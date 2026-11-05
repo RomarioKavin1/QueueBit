@@ -10,7 +10,7 @@ export default defineProject({
   ssr: { resolve: { conditions, externalConditions: ["source"] } },
   test: {
     name: "extension",
-    include: ["test/unit/**/*.test.ts"],
+    include: ["test/unit/**/*.test.ts", "test/devnet/**/*.test.ts"],
     environment: "node",
   },
 });

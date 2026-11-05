@@ -38,7 +38,7 @@
       "deployTx": "0x8cceeff7449ba219151e0638437c93e950666dfa4e984b0776bc64461deff21d"
     },
     "RoleSignerFactory": {
-      "address": "0x63a06d668096c51e690630E638589957672a7CEF",
+      "address": "0x6E721ac3171b611eE9E2FD3e989B7B2563B3A578",
       "artifact": "RoleSignerFactory.sol/RoleSignerFactory",
       "args": [
         0,
@@ -46,8 +46,8 @@
         "0x8464135c8F25Da09e49BC8782676a84730C318bC",
         "10000000000000000"
       ],
-      "initCodeHash": "0xda104d6edcbe2951c796e3227687047b1ae4fdde465321b22ead9d43c08d4f06",
-      "deployTx": "0x9938f385266b403bd9a157416a519508fdcfe450104d9250e08c8c5f16e6ce2b"
+      "initCodeHash": "0xb099a5792d3758b0f8c65fe1f7dba9efd9923ad4c8ef0d85329cb60a42ea2b0c",
+      "deployTx": "0xf2c5b79502b03aa132cf82fbd1f0af6ef5bda926c32dbf54856f31a624dc38b0"
     }
   },
   "testVault": {

@@ -12,16 +12,21 @@
     "prepare:types": "wxt prepare",
     "typecheck": "wxt prepare && tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
-    "e2e": "wxt build && playwright test --project=e2e",
+    "e2e": "VITE_LEAKED_LOCAL_DEVNET=1 wxt build && playwright test --project=e2e",
     "e2e:only": "playwright test --project=e2e",
-    "screenshots": "wxt build && playwright test --project=screenshots",
-    "icons": "node scripts/render-icons.mjs"
+    "screenshots": "VITE_LEAKED_LOCAL_DEVNET=1 VITE_LEAKED_DESIGN=1 wxt build && playwright test --project=screenshots",
+    "icons": "node scripts/render-icons.mjs",
+    "gen:contracts": "node scripts/gen-contracts.mjs",
+    "build:local": "VITE_LEAKED_LOCAL_DEVNET=1 wxt build",
+    "test:devnet": "LOCAL_DEVNET=1 VITE_LEAKED_LOCAL_DEVNET=1 vitest run test/devnet"
   },
   "dependencies": {
+    "@leaked/frames": "workspace:*",
     "@leaked/rpc": "workspace:*",
     "@noble/hashes": "2.4.0",
     "@scure/bip32": "2.4.0",
     "@scure/bip39": "2.4.0",
+    "qrcode": "1.5.4",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "viem": "2.57.16"
@@ -30,6 +35,7 @@
     "@playwright/test": "1.64.1",
     "@tailwindcss/vite": "4.3.3",
     "@types/node": "26.6.6",
+    "@types/qrcode": "1.5.6",
     "@types/react": "18.3.31",
     "@types/react-dom": "18.3.7",
     "@wxt-dev/module-react": "1.2.2",
