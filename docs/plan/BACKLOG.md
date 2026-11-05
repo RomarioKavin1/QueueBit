@@ -25,6 +25,16 @@ Each entry is tagged with its source. Remove an entry when it lands, and cite th
 - [ ] `recoveryStartVaultRotation` reverts if the hook was retired; migration flows must rotate first (module review).
 - [ ] Kernel `MAGIC_VALUE_SIG_REPLAYABLE`: the hot key can sign chain-agnostic userOps (module review, low).
 
+## Privacy package (review of 72c290d..d20cfeb)
+- [ ] Enforce that the broadcaster's node RPC (nonce, simulation with the full proof, receipts) runs on the withdrawal's fresh Anon-RPC isolation key, not the account's circuit (linkability).
+- [ ] `EncryptedStorage.lock()` should trigger the secret manager's `forget()`; remove the private key from `FramePaymasterQuote.senderKey` (pass a signer handle instead).
+- [ ] Relayer mode: the UI must pass the user-approved BPS, not the self-referential quote.
+- [ ] `createGroth16Prover` must fail if the engine has no `verify` (don't silently skip self-verify).
+
+## Watcher (review 13f10d4..20bfcd8)
+- [ ] Webhook/request-auth nonce (replayable within the 5-minute skew today); move the EventSource `sig` out of the query string; trust-proxy for rate-limit keys; don't echo `e.message` in 500s.
+- [ ] Copy fixes: "Anyone can finish it" while a rotation is pending; tell vault userOp reverts apart from everyday-payment blocks on 4337; module reinstall looks like account creation; avoid "staked lane" wording.
+
 ## Infra / upstream
 - [ ] Open the BUDGET-010 PR upstream (needs the user's GitHub account).
 - [ ] A separate small PR: a sensible default `precompiles` list in the sidecar.
