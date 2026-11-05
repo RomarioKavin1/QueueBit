@@ -45,6 +45,8 @@ export function webhookSink(
           method: "POST",
           headers: { "content-type": "application/json", "x-leaked-signature": sig, "x-leaked-event": e.type },
           body,
+          // The body carries the account address: never follow a redirect to somewhere the operator did not name.
+          redirect: "error",
           signal: AbortSignal.timeout(10_000),
         }),
       opts.tries ?? 3,
@@ -86,6 +88,7 @@ export function ntfySink(
           method: "POST",
           headers,
           body: e.alert.body,
+          redirect: "error",
           signal: AbortSignal.timeout(10_000),
         }),
       opts.tries ?? 3,

@@ -202,6 +202,39 @@ describe("delivery", () => {
     expect(JSON.parse(got[0]!.body)).toMatchObject({ type: "alert", seq: 1, alert: { id: "w1" } });
   });
 
+  it("webhook and ntfy never follow a redirect (the signed body stays with the configured host)", async () => {
+    const elsewhere: string[] = [];
+    const s = createServer((req, res) => {
+      if (req.url === "/hook" || req.url === "/topic") {
+        res.writeHead(307, { location: "/elsewhere" }).end();
+        return;
+      }
+      let b = "";
+      req.on("data", (c) => (b += c));
+      req.on("end", () => {
+        elsewhere.push(`${req.url} ${b}`);
+        res.writeHead(200).end();
+      });
+    });
+    await new Promise<void>((r) => s.listen(0, "127.0.0.1", r));
+    servers.push(s);
+    const base = `http://127.0.0.1:${(s.address() as AddressInfo).port}`;
+    const logged: string[] = [];
+    const log = (m: string) => void logged.push(m);
+    await webhookSink({ url: `${base}/hook`, secret: KEY, minSeverity: "info" }, { log, tries: 1 })({
+      seq: 1,
+      type: "alert",
+      alert: alert("r1"),
+    });
+    await ntfySink({ url: base, topic: "topic", minSeverity: "info" }, { log, tries: 1 })({
+      seq: 2,
+      type: "alert",
+      alert: alert("r2"),
+    });
+    expect(elsewhere).toEqual([]);
+    expect(logged).toEqual(["webhook failed", "ntfy failed"]);
+  });
+
   it("ntfy: posts title/body/priority to the topic, never the account address", async () => {
     const got: { body: string; h: Record<string, unknown>; path: string }[] = [];
     const url = await receiver((body, h, path) => got.push({ body, h, path }));
@@ -254,5 +287,21 @@ describe("config", () => {
     expect(() => parseConfig({ ...base, accounts: [{ address: "0x1234" }] })).toThrow(/not an address/);
     expect(() => parseConfig({ ...base, apiKeys: [{ id: "x", secret: "password" }] })).toThrow(/secret/);
     expect(() => parseConfig({ accounts: base.accounts })).toThrow(/rpcUrl/);
+  });
+
+  it("accepts only http(s) URLs for the RPC, the webhook and ntfy", () => {
+    expect(() => parseConfig({ ...base, rpcUrl: "ws://localhost:8546" })).toThrow(/rpcUrl.*http/);
+    expect(() => parseConfig({ ...base, webhook: { url: "ftp://x.invalid/h", secret: KEY } })).toThrow(/webhook\.url/);
+    expect(() => parseConfig({ ...base, webhook: { url: "file:///etc/passwd", secret: KEY } })).toThrow(/webhook\.url/);
+    expect(() => parseConfig({ ...base, ntfy: { url: "gopher://x.invalid", topic: "t" } })).toThrow(/ntfy\.url/);
+    expect(() => parseConfig({ ...base }, { WATCHER_NTFY_TOPIC: "t", WATCHER_NTFY_URL: "javascript:1" })).toThrow(
+      /ntfy\.url/,
+    );
+    const ok = parseConfig(
+      { ...base, webhook: { url: "https://hooks.example/leaked", secret: KEY } },
+      { WATCHER_NTFY_TOPIC: "t", WATCHER_NTFY_URL: "https://ntfy.example/" },
+    );
+    expect(ok.webhook?.url).toBe("https://hooks.example/leaked");
+    expect(ok.ntfy?.url).toBe("https://ntfy.example");
   });
 });

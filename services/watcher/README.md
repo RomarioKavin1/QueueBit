@@ -88,8 +88,8 @@ variables. Accounts are addresses only; any other field on an account (a label, 
 | `http.host`, `http.port` | `WATCHER_HOST`, `WATCHER_PORT` | 127.0.0.1, 8787 | |
 | `apiKeys[]` `{id, secret}` | `WATCHER_API_KEYS=id:0xsecret,…` | – | 0x-hex, ≥ 16 bytes |
 | `rateLimit` | – | 60/min, burst 20, 4 streams/key | per IP before auth, per key after |
-| `webhook` `{url, secret, minSeverity}` | `WATCHER_WEBHOOK_URL`, `…_SECRET`, `…_MIN_SEVERITY` | – | |
-| `ntfy` `{url, topic, token?, minSeverity}` | `WATCHER_NTFY_URL`, `…_TOPIC`, `…_TOKEN`, `…_MIN_SEVERITY` | ntfy.sh, warning | |
+| `webhook` `{url, secret, minSeverity}` | `WATCHER_WEBHOOK_URL`, `…_SECRET`, `…_MIN_SEVERITY` | – | http(s) only; redirects are never followed |
+| `ntfy` `{url, topic, token?, minSeverity}` | `WATCHER_NTFY_URL`, `…_TOPIC`, `…_TOKEN`, `…_MIN_SEVERITY` | ntfy.sh, warning | http(s) only; redirects are never followed |
 
 ## API
 
@@ -110,9 +110,13 @@ scanning `{url, topic, keyId, hmacKey}` (`parsePairing`).
 Blocks are processed once they are `confirmations` deep. The hash of every processed block within `reorgWindow` is
 kept; each poll first re-checks the newest one. On a mismatch the poller walks back to the common ancestor, restores
 the core state saved at that block (deadlines, dedup set), reprocesses the new branch and publishes `retract` for
-alerts whose transaction did not come back. Alert ids derive from (chain, account, kind, tx hash, position), so a
-transaction re-included in another block does not alert twice. The cursor, recent hashes, core state and the last
-1000 alerts are checkpointed after every poll.
+alerts whose transaction did not come back. A retraction is published only once the orphaned alert's block height has
+been reprocessed without it: if the reprocessing stops early (the node's view is inconsistent mid-poll) or the new
+branch is still shorter, the alert stays pending rather than being retracted and re-raised. Alert ids derive from
+(chain, account, kind, tx hash, position), so a transaction re-included in another block does not alert twice. The
+cursor, recent hashes, core state and the last 1000 alerts are checkpointed after every poll (the per-block state
+snapshots used for rewinds are in memory only: after a restart a reorg deeper than the last checkpoint is handled
+best-effort, without retractions).
 
 ## Tests
 

@@ -53,6 +53,17 @@ const sev = (v: unknown, def: Severity): Severity => {
   return v as Severity;
 };
 
+/** Outbound URLs (RPC, webhook, ntfy): http(s) only, so a config cannot point the watcher at file:, gopher:, … */
+const httpUrl = (v: unknown, what: string): string => {
+  if (typeof v !== "string" || !/^https?:\/\/[^\s/?#]+/.test(v)) fail(`${what}: must be an http(s) URL`);
+  try {
+    new URL(v);
+  } catch {
+    fail(`${what}: not a valid URL`);
+  }
+  return v;
+};
+
 const secret = (v: unknown, what: string): string => {
   if (typeof v !== "string" || !/^0x([0-9a-fA-F]{2}){16,}$/.test(v))
     fail(`${what}: secret must be 0x-hex of >= 16 bytes`);
@@ -103,8 +114,9 @@ export function parseConfig(j: Record<string, unknown>, env: Record<string, stri
     return x;
   };
 
-  const rpcUrl = env.WATCHER_RPC_URL ?? o<string>("rpcUrl");
-  if (!rpcUrl || !/^https?:\/\//.test(rpcUrl)) fail("rpcUrl (WATCHER_RPC_URL) is required (http/https)");
+  const rpcUrlRaw = env.WATCHER_RPC_URL ?? o<string>("rpcUrl");
+  if (!rpcUrlRaw) fail("rpcUrl (WATCHER_RPC_URL) is required (http/https)");
+  const rpcUrl = httpUrl(rpcUrlRaw, "rpcUrl");
 
   const accounts = env.WATCHER_ACCOUNTS
     ? parseAccountsEnv(env.WATCHER_ACCOUNTS)
@@ -135,7 +147,7 @@ export function parseConfig(j: Record<string, unknown>, env: Record<string, stri
   const whUrl = env.WATCHER_WEBHOOK_URL ?? wh.url;
   const webhook = whUrl
     ? {
-        url: whUrl,
+        url: httpUrl(whUrl, "webhook.url"),
         secret: secret(env.WATCHER_WEBHOOK_SECRET ?? wh.secret, "webhook.secret"),
         minSeverity: sev(env.WATCHER_WEBHOOK_MIN_SEVERITY ?? wh.minSeverity, "info"),
       }
@@ -145,7 +157,7 @@ export function parseConfig(j: Record<string, unknown>, env: Record<string, stri
   const ntTopic = env.WATCHER_NTFY_TOPIC ?? nt.topic;
   const ntfy = ntTopic
     ? {
-        url: (env.WATCHER_NTFY_URL ?? nt.url ?? "https://ntfy.sh").replace(/\/$/, ""),
+        url: httpUrl(env.WATCHER_NTFY_URL ?? nt.url ?? "https://ntfy.sh", "ntfy.url").replace(/\/$/, ""),
         topic: ntTopic,
         ...((env.WATCHER_NTFY_TOKEN ?? nt.token) ? { token: (env.WATCHER_NTFY_TOKEN ?? nt.token)! } : {}),
         minSeverity: sev(env.WATCHER_NTFY_MIN_SEVERITY ?? nt.minSeverity, "warning"),
