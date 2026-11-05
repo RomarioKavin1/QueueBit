@@ -1,0 +1,6 @@
+# local signer builds, upstream checkouts, Python venv, generated keys (dev-only), raw devnet dumps
+.cache/
+dist/
+node_modules/
+contracts/out/
+contracts/cache/

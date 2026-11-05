@@ -1,0 +1,34 @@
+{
+  "name": "bench",
+  "version": "0.0.0",
+  "private": true,
+  "description": "LEAKED M3: measured cost of post-quantum signature verification inside EIP-8141 VERIFY frames vs the ERC-8421 budgets",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "build:deps": "pnpm --filter @leaked/frames --filter @leaked/pq-signer run build",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "setup": "bash scripts/setup.sh",
+    "forge:build": "cd contracts && forge build",
+    "vectors": "node dist/cli.js vectors",
+    "forge": "node dist/cli.js forge",
+    "devnet": "node dist/cli.js devnet",
+    "report": "node dist/cli.js report",
+    "ci": "pnpm run build:deps && pnpm run build && vitest run && cd contracts && forge test -vv",
+    "all": "bash scripts/setup.sh && pnpm run build:deps && pnpm run build && node dist/cli.js all"
+  },
+  "dependencies": {
+    "@leaked/frames": "workspace:*",
+    "@leaked/pq-signer": "workspace:*",
+    "@noble/hashes": "2.4.0",
+    "@noble/post-quantum": "0.7.1",
+    "viem": "2.57.16"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.6",
+    "typescript": "6.0.3",
+    "vitest": "5.1.0"
+  }
+}
