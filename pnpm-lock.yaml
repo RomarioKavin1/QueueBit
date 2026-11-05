@@ -60,6 +60,15 @@ importers:
         specifier: 5.1.0
         version: 5.1.0(@types/node@26.6.6)(@vitest/coverage-v8@5.1.0)(vite@8.3.6(@types/node@26.6.6))
 
+  packages/rpc:
+    dependencies:
+      '@leaked/frames':
+        specifier: workspace:*
+        version: link:../frames
+      viem:
+        specifier: 2.57.16
+        version: 2.57.16(typescript@6.0.3)
+
 packages:
 
   '@adraffy/ens-normalize@1.11.1':

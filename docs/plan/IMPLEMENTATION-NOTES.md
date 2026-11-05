@@ -83,3 +83,22 @@ Where the build differs from, or settles, something in the plan. Newest last. Ea
   no wasm-pack). The WASM (~86 KB) is inlined as base64 so one ESM module works in browsers, extension workers and
   Node. `wasm/` and `dist/` are build outputs and not committed: consumers run `pnpm --filter @leaked/pq-signer build`
   (needs Rust + `wasm32-unknown-unknown`).
+
+### `@leaked/rpc`
+
+- **`ethrex_simulateFrameTransaction` field names differ from the sidecar docs.** The live node (2026-11-06) answers
+  `canonicalMempoolValid` / `canonicalMempoolViolation`; `rpc-methods.md` (and plan §30.4.4) say `valid` /
+  `violation`. Following the running code, the client reads the live names first, falls back to the documented
+  ones, and exposes both as `valid` / `violation`. Example (the mined tx re-simulated):
+  `{canonicalMempoolValid: false, canonicalMempoolViolation: "Invalid Transaction: Nonce mismatch: expected 10, got 8",
+  prefixShape: "SelfVerify", maxCost: "0x644f6a61fa800", …}`.
+- `eth_estimateFrameTransactionGas` simulates the VERIFY frames, so an unsigned partial transaction for a wallet that
+  checks signatures fails with `-32500 validation frame 0: reverted`; a fee-less one with
+  `-32500 … Insufficient max fee per gas`. The extension must estimate with placeholder signatures its VERIFY code
+  accepts (or with fees and real signatures), not with the bare `{sender, frames}` the docs call sufficient.
+- Not-found conventions, as probed: `skandha_frameTransactionStatus` and `skandha_explorer_getTransaction` answer
+  `-32600 Frame transaction not found`; `eth_getFrameTransactionReceipt` answers `-32000 transaction receipt not
+  found`; `eth_getFrameTransactionByHash` answers `null` (also for a mined tx no longer in the mempool). The client maps
+  the first three to `null` and rethrows any other error.
+- Live tests are opt-in (`LIVE_DEVNET=1 pnpm test`) and read-only: chain ids, the fixture tx's raw bytes and JSON,
+  both receipts, a dry-run simulate, an estimate error, gas price, config, explorer info.

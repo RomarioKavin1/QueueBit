@@ -1,0 +1,29 @@
+{
+  "name": "@leaked/rpc",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Typed JSON-RPC client for EIP-8141 frame transactions: ethrex node and Skandha alt-mempool sidecar",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:live": "LIVE_DEVNET=1 vitest run"
+  },
+  "dependencies": {
+    "@leaked/frames": "workspace:*",
+    "viem": "2.57.16"
+  }
+}
