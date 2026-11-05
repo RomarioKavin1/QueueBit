@@ -1,0 +1,48 @@
+[package]
+name = "leaked-groth16"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+ark-groth16 = { version = "=0.6.0", default-features = false }
+ark-bn254 = { version = "=0.6.0", default-features = false, features = ["curve"] }
+ark-ec = { version = "=0.6.0", default-features = false }
+ark-ff = { version = "=0.6.0", default-features = false }
+ark-poly = { version = "=0.6.0", default-features = false }
+ark-relations = { version = "=0.6.0", default-features = false }
+ark-serialize = { version = "=0.6.0", default-features = false }
+ark-std = { version = "=0.6.0", default-features = false }
+wasm-bindgen = { version = "=0.2.117", optional = true }
+# Native-only witness generation (CLI, Rust tests, native benchmark). The browser build runs the circuit's
+# witness calculator in the host's own WebAssembly engine instead (src/witness.ts).
+wasmi = { version = "=2.0.0", optional = true }
+serde_json = { version = "1", optional = true }
+num-bigint = { version = "0.4", optional = true }
+rand = { version = "0.8", optional = true }
+
+[features]
+default = []
+wasm = ["dep:wasm-bindgen"]
+native = ["dep:wasmi", "dep:serde_json", "dep:num-bigint", "dep:rand"]
+parallel = ["ark-groth16/parallel", "ark-ff/parallel", "ark-ec/parallel", "ark-poly/parallel", "ark-std/parallel"]
+
+[[bin]]
+name = "leaked-groth16"
+path = "src/bin/leaked_groth16.rs"
+required-features = ["native"]
+
+[profile.test]
+opt-level = 3
+
+[profile.dev]
+opt-level = 3
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
