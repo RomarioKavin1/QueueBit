@@ -24,7 +24,19 @@ export default defineConfig({
     host_permissions: RPC_HOSTS,
     action: { default_title: "LEAKED" },
     content_security_policy: {
-      extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'",
+      // Chrome's minimum is `script-src 'self'; object-src 'self'`. Nothing in M0 runs WASM, so 'wasm-unsafe-eval'
+      // stays off until the PQ verifier / zxing workers arrive (plan §30 §2.5, §9.5). The extra directives bound what
+      // extension pages and the service worker may load or connect to (the fixed RPC hosts over https, or a local
+      // devnet fork), and refuse frames, plugins, <base> and form posts outright.
+      extension_pages: [
+        "script-src 'self'",
+        "object-src 'none'",
+        "frame-src 'none'",
+        "base-uri 'none'",
+        "form-action 'none'",
+        "img-src 'self' data:",
+        "connect-src https: http://localhost:* http://127.0.0.1:*",
+      ].join("; "),
     },
     minimum_chrome_version: "120",
   },

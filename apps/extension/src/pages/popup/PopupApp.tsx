@@ -101,7 +101,7 @@ function Unlocked({ state, close }: { state: WalletState; close: () => void }) {
     <Frame>
       <header className="flex h-12 shrink-0 items-center gap-2 border-b border-line pr-1 pl-3">
         <LogoMark size={22} />
-        <span className="t-strong">LEAKED</span>
+        <h1 className="t-strong">LEAKED</h1>
         <NetworkSwitcher chainId={state.settings.selectedChainId} />
         <MenuButton
           label="More"
@@ -191,6 +191,15 @@ function TabBar({ tab, onChange }: { tab: Tab; onChange: (t: Tab) => void }) {
   );
 }
 
-export function Frame({ children }: { children: React.ReactNode }) {
-  return <div className="flex h-[600px] w-[360px] flex-col overflow-hidden bg-bg text-fg">{children}</div>;
+/**
+ * The 360 × 600 surface. The action popup is sized by its content, so the frame fixes its own height; the approval
+ * window is created 360 × 600 *outer* (`chrome.windows.create`), so its viewport is shorter by the title bar and the
+ * frame fills the viewport instead (`fill`), otherwise the Cancel / Connect footer sits below the fold.
+ */
+export function Frame({ children, fill = false }: { children: React.ReactNode; fill?: boolean }) {
+  return (
+    <div className={cx("flex w-[360px] flex-col overflow-hidden bg-bg text-fg", fill ? "h-dvh" : "h-[600px]")}>
+      {children}
+    </div>
+  );
 }

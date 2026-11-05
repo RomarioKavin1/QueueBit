@@ -22,7 +22,7 @@ function deps(over: Partial<RouterDeps> & { outcome?: ApprovalOutcome } = {}) {
     hasKeyring: async () => true,
     isUnlocked: async () => unlocked,
     getAccount: async () => ACCOUNT,
-    requestConnect: vi.fn(async (origin: string) => {
+    requestConnect: vi.fn(async ({ origin }: { origin: string }) => {
       const outcome = over.outcome ?? "approved";
       if (outcome === "approved") await permissions.grant(origin, [ACCOUNT]);
       return outcome;
@@ -73,7 +73,7 @@ describe("provider router", () => {
     const d = deps();
     expect(await call(d, "eth_requestAccounts")).toEqual([ACCOUNT]);
     expect(d.requestConnect).toHaveBeenCalledTimes(1);
-    expect(d.requestConnect).toHaveBeenCalledWith(ORIGIN, "r1", 1337);
+    expect(d.requestConnect).toHaveBeenCalledWith(ctx, 1337);
     expect(await call(d, "eth_requestAccounts")).toEqual([ACCOUNT]);
     expect(d.requestConnect).toHaveBeenCalledTimes(1);
   });

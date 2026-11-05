@@ -64,6 +64,8 @@ export interface Approval {
   resumedAt?: number;
   /** First time this site asks to connect (from the local known-sites list). */
   firstVisit: boolean;
+  /** The request came from a frame embedded in another page (`MessageSender.frameId !== 0`), not the page itself. */
+  embedded?: boolean;
 }
 
 export interface WalletState {

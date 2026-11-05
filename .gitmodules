@@ -25,9 +25,12 @@
 [submodule "contracts/lib/safe-smart-account"]
 	path = contracts/lib/safe-smart-account
 	url = https://github.com/safe-global/safe-smart-account
-[submodule "contracts/lib/checknsignatures"]
-	path = contracts/lib/checknsignatures
-	url = https://github.com/rhinestonewtf/checknsignatures
 [submodule "contracts/lib/kernel"]
 	path = contracts/lib/kernel
 	url = https://github.com/zerodevapp/kernel
+[submodule "contracts/lib/erc7579-safe7579-dep"]
+	path = contracts/lib/erc7579-safe7579-dep
+	url = https://github.com/erc7579/erc7579-implementation
+[submodule "contracts/lib/checknsignatures"]
+	path = contracts/lib/checknsignatures
+	url = https://github.com/rhinestonewtf/checknsignatures

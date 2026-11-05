@@ -49,12 +49,17 @@ export default defineBackground({
         return;
       }
       ports.set(port, origin);
-      const tabKey = `${port.sender?.tab?.id ?? "x"}:${port.sender?.frameId ?? 0}`;
+      const frameId = port.sender?.frameId ?? 0;
+      const tabKey = `${port.sender?.tab?.id ?? "x"}:${frameId}`;
+      const embedded = frameId !== 0;
       port.onDisconnect.addListener(() => ports.delete(port));
       port.onMessage.addListener((msg: PortRequest) => {
         if (typeof msg?.id !== "string" || typeof msg.method !== "string") return;
         wallet
-          .handleProvider({ origin, requestId: `${tabKey}:${msg.id}` }, { method: msg.method, params: msg.params })
+          .handleProvider(
+            { origin, requestId: `${tabKey}:${msg.id}`, embedded },
+            { method: msg.method, params: msg.params },
+          )
           .then(
             (result) => safePost(port, { id: msg.id, result: result ?? null }),
             (err: unknown) => {

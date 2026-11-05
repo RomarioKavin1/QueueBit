@@ -204,6 +204,48 @@ test("service-worker restart mid-approval picks up where it left off", async ({
   await expect.poll(() => dapp.evaluate(() => (window as unknown as Win).__result)).toEqual([account]);
 });
 
+test("a request from a cross-origin frame is attributed to the frame and flagged as embedded", async ({
+  context,
+  extensionId,
+  dappUrl,
+}) => {
+  await onboard(context, extensionId);
+  const dapp = await context.newPage();
+  await dapp.goto(dappUrl);
+  // 127.0.0.1 and localhost are different origins for the same server: a cross-origin iframe of the test dapp.
+  const frameUrl = dappUrl.replace("localhost", "127.0.0.1");
+  await dapp.evaluate((src) => {
+    const f = document.createElement("iframe");
+    f.id = "embedded";
+    f.src = src;
+    document.body.append(f);
+  }, frameUrl);
+  const frame = (await (await dapp.waitForSelector("#embedded")).contentFrame())!;
+  await frame.waitForLoadState("domcontentloaded");
+  await expect.poll(() => frame.evaluate(() => (window as unknown as Win).__providers.length)).toBe(1);
+  await frame.evaluate(() => {
+    const w = window as unknown as Win;
+    w.leaked()
+      .request({ method: "eth_requestAccounts" })
+      .then(
+        (r) => (w.__result = r),
+        (e: { code: number; message: string }) => (w.__error = { code: e.code, message: e.message }),
+      );
+  });
+  const approval = await waitForApproval(context);
+  await expect(approval.getByTestId("approval-origin")).toHaveText(new URL(frameUrl).host);
+  await expect(approval.getByText("This request comes from a frame inside another page")).toBeVisible();
+  // The whole 360 × 600 window: the footer must be on screen without scrolling (the window size is the outer size).
+  const connect = approval.getByRole("button", { name: "Connect" });
+  await expect(connect).toBeInViewport();
+  await connect.click();
+  await expect
+    .poll(() => frame.evaluate(() => ((window as unknown as Win).__result as string[] | undefined)?.[0]))
+    .toMatch(/^0x[0-9a-fA-F]{40}$/u);
+  // The parent page (localhost) is a different origin and stays unconnected.
+  expect(await rpc(dapp, "eth_accounts")).toEqual({ result: [] });
+});
+
 test("approval window: closing it rejects with 4001", async ({ context, extensionId, dappUrl }) => {
   await onboard(context, extensionId);
   const dapp = await context.newPage();

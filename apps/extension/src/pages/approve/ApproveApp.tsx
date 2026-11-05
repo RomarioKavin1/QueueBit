@@ -5,7 +5,7 @@ import { StorageKeys } from "../../shared/kv";
 import type { ApprovalView } from "../../shared/messages";
 import { AddressChip, Button, CheckIcon, CloseIcon, GlobeIcon, LogoMark, RiskBanner, Spinner } from "../../ui";
 import { hostOf } from "../../ui/format";
-import { call } from "../lib/api";
+import { call, UiCallError } from "../lib/api";
 import { useTheme, useWalletState } from "../lib/hooks";
 import { UnlockForm } from "../common/Unlock";
 import { Frame, openFullApp } from "../popup/PopupApp";
@@ -38,7 +38,7 @@ export function ApproveApp() {
 
   if (view === undefined || !state) {
     return (
-      <Frame>
+      <Frame fill>
         <div className="grid flex-1 place-items-center text-muted">
           <Spinner size={24} label="Loading request" />
         </div>
@@ -47,7 +47,7 @@ export function ApproveApp() {
   }
   if (view === null || view.approval.status !== "pending") {
     return (
-      <Frame>
+      <Frame fill>
         <Finished status={view?.approval.status ?? "gone"} />
       </Frame>
     );
@@ -55,7 +55,7 @@ export function ApproveApp() {
 
   const host = hostOf(view.approval.origin);
   return (
-    <Frame>
+    <Frame fill>
       <header className="flex items-start gap-3 border-b border-line p-4">
         <span className="grid size-10 shrink-0 place-items-center rounded-md bg-surface-2 text-muted">
           <GlobeIcon size={22} />
@@ -67,6 +67,7 @@ export function ApproveApp() {
           </h1>
           <p className="t-small text-muted">
             {view.approval.origin.startsWith("http:") ? "Not secure (http) · " : ""}
+            {view.approval.embedded ? "Embedded in another page · " : ""}
             {getNetwork(view.approval.chainId).name}
           </p>
         </div>
@@ -104,8 +105,36 @@ async function reject() {
   window.close();
 }
 
+/**
+ * The approval window opens focused, at a predictable spot, the moment a page asks. A page that gets the user clicking
+ * or pressing Enter repeatedly could land that input on Connect. The primary action therefore stays disabled for a
+ * short arming period after the window appears or regains focus (the same guard MetaMask and Rabby apply).
+ */
+const ARM_DELAY_MS = 500;
+
+function useArmed(): boolean {
+  const [armed, setArmed] = useState(false);
+  useEffect(() => {
+    let t: ReturnType<typeof setTimeout> | undefined;
+    const arm = () => {
+      clearTimeout(t);
+      setArmed(false);
+      t = setTimeout(() => setArmed(true), ARM_DELAY_MS);
+    };
+    arm();
+    window.addEventListener("focus", arm);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener("focus", arm);
+    };
+  }, []);
+  return armed;
+}
+
 function ConnectBody({ view, account }: { view: ApprovalView; account: string }) {
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const armed = useArmed();
   const net = getNetwork(view.approval.chainId);
   const host = hostOf(view.approval.origin);
 
@@ -121,6 +150,14 @@ function ConnectBody({ view, account }: { view: ApprovalView; account: string })
     <>
       <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-4">
         {view.approval.resumedAt && <RiskBanner level="info" title="Picking up where you left off." />}
+        {view.approval.embedded && (
+          <RiskBanner
+            level="limit"
+            title="This request comes from a frame inside another page"
+            body={`The page you see in the address bar is not ${host}. Only connect if you expect ${host} here.`}
+          />
+        )}
+        {error && <RiskBanner level="danger" title={error} />}
         {view.approval.firstVisit ? (
           <RiskBanner
             level="limit"
@@ -160,11 +197,15 @@ function ConnectBody({ view, account }: { view: ApprovalView; account: string })
           block
           loading={busy}
           loadingLabel="Connecting…"
+          disabled={!armed}
           onClick={async () => {
             setBusy(true);
+            setError(null);
             try {
               await call("approval:resolve", { id: approvalId, approved: true });
               window.close();
+            } catch (err) {
+              setError(err instanceof UiCallError ? err.message : "Couldn't connect. Try again.");
             } finally {
               setBusy(false);
             }

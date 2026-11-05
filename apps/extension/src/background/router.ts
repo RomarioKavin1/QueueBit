@@ -19,6 +19,8 @@ export interface RequestContext {
   origin: string;
   /** Unique per dapp request; a replay after a service-worker restart carries the same id. */
   requestId: string;
+  /** From `MessageSender.frameId`: true when the request comes from a frame inside another page. */
+  embedded?: boolean;
 }
 
 export interface RouterDeps {
@@ -29,7 +31,7 @@ export interface RouterDeps {
   isUnlocked(): Promise<boolean>;
   /** The account a dapp sees. M0: the everyday key's address (see `accountsForDapp`). */
   getAccount(): Promise<Address | undefined>;
-  requestConnect(origin: string, requestId: string, chainId: number): Promise<ApprovalOutcome>;
+  requestConnect(ctx: RequestContext, chainId: number): Promise<ApprovalOutcome>;
   readRpc(chainId: number, method: string, params: unknown[]): Promise<unknown>;
 }
 
@@ -141,7 +143,7 @@ export async function routeProviderRequest(
     case "eth_requestAccounts": {
       const existing = await accountsForDapp(ctx.origin, deps);
       if (existing.length > 0) return existing;
-      const outcome = await deps.requestConnect(ctx.origin, ctx.requestId, await deps.getChainId());
+      const outcome = await deps.requestConnect(ctx, await deps.getChainId());
       if (outcome !== "approved") throw userRejected("The user rejected the connection request.");
       const accounts = await accountsForDapp(ctx.origin, deps);
       // Approval requires an unlocked wallet; if it auto-locked in between, the request is not fulfilled.

@@ -126,14 +126,35 @@ export async function decryptWithPassword(
   return { plaintext: await decryptWithKey(dek, blob, aad), dek };
 }
 
+export class KeyringFormatError extends Error {
+  constructor() {
+    super("Unsupported keyring format");
+    this.name = "KeyringFormatError";
+  }
+}
+
+/** Bounds on the stored scrypt parameters: a power-of-two N between 2^10 and 2^22, r ≤ 32, p ≤ 16 (≤ 4 GiB). */
+function saneScrypt(kdf: EncryptedBlob["kdf"]): boolean {
+  const { N, r, p } = kdf;
+  const pow2 = Number.isInteger(N) && N >= 2 ** 10 && N <= 2 ** 22 && (N & (N - 1)) === 0;
+  return pow2 && Number.isInteger(r) && r >= 1 && r <= 32 && Number.isInteger(p) && p >= 1 && p <= 16;
+}
+
+/**
+ * Shape check before any work is done on a blob read from storage.local. Scrypt parameters are bounded so a damaged or
+ * planted record cannot make the unlock try to allocate gigabytes or spin for minutes.
+ */
 function assertBlob(blob: EncryptedBlob): void {
   if (
     blob?.v !== 1 ||
     blob.kdf?.name !== "scrypt" ||
+    !saneScrypt(blob.kdf) ||
     blob.cipher?.name !== "AES-GCM" ||
+    typeof blob.ct !== "string" ||
+    hexToBytes(blob.kdf.salt).length !== SALT_BYTES ||
     hexToBytes(blob.cipher.iv).length !== IV_BYTES ||
     hexToBytes(blob.tag).length !== GCM_TAG_BYTES
   ) {
-    throw new Error("Unsupported keyring format");
+    throw new KeyringFormatError();
   }
 }

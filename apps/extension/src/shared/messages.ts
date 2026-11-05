@@ -23,7 +23,8 @@ export interface ApprovalView {
 
 export interface UiApi {
   "state:get": { req: undefined; res: WalletState };
-  "keyring:create": { req: { password: string }; res: { mnemonic: string } };
+  /** The backup words leave the service worker only when the user asked to see them (`revealWords`). */
+  "keyring:create": { req: { password: string; revealWords?: boolean }; res: { mnemonic?: string } };
   "keyring:import": { req: { mnemonic: string; password: string }; res: null };
   "keyring:unlock": { req: { password: string }; res: null };
   "keyring:lock": { req: undefined; res: null };

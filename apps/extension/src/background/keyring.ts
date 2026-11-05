@@ -7,6 +7,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import { StorageKeys, type KV } from "../shared/kv";
 import {
   DEFAULT_SCRYPT,
+  DecryptionError,
   aadFor,
   decryptWithKey,
   decryptWithPassword,
@@ -156,8 +157,9 @@ export class KeyringController {
     let dek: Uint8Array;
     try {
       ({ dek } = await decryptWithPassword(password, record.blob, aadFor(record.accounts.everyday)));
-    } catch {
-      throw new KeyringError("wrong-password", "That password didn't work.");
+    } catch (err) {
+      if (err instanceof DecryptionError) throw new KeyringError("wrong-password", "That password didn't work.");
+      throw new KeyringError("damaged", "The stored keyring is damaged and can't be unlocked.");
     }
     await this.startSession(dek);
     return record.accounts;
@@ -174,8 +176,10 @@ export class KeyringController {
     let plaintext: Uint8Array;
     try {
       ({ plaintext } = await decryptWithPassword(oldPassword, record.blob, aad));
-    } catch {
-      throw new KeyringError("wrong-password", "Your current password didn't work.");
+    } catch (err) {
+      if (err instanceof DecryptionError)
+        throw new KeyringError("wrong-password", "Your current password didn't work.");
+      throw new KeyringError("damaged", "The stored keyring is damaged and can't be unlocked.");
     }
     const { blob, dek } = await encryptWithPassword(newPassword, plaintext, aad, this.scrypt);
     plaintext.fill(0);

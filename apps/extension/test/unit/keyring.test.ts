@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_SCRYPT,
   DecryptionError,
+  KeyringFormatError,
   aadFor,
   decryptWithKey,
   decryptWithPassword,
@@ -79,7 +80,7 @@ describe("encryption (scrypt → AES-256-GCM)", () => {
     const { blob } = await encryptWithPassword("pw-123456", enc.encode("x"), aadFor("0x01"), FAST);
     await expect(
       decryptWithPassword("pw-123456", { ...blob, v: 2 } as unknown as EncryptedBlob, aadFor("0x01")),
-    ).rejects.toThrow("Unsupported keyring format");
+    ).rejects.toBeInstanceOf(KeyringFormatError);
   });
 });
 
@@ -114,6 +115,22 @@ describe("KeyringController", () => {
     expect(JSON.stringify(s)).not.toContain("password-1");
     expect(accounts).toEqual(deriveAccounts(mnemonic));
     expect(await k.withMnemonic((m) => m)).toBe(mnemonic);
+  });
+
+  it("refuses a keyring blob with absurd scrypt parameters instead of trying to allocate for it", async () => {
+    const { k, local } = setup();
+    await k.import(TEST_MNEMONIC, "password-1");
+    await k.lock();
+    const rec = (await local.get<{ blob: EncryptedBlob }>(StorageKeys.keyring))!;
+    for (const kdf of [
+      { ...rec.blob.kdf, N: 2 ** 40 },
+      { ...rec.blob.kdf, N: 3 },
+      { ...rec.blob.kdf, r: 0 },
+      { ...rec.blob.kdf, p: 10_000 },
+    ]) {
+      await local.set(StorageKeys.keyring, { ...rec, blob: { ...rec.blob, kdf } });
+      await expect(k.unlock("password-1")).rejects.toMatchObject({ reason: "damaged" });
+    }
   });
 
   it("refuses short passwords and a second account", async () => {

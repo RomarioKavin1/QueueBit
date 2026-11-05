@@ -3,7 +3,8 @@ import { getNetwork, toHexChainId } from "../shared/chains";
 import type { KV } from "../shared/kv";
 import type { ApprovalView, UiApi, UiType } from "../shared/messages";
 import type { WalletState } from "../shared/types";
-import { ApprovalBroker, ApprovalStore, type ApprovalWindows } from "./approvals";
+import { ProviderRpcError, RpcErrorCode } from "../shared/errors";
+import { ApprovalBroker, ApprovalStore, TooManyPendingError, type ApprovalWindows } from "./approvals";
 import { placeholderBucketSource, type BucketSource } from "./bucket";
 import { KeyringController, KeyringError, type KeyringOptions } from "./keyring";
 import { PermissionsStore } from "./permissions";
@@ -67,11 +68,23 @@ export class Wallet {
       hasKeyring: () => this.keyring.isInitialized(),
       isUnlocked: () => this.keyring.isUnlocked(),
       getAccount: async () => (await this.keyring.accounts())?.everyday,
-      requestConnect: async (origin, requestId, chainId) =>
-        this.approvals.request(
-          { kind: "connect", origin, chainId, firstVisit: await this.permissions.isFirstVisit(origin) },
-          requestId,
-        ),
+      requestConnect: async ({ origin, requestId, embedded }, chainId) => {
+        try {
+          return await this.approvals.request(
+            {
+              kind: "connect",
+              origin,
+              chainId,
+              firstVisit: await this.permissions.isFirstVisit(origin),
+              ...(embedded ? { embedded: true } : {}),
+            },
+            requestId,
+          );
+        } catch (err) {
+          if (err instanceof TooManyPendingError) throw new ProviderRpcError(RpcErrorCode.limitExceeded, err.message);
+          throw err;
+        }
+      },
       readRpc: this.env.readRpc,
     };
   }
@@ -150,9 +163,9 @@ export class Wallet {
 
   private readonly uiHandlers: { [K in UiType]: (p: UiApi[K]["req"]) => Promise<UiApi[K]["res"]> } = {
     "state:get": () => this.state(),
-    "keyring:create": async ({ password }) => {
+    "keyring:create": async ({ password, revealWords }) => {
       const { mnemonic } = await this.keyring.create(password);
-      return { mnemonic };
+      return revealWords === true ? { mnemonic } : {};
     },
     "keyring:import": async ({ mnemonic, password }) => {
       await this.keyring.import(mnemonic, password);

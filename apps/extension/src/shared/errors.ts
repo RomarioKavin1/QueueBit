@@ -12,6 +12,8 @@ export const RpcErrorCode = {
   invalidParams: -32602,
   methodNotFound: -32601,
   internal: -32603,
+  /** EIP-1474 "Limit exceeded": too many requests waiting for the user. */
+  limitExceeded: -32005,
 } as const;
 
 export interface SerializedRpcError {

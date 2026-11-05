@@ -23,8 +23,12 @@ export class ApprovalStore {
     return (await this.all())[id];
   }
 
-  async findByRequestId(requestId: string): Promise<Approval | undefined> {
-    return Object.values(await this.all()).find((a) => a.requestIds.includes(requestId));
+  /**
+   * A request id is `<tab>:<frame>:<page id>`; the page picks the last part, and a tab keeps its id across navigations,
+   * so the lookup is scoped to the origin as well. A site can never reach another site's approval.
+   */
+  async findByRequestId(origin: string, requestId: string): Promise<Approval | undefined> {
+    return Object.values(await this.all()).find((a) => a.origin === origin && a.requestIds.includes(requestId));
   }
 
   async findPending(origin: string, kind: ApprovalKind): Promise<Approval | undefined> {
@@ -37,7 +41,7 @@ export class ApprovalStore {
     return Object.values(await this.all()).filter((a) => a.status === "pending");
   }
 
-  async create(init: Pick<Approval, "kind" | "origin" | "chainId" | "firstVisit">, requestId: string) {
+  async create(init: ApprovalInit, requestId: string) {
     const approval: Approval = {
       ...init,
       id: crypto.randomUUID(),
@@ -81,6 +85,21 @@ export class ApprovalStore {
 
 export type ApprovalOutcome = Exclude<ApprovalStatus, "pending">;
 
+export type ApprovalInit = Pick<Approval, "kind" | "origin" | "chainId" | "firstVisit" | "embedded">;
+
+/**
+ * Upper bound on approvals waiting at once. Each one is a window, and a page can embed any number of cross-origin
+ * frames that all ask to connect, so without a bound one site could carpet the screen with approval windows.
+ */
+export const MAX_PENDING_APPROVALS = 3;
+
+export class TooManyPendingError extends Error {
+  constructor() {
+    super("LEAKED already has open requests waiting for you. Answer or close them first.");
+    this.name = "TooManyPendingError";
+  }
+}
+
 export interface ApprovalWindows {
   /** Open the approval window for `approvalId`; returns its window id. */
   open(approvalId: string): Promise<number | undefined>;
@@ -103,26 +122,37 @@ export class ApprovalBroker {
     private readonly now: () => number = Date.now,
   ) {}
 
-  async request(
-    init: Pick<Approval, "kind" | "origin" | "chainId" | "firstVisit">,
-    requestId: string,
-  ): Promise<ApprovalOutcome> {
-    let approval = await this.store.findByRequestId(requestId);
-    if (approval && approval.status !== "pending") return approval.status;
+  /** Requests arrive concurrently; the find-or-create step runs one at a time so the cap and the dedup hold. */
+  private queue: Promise<unknown> = Promise.resolve();
 
-    if (!approval) {
-      approval = await this.store.findPending(init.origin, init.kind);
-      if (approval) await this.store.attachRequest(approval.id, requestId);
-    }
+  private serialized<T>(fn: () => Promise<T>): Promise<T> {
+    const run = this.queue.then(fn, fn);
+    this.queue = run.catch(() => undefined);
+    return run;
+  }
 
-    if (!approval) {
-      approval = await this.store.create(init, requestId);
-      const windowId = await this.windows.open(approval.id);
-      if (windowId !== undefined) await this.store.update(approval.id, { windowId });
-    } else if (approval.windowId === undefined || !(await this.windows.focus(approval.windowId))) {
-      const windowId = await this.windows.open(approval.id);
-      if (windowId !== undefined) await this.store.update(approval.id, { windowId });
-    }
+  async request(init: ApprovalInit, requestId: string): Promise<ApprovalOutcome> {
+    const approval = await this.serialized(async () => {
+      let approval = await this.store.findByRequestId(init.origin, requestId);
+      if (approval && approval.status !== "pending") return approval;
+
+      if (!approval) {
+        approval = await this.store.findPending(init.origin, init.kind);
+        if (approval) await this.store.attachRequest(approval.id, requestId);
+      }
+
+      if (!approval) {
+        if ((await this.store.pending()).length >= MAX_PENDING_APPROVALS) throw new TooManyPendingError();
+        approval = await this.store.create(init, requestId);
+        const windowId = await this.windows.open(approval.id);
+        if (windowId !== undefined) await this.store.update(approval.id, { windowId });
+      } else if (approval.windowId === undefined || !(await this.windows.focus(approval.windowId))) {
+        const windowId = await this.windows.open(approval.id);
+        if (windowId !== undefined) await this.store.update(approval.id, { windowId });
+      }
+      return approval;
+    });
+    if (approval.status !== "pending") return approval.status;
 
     const id = approval.id;
     return new Promise<ApprovalOutcome>((resolve) => {

@@ -212,8 +212,8 @@ function Create({ headingRef, go }: StepProps) {
           setBusy(true);
           setError(null);
           try {
-            const { mnemonic } = await call("keyring:create", { password: p.pw });
-            createdWords = showWords ? mnemonic : null;
+            const { mnemonic } = await call("keyring:create", { password: p.pw, revealWords: showWords });
+            createdWords = showWords && mnemonic ? mnemonic : null;
             go(showWords ? "words" : "limit");
           } catch (err) {
             setError(err instanceof UiCallError ? err.message : "Couldn't create the account.");
@@ -434,7 +434,7 @@ function Limit({ headingRef, state, go }: StepProps & { state: WalletState }) {
           </p>
           <p className="t-body mt-2">Lowering these later is instant. Raising them takes 48 hours.</p>
           <p className="t-small mt-2 text-muted">
-            Your choice is saved now and written to your account when it activates with your Vault (next milestone).
+            Your choice is saved now and written to your account when you pair your Vault (coming in the next update).
             Until then there is no limit.
           </p>
         </Card>
@@ -584,7 +584,7 @@ function VaultStub({ headingRef, go }: StepProps) {
         className="mt-6"
         level="vault"
         title="Vault pairing isn't available in this version"
-        body="It arrives with the Vault app in the next milestone. Nothing is paired yet."
+        body="It arrives with the Vault app in the next update. Nothing is paired yet."
       />
       <div className="mt-6 flex gap-3">
         <Button variant="secondary" onClick={() => go("network")}>
@@ -651,7 +651,7 @@ function RecoveryStub({ headingRef, go }: StepProps) {
         className="mt-4"
         level="info"
         title="Recovery setup needs the Vault app"
-        body="It arrives with Vault pairing in a later milestone."
+        body="It arrives with Vault pairing in a later update."
       />
       <div className="mt-6 flex gap-3">
         <Button variant="secondary" onClick={() => go("vault")}>
@@ -700,7 +700,7 @@ function Done({ headingRef, state }: { headingRef: StepProps["headingRef"]; stat
   ];
   return (
     <>
-      <Title headingRef={headingRef} sub="Your everyday account is ready on this browser.">
+      <Title headingRef={headingRef} sub="Your everyday key is ready on this browser.">
         You're set.
       </Title>
       <dl className="mb-6 divide-y divide-line rounded-md border border-line">

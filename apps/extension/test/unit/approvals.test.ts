@@ -110,6 +110,56 @@ describe("connect approvals", () => {
     expect(await replay).toEqual([ACCOUNT]);
   });
 
+  it("a replayed request id from another origin in the same tab never reaches the first site's approval", async () => {
+    // Tab 7 is on site A, asks to connect (page-chosen id "X") and the user approves. The tab then navigates to
+    // site B, which sends the very same id. B must get its own approval window, not A's answer.
+    const { wallet, w } = makeWallet();
+    await wallet.keyring.import(MNEMONIC, "password-1");
+    const pA = wallet.handleProvider({ origin: ORIGIN, requestId: "7:0:X" }, { method: "eth_requestAccounts" });
+    await flush();
+    const [a] = await wallet.approvals.store.pending();
+    await wallet.handleUi("approval:resolve", { id: a!.id, approved: true });
+    expect(await pA).toEqual([ACCOUNT]);
+
+    const other = "https://other.example";
+    const pB = wallet.handleProvider({ origin: other, requestId: "7:0:X" }, { method: "eth_requestAccounts" });
+    await flush();
+    expect(w.open).toHaveBeenCalledTimes(2);
+    const [b] = await wallet.approvals.store.pending();
+    expect(b).toMatchObject({ origin: other, status: "pending" });
+    await wallet.approvals.resolve(b!.id, "rejected");
+    await expect(pB).rejects.toMatchObject({ code: 4001 });
+    expect(await wallet.permissions.isPermitted(other)).toBe(false);
+  });
+
+  it("caps the number of approval windows a page can open through embedded frames", async () => {
+    const { wallet, w } = makeWallet();
+    await wallet.keyring.import(MNEMONIC, "password-1");
+    const frames = [1, 2, 3, 4].map((n) =>
+      wallet
+        .handleProvider(
+          { origin: `https://frame${n}.evil.example`, requestId: `9:${n}:r`, embedded: true },
+          { method: "eth_requestAccounts" },
+        )
+        .catch((e: unknown) => e),
+    );
+    await flush();
+    expect(w.open).toHaveBeenCalledTimes(3);
+    expect(await frames[3]).toMatchObject({ code: -32005, message: /open requests waiting/u });
+    const pending = await wallet.approvals.store.pending();
+    expect(pending).toHaveLength(3);
+    expect(pending.every((a) => a.embedded === true)).toBe(true);
+    // Answering one frees a slot.
+    await wallet.approvals.resolve(pending[0]!.id, "rejected");
+    void wallet
+      .handleProvider({ origin: "https://frame5.evil.example", requestId: "9:5:r" }, { method: "eth_requestAccounts" })
+      .catch(() => {});
+    await flush();
+    expect(w.open).toHaveBeenCalledTimes(4);
+    // A top-level page is not flagged as embedded.
+    expect((await wallet.approvals.store.pending()).find((a) => a.origin.includes("frame5"))?.embedded).toBeUndefined();
+  });
+
   it("reopens the window after a restart if it is gone, and a late replay of a rejected request gets 4001", async () => {
     const local = new MemoryKV();
     const session = new MemoryKV();
