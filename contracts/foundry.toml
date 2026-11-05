@@ -35,4 +35,5 @@ fuzz = { runs = 10000 }
 [fmt]
 line_length = 120
 # forge fmt only parses Solidity; standalone Yul objects (src/pq/vendor/*.yul) make `forge fmt --check` fail.
-ignore = ["**/*.yul"]
+# test/privacy/vendor/: third-party sources, kept as upstream wrote them (THIRD_PARTY.md lists the edits).
+ignore = ["**/*.yul", "test/privacy/vendor/**"]

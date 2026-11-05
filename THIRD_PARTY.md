@@ -72,3 +72,28 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+## Privacy Pools test deployment (`contracts/test/privacy/vendor/`, PoolPayer milestone P4)
+
+Vendored so that the PoolPayer tests run against the **real** Privacy Pools v1 contracts (in Foundry and on the
+local devnet). Test-only: nothing under `contracts/src/` imports them (`src/privacy/IPrivacyPools.sol` restates the
+ABI). `PoolPayer` itself is written from scratch; nothing was taken from `Robert-MacWha/privacy-paymaster`
+(`UNLICENSED`).
+
+| Where in this repo | Origin | License | What was taken |
+|---|---|---|---|
+| `contracts/test/privacy/vendor/privacy-pools-core/contracts/{Entrypoint,PrivacyPool,State}.sol`, `implementations/PrivacyPoolSimple.sol`, `lib/{Constants,ProofLib}.sol`, `interfaces/{IEntrypoint,IPrivacyPool,IState,IVerifier}.sol` | [`0xbow-io/privacy-pools-core`](https://github.com/0xbow-io/privacy-pools-core) @ `df4bf730214bf9d0c717a9258f7a74861758c269`, `packages/contracts/src/` (Wonderland for 0xBow) | Apache-2.0 (`vendor/privacy-pools-core/LICENSE`) | Unmodified except: **import paths rewritten to relative paths** and a one-line provenance header per file (Apache-2.0 §4(b) notice) |
+| `contracts/test/privacy/vendor/lean-imt/{InternalLeanIMT,Constants}.sol` | npm `@zk-kit/lean-imt.sol@2.0.0` (the version 0xbow pins) | MIT, Copyright (c) 2024 Ethereum Foundation (`vendor/lean-imt/LICENSE`) | Unmodified except the `PoseidonT3` import path and a provenance header |
+| `contracts/test/privacy/vendor/poseidon-solidity/{PoseidonT3,PoseidonT4}.sol` | npm `poseidon-solidity@0.0.5` (Chance Hudson, `github.com/vimwitch/poseidon-solidity`) | MIT (package.json; the tarball ships no LICENSE file) | Unmodified below a provenance header |
+| `contracts/test/privacy/vendor/openzeppelin-contracts-upgradeable/{access/AccessControlUpgradeable,proxy/utils/{UUPSUpgradeable,Initializable},utils/{ReentrancyGuardUpgradeable,ContextUpgradeable},utils/introspection/ERC165Upgradeable}.sol` | npm `@openzeppelin/contracts-upgradeable@5.0.2` (the version 0xbow pins); their `@openzeppelin/contracts` imports resolve to our `lib/openzeppelin-contracts` | MIT, Copyright (c) 2016-2023 Zeppelin Group Ltd | Unmodified below a provenance header |
+| `contracts/test/privacy/WithdrawVkey.sol` (generated) | the withdraw circuit's verification key, `packages/circuits/trusted-setup/final-keys/withdraw.vkey` of the same repo (sha256 `666bd098…d21e`; identical in npm `@fatsolutions/privacy-pools-core-circuits@1.0.5`) | Apache-2.0 (data) | The key's numbers, emitted by `contracts/devnet-tests/privacy/scripts/gen-verifier.py` |
+
+Not vendored on purpose: 0xbow's `WithdrawalVerifier.sol` is a snarkjs template under **GPL-3.0**; the tests use
+`contracts/test/privacy/WithdrawalGroth16Verifier.sol` instead (MIT, written here; same ABI, same key — it accepts
+the same proofs). Tools used at test time but not distributed: `snarkjs@0.7.5` (GPL-3.0) and the circuit artifacts
+of npm `@fatsolutions/privacy-pools-core-circuits@1.0.5` (Apache-2.0; `withdraw.zkey` sha256 `2a893b42…de677` =
+0xbow's `final-keys/withdraw.zkey`), installed by `contracts/devnet-tests/privacy/package.json`.
+
+The MIT license text of `poseidon-solidity` and `@openzeppelin/contracts-upgradeable` is the standard MIT text quoted
+above for hegota-support, with their own copyright lines ("Copyright (c) Chance Hudson" per the package metadata;
+"Copyright (c) 2016-2023 Zeppelin Group Ltd").
