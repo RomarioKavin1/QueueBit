@@ -628,3 +628,9 @@ Deployed: account `0x553d9CB1…7721` (AccountFactory, tx `0x4994bd22…21d5`), 
 - The clone hop costs ~1.5k gas in VERIFY: Path B 36,213 vs 34,754, Path A 151,701 vs 148,098 (M4 run).
 - `clearExpiredFreeze` could not be shown for a guardian freeze: it is fixed at 72 h and there is no time travel on the
   devnet. It was shown with the vault's `vaultExtendFreeze` short freeze instead. It is the same `frozenUntil` path.
+
+## PoolPayer after the security review (2026-11-06; supersedes the earlier P4 gas table)
+- Review fixes `a8ce107`, `b2cd1dd` cover unmetered charges (blobs, oversized data, witnesses, value frames), stranded refunds, and self-recipient. 45/45 Foundry tests pass.
+- Current devnet numbers (e2e-1793920665037, sidecar :14340): **VERIFY frame 306,006 gas** (was 298,460 before the extra introspection reads), refund frame 25,796, payer net −5,540 gas (the configured estimator slack).
+- **Decision (v1): no user tail frames.** A PoolPayer withdrawal is exactly `[pay(PoolPayer), DEFAULT(settle), DEFAULT(refund)]`. User calls after the withdrawal (and their EIP-3529 refund effects, which PoolPayer can't observe) are out of scope for v1. The wallet sends a separate tx from the recipient if needed. Follow-up: enforce it in `verify`, and update `@leaked/privacy`'s broadcaster.
+- Operator calibration before mainnet: `MIN_SETTLE_GAS` for a depth-32 LeanIMT insert; `MAX_INTRINSIC_GAS` vs the EIP-text intrinsic; make `setOperator` two-step.
