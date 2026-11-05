@@ -115,6 +115,16 @@ abstract contract AccountTestBase is FrameSim {
         return _queueAndExecute(_one(_selfCall(data)), 1);
     }
 
+    /// Queues a loosening self-call and expects its execution to revert (the inner call's error is wrapped).
+    function _queueLoosenReverts(bytes memory data) internal {
+        ILeakedAccount.Call[] memory c = _one(_selfCall(data));
+        vm.prank(vault);
+        bytes32 opId = roles.vaultQueue(c, 1);
+        vm.warp(vm.getBlockTimestamp() + DELAY);
+        vm.expectRevert();
+        roles.executeQueued(opId, c);
+    }
+
     function _usdcTransfer(address to, uint256 amount) internal view returns (ILeakedAccount.Call memory) {
         return ILeakedAccount.Call(address(usdc), 0, abi.encodeWithSelector(usdc.transfer.selector, to, amount));
     }
