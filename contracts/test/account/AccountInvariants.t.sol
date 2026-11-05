@@ -8,16 +8,17 @@ import {ILeakedAccount} from "../../src/account/ILeakedAccount.sol";
 import {LeakedAccountImpl} from "../../src/account/LeakedAccountImpl.sol";
 import {LeakedAccountRoles} from "../../src/account/LeakedAccountRoles.sol";
 import {AccountFactory} from "../../src/account/AccountFactory.sol";
-import {MockToken} from "./mocks/AccountMocks.sol";
+import {MockToken, MockRouter} from "./mocks/AccountMocks.sol";
 
-/// Plays hot key, vault, recovery, guardian, anyone, an attacker and time against one account and keeps ghost
-/// state for the invariants (§10.7.1 layer 3).
+/// Plays hot key (transfers, ETH, registered hashes, router sessions), vault, recovery, guardian, anyone, an
+/// attacker and time against one account and keeps ghost state for the invariants (§10.7.1 layer 3).
 contract AccountHandler is Test {
     uint256 internal constant USD = 1e6;
 
     LeakedAccountImpl public account;
     LeakedAccountRoles public roles;
     MockToken public usdc;
+    MockRouter public router;
     address public recovery;
     address public guardian;
     address public alice;
@@ -30,6 +31,9 @@ contract AccountHandler is Test {
     uint256 public capMax;
     uint256 public hotWhileFrozen;
     uint256 public hotWhileBunker;
+    uint256[] public vaultTimes;
+    uint256[] public vaultUsd;
+    uint256 public thresholdMax;
     uint256 public attackerSuccesses;
     uint256 public nonVaultLoosenings;
     uint256 public rotationTamperedByVault;
@@ -42,10 +46,12 @@ contract AccountHandler is Test {
 
     uint256 public calls;
 
-    constructor(LeakedAccountImpl a, MockToken u, address rec, address g, address al) {
+    constructor(LeakedAccountImpl a, MockToken u, MockRouter r, address rec, address g, address al) {
         account = a;
         roles = LeakedAccountRoles(payable(address(a)));
         usdc = u;
+        router = r;
+        (, thresholdMax,) = roles.getVaultBucket();
         recovery = rec;
         guardian = g;
         alice = al;
@@ -133,6 +139,23 @@ contract AccountHandler is Test {
         _hotRun(amount, c, amount);
     }
 
+    /// A session batch: approve the router, let it pull to alice or sweep to the attacker (H4: debited by delta),
+    /// or leave part of the approval standing (I-6: must revert).
+    function hotSession(uint256 amount, bool sweep, bool leaveApproval) external nonVault {
+        _track();
+        amount = bound(amount, 2, 600 * USD);
+        ILeakedAccount.Call[] memory c = new ILeakedAccount.Call[](2);
+        c[0] = ILeakedAccount.Call(address(usdc), 0, abi.encodeCall(IERC20.approve, (address(router), amount)));
+        c[1] = ILeakedAccount.Call(
+            address(router),
+            0,
+            leaveApproval
+                ? abi.encodeCall(MockRouter.pullPartial, (usdc, amount, sweep ? attacker : alice))
+                : abi.encodeCall(MockRouter.pull, (usdc, amount, sweep ? attacker : alice))
+        );
+        _hotRun(amount, c, amount);
+    }
+
     function _hotRun(uint256 declared, ILeakedAccount.Call[] memory c, uint256 usd) internal {
         ILeakedAccount.HotConfig memory cfg = _cfg();
         vm.prank(address(account));
@@ -203,7 +226,10 @@ contract AccountHandler is Test {
         ILeakedAccount.Call[] memory q = new ILeakedAccount.Call[](1);
         q[0] = ILeakedAccount.Call(address(usdc), 0, abi.encodeCall(IERC20.transfer, (alice, amount)));
         vm.prank(_vault());
-        try roles.vaultExecute(q, amount) {} catch {}
+        try roles.vaultExecute(q, amount) {
+            vaultTimes.push(block.timestamp);
+            vaultUsd.push(amount);
+        } catch {}
     }
 
     function vaultFreezeOrUnfreeze(bool freeze) external vaultAction {
@@ -318,6 +344,10 @@ contract AccountHandler is Test {
         return hotTimes.length;
     }
 
+    function vaultCount() external view returns (uint256) {
+        return vaultTimes.length;
+    }
+
     function opCount() external view returns (uint256) {
         return ops.length;
     }
@@ -357,11 +387,36 @@ contract AccountInvariantsTest is Test {
         );
         roles = LeakedAccountRoles(payable(address(account)));
         MockToken usdc = new MockToken("USDC", 6);
+        MockRouter router = new MockRouter();
         usdc.mint(address(account), 1e12 * USD);
         vm.deal(address(account), 1e6 ether);
 
-        // allowlist usdc and alice through the queue
-        ILeakedAccount.Call[] memory q = new ILeakedAccount.Call[](3);
+        // allowlist usdc and alice, the guardian, and a router session through the queue
+        uint48 sessionExpiry = uint48(block.timestamp + 365 days);
+        ILeakedAccount.Call[] memory q = new ILeakedAccount.Call[](6);
+        q[3] = ILeakedAccount.Call(
+            address(account),
+            0,
+            abi.encodeCall(
+                LeakedAccountRoles.vaultSetSession, (address(usdc), IERC20.approve.selector, 1e9 * USD, sessionExpiry)
+            )
+        );
+        q[4] = ILeakedAccount.Call(
+            address(account),
+            0,
+            abi.encodeCall(
+                LeakedAccountRoles.vaultSetSession,
+                (address(router), MockRouter.pull.selector, 1e9 * USD, sessionExpiry)
+            )
+        );
+        q[5] = ILeakedAccount.Call(
+            address(account),
+            0,
+            abi.encodeCall(
+                LeakedAccountRoles.vaultSetSession,
+                (address(router), MockRouter.pullPartial.selector, 1e9 * USD, sessionExpiry)
+            )
+        );
         q[0] = ILeakedAccount.Call(
             address(account), 0, abi.encodeCall(LeakedAccountRoles.vaultSetToken, (address(usdc), true, 6, 1 * USD))
         );
@@ -375,8 +430,40 @@ contract AccountInvariantsTest is Test {
         vm.warp(block.timestamp + 48 hours);
         roles.executeQueued(op, q);
 
-        handler = new AccountHandler(account, usdc, recovery, guardian, alice);
+        handler = new AccountHandler(account, usdc, router, recovery, guardian, alice);
         targetContract(address(handler));
+    }
+
+    /// The session handler reaches the state the invariants are about: a full pull succeeds (and sweeps to the
+    /// attacker, debited), a partial one reverts (I-6) rather than silently failing for another reason.
+    function test_handler_sessionsReachable() public {
+        uint256 before = handler.usdc().balanceOf(handler.attacker());
+        handler.hotSession(100 * USD, true, false);
+        assertEq(handler.usdc().balanceOf(handler.attacker()), before + 100 * USD);
+        assertEq(handler.hotCount(), 1);
+        handler.hotSession(100 * USD, true, true);
+        assertEq(handler.hotCount(), 1, "partial pull must revert (I-6)");
+        assertEq(handler.usdc().allowance(address(account), address(handler.router())), 0);
+    }
+
+    /// I-6: no approval granted by a hot batch survives it (the router session is the only approver).
+    function invariant_noStandingApproval() public view {
+        assertEq(handler.usdc().allowance(address(account), address(handler.router())), 0, "I-6 standing approval");
+    }
+
+    /// The vault's instant spends are bounded like the hot bucket: over any window, <= threshold + elapsed x
+    /// threshold / 1 day (the daily instant allowance; the handler never raises it).
+    function invariant_vaultInstantSpendBounded() public view {
+        uint256 n = handler.vaultCount();
+        uint256 cap = handler.thresholdMax();
+        for (uint256 i; i < n; ++i) {
+            uint256 sum;
+            uint256 ti = handler.vaultTimes(i);
+            for (uint256 j = i; j < n; ++j) {
+                sum += handler.vaultUsd(j);
+                assertLe(sum, cap + ((handler.vaultTimes(j) - ti) * cap) / 1 days, "vault instant spend over window");
+            }
+        }
     }
 
     /// I-1: USD leaving through the hot tier over any window [t_i, t_j] <= cap + (t_j - t_i) * cap / 1 day, with

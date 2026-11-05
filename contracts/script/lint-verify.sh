@@ -55,7 +55,15 @@ for line in $rs; do
     fail=1
   fi
 done
-[ $fail -eq 0 ] && echo "lint-verify: source OK"
+# The role surface runs by DELEGATECALL from the implementation's fallback, so it executes in the account's context
+# with the VERIFY frame's data chosen by the hot key: it must hold no APPROVE helper (no HegotaSupport) so that no
+# selector routed to it can approve a frame (the lint then only needs LeakedVerify's own reachable code).
+roles=src/account/LeakedAccountRoles.sol
+if grep -nE 'HegotaSupport|\bapprove\(Scope|LeakedVerify' "$roles" >/dev/null; then
+  echo "lint-verify: $roles: the roles module must not inherit HegotaSupport / reach APPROVE"
+  fail=1
+fi
+[ $fail -eq 0 ] && echo "lint-verify: source OK (LeakedVerify.sol; roles module holds no APPROVE helper)"
 
 echo "== 3. executed opcodes (forge test -vvv)"
 out=$(forge test --match-contract VerifyOpcodesTest -vvv 2>&1 || true)
