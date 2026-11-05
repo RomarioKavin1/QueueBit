@@ -12,6 +12,8 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Permit.sol";
 import {RollingCap} from "../lib/RollingCap.sol";
+import {IPQVerifier} from "../interfaces/IPQVerifier.sol";
+import {IRoleSignerFactory} from "../interfaces/IRoleSignerFactory.sol";
 import {LeakedVerify} from "./LeakedVerify.sol";
 import {LeakedAccountStorage} from "./LeakedAccountStorage.sol";
 import {LeakedAccountBase} from "./LeakedAccountBase.sol";
@@ -24,7 +26,8 @@ import {LeakedAccountBase} from "./LeakedAccountBase.sol";
 ///
 ///         Tiers:
 ///         - hot: `verifyFrame()` (VERIFY, `LeakedVerify`) then `hotExecute` (SENDER frame, msg.sender == this):
-///           allowlisted ERC-20 `transfer`s and ETH sends to allowlisted recipients, vault-issued session calls with
+///           allowlisted ERC-20 `transfer`s and ETH sends (to any recipient in `RecipientMode.Open`, the default;
+///           to allowlisted recipients in `Strict`), vault-issued session calls with
 ///           balance-delta accounting, `registerHash` for value-bearing 1271 hashes; all debited at vault-set static
 ///           prices from one rolling USD bucket (`RollingCap`), bounded per tx and stopped by freeze or bunker;
 ///         - vault: tightening is instant; loosening, large spends, upgrade and migration are queued (default 48 h)
@@ -44,6 +47,8 @@ contract LeakedAccountImpl is LeakedVerify, LeakedAccountBase, Initializable, UU
     address internal constant PERMIT2 = 0x000000000022D473030F116dDEE9F6B43aC78BA3;
 
     bytes4 private constant MAGIC_1271 = 0x1626ba7e;
+    uint8 private constant ROLE_VAULT = 1; // PQRoleSigner.ROLE_VAULT
+    uint8 private constant ROLE_RECOVERY = 2; // PQRoleSigner.ROLE_RECOVERY
     bytes4 private constant ERC20_APPROVE = 0x095ea7b3;
     bytes4 private constant ERC20_INCREASE_ALLOWANCE = 0x39509351;
     bytes4 private constant SET_APPROVAL_FOR_ALL = 0xa22cb465;
@@ -69,13 +74,21 @@ contract LeakedAccountImpl is LeakedVerify, LeakedAccountBase, Initializable, UU
     }
 
     /// @notice One-time setup of a fresh proxy (the factory passes this as the proxy's init data).
+    /// @dev Bound mode (`c.vault.pk != 0`, the default path): the vault signer is not an input but derived from the
+    ///      vault's PQ parameters and this proxy's own address, `c.roleSignerFactory.predictRoleSigner(c.vault.salt,
+    ///      1, address(this), c.vault.pk, c.vault.verifier, c.vault.payerKey)`; likewise the recovery signer (role 2)
+    ///      when `c.recovery.pk != 0`. The proxy's CREATE2 address commits to those parameters (they are init data),
+    ///      the clone's to this address: both are counterfactual, and the clone may be deployed later by anyone
+    ///      (`createRoleSigner` with the same arguments; `RoleSignerDerived` logs them). Explicit mode (pk == 0):
+    ///      the address in `c.vaultSigner` / `c.recoverySigner` (an unbound `PQRoleSigner`, a test signer).
     function initialize(InitConfig calldata c) external initializer {
         LeakedAccountStorage.Layout storage $ = _s();
         if (c.hotKey == address(0) || c.hotKey == address(this)) revert BadAddress(c.hotKey);
-        if (c.vaultSigner == address(0) || c.vaultSigner == address(this)) revert BadAddress(c.vaultSigner);
-        if (c.recoverySigner == address(this) || (c.recoverySigner != address(0) && c.recoverySigner == c.vaultSigner))
-        {
-            revert BadAddress(c.recoverySigner);
+        address vaultSigner = _roleSigner(c.roleSignerFactory, c.vault, c.vaultSigner, ROLE_VAULT);
+        address recoverySigner = _roleSigner(c.roleSignerFactory, c.recovery, c.recoverySigner, ROLE_RECOVERY);
+        if (vaultSigner == address(0) || vaultSigner == address(this)) revert BadAddress(vaultSigner);
+        if (recoverySigner == address(this) || (recoverySigner != address(0) && recoverySigner == vaultSigner)) {
+            revert BadAddress(recoverySigner);
         }
         uint8 frames = c.maxHotFrames == 0 ? DEFAULT_MAX_HOT_FRAMES : c.maxHotFrames;
         uint48 delay = c.timelockDelay == 0 ? DEFAULT_TIMELOCK : c.timelockDelay;
@@ -85,8 +98,8 @@ contract LeakedAccountImpl is LeakedVerify, LeakedAccountBase, Initializable, UU
         }
 
         $.hotKey = c.hotKey;
-        $.vaultSigner = c.vaultSigner;
-        $.recoverySigner = c.recoverySigner;
+        $.vaultSigner = vaultSigner;
+        $.recoverySigner = recoverySigner;
         $.maxHotFrames = frames;
         $.perTxMaxUsd = uint96(c.perTxMaxUsd);
         $.maxFeeWeiPerTx = uint128(c.maxFeeWeiPerTx);
@@ -94,15 +107,15 @@ contract LeakedAccountImpl is LeakedVerify, LeakedAccountBase, Initializable, UU
         $.timelockDelay = delay;
         $.vaultBucket.init(c.timelockThresholdUsd);
         emit HotKeyRotated(address(0), c.hotKey);
-        emit VaultSignerSet(c.vaultSigner);
-        if (c.recoverySigner != address(0)) emit RecoverySignerSet(c.recoverySigner);
+        emit VaultSignerSet(vaultSigner);
+        if (recoverySigner != address(0)) emit RecoverySignerSet(recoverySigner);
         emit CapUpdated(c.capUsdPerDay, c.perTxMaxUsd, c.maxFeeWeiPerTx, frames);
         emit TimelockUpdated(delay, c.timelockThresholdUsd);
         _setFeePolicy($, c.maxPriorityFeePerGas, c.selfPay, c.tank);
 
         // UX decision (ux-spec §9 item 4): the fee tank is an everyday recipient, so a low tank never needs the vault.
         if (c.tank != address(0)) {
-            if (c.tank == address(this) || c.tank == c.vaultSigner || c.tank == c.recoverySigner) {
+            if (c.tank == address(this) || c.tank == vaultSigner || c.tank == recoverySigner) {
                 revert BadAddress(c.tank);
             }
             $.targets[c.tank] = true;
@@ -114,6 +127,33 @@ contract LeakedAccountImpl is LeakedVerify, LeakedAccountBase, Initializable, UU
         }
         $.valueVerifiers[PERMIT2] = true;
         emit ValueVerifierSet(PERMIT2, true);
+        $.recipientsOpen = c.recipientMode == RecipientMode.Open;
+        emit RecipientModeSet(c.recipientMode);
+    }
+
+    /// The role signer of `role`: derived from `p` (bound mode) or the explicit address (`p` all zero).
+    function _roleSigner(address factory, RoleSignerParams calldata p, address explicit, uint8 role)
+        private
+        returns (address signer)
+    {
+        if (p.pk == bytes32(0)) {
+            if (p.salt != bytes32(0) || p.verifier != address(0) || p.payerKey != address(0)) revert BadConfig();
+            return explicit;
+        }
+        // Bound: the address must come from the parameters alone, and must be one `createRoleSigner` can deploy
+        // (the factory refuses a verifier without a fixed `sigLength`; such an address would never get code).
+        if (explicit != address(0) || factory.code.length == 0 || _sigLength(p.verifier) == 0) revert BadConfig();
+        signer =
+            IRoleSignerFactory(factory).predictRoleSigner(p.salt, role, address(this), p.pk, p.verifier, p.payerKey);
+        emit RoleSignerDerived(role, signer, factory, p.salt, p.pk, p.verifier, p.payerKey);
+    }
+
+    /// `verifier.sigLength()` with the factory's acceptance rule (code, answers, 1..65535), else 0.
+    function _sigLength(address verifier) private view returns (uint256 len) {
+        if (verifier.code.length == 0) return 0;
+        (bool ok, bytes memory ret) = verifier.staticcall(abi.encodeCall(IPQVerifier.sigLength, ()));
+        if (ok && ret.length >= 32) len = abi.decode(ret, (uint256));
+        if (len > type(uint16).max) len = 0;
     }
 
     /// Accepts ETH. (An empty-data VERIFY frame lands here and never approves: `verifyFrame()` is the entry.)
@@ -309,6 +349,11 @@ contract LeakedAccountImpl is LeakedVerify, LeakedAccountBase, Initializable, UU
         return _s().targets[target];
     }
 
+    /// @notice Who may receive a hot ETH send or token `transfer` (Open: anyone; Strict: `isTarget` only).
+    function recipientMode() external view returns (RecipientMode) {
+        return _s().recipientsOpen ? RecipientMode.Open : RecipientMode.Strict;
+    }
+
     function getSession(address target, bytes4 selector) external view returns (Session memory) {
         return _s().sessions[sessionId(target, selector)];
     }
@@ -348,18 +393,20 @@ contract LeakedAccountImpl is LeakedVerify, LeakedAccountBase, Initializable, UU
             return 0;
         }
         if (c.data.length == 0) {
-            // Plain ETH to an allowlisted recipient.
-            if (!$.targets[t]) revert NotAllowed(t, bytes4(0));
+            // Plain ETH: to an allowlisted recipient, or (Open) to any recipient, with value. A zero-value empty call
+            // moves nothing and only runs the target's fallback: it is a non-transfer call and needs the allowlist.
+            if (!$.targets[t] && (c.value == 0 || !_openRecipient($, t))) revert NotAllowed(t, bytes4(0));
             uint256 usd = quoteUsd(address(0), c.value);
             _call(i, t, c.value, "");
             return usd;
         }
         TokenCfg storage tc = $.tokens[t];
         if (t != address(0) && tc.allowed && sel == IERC20.transfer.selector) {
-            // ERC-20 transfer of an allowlisted token to an allowlisted recipient (H2: nothing else on a token).
+            // ERC-20 transfer of an allowlisted (priced) token to an allowlisted recipient, or (Open) to any
+            // recipient (H2: nothing else on a token: no approve / permit / transferFrom outside a session).
             if (c.value != 0 || c.data.length != 68) revert NotAllowed(t, sel);
             (address to, uint256 amount) = abi.decode(c.data[4:], (address, uint256));
-            if (!$.targets[to]) revert NotAllowed(to, sel);
+            if (!$.targets[to] && !_openRecipient($, to)) revert NotAllowed(to, sel);
             uint256 usd = _quote(tc, amount);
             _callToken(i, t, c.data);
             return usd;
@@ -384,6 +431,12 @@ contract LeakedAccountImpl is LeakedVerify, LeakedAccountBase, Initializable, UU
         s.allowanceUsd = left;
         emit SessionUsed(sid, used, left);
         return used;
+    }
+
+    /// Open mode admits any recipient of a plain ETH send or token `transfer` but address(0) (a burn is never an
+    /// everyday payment). The account itself never gets here (self-calls are handled first).
+    function _openRecipient(LeakedAccountStorage.Layout storage $, address to) private view returns (bool) {
+        return to != address(0) && $.recipientsOpen;
     }
 
     /// I-6: no approval granted inside the batch survives it.

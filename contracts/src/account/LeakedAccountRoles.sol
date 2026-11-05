@@ -15,7 +15,8 @@ import {LeakedAccountStorage} from "./LeakedAccountStorage.sol";
 ///         Spec: `docs/plan/sections/10-contracts.md` §10.3.2 ("Role entry points", access-control matrix).
 ///
 ///         Authority (`msg.sender`, never an EIP-8141 introspection read; role signers are separate senders):
-///         - vault (`msg.sender == vaultSigner`): tightening instant; loosening must be queued (`MustQueue`);
+///         - vault (`msg.sender == vaultSigner`): tightening instant; loosening must be queued (`MustQueue`)
+///           (recipient mode: Open -> Strict instant, Strict -> Open queued);
 ///           instant spends draw on a daily allowance (cap = timelock threshold); larger ones are queued;
 ///         - queued ops execute permissionlessly after `eta`, with vault authority (`T_QUEUED`);
 ///         - recovery outranks the vault: cancels any queued op, starts a 7-day rotation the vault cannot cancel,
@@ -179,6 +180,20 @@ contract LeakedAccountRoles is LeakedAccountBase {
         _checkPolicyTarget($, target);
         $.targets[target] = allowed;
         emit TargetConfigured(target, allowed);
+    }
+
+    /// @notice Hot recipient policy. Open -> Strict (only `vaultSetTarget` recipients) is a tightening and instant;
+    ///         Strict -> Open is a loosening and must be queued.
+    /// @dev Vault only, not the guardian: a guardian's power is a bounded, self-expiring pause (72 h, once per 7 days),
+    ///      and freeze already stops every hot payment. Strict is an open-ended policy change that only a queued vault
+    ///      op can undo, so a guardian (a third party, or a compromised guardian key) could impose an indefinite,
+    ///      timelocked outage of everyday payments, and it buys nothing against a leaked hot key that the cap and a
+    ///      freeze do not already give. Not read in VERIFY (execution-only slot; I-2).
+    function vaultSetRecipientMode(RecipientMode mode) external delegated {
+        bool open = mode == RecipientMode.Open;
+        LeakedAccountStorage.Layout storage $ = _authVault(open && !_s().recipientsOpen);
+        $.recipientsOpen = open;
+        emit RecipientModeSet(mode);
     }
 
     /// @notice Session policy `(target, selector, allowanceUsd, expiry)`: hot batches may call `target.selector`
@@ -513,11 +528,11 @@ contract LeakedAccountRoles is LeakedAccountBase {
         return sel == this.vaultSetHotKey.selector || sel == this.vaultSetCap.selector
             || sel == this.vaultSetFeePolicy.selector || sel == this.vaultSetToken.selector
             || sel == this.vaultSetTarget.selector || sel == this.vaultSetSession.selector
-            || sel == this.vaultSetValueVerifier.selector || sel == this.vaultSetTrustedVerifier.selector
-            || sel == this.vaultSetTimelock.selector || sel == this.vaultSetRecoverySigner.selector
-            || sel == this.vaultSetGuardian.selector || sel == this.vaultFreeze.selector
-            || sel == this.vaultUnfreeze.selector || sel == this.vaultExtendFreeze.selector
-            || sel == this.vaultEnableBunker.selector;
+            || sel == this.vaultSetRecipientMode.selector || sel == this.vaultSetValueVerifier.selector
+            || sel == this.vaultSetTrustedVerifier.selector || sel == this.vaultSetTimelock.selector
+            || sel == this.vaultSetRecoverySigner.selector || sel == this.vaultSetGuardian.selector
+            || sel == this.vaultFreeze.selector || sel == this.vaultUnfreeze.selector
+            || sel == this.vaultExtendFreeze.selector || sel == this.vaultEnableBunker.selector;
     }
 
     function _enqueue(LeakedAccountStorage.Layout storage $, uint8 kind, bytes32 payloadHash)

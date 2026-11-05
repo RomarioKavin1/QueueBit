@@ -164,3 +164,24 @@ contract NotUUPS {
         return 1;
     }
 }
+
+/// A stateless fixed-length PQ verifier stand-in (`IPQVerifier` shape): accepts exactly the configured witness.
+contract MockPQVerifier {
+    uint256 public immutable sigLength;
+
+    constructor(uint256 len) {
+        sigLength = len;
+    }
+
+    function schemeId() external pure returns (bytes32) {
+        return keccak256("leaked.test.mock-pq");
+    }
+
+    function verifyGasEstimate() external pure returns (uint256) {
+        return 1_000;
+    }
+
+    function verify(bytes32 pk, bytes32 digest, bytes calldata sig) external view returns (bool) {
+        return sig.length == sigLength && keccak256(sig) == keccak256(abi.encode(pk, digest));
+    }
+}

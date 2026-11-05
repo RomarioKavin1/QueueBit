@@ -60,6 +60,11 @@ library LeakedAccountStorage {
         mapping(address verifier => bool) trustedVerifiers;
         /// A registered hash bound to one consumer (`registerPermit`: the token); address(0) = the verifier rule.
         mapping(bytes32 hash => address consumer) registeredFor;
+        // ---- appended (recipient policy, 2026-11-06) ----
+        /// `RecipientMode.Open` when true. Stored inverted (false = Strict) so that the zero value of this appended
+        /// slot fails closed: an account upgraded from an implementation without the field keeps the recipient
+        /// allowlist. Execution-only (VERIFY never reads it; I-2): written by `initialize` and the vault only.
+        bool recipientsOpen;
     }
 
     bytes32 internal constant SLOT = 0x9eadb468a7841dcf4c48ba06e49dbfab6d1eb75065d9b194aac64cacb775e800;

@@ -8,6 +8,19 @@ pragma solidity 0.8.28;
 ///           (EIP-170: one contract was 30.6 KB); unknown selectors still revert;
 ///         - `initialize(InitConfig)` (adds tank, ETH price, priority-fee bound, timelock fields); the tank is
 ///           allowlisted as a hot recipient at initialize (UX decision);
+///         - bound role signers (2026-11-06): `InitConfig` carries the vault's (and optionally the recovery's) PQ
+///           parameters and `initialize` DERIVES the signer address as
+///           `roleSignerFactory.predictRoleSigner(salt, role, address(this), pk, verifier, payerKey)`, so the
+///           account's CREATE2 address commits to the vault pk (through the init data) and the bound signer commits
+///           to the account: no cycle, both counterfactual; the clone is deployed lazily by anyone (deterministic).
+///           Explicit signer addresses (unbound `PQRoleSigner`, or any contract) remain accepted when no PQ
+///           parameters are given (backward compatibility);
+///         - recipient policy (2026-11-06, product decision): `RecipientMode.Open` (the default at initialize) lets
+///           the hot key send ETH and allowlisted (priced) ERC-20s by `transfer` to ANY recipient, within the bucket
+///           and the per-tx bound; `Strict` is the plan's recipient allowlist. Open -> Strict is instant
+///           (`vaultSetRecipientMode`, vault only), Strict -> Open is a queued loosening. Everything else on the hot
+///           path (non-transfer calls: sessions only; token: allowlisted and priced; I-6) is mode-independent, and
+///           VERIFY does not read the mode;
 ///         - no `vaultSetDomain`/`allowedDomains`: hot-key ERC-7739 is accepted for any app domain (UX decision),
 ///           but the account cannot tell zero-value typed data from a permit or an order, so (audit 2026-11-06) it is
 ///           honoured only where it cannot move assets: for a code-less caller (eth_call verification, i.e. SIWE and
@@ -38,11 +51,36 @@ interface ILeakedAccount {
         bytes data;
     }
 
-    /// Everything `initialize` sets. Zero means "default" for `maxHotFrames` (4) and `timelockDelay` (48 h).
+    /// Who may receive a hot-key ETH send or token `transfer`. Open: anyone (the bucket and per-tx bound still
+    /// apply); Strict: only the vault's recipient allowlist (`vaultSetTarget`).
+    enum RecipientMode {
+        Open,
+        Strict
+    }
+
+    /// The `RoleSignerFactory.createRoleSigner` arguments of a bound role signer, but `role` and `account` (the
+    /// account fills them in: `role` from the field, `account = address(this)`). `pk == 0` = not given.
+    struct RoleSignerParams {
+        bytes32 salt;
+        bytes32 pk;
+        address verifier;
+        address payerKey;
+    }
+
+    /// Everything `initialize` sets. Zero means "default" for `maxHotFrames` (4), `timelockDelay` (48 h) and
+    /// `recipientMode` (Open).
     struct InitConfig {
         address hotKey;
+        /// Bound mode (the default path): the `RoleSignerFactory` the signers below are derived from.
+        address roleSignerFactory;
+        /// The vault's PQ parameters: `vaultSigner` is derived (`predictRoleSigner`, role 1, account = this).
+        RoleSignerParams vault;
+        /// Optional (`pk == 0`: none, or the explicit `recoverySigner`): derived with role 2.
+        RoleSignerParams recovery;
+        /// Unbound / explicit mode only (`vault.pk == 0`): the vault signer's address; must be 0 in bound mode.
         address vaultSigner;
-        /// address(0) = no recovery signer yet (bunker cannot be enabled until one is installed).
+        /// Explicit mode only (`recovery.pk == 0`); address(0) = no recovery signer yet (bunker cannot be enabled
+        /// until one is installed). Must be 0 when `recovery.pk` is given.
         address recoverySigner;
         /// The default-code fee-tank EOA: pinned as the `pay` frame's target and allowlisted as a hot recipient
         /// (so a low tank is topped up as an everyday payment). address(0) = no pin, nothing allowlisted.
@@ -58,6 +96,8 @@ interface ILeakedAccount {
         uint256 timelockThresholdUsd;
         /// USD (6 decimals) per 1 ETH; 0 = ETH is not a hot-spendable asset.
         uint256 ethUsdPrice;
+        /// Open (default) or Strict (recipient allowlist only).
+        RecipientMode recipientMode;
     }
 
     /// The fields VERIFY reads, plus the per-tx bounds. Returned by `getHotConfig()`.
@@ -126,6 +166,8 @@ interface ILeakedAccount {
     event ValueVerifierSet(address indexed verifier, bool denied);
     event TrustedVerifierSet(address indexed verifier, bool trusted);
     event TimelockUpdated(uint48 delay, uint256 thresholdUsd);
+    /// The hot recipient policy (emitted at initialize and on every change).
+    event RecipientModeSet(RecipientMode mode);
 
     event Frozen(address indexed by, uint48 until);
     event Unfrozen(address indexed by);
@@ -138,6 +180,18 @@ interface ILeakedAccount {
 
     event VaultSignerSet(address indexed signer);
     event RecoverySignerSet(address indexed signer);
+    /// A role signer derived at initialize (bound mode): the `createRoleSigner` arguments that deploy it, so anyone
+    /// can deploy the clone lazily from the log alone. Emitted before the matching `VaultSignerSet` /
+    /// `RecoverySignerSet`.
+    event RoleSignerDerived(
+        uint8 indexed role,
+        address indexed signer,
+        address indexed factory,
+        bytes32 salt,
+        bytes32 pk,
+        address verifier,
+        address payerKey
+    );
     event GuardianSet(address indexed guardian, bool enabled);
     event VaultRotationStarted(address indexed newVaultSigner, uint48 eta);
     event VaultRotationFinalized(address indexed newVaultSigner);

@@ -2,15 +2,21 @@
 pragma solidity 0.8.28;
 
 import {Devnet} from "@forshtat/hegota-support/contracts/HegotaSupport.sol";
+import {TxParam} from "@forshtat/hegota-support/contracts/Params.sol";
+import {IStakingRegistry} from "../../src/interfaces/IStakingRegistry.sol";
+import {RoleSignerFactory} from "../../src/roles/RoleSignerFactory.sol";
 import {FrameSim} from "../frame/FrameSim.sol";
 import {LeakedAccountImpl} from "../../src/account/LeakedAccountImpl.sol";
 import {LeakedAccountRoles} from "../../src/account/LeakedAccountRoles.sol";
 import {AccountFactory} from "../../src/account/AccountFactory.sol";
 import {ILeakedAccount} from "../../src/account/ILeakedAccount.sol";
-import {MockToken, MockRouter} from "./mocks/AccountMocks.sol";
+import {MockToken, MockRouter, MockPQVerifier} from "./mocks/AccountMocks.sol";
 
 /// Shared setup: one implementation + roles module, a factory-deployed proxy with a default policy, two priced
 /// tokens and an allowlisted recipient. `account` and `roles` are the same proxy viewed through the two ABIs.
+/// Bound mode (the production default): `vault` and `recovery` are the `PQRoleSigner` clone addresses that
+/// `initialize` derived from the PQ parameters and the account's own address (not deployed: the tests act as them
+/// with `vm.prank`; `BoundRoleSigners.t.sol` deploys them and signs through them). Recipient mode: Open (default).
 abstract contract AccountTestBase is FrameSim {
     uint256 internal constant USD = 1e6;
     uint256 internal constant CAP = 1_000 * USD;
@@ -25,8 +31,14 @@ abstract contract AccountTestBase is FrameSim {
     uint256 internal tankPk = 0x7A4C;
     address internal hot;
     address internal tank;
-    address internal vault = makeAddr("vaultSigner");
-    address internal recovery = makeAddr("recoverySigner");
+    address internal vault;
+    address internal recovery;
+    bytes32 internal constant VAULT_PK = keccak256("leaked.test.vault-pk");
+    bytes32 internal constant RECOVERY_PK = keccak256("leaked.test.recovery-pk");
+    uint256 internal constant SIG_LEN = 64;
+    address internal vaultPayer = makeAddr("vaultPayer");
+    RoleSignerFactory internal signerFactory;
+    MockPQVerifier internal pqVerifier;
     address internal guardian = makeAddr("guardian");
     address internal alice = makeAddr("alice");
     address internal stranger = makeAddr("stranger");
@@ -47,7 +59,17 @@ abstract contract AccountTestBase is FrameSim {
         impl = new LeakedAccountImpl(Devnet.ERC8421_WORKSHOP, true, address(rolesModule));
         simAttach(address(impl));
         factory = new AccountFactory();
-        address a = factory.createAccount(bytes32(uint256(1)), address(impl), _initData(_defaultCfg()));
+        pqVerifier = new MockPQVerifier(SIG_LEN);
+        signerFactory = new RoleSignerFactory(
+            Devnet.ERC8421_WORKSHOP, TxParam.MAX_COST, IStakingRegistry(makeAddr("stakingRegistry")), MAX_FEE_WEI
+        );
+        bytes memory init = _initData(_defaultCfg());
+        address predicted = factory.predictAccount(bytes32(uint256(1)), address(impl), init);
+        vault = _derivedSigner(predicted, 1, VAULT_PK, vaultPayer);
+        recovery = _derivedSigner(predicted, 2, RECOVERY_PK, address(0));
+        vm.label(vault, "vaultSigner");
+        vm.label(recovery, "recoverySigner");
+        address a = factory.createAccount(bytes32(uint256(1)), address(impl), init);
         account = LeakedAccountImpl(payable(a));
         roles = LeakedAccountRoles(payable(a));
         vm.label(a, "account");
@@ -73,11 +95,24 @@ abstract contract AccountTestBase is FrameSim {
 
     // ---------------------------------------------------------------------------------------------- helpers ------
 
-    function _defaultCfg() internal view returns (ILeakedAccount.InitConfig memory) {
+    /// Bound mode (default): vault and recovery derived from their PQ parameters at initialize.
+    function _defaultCfg() internal view returns (ILeakedAccount.InitConfig memory c) {
+        c = _explicitCfg(address(0), address(0));
+        c.roleSignerFactory = address(signerFactory);
+        c.vault = ILeakedAccount.RoleSignerParams(bytes32(0), VAULT_PK, address(pqVerifier), vaultPayer);
+        c.recovery = ILeakedAccount.RoleSignerParams(bytes32(0), RECOVERY_PK, address(pqVerifier), address(0));
+    }
+
+    /// Explicit (unbound / legacy) mode: the signers by address.
+    function _explicitCfg(address v, address r) internal view returns (ILeakedAccount.InitConfig memory) {
+        ILeakedAccount.RoleSignerParams memory none;
         return ILeakedAccount.InitConfig({
             hotKey: hot,
-            vaultSigner: vault,
-            recoverySigner: recovery,
+            roleSignerFactory: address(0),
+            vault: none,
+            recovery: none,
+            vaultSigner: v,
+            recoverySigner: r,
             tank: tank,
             capUsdPerDay: CAP,
             perTxMaxUsd: PER_TX,
@@ -87,8 +122,20 @@ abstract contract AccountTestBase is FrameSim {
             selfPay: false,
             timelockDelay: DELAY,
             timelockThresholdUsd: THRESHOLD,
-            ethUsdPrice: ETH_PRICE
+            ethUsdPrice: ETH_PRICE,
+            recipientMode: ILeakedAccount.RecipientMode.Open
         });
+    }
+
+    /// The bound signer `initialize` derives for `acct` (what `createRoleSigner` would deploy).
+    function _derivedSigner(address acct, uint8 role, bytes32 pk, address payer) internal view returns (address) {
+        return signerFactory.predictRoleSigner(bytes32(0), role, acct, pk, address(pqVerifier), payer);
+    }
+
+    /// Instant tightening to the recipient allowlist (the pre-2026-11-06 behaviour).
+    function _strict() internal {
+        vm.prank(vault);
+        roles.vaultSetRecipientMode(ILeakedAccount.RecipientMode.Strict);
     }
 
     function _initData(ILeakedAccount.InitConfig memory c) internal pure returns (bytes memory) {

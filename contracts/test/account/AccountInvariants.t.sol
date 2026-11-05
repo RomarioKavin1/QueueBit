@@ -3,12 +3,28 @@ pragma solidity 0.8.28;
 
 import {Test} from "forge-std/Test.sol";
 import {Devnet} from "@forshtat/hegota-support/contracts/HegotaSupport.sol";
+import {TxParam} from "@forshtat/hegota-support/contracts/Params.sol";
+import {IStakingRegistry} from "../../src/interfaces/IStakingRegistry.sol";
+import {RoleSignerFactory} from "../../src/roles/RoleSignerFactory.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ILeakedAccount} from "../../src/account/ILeakedAccount.sol";
 import {LeakedAccountImpl} from "../../src/account/LeakedAccountImpl.sol";
 import {LeakedAccountRoles} from "../../src/account/LeakedAccountRoles.sol";
 import {AccountFactory} from "../../src/account/AccountFactory.sol";
-import {MockToken, MockRouter} from "./mocks/AccountMocks.sol";
+import {MockToken, MockRouter, MockPQVerifier} from "./mocks/AccountMocks.sol";
+
+/// A contract with a state-changing fallback: an "arbitrary contract" the hot key must not call in Open mode.
+contract OpenModeVictim {
+    uint256 public pokes;
+
+    fallback() external payable {
+        if (msg.value == 0) pokes++;
+    }
+
+    receive() external payable {
+        pokes++;
+    }
+}
 
 /// Plays hot key (transfers, ETH, registered hashes, router sessions), vault, recovery, guardian, anyone, an
 /// attacker and time against one account and keeps ghost state for the invariants (§10.7.1 layer 3).
@@ -37,6 +53,13 @@ contract AccountHandler is Test {
     uint256 public attackerSuccesses;
     uint256 public nonVaultLoosenings;
     uint256 public rotationTamperedByVault;
+    /// Open-mode abuse that succeeded (approve / permit / transferFrom / increaseAllowance on a token, a
+    /// non-transfer call or a zero-value empty call to an unallowlisted contract, ETH with calldata).
+    uint256 public openAbuseSuccesses;
+    /// A transfer to a recipient outside the allowlist that succeeded while the mode was Strict.
+    uint256 public strictViolations;
+    uint256 public openPayments;
+    OpenModeVictim public victim = new OpenModeVictim();
 
     bytes32[] public ops;
     mapping(bytes32 => uint48) public ghostEta;
@@ -91,8 +114,13 @@ contract AccountHandler is Test {
     modifier nonVault() {
         ILeakedAccount.HotConfig memory a = _cfg();
         uint256 capA = _cap();
+        bool strictA = _strictMode();
         _;
-        if (_loosened(a, capA, _cfg(), _cap())) nonVaultLoosenings++;
+        if (_loosened(a, capA, _cfg(), _cap()) || (strictA && !_strictMode())) nonVaultLoosenings++;
+    }
+
+    function _strictMode() internal view returns (bool) {
+        return account.recipientMode() == ILeakedAccount.RecipientMode.Strict;
     }
 
     modifier vaultAction() {
@@ -127,6 +155,73 @@ contract AccountHandler is Test {
         _hotRun(usd, c, usd);
     }
 
+    /// A payment to an arbitrary recipient (ETH or USDC): succeeds in Open mode (within the cap), never in Strict.
+    function hotPayAnyone(uint256 amount, uint160 who, bool eth) external nonVault {
+        _track();
+        address to = address(uint160(bound(who, 0x10000, type(uint160).max)));
+        if (to == address(account) || to == alice || to == account.getHotConfig().tank || to.code.length != 0) {
+            to = makeAddr("bob");
+        }
+        bool strict = _strictMode();
+        ILeakedAccount.Call[] memory c = new ILeakedAccount.Call[](1);
+        uint256 usd;
+        if (eth) {
+            amount = bound(amount, 1, 0.2 ether);
+            c[0] = ILeakedAccount.Call(to, amount, "");
+            usd = (amount * 3_000 * USD + 1e18 - 1) / 1e18;
+        } else {
+            amount = bound(amount, 1, 600 * USD);
+            c[0] = ILeakedAccount.Call(address(usdc), 0, abi.encodeCall(IERC20.transfer, (to, amount)));
+            usd = amount;
+        }
+        if (_hotRun(usd, c, usd)) {
+            openPayments++;
+            if (strict) strictViolations++;
+        }
+    }
+
+    /// Open mode never admits anything but a plain ETH send or a token `transfer` to an arbitrary address.
+    function hotOpenAbuse(uint256 which, uint256 amount) external nonVault {
+        _track();
+        amount = bound(amount, 1, 600 * USD);
+        which = bound(which, 0, 6);
+        ILeakedAccount.Call[] memory c = new ILeakedAccount.Call[](1);
+        if (which == 0) {
+            c[0] = ILeakedAccount.Call(address(usdc), 0, abi.encodeCall(IERC20.approve, (attacker, amount)));
+        } else if (which == 1) {
+            c[0] = ILeakedAccount.Call(
+                address(usdc), 0, abi.encodeCall(IERC20.transferFrom, (address(account), attacker, amount))
+            );
+        } else if (which == 2) {
+            c[0] = ILeakedAccount.Call(
+                address(usdc),
+                0,
+                abi.encodeWithSelector(0x39509351, attacker, amount) // increaseAllowance
+            );
+        } else if (which == 3) {
+            // ERC-2612 permit(owner, spender, value, deadline, v, r, s)
+            c[0] = ILeakedAccount.Call(
+                address(usdc),
+                0,
+                abi.encodeWithSelector(
+                    0xd505accf, address(account), attacker, amount, block.timestamp, uint8(27), bytes32(0), bytes32(0)
+                )
+            );
+        } else if (which == 4) {
+            c[0] = ILeakedAccount.Call(address(victim), 0, ""); // zero-value empty call: runs the fallback
+        } else if (which == 5) {
+            c[0] = ILeakedAccount.Call(address(victim), 0, abi.encodeWithSignature("poke()"));
+        } else {
+            c[0] = ILeakedAccount.Call(attacker, 1 wei, hex"deadbeef"); // ETH with calldata
+        }
+        uint256 pokes = victim.pokes();
+        vm.prank(address(account));
+        try account.hotExecute(amount, c) {
+            openAbuseSuccesses++;
+        } catch {}
+        if (victim.pokes() != pokes || usdc.allowance(address(account), attacker) != 0) openAbuseSuccesses++;
+    }
+
     function hotRegister(uint256 amount, bytes32 h) external nonVault {
         _track();
         amount = bound(amount, 1, 600 * USD);
@@ -156,14 +251,22 @@ contract AccountHandler is Test {
         _hotRun(amount, c, amount);
     }
 
-    function _hotRun(uint256 declared, ILeakedAccount.Call[] memory c, uint256 usd) internal {
+    /// Runs a hot batch; on success records max(declared intent, measured USD outflow of ETH + USDC), so I-1 is
+    /// checked against what actually left, whichever recipient it went to.
+    function _hotRun(uint256 declared, ILeakedAccount.Call[] memory c, uint256 usd) internal returns (bool ok) {
         ILeakedAccount.HotConfig memory cfg = _cfg();
+        uint256 eth0 = address(account).balance;
+        uint256 usdc0 = usdc.balanceOf(address(account));
         vm.prank(address(account));
         try account.hotExecute(declared, c) {
+            ok = true;
             if (cfg.hotFrozen) hotWhileFrozen++;
             if (cfg.bunker) hotWhileBunker++;
+            uint256 out;
+            if (eth0 > address(account).balance) out += ((eth0 - address(account).balance) * 3_000 * USD) / 1e18;
+            if (usdc0 > usdc.balanceOf(address(account))) out += usdc0 - usdc.balanceOf(address(account));
             hotTimes.push(block.timestamp);
-            hotUsd.push(usd);
+            hotUsd.push(out > usd ? out : usd);
         } catch {}
     }
 
@@ -230,6 +333,27 @@ contract AccountHandler is Test {
             vaultTimes.push(block.timestamp);
             vaultUsd.push(amount);
         } catch {}
+    }
+
+    /// Open -> Strict is instant; Strict -> Open directly must revert (`MustQueue`), so it is queued.
+    function vaultRecipientMode(bool strict) external vaultAction {
+        _track();
+        vm.prank(_vault());
+        if (strict) {
+            try roles.vaultSetRecipientMode(ILeakedAccount.RecipientMode.Strict) {} catch {}
+        } else {
+            bool wasStrict = _strictMode();
+            try roles.vaultSetRecipientMode(ILeakedAccount.RecipientMode.Open) {
+                if (wasStrict) nonVaultLoosenings++; // an unqueued loosening, even by the vault
+            } catch {}
+            ILeakedAccount.Call[] memory q = new ILeakedAccount.Call[](1);
+            q[0] = ILeakedAccount.Call(
+                address(account),
+                0,
+                abi.encodeCall(LeakedAccountRoles.vaultSetRecipientMode, (ILeakedAccount.RecipientMode.Open))
+            );
+            _queue(q, 1);
+        }
     }
 
     function vaultFreezeOrUnfreeze(bool freeze) external vaultAction {
@@ -312,16 +436,30 @@ contract AccountHandler is Test {
 
     function attackerConfig(uint256 which, uint256 x) external nonVault {
         _track();
-        which = bound(which, 0, 7);
+        which = bound(which, 0, 8);
         bytes memory d;
-        if (which == 0) d = abi.encodeCall(LeakedAccountRoles.vaultSetCap, (x, x, x, 64));
-        else if (which == 1) d = abi.encodeCall(LeakedAccountRoles.vaultSetTarget, (attacker, true));
-        else if (which == 2) d = abi.encodeCall(LeakedAccountRoles.vaultSetHotKey, (attacker));
-        else if (which == 3) d = abi.encodeCall(LeakedAccountRoles.vaultUnfreeze, ());
-        else if (which == 4) d = abi.encodeCall(LeakedAccountRoles.recoveryStartVaultRotation, (attacker));
-        else if (which == 5) d = abi.encodeCall(LeakedAccountRoles.vaultSetFeePolicy, (x, true, attacker));
-        else if (which == 6) d = abi.encodeCall(LeakedAccountImpl.hotExecute, (x, new ILeakedAccount.Call[](0)));
-        else d = abi.encodeCall(account.upgradeToAndCall, (attacker, ""));
+        if (which == 0) {
+            d = abi.encodeCall(LeakedAccountRoles.vaultSetCap, (x, x, x, 64));
+        } else if (which == 1) {
+            d = abi.encodeCall(LeakedAccountRoles.vaultSetTarget, (attacker, true));
+        } else if (which == 2) {
+            d = abi.encodeCall(LeakedAccountRoles.vaultSetHotKey, (attacker));
+        } else if (which == 3) {
+            d = abi.encodeCall(LeakedAccountRoles.vaultUnfreeze, ());
+        } else if (which == 4) {
+            d = abi.encodeCall(LeakedAccountRoles.recoveryStartVaultRotation, (attacker));
+        } else if (which == 5) {
+            d = abi.encodeCall(LeakedAccountRoles.vaultSetFeePolicy, (x, true, attacker));
+        } else if (which == 6) {
+            d = abi.encodeCall(LeakedAccountImpl.hotExecute, (x, new ILeakedAccount.Call[](0)));
+        } else if (which == 8) {
+            d = abi.encodeCall(
+                LeakedAccountRoles.vaultSetRecipientMode,
+                (x % 2 == 0 ? ILeakedAccount.RecipientMode.Open : ILeakedAccount.RecipientMode.Strict)
+            );
+        } else {
+            d = abi.encodeCall(account.upgradeToAndCall, (attacker, ""));
+        }
         vm.prank(attacker);
         (bool ok,) = address(account).call(d);
         if (ok) attackerSuccesses++;
@@ -360,16 +498,23 @@ contract AccountInvariantsTest is Test {
     LeakedAccountRoles internal roles;
 
     function setUp() public {
-        address vault = makeAddr("vaultA");
         address recovery = makeAddr("recovery");
         address guardian = makeAddr("guardian");
         address alice = makeAddr("alice");
         LeakedAccountRoles module = new LeakedAccountRoles();
         LeakedAccountImpl impl = new LeakedAccountImpl(Devnet.ERC8421_WORKSHOP, true, address(module));
         AccountFactory factory = new AccountFactory();
+        RoleSignerFactory rsf =
+            new RoleSignerFactory(Devnet.ERC8421_WORKSHOP, TxParam.MAX_COST, IStakingRegistry(makeAddr("reg")), 1 ether);
+        MockPQVerifier pqv = new MockPQVerifier(64);
+        ILeakedAccount.RoleSignerParams memory none;
+        // Bound vault (derived at initialize), explicit recovery (an address; the handler pranks as it).
         ILeakedAccount.InitConfig memory c = ILeakedAccount.InitConfig({
             hotKey: makeAddr("hotKeyEOA"),
-            vaultSigner: vault,
+            roleSignerFactory: address(rsf),
+            vault: ILeakedAccount.RoleSignerParams(0, keccak256("vault"), address(pqv), makeAddr("payer")),
+            recovery: none,
+            vaultSigner: address(0),
             recoverySigner: recovery,
             tank: makeAddr("tank"),
             capUsdPerDay: 1_000 * USD,
@@ -380,12 +525,17 @@ contract AccountInvariantsTest is Test {
             selfPay: false,
             timelockDelay: 48 hours,
             timelockThresholdUsd: 2_000 * USD,
-            ethUsdPrice: 3_000 * USD
+            ethUsdPrice: 3_000 * USD,
+            recipientMode: ILeakedAccount.RecipientMode.Open
         });
         account = LeakedAccountImpl(
             payable(factory.createAccount(0, address(impl), abi.encodeCall(LeakedAccountImpl.initialize, (c))))
         );
         roles = LeakedAccountRoles(payable(address(account)));
+        address vault =
+            rsf.predictRoleSigner(0, 1, address(account), keccak256("vault"), address(pqv), makeAddr("payer"));
+        (address v,,,,) = roles.getRoles();
+        assertEq(v, vault, "bound vault derived at initialize");
         MockToken usdc = new MockToken("USDC", 6);
         MockRouter router = new MockRouter();
         usdc.mint(address(account), 1e12 * USD);
@@ -487,6 +637,35 @@ contract AccountInvariantsTest is Test {
     function invariant_configOnlyVaultOrTightening() public view {
         assertEq(handler.nonVaultLoosenings(), 0, "non-vault actor loosened config");
         assertEq(handler.attackerSuccesses(), 0, "attacker call succeeded");
+    }
+
+    /// Recipient policy: Open mode never admits approve / permit / transferFrom / increaseAllowance, a non-transfer
+    /// call or a zero-value empty call to an unallowlisted contract, or ETH with calldata (the cap is I-1, which
+    /// records the measured outflow of every payment, allowlisted recipient or not); Strict never pays a recipient
+    /// outside the allowlist; Strict -> Open only through the queue (in `invariant_configOnlyVaultOrTightening`).
+    function invariant_recipientPolicy() public view {
+        assertEq(handler.openAbuseSuccesses(), 0, "Open mode admitted a non-transfer call");
+        assertEq(handler.strictViolations(), 0, "Strict mode paid a non-allowlisted recipient");
+        assertEq(handler.victim().pokes(), 0, "arbitrary contract's fallback ran");
+    }
+
+    /// The Open-mode handlers reach success (payments) and the mode can be tightened and re-opened.
+    function test_handler_openPaymentsReachable() public {
+        handler.hotPayAnyone(10 * USD, 0xb0b, false);
+        handler.hotPayAnyone(0.001 ether, 0xb0b0, true);
+        assertEq(handler.openPayments(), 2);
+        handler.vaultRecipientMode(true);
+        handler.hotPayAnyone(10 * USD, 0xb0b, false);
+        assertEq(handler.openPayments(), 2, "Strict refuses the arbitrary recipient");
+        for (uint256 w; w < 7; ++w) {
+            handler.hotOpenAbuse(w, 5 * USD);
+        }
+        handler.vaultRecipientMode(false);
+        for (uint256 w; w < 7; ++w) {
+            handler.hotOpenAbuse(w, 5 * USD);
+        }
+        assertEq(handler.openAbuseSuccesses(), 0);
+        assertEq(handler.nonVaultLoosenings(), 0);
     }
 
     /// I-4: a pending recovery rotation is never changed by a vault action.

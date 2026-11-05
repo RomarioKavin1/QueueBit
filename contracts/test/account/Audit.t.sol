@@ -13,7 +13,8 @@ import {AccountTestBase} from "./AccountTestBase.sol";
 import {PermitToken1271, MockRouter, Verifier1271} from "./mocks/AccountMocks.sol";
 
 /// Security-audit regressions (2026-11-06). Each test names the finding it pins; every one of them failed on the
-/// code as first implemented (the leaked hot key could do what the test forbids).
+/// code as first implemented (the leaked hot key could do what the test forbids). This suite runs in
+/// `RecipientMode.Open` (the default); `AuditStrictTest` below re-runs every PoC in `Strict`.
 contract AuditTest is AccountTestBase {
     bytes4 internal constant MAGIC = 0x1626ba7e;
     bytes4 internal constant BAD = 0xffffffff;
@@ -25,7 +26,7 @@ contract AuditTest is AccountTestBase {
     PermitToken1271 internal dai; // held by the account, NOT allowlisted
     Verifier1271 internal dapp;
 
-    function setUp() public override {
+    function setUp() public virtual override {
         super.setUp();
         pusd = new PermitToken1271("pUSD");
         dai = new PermitToken1271("DAI");
@@ -337,5 +338,71 @@ contract AuditTest is AccountTestBase {
                 assertTrue(hwrites[i] != reads[j], "hot batch wrote a VERIFY-read slot");
             }
         }
+    }
+
+    /// I-2 with the recipient policy: an Open-mode payment to an arbitrary recipient writes no VERIFY-read slot, and
+    /// the mode itself lives outside the three VERIFY slots (VERIFY never reads it; the walker needs no recipient).
+    function test_I2_recipientModeSlotDisjointFromVerify() public virtual {
+        _beginHotTx(_hotData(2 * USD, _one(_usdcTransfer(stranger, 2 * USD))));
+        _signHotTx();
+        vm.record();
+        simEnter(0);
+        vm.prank(ENTRY_POINT);
+        (bool ok,) = address(account).call(_verifyData());
+        simLeave(0, ok ? STATUS_SUCCESS : STATUS_FAILED);
+        assertTrue(ok, "VERIFY admits the arbitrary-recipient payment without reading it");
+        (bytes32[] memory reads,) = vm.accesses(address(account));
+
+        vm.record();
+        ILeakedAccount.Call[] memory c = new ILeakedAccount.Call[](2);
+        c[0] = _usdcTransfer(stranger, 1 * USD);
+        c[1] = _ethSend(makeAddr("carol"), 1 wei);
+        _hot(2 * USD, c);
+        (bytes32[] memory hreads, bytes32[] memory hwrites) = vm.accesses(address(account));
+        vm.record();
+        vm.prank(vault);
+        roles.vaultSetRecipientMode(ILeakedAccount.RecipientMode.Strict);
+        (, bytes32[] memory mwrites) = vm.accesses(address(account));
+        assertEq(mwrites.length, 1, "the mode is one slot");
+        bool hotReadsMode;
+        for (uint256 j; j < hreads.length; ++j) {
+            if (hreads[j] == mwrites[0]) hotReadsMode = true;
+        }
+        assertTrue(hotReadsMode, "execution reads the mode slot");
+        uint256 base = uint256(LeakedAccountStorage.SLOT);
+        assertGt(uint256(mwrites[0]), base + 2, "mode slot is execution-side");
+        for (uint256 j; j < reads.length; ++j) {
+            assertTrue(reads[j] != mwrites[0], "VERIFY read the mode slot");
+            for (uint256 i; i < hwrites.length; ++i) {
+                assertTrue(hwrites[i] != reads[j], "Open-mode hot batch wrote a VERIFY-read slot");
+            }
+        }
+    }
+
+    /// Open mode does not widen the token rule: a held but unallowlisted (unpriced) token cannot be transferred to
+    /// anyone, so every hot outflow stays priced and debited.
+    function test_open_unpricedTokenNeverTransferable() public {
+        vm.expectRevert(
+            abi.encodeWithSelector(ILeakedAccount.NotAllowed.selector, address(dai), IERC20.transfer.selector)
+        );
+        _hot(1 * USD, _one(ILeakedAccount.Call(address(dai), 0, abi.encodeCall(IERC20.transfer, (attacker, 1 ether)))));
+        assertEq(dai.balanceOf(attacker), 0);
+    }
+}
+
+/// Every audit PoC above, re-run with the recipient allowlist (`RecipientMode.Strict`).
+contract AuditStrictTest is AuditTest {
+    function setUp() public override {
+        super.setUp();
+        _strict();
+        assertEq(uint256(account.recipientMode()), uint256(ILeakedAccount.RecipientMode.Strict));
+    }
+
+    /// In Strict the arbitrary-recipient leg is refused in execution (VERIFY is unchanged); the I-2 slot argument
+    /// is checked with an allowlisted recipient instead.
+    function test_I2_recipientModeSlotDisjointFromVerify() public override {
+        vm.expectRevert(abi.encodeWithSelector(ILeakedAccount.NotAllowed.selector, stranger, IERC20.transfer.selector));
+        _hot(1 * USD, _one(_usdcTransfer(stranger, 1 * USD)));
+        test_I2_verifyReadsOnlyRoleWrittenSlots();
     }
 }

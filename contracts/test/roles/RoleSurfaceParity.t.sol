@@ -4,6 +4,8 @@ pragma solidity 0.8.28;
 import {Test} from "forge-std/Test.sol";
 import {ILeakedAccountRoles as R} from "../../src/interfaces/ILeakedAccountRoles.sol";
 import {LeakedAccountRoles as A} from "../../src/account/LeakedAccountRoles.sol";
+import {IRoleSignerFactory as IF} from "../../src/interfaces/IRoleSignerFactory.sol";
+import {RoleSignerFactory as F} from "../../src/roles/RoleSignerFactory.sol";
 
 /// `ILeakedAccountRoles` (what the role signers' tests and scripts encode against) must name exactly the selectors
 /// the account's role module implements. A mismatch here means a role signer would forward calldata the account
@@ -19,6 +21,7 @@ contract RoleSurfaceParityTest is Test {
         assertEq(R.vaultSetToken.selector, A.vaultSetToken.selector);
         assertEq(R.vaultSetTarget.selector, A.vaultSetTarget.selector);
         assertEq(R.vaultSetSession.selector, A.vaultSetSession.selector);
+        assertEq(R.vaultSetRecipientMode.selector, A.vaultSetRecipientMode.selector);
         assertEq(R.vaultSetValueVerifier.selector, A.vaultSetValueVerifier.selector);
         assertEq(R.vaultSetTrustedVerifier.selector, A.vaultSetTrustedVerifier.selector);
         assertEq(R.vaultSetTimelock.selector, A.vaultSetTimelock.selector);
@@ -43,5 +46,11 @@ contract RoleSurfaceParityTest is Test {
         assertEq(R.isQueued.selector, A.isQueued.selector);
         assertEq(R.isValueVerifier.selector, A.isValueVerifier.selector);
         assertEq(R.isTrustedVerifier.selector, A.isTrustedVerifier.selector);
+    }
+
+    /// What `LeakedAccountImpl.initialize` calls to derive a bound role signer.
+    function test_selectors_matchRoleSignerFactory() public pure {
+        assertEq(IF.predictRoleSigner.selector, F.predictRoleSigner.selector);
+        assertEq(IF.createRoleSigner.selector, F.createRoleSigner.selector);
     }
 }

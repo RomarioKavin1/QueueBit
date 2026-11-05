@@ -43,6 +43,30 @@ contract LeakedVerifyTest is AccountTestBase {
         assertEq(a[1].scope, 1);
     }
 
+    /// Open mode end to end: the walker admits the payment to an arbitrary recipient with the same reads as any
+    /// other (it never decodes the batch), and the SENDER frame pays the stranger, debited from the bucket.
+    function test_openMode_arbitraryRecipient_fullTx() public {
+        _beginHotTx(_hotData(10 * USD, _one(_usdcTransfer(stranger, 10 * USD))));
+        _signHotTx();
+        SimResult memory r = simRunValid();
+        assertEq(r.frames[0].foreignSloads, 0, "foreign SLOAD in VERIFY");
+        assertEq(r.frames[2].status, STATUS_SUCCESS);
+        assertEq(usdc.balanceOf(stranger), 10 * USD);
+        assertEq(_bucketAvailable(), CAP - 10 * USD);
+    }
+
+    /// Strict mode: the same transaction is still VERIFY-valid (the recipient is checked in execution, so a mode
+    /// change never touches what VERIFY reads, C4), and its SENDER frame reverts without moving anything.
+    function test_strictMode_arbitraryRecipient_validButSenderReverts() public {
+        _strict();
+        _beginHotTx(_hotData(10 * USD, _one(_usdcTransfer(stranger, 10 * USD))));
+        _signHotTx();
+        SimResult memory r = simRunValid();
+        assertEq(r.frames[2].status, STATUS_FAILED);
+        assertEq(usdc.balanceOf(stranger), 0);
+        assertEq(_bucketAvailable(), CAP);
+    }
+
     function test_verifyReadsOnlyOwnStorage_andIsStatic() public {
         _beginHotTx(_pay(10 * USD));
         _signHotTx();

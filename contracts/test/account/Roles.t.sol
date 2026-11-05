@@ -69,15 +69,14 @@ contract RolesTest is AccountTestBase {
         c.hotKey = address(0);
         vm.expectRevert();
         factory.createAccount(bytes32(uint256(3)), address(impl), _initData(c));
-        c = _defaultCfg();
-        c.vaultSigner = address(0);
+        // explicit mode: the old address checks
+        c = _explicitCfg(address(0), recovery);
         vm.expectRevert();
         factory.createAccount(bytes32(uint256(3)), address(impl), _initData(c));
-        c = _defaultCfg();
-        c.recoverySigner = vault;
+        c = _explicitCfg(vault, vault);
         vm.expectRevert();
         factory.createAccount(bytes32(uint256(3)), address(impl), _initData(c));
-        c = _defaultCfg();
+        c = _explicitCfg(vault, recovery);
         c.tank = vault;
         vm.expectRevert();
         factory.createAccount(bytes32(uint256(3)), address(impl), _initData(c));
@@ -89,6 +88,139 @@ contract RolesTest is AccountTestBase {
         c.timelockDelay = 1;
         vm.expectRevert();
         factory.createAccount(bytes32(uint256(3)), address(impl), _initData(c));
+    }
+
+    // ------------------------------------------------------------------------ bound role signers (init) ------
+
+    /// Bound mode: the account stores the signers `predictRoleSigner(salt, role, address(this), ...)` gives, and
+    /// logs the arguments that deploy them; the account address commits to the PQ parameters (init data).
+    function test_initialize_boundSignersDerived() public {
+        ILeakedAccount.InitConfig memory c = _defaultCfg();
+        c.vault.salt = bytes32(uint256(5));
+        bytes memory init = _initData(c);
+        address predicted = factory.predictAccount(bytes32(uint256(4)), address(impl), init);
+        address v = signerFactory.predictRoleSigner(
+            bytes32(uint256(5)), 1, predicted, VAULT_PK, address(pqVerifier), vaultPayer
+        );
+        address r = _derivedSigner(predicted, 2, RECOVERY_PK, address(0));
+        vm.expectEmit(true, true, true, true, predicted);
+        emit ILeakedAccount.RoleSignerDerived(
+            1, v, address(signerFactory), bytes32(uint256(5)), VAULT_PK, address(pqVerifier), vaultPayer
+        );
+        vm.expectEmit(true, true, true, true, predicted);
+        emit ILeakedAccount.RoleSignerDerived(
+            2, r, address(signerFactory), bytes32(0), RECOVERY_PK, address(pqVerifier), address(0)
+        );
+        address a = factory.createAccount(bytes32(uint256(4)), address(impl), init);
+        assertEq(a, predicted);
+        (address gv, address gr,,,) = LeakedAccountRoles(payable(a)).getRoles();
+        assertEq(gv, v);
+        assertEq(gr, r);
+        assertEq(v.code.length, 0, "counterfactual: nothing deployed at initialize");
+        // another vault pk -> another account address (the address commits to the vault key)
+        c.vault.pk = ~VAULT_PK;
+        assertTrue(factory.predictAccount(bytes32(uint256(4)), address(impl), _initData(c)) != predicted);
+    }
+
+    function test_initialize_boundValidation() public {
+        bytes32 salt = bytes32(uint256(6));
+        ILeakedAccount.InitConfig memory c = _defaultCfg();
+        c.vaultSigner = stranger; // bound and explicit at once
+        vm.expectRevert(ILeakedAccount.BadConfig.selector);
+        factory.createAccount(salt, address(impl), _initData(c));
+        c = _defaultCfg();
+        c.recoverySigner = stranger;
+        vm.expectRevert(ILeakedAccount.BadConfig.selector);
+        factory.createAccount(salt, address(impl), _initData(c));
+        c = _defaultCfg();
+        c.roleSignerFactory = address(0);
+        vm.expectRevert(ILeakedAccount.BadConfig.selector);
+        factory.createAccount(salt, address(impl), _initData(c));
+        c = _defaultCfg();
+        c.roleSignerFactory = stranger; // no code
+        vm.expectRevert(ILeakedAccount.BadConfig.selector);
+        factory.createAccount(salt, address(impl), _initData(c));
+        c = _defaultCfg();
+        c.vault.verifier = stranger; // no code: no sigLength, createRoleSigner would refuse forever
+        vm.expectRevert(ILeakedAccount.BadConfig.selector);
+        factory.createAccount(salt, address(impl), _initData(c));
+        c = _defaultCfg();
+        c.vault.verifier = address(usdc); // answers nothing useful
+        vm.expectRevert(ILeakedAccount.BadConfig.selector);
+        factory.createAccount(salt, address(impl), _initData(c));
+        c = _defaultCfg();
+        c.vault.pk = 0; // falls back to explicit mode, but stray parameters are refused
+        vm.expectRevert(ILeakedAccount.BadConfig.selector);
+        factory.createAccount(salt, address(impl), _initData(c));
+        c.vault.verifier = address(0);
+        c.vault.payerKey = address(0);
+        vm.expectRevert(abi.encodeWithSelector(ILeakedAccount.BadAddress.selector, address(0)));
+        factory.createAccount(salt, address(impl), _initData(c)); // and then needs an explicit vault
+        // recovery optional in bound mode
+        c = _defaultCfg();
+        delete c.recovery;
+        LeakedAccountRoles a = LeakedAccountRoles(payable(factory.createAccount(salt, address(impl), _initData(c))));
+        (, address r,,,) = a.getRoles();
+        assertEq(r, address(0));
+    }
+
+    /// Unbound / explicit mode stays supported (backward compatibility: an unbound `PQRoleSigner`, a test key).
+    function test_initialize_explicitModeStillSupported() public {
+        address v = makeAddr("unboundVault");
+        LeakedAccountRoles a = LeakedAccountRoles(
+            payable(factory.createAccount(bytes32(uint256(7)), address(impl), _initData(_explicitCfg(v, recovery))))
+        );
+        (address gv, address gr,,,) = a.getRoles();
+        assertEq(gv, v);
+        assertEq(gr, recovery);
+        vm.prank(v);
+        a.vaultFreeze();
+    }
+
+    // ------------------------------------------------------------------------------ recipient mode ------
+
+    function test_recipientMode_tightenInstant_loosenQueued() public {
+        assertEq(uint256(account.recipientMode()), uint256(ILeakedAccount.RecipientMode.Open));
+        vm.prank(vault);
+        vm.expectEmit(address(account));
+        emit ILeakedAccount.RecipientModeSet(ILeakedAccount.RecipientMode.Strict);
+        roles.vaultSetRecipientMode(ILeakedAccount.RecipientMode.Strict);
+        assertEq(uint256(account.recipientMode()), uint256(ILeakedAccount.RecipientMode.Strict));
+        vm.prank(vault);
+        roles.vaultSetRecipientMode(ILeakedAccount.RecipientMode.Strict); // idempotent, still instant
+        vm.prank(vault);
+        vm.expectRevert(ILeakedAccount.MustQueue.selector);
+        roles.vaultSetRecipientMode(ILeakedAccount.RecipientMode.Open);
+        _queueLoosen(abi.encodeCall(LeakedAccountRoles.vaultSetRecipientMode, (ILeakedAccount.RecipientMode.Open)));
+        assertEq(uint256(account.recipientMode()), uint256(ILeakedAccount.RecipientMode.Open));
+        vm.prank(vault);
+        roles.vaultSetRecipientMode(ILeakedAccount.RecipientMode.Open); // Open -> Open loosens nothing
+    }
+
+    /// Only the vault (or its queue): not the guardian, the recovery signer, the hot key's EOA, the hot batch.
+    function test_recipientMode_onlyVault() public {
+        address[4] memory who = [guardian, recovery, hot, stranger];
+        for (uint256 i; i < 4; ++i) {
+            vm.prank(who[i]);
+            vm.expectRevert(ILeakedAccount.Unauthorized.selector);
+            roles.vaultSetRecipientMode(ILeakedAccount.RecipientMode.Strict);
+        }
+        ILeakedAccount.Call memory self =
+            _selfCall(abi.encodeCall(LeakedAccountRoles.vaultSetRecipientMode, (ILeakedAccount.RecipientMode.Strict)));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                ILeakedAccount.NotAllowed.selector, address(account), LeakedAccountRoles.vaultSetRecipientMode.selector
+            )
+        );
+        _hot(0, _one(self));
+    }
+
+    function test_recipientMode_strictAtInitialize() public {
+        ILeakedAccount.InitConfig memory c = _explicitCfg(vault, recovery);
+        c.recipientMode = ILeakedAccount.RecipientMode.Strict;
+        LeakedAccountImpl a =
+            LeakedAccountImpl(payable(factory.createAccount(bytes32(uint256(8)), address(impl), _initData(c))));
+        assertEq(uint256(a.recipientMode()), uint256(ILeakedAccount.RecipientMode.Strict));
     }
 
     function test_unknownSelectorReverts_andModuleNotDirectlyUsable() public {
@@ -388,8 +520,7 @@ contract RolesTest is AccountTestBase {
         vm.expectRevert(ILeakedAccount.MustQueue.selector);
         roles.vaultSetRecoverySigner(stranger);
         // first install on an account without one is instant
-        ILeakedAccount.InitConfig memory c = _defaultCfg();
-        c.recoverySigner = address(0);
+        ILeakedAccount.InitConfig memory c = _explicitCfg(vault, address(0)); // same vault address, no recovery
         LeakedAccountRoles a =
             LeakedAccountRoles(payable(factory.createAccount(bytes32(uint256(9)), address(impl), _initData(c))));
         vm.prank(vault);

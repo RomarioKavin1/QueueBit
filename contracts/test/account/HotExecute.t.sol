@@ -127,11 +127,84 @@ contract HotExecuteTest is AccountTestBase {
         _hot(9, c);
     }
 
-    function test_revert_recipientNotAllowlisted() public {
+    function test_strict_revert_recipientNotAllowlisted() public {
+        _strict();
         vm.expectRevert(abi.encodeWithSelector(ILeakedAccount.NotAllowed.selector, stranger, IERC20.transfer.selector));
         _hot(1 * USD, _one(_usdcTransfer(stranger, 1 * USD)));
         vm.expectRevert(abi.encodeWithSelector(ILeakedAccount.NotAllowed.selector, stranger, bytes4(0)));
         _hot(1 * USD, _one(_ethSend(stranger, 1)));
+        // allowlisted recipients (and the tank) still work
+        _hot(1 * USD, _one(_usdcTransfer(alice, 1 * USD)));
+        _hot(3 * USD, _one(_ethSend(tank, 0.001 ether)));
+    }
+
+    // --------------------------------------------------------------------------- Open recipient mode ------
+
+    function test_open_isDefault_anyRecipient_ethAndToken() public {
+        assertEq(uint256(account.recipientMode()), uint256(ILeakedAccount.RecipientMode.Open));
+        assertFalse(account.isTarget(stranger));
+        vm.expectEmit(address(account));
+        emit ILeakedAccount.HotExecuted(130 * USD, CAP - 130 * USD, 2);
+        _hot(130 * USD, _two(_usdcTransfer(stranger, 100 * USD), _ethSend(stranger, 0.01 ether)));
+        assertEq(usdc.balanceOf(stranger), 100 * USD);
+        assertEq(stranger.balance, 0.01 ether);
+        assertEq(_bucketAvailable(), CAP - 130 * USD, "debited like an allowlisted payment");
+    }
+
+    function test_open_capPerTxAndDeclaredStillHold() public {
+        vm.expectRevert(abi.encodeWithSelector(ILeakedAccount.PerTxMaxExceeded.selector, PER_TX + 1, PER_TX));
+        _hot(PER_TX + 1, _one(_usdcTransfer(stranger, PER_TX + 1)));
+        vm.expectRevert(abi.encodeWithSelector(ILeakedAccount.DeclaredUsdExceeded.selector, 2 * USD, 1 * USD));
+        _hot(1 * USD, _one(_usdcTransfer(stranger, 2 * USD)));
+        _hot(PER_TX, _one(_usdcTransfer(stranger, PER_TX)));
+        _hot(PER_TX, _one(_usdcTransfer(makeAddr("carol"), PER_TX)));
+        vm.expectRevert(abi.encodeWithSelector(RollingCap.OverCap.selector, 1, 0));
+        _hot(1, _one(_usdcTransfer(makeAddr("dave"), 1)));
+        assertEq(usdc.balanceOf(makeAddr("dave")), 0);
+    }
+
+    function test_open_ethUnpricedStillRefused() public {
+        vm.prank(vault);
+        roles.vaultSetToken(address(0), false, 0, 0);
+        vm.expectRevert(abi.encodeWithSelector(ILeakedAccount.TokenNotAllowed.selector, address(0)));
+        _hot(1 * USD, _one(_ethSend(stranger, 1)));
+    }
+
+    /// Open widens recipients of value transfers only: a zero-value empty call (it would run an arbitrary
+    /// fallback), ETH with calldata, a burn to address(0), and every non-`transfer` selector need the allowlist or a
+    /// session exactly as in Strict.
+    function test_open_nonTransferCallsStillNeedPolicy() public {
+        RejectEth sink = new RejectEth();
+        vm.expectRevert(abi.encodeWithSelector(ILeakedAccount.NotAllowed.selector, address(sink), bytes4(0)));
+        _hot(0, _one(ILeakedAccount.Call(address(sink), 0, "")));
+        vm.expectRevert(abi.encodeWithSelector(ILeakedAccount.NotAllowed.selector, stranger, bytes4(0xdeadbeef)));
+        _hot(1 * USD, _one(ILeakedAccount.Call(stranger, 1, hex"deadbeef")));
+        vm.expectRevert(abi.encodeWithSelector(ILeakedAccount.NotAllowed.selector, address(0), bytes4(0)));
+        _hot(1 * USD, _one(_ethSend(address(0), 1)));
+        vm.expectRevert(
+            abi.encodeWithSelector(ILeakedAccount.NotAllowed.selector, address(0), IERC20.transfer.selector)
+        );
+        _hot(1 * USD, _one(_usdcTransfer(address(0), 1)));
+        bytes[4] memory bad = [
+            abi.encodeCall(IERC20.approve, (stranger, 1)),
+            abi.encodeCall(IERC20.transferFrom, (address(account), stranger, 1)),
+            abi.encodeWithSelector(bytes4(0x39509351), stranger, 1), // increaseAllowance
+            abi.encodeWithSelector(bytes4(0xd505accf), address(account), stranger, 1, 1, 27, 0, 0) // permit
+        ];
+        for (uint256 i; i < 4; ++i) {
+            vm.expectRevert(abi.encodeWithSelector(ILeakedAccount.NotAllowed.selector, address(usdc), bytes4(bad[i])));
+            _hot(1 * USD, _one(ILeakedAccount.Call(address(usdc), 0, bad[i])));
+        }
+        assertEq(usdc.allowance(address(account), stranger), 0);
+    }
+
+    function testFuzz_open_anyEoaRecipient_debitEqualsQuote(address to, uint96 amount) public {
+        vm.assume(to != address(0) && to != address(account) && to.code.length == 0 && uint160(to) > 0xffff);
+        uint256 amt = bound(amount, 1, PER_TX);
+        uint256 before = usdc.balanceOf(to);
+        _hot(amt, _one(_usdcTransfer(to, amt)));
+        assertEq(usdc.balanceOf(to), before + amt);
+        assertEq(_bucketAvailable(), CAP - amt);
     }
 
     function test_revert_tokenNotAllowlisted_H2() public {
