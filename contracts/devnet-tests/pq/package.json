@@ -1,0 +1,19 @@
+{
+  "name": "leaked-contracts-devnet-tests-pq",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Devnet integration tests for the LEAKED contracts (run with bun against devnet/; standalone, not a pnpm workspace package). @leaked/* resolve to the workspace sources via tsconfig paths.",
+  "scripts": {
+    "test": "bun run run.ts",
+    "lint:verify-opcodes": "python3 lint-verify-opcodes.py ../../out/C13Verifier.sol/C13Verifier.json ../../out/PQRoleSigner.sol/PQRoleSigner.json ../../out/GuardianSigner.sol/GuardianSigner.json",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "viem": "2.57.16"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.6",
+    "typescript": "6.0.3"
+  }
+}

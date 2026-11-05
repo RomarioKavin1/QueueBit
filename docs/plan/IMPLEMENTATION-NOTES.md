@@ -114,3 +114,69 @@ Where the build differs from, or settles, something in the plan. Newest last. Ea
   no wasm-pack). The WASM (~86 KB) is inlined as base64 so one ESM module works in browsers, extension workers and
   Node. `wasm/` and `dist/` are build outputs and not committed: consumers run `pnpm --filter @leaked/pq-signer build`
   (needs Rust + `wasm32-unknown-unknown`).
+
+## Contracts M4: PQ role signers and the C13 verifier adapter (§10.3.6–10.3.8, §10.5.2, §10.6)
+
+Code: `contracts/src/pq/C13Verifier.sol`, `contracts/src/roles/{PQRoleSigner,GuardianSigner,RoleSignerFactory}.sol`,
+`contracts/src/interfaces/{IPQVerifier,IStakingRegistry,ILeakedAccountRoles}.sol`; vendored upstream in
+`contracts/src/pq/vendor/` (`SphincsC13Asm` and `SphincsFrameVerify.yul` @ `4c76aaf`, MIT, THIRD_PARTY.md). Tests:
+`contracts/test/{pq,roles}` (Foundry/FrameSim), `contracts/devnet-tests/pq` (bun; `bun run test`).
+
+- **`C13Verifier` is the upstream verifier plus the adapter in one deployment.** It inherits the unmodified
+  `SphincsC13Asm` (so the raw `verify(pkSeed,pkRoot,msg,sig)` selector `0x2bf6eda8` stays available for upstream's
+  Yul module) and adds `IPQVerifier.verify(pk,digest,sig)`: length check first (`false`, the case upstream reverts on),
+  `pk` split into top-aligned `pkSeed`/`pkRoot` (so upstream's non-canonical-key revert is unreachable), upstream run
+  through a warm self-STATICCALL (it clobbers memory and exits with `return`), any residual revert (OOG) → `false`.
+  `SCHEME_ID` = the `@leaked/pq-signer` constant (asserted against `vectors/c13.json`). Foundry gas over KAT C:
+  min 109,752 / mean 109,830 / max 112,252 (≈ +2.1k over the raw verifier); `verifyGasEstimate()` = 120,000. On the
+  devnet the adapter call measured 108,710 (callTracer). Tests: all 32 KAT C vectors (both ABIs), every negative
+  recipe on every vector, every byte of one vector bit-flipped, wrong lengths 0..8000 fuzzed, OOG → false.
+- **The vendored Yul frame module is reference only.** It hard-codes the chain-1337 opcode bytes (plan §20 §2.2);
+  `PQRoleSigner` reads the witness through the per-`Devnet` hegota-support helpers in both paths, so the opcode set is a
+  constructor argument, not a constant.
+- **`maxFee` bounds a configurable TXPARAM.** On the `ethrex-eip8141-tracer` profile `TXPARAM(0x04)` is per-gas
+  (devnet review F5), so the signers take `feeParam` at construction: `MAX_FEE` (EIP master, total budget) or
+  `MAX_COST` (0x06, ethrex's max cost in wei; used on the devnet). Same in `GuardianSigner`.
+- **Walker details beyond §10.5.2:** exactly one frame after `cur` (SENDER, `RESOLVED_TARGET == this`, `VALUE == 0`);
+  Path B additionally requires `executePQ`'s `sigIndex` argument to equal the VERIFY `sigIndex`; the payer entry is
+  `1 - sigIndex`; scheme checks come before `RESOLVED_SIGNER` / `SIGNATURE_LENGTH` (short-circuit), so a mis-ordered
+  entry list reverts with a custom error instead of halting. `_forward` admits the account (any selector) or `this` with
+  only the six self-admin selectors (no nested `executePQ`/`relay`). `pathAEnabled` is informational, not enforced.
+- **`GuardianSigner` is ECDSA-only** (immutable key, freeze-only walker: one SENDER frame to the account, data exactly
+  `guardianFreeze()`). P256 is not implemented: FrameSim does not model P256 entries and nothing on chain 1337
+  exercises them yet.
+- **Deployment = `RoleSignerFactory`** (CREATE2, salt bound to every argument, chain settings as immutables, signature
+  of plan §10.3.1's `createRoleSigner`). Cost on the devnet (Amsterdam+ state gas): factory 15,991,507; one signer
+  instance via the factory 11,265,863 (its constructor CREATEs 7 opcode helpers); `C13Verifier` 2,932,364. A role
+  rotation is a new ~11M-gas instance: an EIP-1167-style clone with immutable args sharing one helper set would cut
+  this to well under 1M; not done (open item).
+- **Opcode lint.** `contracts/devnet-tests/pq/lint-verify-opcodes.py` over the runtime code: `C13Verifier` and
+  `GuardianSigner` contain no banned opcode, no `GAS` outside `GAS;*CALL`, no TLOAD/TSTORE (only solc's trailing
+  `INVALID` separator); `PQRoleSigner`'s only hits are the 3 execution-side SSTOREs of the admin setters. The devnet
+  ERC-7562 trace of frame 0 (Path A and B) shows no banned opcode, no transient storage, no writes, and SLOADs only
+  on the signer (slots 0/1: `payerKey`, `maxFee`) — `ethrex_simulateFrameTransaction {trace:true}`, `usedOpcodes` is
+  keyed by the decimal opcode byte.
+
+### Devnet results (local fork, 2026-11-06; funding key anvil #2; `contracts/devnet-tests/pq/run.ts`)
+
+Deployed: `C13Verifier` `0xe8bbb5f2…a9fc` (tx `0x907d9fdc…a511`), `MockLeakedAccount` `0x050499eb…ae74`,
+`RoleSignerFactory` `0x5f1e91d5…113a` (tx `0xebe59ad1…4e79`), VaultSigner `0x4dA67f61F1d54111030F4aA62760e3445Fa9726f`
+(tx `0xb7290045…db9c`). Real C13 signatures from `@leaked/pq-signer` over the codec sig hash (signing 3.7 s in bun).
+
+| Tx | Hash | Result | Frame gas (execution / state) |
+|---|---|---|---|
+| Path B, `executePQ → mock.vaultExecute` (0.001 ETH out), ethrex `eth_sendRawTransaction` | `0x3f02a933a04de0f8ad1324f7139945e9536969dcba7063515d817e9b4143bde4` (block 497) | mined, both frames success, ETH moved; simulate `canonicalMempoolValid: true` | VERIFY **34,754**; SENDER 156,897 / 281,520 (of which the PQ verify call 108,710); tx 568,218 |
+| Path B, `executePQ → self.stake(86400, 0.012 ETH)`, sidecar `eth_sendFrameTransaction` | `0x23cb0481f39443f2cf98440c36a578993064498734e5b5d952cecfb6815c7f67` (block 500) | mined; `getDepositInfo = (0.012 ETH, 86400, 0)` | VERIFY 34,754; SENDER 164,252 / 195,840 |
+| Path B, forged PQ witness (one bit), ethrex | `0xa8970740f916ddd05fdb2c4fbbbd216cb13d1f23d27e313a04ba1face3b5427b` | admitted (payer key valid), SENDER frame **reverted**, nothing moved, signer nonce 10 → 11; **286,698 gas burned** (0.000573 ETH at 2 gwei) | VERIFY 34,754; SENDER 56,235 (verifier rejected after 42,758) |
+| Path A, `relay → mock.vaultExecute` | `0x572775b0951c74ddf09527733b60df585cce40ff02e694c99232a658a72883b1` (block 504) | stock sidecar: `validation prefix execution gas sum 400000 + signature-verification cost 100 = 400100 exceeds MAX_VERIFY_GAS 100000`; ethrex `eth_sendRawTransaction`: `Frame transaction prefix gas budget … exceeds MAX_VERIFY_GAS`; then **mined via `ethrex_submitPrivilegedFrameTransaction`**, ETH moved | VERIFY **148,098** (PQ verify inside: 108,710); SENDER 35,712; tx 276,410 |
+
+- **Path B VERIFY fits the canonical budget with room**: 34,754 + 2,900 signature cost ≪ 100,000. **Path A VERIFY
+  needs 148,098 + 100** → admissible only with a staked budget ≥ ~150k (BUDGET-010); Path A tx total (276k) is about half
+  of Path B's (568k) because Path B pays the ECDSA entry, the payer check and the PQ verify in a second frame and its
+  body here created the recipient account (state gas).
+- **Privileged-submit quirk:** a privileged submission of the *same bytes* ethrex had just rejected on
+  `eth_sendRawTransaction` was accepted (hash returned) but never mined and vanished from the pool; re-signing (the C13
+  signer is hedged, so a new witness → same sig hash, new tx hash) mined at once. The script re-signs before the
+  privileged call. Path A went through the privileged RPC, not a source-patched sidecar (no `devnet/patched-sidecar/`
+  was built; the README recipe stays the route for BUDGET-010 work).
+- **Setup gas that bit:** a mock `setRoles` writing 3 fresh slots ran out at 200,000 (state gas); the script uses 3M.

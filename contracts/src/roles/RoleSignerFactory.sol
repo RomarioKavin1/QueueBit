@@ -92,8 +92,7 @@ contract RoleSignerFactory {
     }
 
     function _predict(bytes32 s, bytes memory initCode) private view returns (address) {
-        return address(
-            uint160(uint256(keccak256(abi.encodePacked(bytes1(0xff), address(this), s, keccak256(initCode)))))
-        );
+        return
+            address(uint160(uint256(keccak256(abi.encodePacked(bytes1(0xff), address(this), s, keccak256(initCode))))));
     }
 }
