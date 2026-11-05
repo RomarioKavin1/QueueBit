@@ -34,7 +34,8 @@ export const CSP = [
 export const SW_CSP = "default-src 'none'; connect-src 'self'";
 
 const HEADERS: Record<string, string> = {
-  "Content-Security-Policy": CSP,
+  // `frame-ancestors` only works as a header (ignored in <meta>), so it is added here rather than to CSP.
+  "Content-Security-Policy": `${CSP}; frame-ancestors 'none'`,
   "Referrer-Policy": "no-referrer",
   "X-Content-Type-Options": "nosniff",
   "Permissions-Policy": "camera=(self), microphone=(), geolocation=(), payment=(), usb=(), bluetooth=()",
