@@ -4,6 +4,7 @@ import type { WalletState } from "../../shared/types";
 import {
   AddressChip,
   Button,
+  CheckIcon,
   LimitMeter,
   ReceiveIcon,
   RefreshIcon,
@@ -23,6 +24,7 @@ export function Home({ state, onSend, onOpenApp }: { state: WalletState; onSend:
   const balance = useAsync(() => call("wallet:balance", { chainId }), [chainId, account]);
   const bucket = useAsync(() => call("wallet:bucket"), [chainId, state.setup.dailyLimitUsd, state.setup.perPaymentUsd]);
   const [receiveOpen, setReceiveOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   return (
     <div className="flex flex-col gap-4 p-4">
@@ -102,7 +104,7 @@ export function Home({ state, onSend, onOpenApp }: { state: WalletState; onSend:
               : {})}
             previewNote={
               bucket.data.source === "placeholder"
-                ? "Preview: the limit you chose. It starts protecting you once your Vault is paired."
+                ? "Preview of the limit you chose. Nothing is enforced until your Vault is paired."
                 : undefined
             }
           />
@@ -123,10 +125,22 @@ export function Home({ state, onSend, onOpenApp }: { state: WalletState; onSend:
           <Button variant="secondary" block onClick={() => setReceiveOpen(false)}>
             Close
           </Button>
-          <Button block onClick={() => void navigator.clipboard?.writeText(account)}>
-            Copy address
+          <Button
+            block
+            icon={copied ? <CheckIcon size={16} /> : undefined}
+            onClick={() => {
+              void navigator.clipboard?.writeText(account).then(() => {
+                setCopied(true);
+                setTimeout(() => setCopied(false), 1500);
+              });
+            }}
+          >
+            {copied ? "Copied" : "Copy address"}
           </Button>
         </div>
+        <p className="sr-only" aria-live="polite">
+          {copied ? "Address copied" : ""}
+        </p>
       </Sheet>
     </div>
   );

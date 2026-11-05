@@ -21,8 +21,8 @@ export function EmptyState({
   );
 }
 
-/** "Coming in the next milestone": used wherever M0 shows a later feature, so nothing pretends to work. */
-export function SoonBadge({ children = "Coming in the next milestone" }: { children?: ReactNode }) {
+/** "Coming in the next update": used wherever M0 shows a later feature, so nothing pretends to work. */
+export function SoonBadge({ children = "Coming in the next update" }: { children?: ReactNode }) {
   return (
     <span className="t-small inline-flex items-center rounded-full bg-vault-bg px-2 py-0.5 font-semibold text-vault">
       {children}

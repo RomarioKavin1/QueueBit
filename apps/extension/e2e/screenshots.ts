@@ -48,7 +48,8 @@ test("screens", async ({ context, extensionId, dappUrl }) => {
   await dapp.getByRole("button", { name: "Connect LEAKED" }).click();
   const approval = await waitForApproval(context);
   await approval.setViewportSize({ width: 360, height: 600 });
-  await expect(approval.getByRole("button", { name: "Connect" })).toBeVisible();
+  // Connect is disabled for a short arming period after the window opens (click-timing guard); capture it armed.
+  await expect(approval.getByRole("button", { name: "Connect" })).toBeEnabled();
   await shot("approve-connect", approval);
   await approval.emulateMedia({ colorScheme: "dark" });
   await shot("approve-connect-dark", approval);

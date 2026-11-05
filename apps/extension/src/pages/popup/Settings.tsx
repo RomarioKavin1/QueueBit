@@ -80,7 +80,7 @@ export function SettingsScreen({ state, onBack }: { state: WalletState; onBack: 
             Reset this browser
           </Button>
         </section>
-        <p className="t-small text-center text-muted">LEAKED M0 preview</p>
+        <p className="t-small text-center text-muted">LEAKED preview build · test money only</p>
       </div>
       <ResetSheet open={resetOpen} onClose={() => setResetOpen(false)} />
     </div>
