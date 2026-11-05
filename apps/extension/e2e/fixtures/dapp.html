@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>LEAKED test dapp</title>
+    <style>
+      body {
+        font:
+          14px system-ui,
+          sans-serif;
+        margin: 24px;
+      }
+      code {
+        background: #eee;
+        padding: 2px 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Test dapp</h1>
+    <p>Wallets discovered via EIP-6963: <span id="wallets">none</span></p>
+    <p>Account: <code id="account">not connected</code></p>
+    <button id="connect">Connect LEAKED</button>
+    <script>
+      // EIP-6963 discovery: listen first, then ask wallets to (re-)announce. The extension announced once at
+      // document_start, before this listener existed, so this exercises the requestProvider path.
+      window.__providers = [];
+      window.__events = [];
+      window.addEventListener("eip6963:announceProvider", (e) => {
+        if (window.__providers.some((p) => p.info.uuid === e.detail.info.uuid)) return;
+        window.__providers.push(e.detail);
+        document.getElementById("wallets").textContent = window.__providers.map((p) => p.info.name).join(", ");
+        const p = e.detail.provider;
+        for (const ev of ["connect", "chainChanged", "accountsChanged"]) {
+          p.on(ev, (data) => window.__events.push({ ev, data }));
+        }
+      });
+      window.dispatchEvent(new Event("eip6963:requestProvider"));
+      window.leaked = () => window.__providers.find((p) => p.info.rdns === "xyz.leaked.wallet")?.provider;
+      document.getElementById("connect").onclick = async () => {
+        const [a] = await window.leaked().request({ method: "eth_requestAccounts" });
+        document.getElementById("account").textContent = a;
+      };
+    </script>
+  </body>
+</html>
