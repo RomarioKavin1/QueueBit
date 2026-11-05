@@ -1,0 +1,19 @@
+{
+  "name": "leaked-devnet-deploy",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Deploys the LEAKED account stack to the local devnet from the forge artifacts (run with bun; standalone, not a workspace package)",
+  "scripts": {
+    "deploy": "bun run deploy.ts",
+    "check": "CHECK_ONLY=1 bun run deploy.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "viem": "2.57.16"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.6",
+    "typescript": "6.0.3"
+  }
+}

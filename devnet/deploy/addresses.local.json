@@ -1,0 +1,58 @@
+{
+  "network": {
+    "chainId": 1337,
+    "rpcUrl": "http://localhost:8545"
+  },
+  "deployer": "0x4e59b44847b379578588920cA78FbF26c0B4956C",
+  "salt": "0xaca47e8a366ca735530b57aa7c0af4c32cd86e606bcb4245905a07b91e267401",
+  "funder": "0x14dC79964da2C08b23698B3D3cc7Ca32193d9955",
+  "stakingRegistry": "0x8464135c8F25Da09e49BC8782676a84730C318bC",
+  "contracts": {
+    "LeakedAccountRoles": {
+      "address": "0x0b031120BA7B620896602f2c5A0992a6A30Fa6eE",
+      "artifact": "LeakedAccountRoles.sol/LeakedAccountRoles",
+      "args": [],
+      "initCodeHash": "0xb75c46cbe36ac500bfbd285f648cabd29710f3edd21c2c1baab6c3e55c168bd3"
+    },
+    "LeakedAccountImpl": {
+      "address": "0x6770518a08E18eB6dAf13fFf2C7B675375F6A8da",
+      "artifact": "LeakedAccountImpl.sol/LeakedAccountImpl",
+      "args": [
+        0,
+        true,
+        "0x0b031120BA7B620896602f2c5A0992a6A30Fa6eE"
+      ],
+      "initCodeHash": "0x1c00084037372738babedf8960f56f98b9f8b3b4e4dee8f5dd4ff94f40a46376"
+    },
+    "AccountFactory": {
+      "address": "0x12e7A64982e85868C345165bD149d6bE55fcA345",
+      "artifact": "AccountFactory.sol/AccountFactory",
+      "args": [],
+      "initCodeHash": "0xa85613f47fc252817f87db727e82ee34b716b793d925521f3aa898d8d5b2f713"
+    },
+    "C13Verifier": {
+      "address": "0xf67f51B70d6e751db52E9Ab8C20e5430dBB04715",
+      "artifact": "C13Verifier.sol/C13Verifier",
+      "args": [],
+      "initCodeHash": "0x6bb7940450c486efc601df5db8e29082e5328f9d5793e0fa807a5e55b223dc38",
+      "deployTx": "0x8cceeff7449ba219151e0638437c93e950666dfa4e984b0776bc64461deff21d"
+    },
+    "RoleSignerFactory": {
+      "address": "0x63a06d668096c51e690630E638589957672a7CEF",
+      "artifact": "RoleSignerFactory.sol/RoleSignerFactory",
+      "args": [
+        0,
+        6,
+        "0x8464135c8F25Da09e49BC8782676a84730C318bC",
+        "10000000000000000"
+      ],
+      "initCodeHash": "0xda104d6edcbe2951c796e3227687047b1ae4fdde465321b22ead9d43c08d4f06",
+      "deployTx": "0x9938f385266b403bd9a157416a519508fdcfe450104d9250e08c8c5f16e6ce2b"
+    }
+  },
+  "testVault": {
+    "address": "0xd2A752cbA5c92DfEEa06957819F229a6fdC1107a",
+    "privateKey": "0x719beaf8d3bd6187f4467212fde50b9937efcaf53109c6d125157e13f7debd37",
+    "note": "Public devnet-only key standing in for the Vault signer until Vault pairing (M4). Never use elsewhere."
+  }
+}
