@@ -31,6 +31,13 @@ export function validateTx(profile: Profile, tx: FrameTx): string[] {
   }
   if (size(tx.sender) !== 20) issues.push("sender must be 20 bytes");
   if (tx.nonceSeq >= 2n ** 64n - 1n) issues.push("nonce must be below 2^64 - 1");
+  tx.blobVersionedHashes.forEach((h, i) => {
+    if (size(h) !== 32 || !h.toLowerCase().startsWith("0x01")) {
+      issues.push(`blob versioned hash ${i}: 32 bytes starting with the KZG version byte 0x01`);
+    }
+  });
+  const totalFrameGas = tx.frames.reduce((a, f) => a + f.limits.execution + f.limits.state, 0n);
+  if (totalFrameGas >= 2n ** 64n) issues.push("the frame gas limits must sum to less than 2^64");
 
   let expiryFrames = 0;
   tx.frames.forEach((f, i) => {

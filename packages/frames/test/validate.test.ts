@@ -100,6 +100,21 @@ describe("validateTx (EIP-8141 static constraints)", () => {
     expect(validateTx(current, tx([e, e]))).toEqual(["a transaction can contain at most one expiry verifier frame"]);
   });
 
+  it("blob versioned hashes and the total frame gas", () => {
+    const tx = base();
+    expect(validateTx(tracer, { ...tx, blobVersionedHashes: [`0x01${"ab".repeat(31)}` as Hex] })).toEqual([]);
+    expect(
+      validateTx(tracer, { ...tx, blobVersionedHashes: [`0x02${"ab".repeat(31)}` as Hex, "0x0102" as Hex] }),
+    ).toEqual([
+      "blob versioned hash 0: 32 bytes starting with the KZG version byte 0x01",
+      "blob versioned hash 1: 32 bytes starting with the KZG version byte 0x01",
+    ]);
+    const big = selfVerify(tracer, { execution: 2n ** 63n });
+    expect(validateTx(tracer, base([big, senderFrame(tracer, { execution: 2n ** 63n })]))).toEqual([
+      "the frame gas limits must sum to less than 2^64",
+    ]);
+  });
+
   it("signature entries", () => {
     const sig = (s: Partial<FrameTx["signatures"][number]>) => ({ ...secp256k1Entry(tracer), ...s });
     const issues = validateTx(tracer, {
