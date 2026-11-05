@@ -8,6 +8,7 @@
 //!   leaked-pq sign-det <sk64> <msg32>              deterministic, raw sig hex
 //!   leaked-pq verify <pk32> <msg32> <sig>          prints true/false
 //!   leaked-pq bench [n]                            keygen/sign/verify timings (median, p95, ms)
+//!   leaked-pq bench-lean [n]                       the same for leanSphincs-s (Light tier, b = 13)
 //!
 //! Secrets on the command line are visible to other local users: test keys only.
 
@@ -124,7 +125,34 @@ fn main() {
                 println!("{name:7} n={n} median={med:.2}ms p95={p95:.2}ms min={min:.2}ms");
             }
         }
-        _ => die("usage: leaked-pq upstream-c13|keygen-seeds|sign|sign-det|verify|bench (see source header)"),
+        Some("bench-lean") => {
+            use leaked_pq::lean_s;
+            let n: usize = a.get(2).map(|s| s.parse().unwrap()).unwrap_or(10);
+            let (mut kg, mut sg, mut vf) = (vec![], vec![], vec![]);
+            for i in 0..n {
+                let mut m = [0u8; 32];
+                m[0] = i as u8;
+                m[31] = 0xa5;
+                let seed = hash::keccak256(&m);
+                let t = Instant::now();
+                let sk = lean_s::SecretKey::from_seed(&seed);
+                kg.push(t.elapsed().as_secs_f64() * 1e3);
+                let t = Instant::now();
+                let s = lean_s::sign(&sk, &m).unwrap();
+                sg.push(t.elapsed().as_secs_f64() * 1e3);
+                let pk = sk.public_key();
+                let t = Instant::now();
+                for _ in 0..100 {
+                    assert!(lean_s::verify(&pk, &m, &s));
+                }
+                vf.push(t.elapsed().as_secs_f64() * 1e3 / 100.0);
+            }
+            for (name, v) in [("keygen", kg), ("sign", sg), ("verify", vf)] {
+                let (med, p95, min) = stats(v);
+                println!("{name:7} n={n} median={med:.2}ms p95={p95:.2}ms min={min:.2}ms");
+            }
+        }
+        _ => die("usage: leaked-pq upstream-c13|keygen-seeds|sign|sign-det|verify|bench|bench-lean (see source header)"),
     }
 }
 

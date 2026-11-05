@@ -62,8 +62,16 @@ pub enum DeriveError {
     BadChainScope,
 }
 
-/// Domain-separated (skSeed, pkSeed) for a role. Exposed for test vectors.
-pub fn role_seeds(master: &[u8], role: Role, chain_scope: &str) -> Result<([u8; 32], [u8; 16]), DeriveError> {
+/// The 64-byte role key of any scheme: `HMAC-SHA512(key = "leaked/v1/" || scheme_id || "/" || role || "/" ||
+/// chainScope, msg = master)`. Every scheme the package supports derives through this one function with its own
+/// 32-byte `scheme_id` in the HMAC key, so one mnemonic never yields related keys for two schemes (or two roles, or
+/// two scopes). Exposed for test vectors and the cross-scheme separation tests.
+pub fn role_key(
+    scheme_id: &[u8; 32],
+    master: &[u8],
+    role: Role,
+    chain_scope: &str,
+) -> Result<zeroize::Zeroizing<[u8; 64]>, DeriveError> {
     if master.len() < 32 || master.len() > 64 {
         return Err(DeriveError::BadMasterLength);
     }
@@ -75,19 +83,23 @@ pub fn role_seeds(master: &[u8], role: Role, chain_scope: &str) -> Result<([u8; 
     }
     let mut key = Vec::with_capacity(10 + 32 + 1 + 8 + 1 + chain_scope.len());
     key.extend_from_slice(b"leaked/v1/");
-    key.extend_from_slice(&SCHEME_ID);
+    key.extend_from_slice(scheme_id);
     key.push(b'/');
     key.extend_from_slice(role.label().as_bytes());
     key.push(b'/');
     key.extend_from_slice(chain_scope.as_bytes());
     let mut mac = HmacSha512::new_from_slice(&key).expect("HMAC accepts any key length");
     mac.update(master);
-    let mut rk: [u8; 64] = mac.finalize().into_bytes().into();
+    Ok(zeroize::Zeroizing::new(mac.finalize().into_bytes().into()))
+}
+
+/// Domain-separated C13 (skSeed, pkSeed) for a role. Exposed for test vectors.
+pub fn role_seeds(master: &[u8], role: Role, chain_scope: &str) -> Result<([u8; 32], [u8; 16]), DeriveError> {
+    let rk = role_key(&SCHEME_ID, master, role, chain_scope)?;
     let mut sk_seed = [0u8; 32];
     let mut pk_seed = [0u8; 16];
     sk_seed.copy_from_slice(&rk[..32]);
     pk_seed.copy_from_slice(&rk[32..48]);
-    rk.zeroize();
     Ok((sk_seed, pk_seed))
 }
 

@@ -8,6 +8,10 @@
 //! and LEAKED's role-separated key derivation. Deterministic mode reproduces upstream signatures
 //! byte for byte (KAT set A).
 //!
+//! Second, EXPERIMENTAL scheme: [`lean_s`] (leanSphincs-s, 4,164-byte signatures, fits Path A under the stock 100 K
+//! VERIFY budget). It shares only the keccak sponge, the derivation function (with its own scheme id) and the WASM
+//! allocator with C13; the C13 API at the crate root is unchanged.
+//!
 //! NOT AUDITED. Upstream marks the scheme "not audited, not production-safe".
 
 #![deny(unsafe_code)]
@@ -15,6 +19,7 @@
 pub mod derive;
 pub mod hash;
 pub mod keys;
+pub mod lean_s;
 pub mod params;
 pub mod prf;
 pub mod sign;
