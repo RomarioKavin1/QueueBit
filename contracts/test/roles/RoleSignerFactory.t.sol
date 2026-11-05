@@ -8,6 +8,7 @@ import {C13Verifier} from "../../src/pq/C13Verifier.sol";
 import {IStakingRegistry} from "../../src/interfaces/IStakingRegistry.sol";
 import {PQRoleSigner} from "../../src/roles/PQRoleSigner.sol";
 import {RoleSignerFactory} from "../../src/roles/RoleSignerFactory.sol";
+import {FeeProfile} from "../../src/roles/FeeProfile.sol";
 
 contract RoleSignerFactoryTest is Test {
     RoleSignerFactory internal f;
@@ -75,7 +76,7 @@ contract RoleSignerFactoryTest is Test {
 
     /// The chain-profile settings are the factory's immutables, so two factories never share an address space.
     function test_differentFactorySettings_differentAddress() public {
-        RoleSignerFactory g = new RoleSignerFactory(Devnet.ERC8421_WORKSHOP, TxParam.MAX_FEE, registry, 0.05 ether);
+        RoleSignerFactory g = new RoleSignerFactory(Devnet.EIP7906_WORKSHOP, TxParam.MAX_COST, registry, 0.05 ether);
         assertTrue(
             f.predictRoleSigner(bytes32(0), 1, account, PK, address(verifier), payer)
                 != g.predictRoleSigner(bytes32(0), 1, account, PK, address(verifier), payer)
@@ -83,20 +84,74 @@ contract RoleSignerFactoryTest is Test {
     }
 
     function test_create_badSignerConfig_reverts() public {
-        vm.expectRevert(bytes("create2 failed"));
+        vm.expectRevert(RoleSignerFactory.InvalidConfig.selector);
         f.createRoleSigner(bytes32(0), 1, account, bytes32(0), address(verifier), payer);
-        vm.expectRevert(bytes("create2 failed"));
+        vm.expectRevert(RoleSignerFactory.InvalidConfig.selector);
         f.createRoleSigner(bytes32(0), 3, account, PK, address(verifier), payer);
-        vm.expectRevert(bytes("create2 failed"));
+        vm.expectRevert(RoleSignerFactory.InvalidConfig.selector);
         f.createRoleSigner(bytes32(0), 1, account, PK, makeAddr("noCode"), payer);
+        vm.expectRevert(RoleSignerFactory.InvalidConfig.selector);
+        f.createRoleSigner(bytes32(0), 0, account, PK, address(verifier), payer);
     }
 
-    function test_constructor_rejectsBadFeeParam() public {
-        vm.expectRevert(RoleSignerFactory.InvalidConfig.selector);
-        new RoleSignerFactory(Devnet.ERC8421_WORKSHOP, TxParam.MAX_PRIORITY_FEE_PER_GAS, registry, 0.05 ether);
-        vm.expectRevert(RoleSignerFactory.InvalidConfig.selector);
-        new RoleSignerFactory(Devnet.ERC8421_WORKSHOP, TxParam.SIG_HASH, registry, 0.05 ether);
-        // both profiles' fee parameters are accepted
+    /// The deploy-time fee-parameter assertion (`FeeProfile`): on the chain-1337 profile (ethrex
+    /// `eip8141-tracer`, TXPARAM 0x04 per-gas) only MAX_COST is a total budget, so a MAX_FEE factory fails to
+    /// deploy; a parameter that is no fee at all fails on every profile.
+    function test_constructor_feeProfileAssertion() public {
+        vm.expectRevert(
+            abi.encodeWithSelector(FeeProfile.FeeParamMismatch.selector, Devnet.ERC8421_WORKSHOP, TxParam.MAX_FEE)
+        );
         new RoleSignerFactory(Devnet.ERC8421_WORKSHOP, TxParam.MAX_FEE, registry, 0.05 ether);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                FeeProfile.FeeParamMismatch.selector, Devnet.ERC8421_WORKSHOP, TxParam.MAX_PRIORITY_FEE_PER_GAS
+            )
+        );
+        new RoleSignerFactory(Devnet.ERC8421_WORKSHOP, TxParam.MAX_PRIORITY_FEE_PER_GAS, registry, 0.05 ether);
+        vm.expectRevert(
+            abi.encodeWithSelector(FeeProfile.FeeParamMismatch.selector, Devnet.EIP7906_WORKSHOP, TxParam.SIG_HASH)
+        );
+        new RoleSignerFactory(Devnet.EIP7906_WORKSHOP, TxParam.SIG_HASH, registry, 0.05 ether);
+        // the 7906 workshop chain is not probed yet: both total-budget parameters pass there
+        new RoleSignerFactory(Devnet.EIP7906_WORKSHOP, TxParam.MAX_FEE, registry, 0.05 ether);
+        new RoleSignerFactory(Devnet.EIP7906_WORKSHOP, TxParam.MAX_COST, registry, 0.05 ether);
+        vm.expectRevert(RoleSignerFactory.InvalidConfig.selector);
+        new RoleSignerFactory(Devnet.ERC8421_WORKSHOP, TxParam.MAX_COST, registry, uint256(type(uint96).max) + 1);
+    }
+
+    /// The clone target: < 300k gas per instance (measured here without Amsterdam+ state gas; the devnet run in
+    /// `devnet-tests/g1` records the chain figure), 150 bytes of code, the implementation shared.
+    function test_cloneCost_andShape() public {
+        uint256 g0 = gasleft();
+        address v = f.createRoleSigner(bytes32(uint256(42)), 1, account, PK, address(verifier), payer);
+        uint256 used = g0 - gasleft();
+        assertLt(used, 300_000, "instance gas");
+        assertEq(v.code.length, 0x2d + 105);
+        address r = f.createRoleSigner(bytes32(uint256(42)), 2, account, PK, address(verifier), payer);
+        // both clones delegate to the one implementation (its address is in the proxy code)
+        assertEq(address(uint160(bytes20(_slice(v.code, 10, 20)))), address(f.implementation()));
+        assertEq(address(uint160(bytes20(_slice(r.code, 10, 20)))), address(f.implementation()));
+    }
+
+    function test_unbound_signer() public {
+        address u = f.createRoleSigner(bytes32(0), 1, address(0), PK, address(verifier), payer);
+        assertEq(PQRoleSigner(payable(u)).account(), address(0));
+        assertTrue(u != f.predictRoleSigner(bytes32(0), 1, account, PK, address(verifier), payer));
+    }
+
+    function test_maxFeeBoundInSalt() public {
+        RoleSignerFactory g = new RoleSignerFactory(Devnet.ERC8421_WORKSHOP, TxParam.MAX_COST, registry, 0.06 ether);
+        // same chain settings but a different default bound: a different factory, a different address space anyway;
+        // the bound is also mixed into the salt, so the storage half of the config is committed too
+        assertEq(
+            PQRoleSigner(payable(g.createRoleSigner(0, 1, account, PK, address(verifier), payer))).maxFee(), 0.06 ether
+        );
+    }
+
+    function _slice(bytes memory b, uint256 start, uint256 len) private pure returns (bytes memory out) {
+        out = new bytes(len);
+        for (uint256 i; i < len; i++) {
+            out[i] = b[start + i];
+        }
     }
 }

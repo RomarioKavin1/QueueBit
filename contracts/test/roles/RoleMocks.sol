@@ -33,6 +33,11 @@ contract MockLeakedAccount {
         guardian = guardian_;
     }
 
+    /// Same shape as `ILeakedAccountRoles.getRoles` (an unbound `PQRoleSigner` checks it).
+    function getRoles() external view returns (address, address, address, uint48, uint32) {
+        return (vaultSigner, recoverySigner, address(0), 0, 0);
+    }
+
     function vaultExecute(ILeakedAccountRoles.Call[] calldata calls, uint256 usdValue) external {
         if (msg.sender != vaultSigner) revert NotVault();
         for (uint256 i; i < calls.length; i++) {

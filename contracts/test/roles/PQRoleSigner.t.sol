@@ -9,16 +9,22 @@ import {IPQVerifier} from "../../src/interfaces/IPQVerifier.sol";
 import {IStakingRegistry} from "../../src/interfaces/IStakingRegistry.sol";
 import {ILeakedAccountRoles} from "../../src/interfaces/ILeakedAccountRoles.sol";
 import {PQRoleSigner} from "../../src/roles/PQRoleSigner.sol";
+import {RoleSignerFactory} from "../../src/roles/RoleSignerFactory.sol";
+import {FeeProfile} from "../../src/roles/FeeProfile.sol";
 import {C13Kat} from "../pq/C13Kat.sol";
 import {MockLeakedAccount, MockStakingRegistry, MockOther} from "./RoleMocks.sol";
 
 /// PQRoleSigner under FrameSim (EIP-8141 semantics, mocked opcodes) with real C13 signatures from KAT set C: the
 /// sig hash of each simulated tx is set to a vector's digest, so the vector's signature is a valid PQ signature over
 /// it. Covers both paths, payer pinning, the frame walker, target restrictions, fee bound, self-admin, staking.
+/// The signer under test is a clone from `RoleSignerFactory` (the production path): the opcode helpers are the
+/// implementation's, the args are read from the clone's code, APPROVE runs through clone -> implementation ->
+/// helper DELEGATECALLs.
 contract PQRoleSignerTest is FrameSim {
     C13Verifier internal verifier;
     MockLeakedAccount internal account;
     MockStakingRegistry internal registry;
+    RoleSignerFactory internal factory;
     PQRoleSigner internal signer;
     C13Kat.Vector internal kat;
 
@@ -37,18 +43,13 @@ contract PQRoleSignerTest is FrameSim {
         registry = new MockStakingRegistry();
         account = new MockLeakedAccount();
         (payer, payerPk) = makeAddrAndKey("payer");
-        signer = new PQRoleSigner(
-            Devnet.ERC8421_WORKSHOP,
-            address(account),
-            1,
-            IPQVerifier(address(verifier)),
-            kat.pk,
-            payer,
-            MAX_FEE,
-            TxParam.MAX_COST,
-            IStakingRegistry(address(registry))
+        factory = new RoleSignerFactory(
+            Devnet.ERC8421_WORKSHOP, TxParam.MAX_COST, IStakingRegistry(address(registry)), MAX_FEE
         );
-        simAttach(address(signer));
+        signer = PQRoleSigner(
+            payable(factory.createRoleSigner(bytes32(0), 1, address(account), kat.pk, address(verifier), payer))
+        );
+        simAttach(address(factory.implementation()));
         account.setRoles(address(signer), address(0), address(0));
         vm.deal(address(signer), 1 ether);
         vm.deal(address(account), 1 ether);
@@ -260,19 +261,14 @@ contract PQRoleSignerTest is FrameSim {
     }
 
     /// `feeParam = MAX_FEE` (the EIP master profile, where 0x04 is the total budget): the bound applies to 0x04.
+    ///      (Built for the EIP-7906 workshop helper set: `FeeProfile` refuses MAX_FEE on the chain-1337 profile.)
     function test_feeBound_maxFeeProfile() public {
-        PQRoleSigner s = new PQRoleSigner(
-            Devnet.ERC8421_WORKSHOP,
-            address(account),
-            1,
-            IPQVerifier(address(verifier)),
-            kat.pk,
-            payer,
-            MAX_FEE,
-            TxParam.MAX_FEE,
-            IStakingRegistry(address(registry))
+        RoleSignerFactory g = new RoleSignerFactory(
+            Devnet.EIP7906_WORKSHOP, TxParam.MAX_FEE, IStakingRegistry(address(registry)), MAX_FEE
         );
-        simAttach(address(s));
+        PQRoleSigner s =
+            PQRoleSigner(payable(g.createRoleSigner(bytes32(0), 1, address(account), kat.pk, address(verifier), payer)));
+        simAttach(address(g.implementation()), Devnet.EIP7906_WORKSHOP);
         vm.deal(address(s), 1 ether);
         simBegin(address(s));
         simSetFees(1 gwei, MAX_FEE + 1, COST);
@@ -609,30 +605,120 @@ contract PQRoleSignerTest is FrameSim {
         assertEq(address(signer.stakingRegistry()), address(registry));
     }
 
-    function test_constructor_rejectsBadConfig() public {
-        vm.expectRevert(PQRoleSigner.InvalidConfig.selector);
-        _deploy(address(0), 1, address(verifier), kat.pk, TxParam.MAX_COST);
-        vm.expectRevert(PQRoleSigner.InvalidConfig.selector);
-        _deploy(address(account), 3, address(verifier), kat.pk, TxParam.MAX_COST);
-        vm.expectRevert(PQRoleSigner.InvalidConfig.selector);
-        _deploy(address(account), 1, makeAddr("noCode"), kat.pk, TxParam.MAX_COST);
-        vm.expectRevert(PQRoleSigner.InvalidConfig.selector);
-        _deploy(address(account), 1, address(verifier), bytes32(0), TxParam.MAX_COST);
-        vm.expectRevert(PQRoleSigner.InvalidConfig.selector);
-        _deploy(address(account), 1, address(verifier), kat.pk, TxParam.MAX_PRIORITY_FEE_PER_GAS);
+    function test_createRoleSigner_rejectsBadConfig() public {
+        vm.expectRevert(RoleSignerFactory.InvalidConfig.selector);
+        factory.createRoleSigner(bytes32(0), 3, address(account), kat.pk, address(verifier), payer);
+        vm.expectRevert(RoleSignerFactory.InvalidConfig.selector);
+        factory.createRoleSigner(bytes32(0), 1, address(account), kat.pk, makeAddr("noCode"), payer);
+        vm.expectRevert(RoleSignerFactory.InvalidConfig.selector);
+        factory.createRoleSigner(bytes32(0), 1, address(account), bytes32(0), address(verifier), payer);
+        vm.expectRevert(abi.encodeWithSelector(FeeProfile.FeeParamMismatch.selector, 0, 3));
+        new PQRoleSigner(Devnet.ERC8421_WORKSHOP, TxParam.MAX_PRIORITY_FEE_PER_GAS, IStakingRegistry(address(registry)));
     }
 
-    function _deploy(address acct, uint8 role, address ver, bytes32 key, TxParam fp) internal returns (PQRoleSigner) {
-        return new PQRoleSigner(
-            Devnet.ERC8421_WORKSHOP,
-            acct,
-            role,
-            IPQVerifier(ver),
-            key,
-            payer,
-            MAX_FEE,
-            fp,
-            IStakingRegistry(address(registry))
+    // ------------------------------------------------------------------------------- clone / implementation ------
+
+    /// The implementation holds no per-signer args: it can neither approve a frame nor be initialized.
+    function test_implementation_refusesToAct() public {
+        PQRoleSigner impl = factory.implementation();
+        simBegin(address(impl));
+        simSetFees(1 gwei, 2 gwei, COST);
+        simSetSigHash(kat.digest);
+        simVerify(SELF_VERIFY, address(0), 300_000, abi.encodeCall(PQRoleSigner.verifyFrame, (0)));
+        simSender(address(0), SENDER_GAS, 0, _relay(address(account), _move(1)));
+        simAddArbitrary(kat.sig);
+        SimResult memory r = simRun();
+        assertFalse(r.valid);
+        assertEq(bytes4(r.frames[0].returnData), PQRoleSigner.NotClone.selector);
+        vm.prank(address(factory));
+        vm.expectRevert(PQRoleSigner.NotClone.selector);
+        impl.initialize(payer, 1);
+    }
+
+    /// Only the factory initializes, and only in the creating call (a later call would be a re-initialization).
+    function test_initialize_onlyFactory() public {
+        vm.expectRevert(PQRoleSigner.NotFactory.selector);
+        signer.initialize(address(this), 1);
+        vm.prank(makeAddr("frontRunner"));
+        vm.expectRevert(PQRoleSigner.NotFactory.selector);
+        signer.initialize(address(this), 1);
+        assertEq(signer.payerKey(), payer);
+    }
+
+    function test_setMaxFee_boundedToUint96() public {
+        _pathB(_execPQ(address(signer), abi.encodeCall(PQRoleSigner.setMaxFee, (uint256(type(uint96).max) + 1))));
+        SimResult memory r = simRunValid();
+        assertEq(r.frames[1].status, STATUS_FAILED);
+        assertEq(bytes4(r.frames[1].returnData), PQRoleSigner.InvalidConfig.selector);
+        assertEq(signer.maxFee(), MAX_FEE);
+    }
+
+    /// The args are in the clone's code, `payerKey` and `maxFee` share one slot: VERIFY reads one storage slot.
+    function test_clone_storageLayout_oneSlot() public view {
+        bytes32 slot0 = vm.load(address(signer), bytes32(0));
+        assertEq(address(uint160(uint256(slot0))), payer);
+        assertEq(uint256(slot0) >> 160, MAX_FEE);
+        assertEq(address(signer).code.length, 0x2d + 105);
+    }
+
+    // ---------------------------------------------------------------------------------------- unbound mode ------
+
+    function _unbound(uint8 role) internal returns (PQRoleSigner s) {
+        s = PQRoleSigner(
+            payable(factory.createRoleSigner(bytes32("unbound"), role, address(0), kat.pk, address(verifier), payer))
         );
+        vm.deal(address(s), 1 ether);
+    }
+
+    function _pathBFrom(PQRoleSigner s, bytes memory body) internal {
+        simBegin(address(s));
+        simSetFees(1 gwei, 2 gwei, COST);
+        simSetSigHash(kat.digest);
+        simVerify(SELF_VERIFY, address(0), VERIFY_GAS, abi.encodeCall(PQRoleSigner.verifyFrame, (0)));
+        simSender(address(0), SENDER_GAS, 0, body);
+        simAddArbitrary(kat.sig);
+        simAddSecp256k1(payer);
+        simSignSecp256k1(1, payerPk);
+    }
+
+    /// An unbound vault signer serves an account whose `getRoles()` names it as the vault.
+    function test_unbound_servesAccountThatNamesIt() public {
+        MockLeakedAccount acct = new MockLeakedAccount();
+        vm.deal(address(acct), 1 ether);
+        PQRoleSigner s = _unbound(1);
+        assertEq(s.account(), address(0));
+        acct.setRoles(address(s), address(0), address(0));
+        _pathBFrom(s, _execPQ(address(acct), _move(0.1 ether)));
+        SimResult memory r = simRunValid();
+        _assertVerifyClean(r);
+        assertEq(r.frames[1].status, STATUS_SUCCESS);
+        assertEq(recipient.balance, 0.1 ether);
+    }
+
+    /// ...and nothing else: not an account that does not name it, not one that names it in the other role, not
+    /// an EOA, not a contract without `getRoles`.
+    function test_unbound_refusesOtherTargets() public {
+        PQRoleSigner s = _unbound(1);
+        MockLeakedAccount stranger = new MockLeakedAccount();
+        stranger.setRoles(makeAddr("otherVault"), address(s), address(0)); // names it as recovery, not vault
+        MockOther other = new MockOther();
+        address[3] memory targets = [address(stranger), address(other), makeAddr("eoa")];
+        for (uint256 i; i < targets.length; i++) {
+            _pathBFrom(s, _execPQ(targets[i], _move(0.1 ether)));
+            SimResult memory r = simRunValid();
+            assertEq(r.frames[1].status, STATUS_FAILED);
+            assertEq(bytes4(r.frames[1].returnData), PQRoleSigner.TargetNotAllowed.selector);
+        }
+        assertEq(recipient.balance, 0);
+    }
+
+    function test_unbound_recoveryRole() public {
+        PQRoleSigner s = _unbound(2);
+        MockLeakedAccount acct = new MockLeakedAccount();
+        acct.setRoles(makeAddr("vault"), address(s), address(0));
+        _pathBFrom(s, _execPQ(address(acct), abi.encodeCall(ILeakedAccountRoles.recoveryCancel, (bytes32(uint256(9))))));
+        SimResult memory r = simRunValid();
+        assertEq(r.frames[1].status, STATUS_SUCCESS);
+        assertEq(acct.lastCancelled(), bytes32(uint256(9)));
     }
 }

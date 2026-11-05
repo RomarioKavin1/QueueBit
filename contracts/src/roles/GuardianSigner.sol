@@ -4,6 +4,7 @@ pragma solidity 0.8.28;
 import {HegotaSupport, Devnet} from "@forshtat/hegota-support/contracts/HegotaSupport.sol";
 import {Scope, TxParam, FrameParam, FrameMode, SigParam} from "@forshtat/hegota-support/contracts/Params.sol";
 import {ILeakedAccountRoles} from "../interfaces/ILeakedAccountRoles.sol";
+import {FeeProfile} from "./FeeProfile.sol";
 
 /// @title GuardianSigner
 /// @notice A freeze-only EIP-8141 sender for a guardian (plan `10-contracts.md` §10.3.7, §10.5.3). Its only power
@@ -23,7 +24,8 @@ contract GuardianSigner is HegotaSupport {
     address public immutable guardianKey;
     /// Upper bound on `txparam(feeParam)` (wei).
     uint256 public immutable maxFee;
-    /// `TxParam.MAX_FEE` (EIP: total budget) or `TxParam.MAX_COST` (ethrex-eip8141-tracer devnet).
+    /// `TxParam.MAX_FEE` (EIP: total budget) or `TxParam.MAX_COST` (ethrex-eip8141-tracer devnet), as `FeeProfile`
+    /// requires for the devnet (checked at construction).
     TxParam public immutable feeParam;
 
     error InvalidConfig();
@@ -38,7 +40,7 @@ contract GuardianSigner is HegotaSupport {
         HegotaSupport(devnet_)
     {
         if (account_ == address(0) || guardianKey_ == address(0)) revert InvalidConfig();
-        if (feeParam_ != TxParam.MAX_FEE && feeParam_ != TxParam.MAX_COST) revert InvalidConfig();
+        FeeProfile.check(devnet_, feeParam_);
         account = account_;
         guardianKey = guardianKey_;
         maxFee = maxFee_;
