@@ -127,6 +127,20 @@ describe("§7 rule 2: PoolPayer fee is exactly at cost", () => {
     expect(q.withdrawal.processooor).toBe(PAYER);
   });
 
+  it("quote: an RPC failure reading the sender's nonce is an error, never a guessed nonce 0", async () => {
+    const node = mockNode([100n]);
+    node.getTransactionCount = async () => {
+      throw new Error("rpc down");
+    };
+    const b = new FramePaymasterBroadcaster(opts(node));
+    await expect(b.quote({ senderKey: generatePrivateKey(), rootIndexHint: 0 })).rejects.toThrow(/rpc down/);
+    expect(node.simulated).toBe(0);
+    const node2 = mockNode([100n]);
+    node2.getTransactionCount = async () => 3n;
+    const q = await new FramePaymasterBroadcaster(opts(node2)).quote({ senderKey: generatePrivateKey(), rootIndexHint: 0 });
+    expect(q.nonce).toBe(3n);
+  });
+
   it("build: refuses when the real tx would cost more than the fee, or the quote was inflated", async () => {
     const node = mockNode([100n, 101n]);
     const b = new FramePaymasterBroadcaster(opts(node));

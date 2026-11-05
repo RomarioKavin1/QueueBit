@@ -114,7 +114,9 @@ export class FramePaymasterBroadcaster {
   async quote(a: { senderKey: Hex; rootIndexHint: number; refundRecipient?: Address }): Promise<FramePaymasterQuote> {
     rejectFeeOptions(a);
     const sender = privateKeyToAddress(a.senderKey);
-    const nonce = await this.o.node.getTransactionCount(sender, "pending").catch(() => 0n);
+    // The nonce is signed into the tx whose max cost becomes the fee, and the fee is bound by the proof's `context`:
+    // a guessed nonce would only surface as a failed re-simulation after the proof, so an RPC failure here is an error.
+    const nonce = await this.o.node.getTransactionCount(sender, "pending");
     const mk = (fee: bigint) =>
       poolPayerWithdrawal({
         payer: this.o.payer,
