@@ -174,9 +174,14 @@ Deployed: `C13Verifier` `0xe8bbb5f2…a9fc` (tx `0x907d9fdc…a511`), `MockLeake
   needs 148,098 + 100** → admissible only with a staked budget ≥ ~150k (BUDGET-010); Path A tx total (276k) is about half
   of Path B's (568k) because Path B pays the ECDSA entry, the payer check and the PQ verify in a second frame and its
   body here created the recipient account (state gas).
-- **Privileged-submit quirk:** a privileged submission of the *same bytes* ethrex had just rejected on
-  `eth_sendRawTransaction` was accepted (hash returned) but never mined and vanished from the pool; re-signing (the C13
-  signer is hedged, so a new witness → same sig hash, new tx hash) mined at once. The script re-signs before the
-  privileged call. Path A went through the privileged RPC, not a source-patched sidecar (no `devnet/patched-sidecar/`
-  was built; the README recipe stays the route for BUDGET-010 work).
+- **Privileged-submit quirk (corrected by the M4 review, 2026-11-06):** an ethrex `eth_sendRawTransaction` rejection
+  poisons the **(sender, nonce) lane**: a later `ethrex_submitPrivilegedFrameTransaction` with that nonce is accepted
+  (hash returned) but never mined, whatever the witness or tx hash (re-signing does not reliably help; the review's
+  re-run timed out exactly there). Isolated with `contracts/devnet-tests/pq/probe-patha.ts`-style runs on one signer:
+  direct privileged submission mined in the next block; after a sidecar `eth_sendFrameTransaction` rejection it mined
+  in the next block (the sidecar rejects before reaching ethrex); after an ethrex `eth_sendRawTransaction` rejection
+  it never mined. `run.ts` therefore takes ethrex's stock verdict from `ethrex_simulateFrameTransaction`
+  (`canonicalMempoolValid: false`, MAX_VERIFY_GAS violation) instead of offering the tx to `eth_sendRawTransaction`,
+  and keeps a re-sign fallback. Path A went through the privileged RPC, not a source-patched sidecar (no
+  `devnet/patched-sidecar/` was built; the README recipe stays the route for BUDGET-010 work).
 - **Setup gas that bit:** a mock `setRoles` writing 3 fresh slots ran out at 200,000 (state gas); the script uses 3M.

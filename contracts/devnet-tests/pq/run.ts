@@ -8,8 +8,8 @@
 // 3. Path B (public mempool, ethrex eth_sendRawTransaction): vaultExecute moving ETH via the mock -> mined.
 // 4. Path B through the sidecar: executePQ(self, stake(86400, 0.012 ETH)) -> staked in the ERC-8421 registry.
 // 5. Path B with a forged PQ witness: admitted (payer key is valid), SENDER frame reverts, nothing moves, nonce +1.
-// 6. Path A: PQ verified in VERIFY. Rejected by the stock sidecar and by ethrex (MAX_VERIFY_GAS = 100k), then
-//    admitted with ethrex_submitPrivilegedFrameTransaction (the sidecar's relay path) and mined.
+// 6. Path A: PQ verified in VERIFY. Rejected by the stock sidecar and by ethrex's simulation (MAX_VERIFY_GAS = 100k),
+//    then admitted with ethrex_submitPrivilegedFrameTransaction (the sidecar's relay path) and mined.
 // Every tx is first run through ethrex_simulateFrameTransaction {trace:true}: canonicalMempoolValid + frame gas.
 // Results go to stdout and ./last-run.json.
 import { writeFileSync } from "node:fs";
@@ -358,30 +358,33 @@ function frameGas(r: Awaited<ReturnType<typeof waitReceipt>>) {
 {
   const before = await balances();
   const tx = await pathA(relay(mock.address, vaultMove(MOVE)));
-  const raw = encodeTx(profile, tx);
-  const { out } = await simulate("Path A", tx);
+  const { out, sim } = await simulate("Path A", tx);
+  // Stock admission: the sidecar's verdict and ethrex's own simulation verdict (`canonicalMempoolValid`). The tx is
+  // deliberately NOT offered to ethrex `eth_sendRawTransaction`: an ethrex-side rejection poisons the (sender, nonce)
+  // lane, after which a privileged submission with that nonce is accepted (hash returned) but never mined, whatever
+  // the witness or tx hash (review 2026-11-06, `probe-patha.ts` runs: direct and after-sidecar-probe mined in the
+  // next block; after-ethrex-probe never mined). The sidecar rejects before reaching ethrex, so it is harmless.
   const sidecarVerdict = await rpc.sidecar
     .sendFrameTransaction(tx)
     .then((h) => ({ accepted: h }))
     .catch((e: Error) => ({ rejected: e.message }));
-  const ethrexVerdict = await rpc.node
-    .sendRawTransaction(raw)
-    .then((h) => ({ accepted: h }))
-    .catch((e: Error) => ({ rejected: e.message }));
-  log("Path A, stock admission", { sidecar: sidecarVerdict, ethrex: ethrexVerdict });
+  const ethrexVerdict = sim.valid ? { accepted: "canonicalMempoolValid" } : { rejected: sim.violation };
+  log("Path A, stock admission", { sidecar: sidecarVerdict, ethrexSimulate: ethrexVerdict });
   if ("accepted" in sidecarVerdict || "accepted" in ethrexVerdict) {
     throw new Error("Path A was admitted by a stock mempool: MAX_VERIFY_GAS rule changed?");
   }
-  // Re-sign before the privileged submission. Observed 2026-11-06: ethrex accepted a privileged submission of the
-  // exact bytes it had just rejected on eth_sendRawTransaction (same tx hash) but never mined it; a fresh hedged
-  // witness (same sig hash, new tx hash) mines.
-  const tx2 = await pqSign(tx);
-  const hash = await ethrexRaw<Hex>("ethrex_submitPrivilegedFrameTransaction", [encodeTx(profile, tx2)]);
-  const r = await waitReceipt(hash);
+  let hash = await ethrexRaw<Hex>("ethrex_submitPrivilegedFrameTransaction", [encodeTx(profile, tx)]);
+  let r = await waitReceipt(hash, 60_000).catch(() => null);
+  if (!r) {
+    // Fallback: a fresh hedged witness (same sig hash, new tx hash), in case the lane was poisoned by an earlier run.
+    const tx2 = await pqSign(tx);
+    hash = await ethrexRaw<Hex>("ethrex_submitPrivilegedFrameTransaction", [encodeTx(profile, tx2)]);
+    r = await waitReceipt(hash);
+  }
   const after = await balances();
   results.pathA = {
     verifierCallGas: await verifierGas(hash),
-    rejectedBy: { sidecar: sidecarVerdict, ethrex: ethrexVerdict },
+    rejectedBy: { sidecar: sidecarVerdict, ethrexSimulate: ethrexVerdict },
     admittedVia: "ethrex_submitPrivilegedFrameTransaction",
     hash,
     block: r.blockNumber,
