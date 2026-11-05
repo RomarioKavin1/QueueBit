@@ -53,8 +53,10 @@ function rejects(f: () => unknown, code: string): RequestRejected {
 describe("clear signing: the two headline flows", () => {
   it("a queued daily-limit raise reads as one sentence with the waiting period", () => {
     const r = reviewRequestBytes(limitRaise().cbor, ctx());
-    expect(r.headline).toBe("Raise daily limit from $50 → $200: takes effect after a 48-hour waiting period");
-    expect(r.admin?.sentence).toBe("Raise daily limit from $50 → $200: takes effect after a 48-hour waiting period.");
+    // No snapshot yet: the headline carries the signed value only; the browser's "from" is in the row, labelled.
+    expect(r.headline).toBe("Set daily limit to $200: takes effect after a 48-hour waiting period");
+    expect(r.admin?.sentence).toBe("Set daily limit to $200: takes effect after a 48-hour waiting period.");
+    expect(r.actions[0]!.details).toContainEqual({ label: "Daily limit", value: "$50 (browser) → $200" });
     expect(r.approval).toBe("normal");
     expect(r.mismatch).toEqual([]);
     expect(r.unknown).toBe(false);
@@ -124,18 +126,19 @@ describe("warnings", () => {
   it("E-74 when the browser's settings differ from what this phone signed", () => {
     const first = reviewRequestBytes(usdcWithdrawal().cbor, ctx());
     const snaps = updateSnapshots(first, [], 1);
-    expect(snaps[0]!.settings.capUsdPerDay).toBe(50_000_000n);
+    expect(snaps[0]!.settings.capUsdPerDay).toBeUndefined(); // never trusted as "what this phone signed"
+    expect(snaps[0]!.reported?.capUsdPerDay).toBe(50_000_000n);
     const changed = usdcWithdrawal();
     const req = { ...changed.request, policy: { ...changed.request.policy!, capUsdPerDay: 999_000_000n } };
     const r = reviewRequest(req, ctx({ snapshots: snaps }));
     expect(r.warnings.map((w) => w.code)).toContain("E-74");
   });
 
-  it("uses this phone's own snapshot for the 'from' value once it has signed", () => {
+  it("the browser's report at the first approval does not become the trusted 'from' value", () => {
     const snaps = updateSnapshots(reviewRequestBytes(usdcWithdrawal().cbor, ctx()), [], 1);
     const r = reviewRequestBytes(limitRaise().cbor, ctx({ snapshots: snaps }));
-    expect(r.headline).toBe("Raise daily limit from $50 → $200: takes effect after a 48-hour waiting period");
-    expect(r.warnings.map((w) => w.code)).not.toContain("browser-values");
+    expect(r.headline).toBe("Set daily limit to $200: takes effect after a 48-hour waiting period");
+    expect(r.warnings.map((w) => w.code)).toContain("browser-values");
   });
 });
 

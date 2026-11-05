@@ -69,12 +69,13 @@ test("clear signing: a daily-limit raise reads as one sentence with the waiting 
   await restoreVault(page, H.VAULT_WORDS, H.PASSPHRASE);
   await pasteRequest(page, H.requestText(H.limitRaise().cbor));
   await expect(page.getByTestId("headline")).toHaveText(
-    "Raise daily limit from $50 → $200: takes effect after a 48-hour waiting period",
+    "Set daily limit to $200: takes effect after a 48-hour waiting period",
   );
   await expect(page.getByTestId("admin-banner")).toContainText("ADMIN ACTION");
   await expect(page.getByTestId("admin-banner")).toContainText(
-    "Raise daily limit from $50 → $200: takes effect after a 48-hour waiting period",
+    "Set daily limit to $200: takes effect after a 48-hour waiting period",
   );
+  await expect(page.getByText("$50 (browser) → $200")).toBeVisible();
   await expect(page.getByTestId("warning-browser-values")).toBeVisible();
   await shot(page, "07-review-limit-raise");
   await page.getByTestId("reject").click();

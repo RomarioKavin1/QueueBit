@@ -307,6 +307,10 @@ function reviewFrameTx(req: SignRequest, ctx: DeviceContext): Review {
   const f0 = tx.frames[0];
   const f1 = tx.frames[1];
   if (tx.frames.length !== 2) structural.push(`it has ${tx.frames.length} steps instead of 2`);
+  // Every step beyond the two expected ones is a call from the signer the user must see, not just count.
+  for (const f of tx.frames.slice(2)) {
+    actions.push(unknownAction(ctx, req.chainId, (f.target ?? sender) as Address, f.data, f.value, "Extra step"));
+  }
   if (!f0 || f0.mode !== p.frameModes.VERIFY || !isSelf(f0.target) || f0.value !== 0n) {
     structural.push("its first step is not the Vault's own check");
   } else if (
@@ -641,14 +645,22 @@ function renderFormatted(
         details.push({ label: capital(c.label), value: `${fmt(next)} (unchanged)` });
         continue;
       }
-      const raises = cur ? next > cur.value : undefined;
-      const looser = cur ? (c.looser === "higher" ? next > cur.value : next < cur.value) : true;
+      // Direction ("raise"/"lower", and whether it loosens) is only computed from what this phone signed itself. A
+      // browser-reported current value is shown, labelled, but cannot make a raise read as a lowering, and the change
+      // is treated as loosening (the conservative reading) until the phone has its own snapshot.
+      const trusted = cur?.source === "phone";
+      const raises = trusted ? next > cur.value : undefined;
+      const looser = trusted ? (c.looser === "higher" ? next > cur.value : next < cur.value) : true;
       if (looser) loosening = true;
       const verb = raises === undefined ? "set" : raises ? "raise" : "lower";
+      // The headline carries only the signed value when the "from" is untrusted; the row below shows both.
       sentences.push(
-        cur ? `${verb} ${c.label} from ${fmt(cur.value)} → ${fmt(next)}` : `${verb} ${c.label} to ${fmt(next)}`,
+        trusted ? `${verb} ${c.label} from ${fmt(cur.value)} → ${fmt(next)}` : `${verb} ${c.label} to ${fmt(next)}`,
       );
-      details.push({ label: capital(c.label), value: cur ? `${fmt(cur.value)} → ${fmt(next)}` : fmt(next) });
+      details.push({
+        label: capital(c.label),
+        value: cur ? `${fmt(cur.value)}${trusted ? "" : " (browser)"} → ${fmt(next)}` : fmt(next),
+      });
     }
     title = sentences.length > 0 ? capital(sentences.join(" and ")) : "No change to your settings";
   }
@@ -904,11 +916,13 @@ function amountView(r: RenderCtx, token: Address, units: bigint): AmountView {
   const reg = native ? NATIVE : tokenInfo(r.chainId, token);
   const snap = r.snapshot?.tokens[token.toLowerCase()];
   const adv = r.policy?.tokens?.find((t) => isAddressEqual(t.token as Address, token));
-  const decimals = reg?.decimals ?? snap?.decimals ?? adv?.decimals;
+  // Decimals come from the bundled registry or from what this phone signed (`vaultSetToken`), never from the
+  // request: browser-reported decimals could print a million-token transfer as "0.000001".
+  const decimals = reg?.decimals ?? snap?.decimals;
   let text: string;
   let unknownToken = false;
   if (decimals === undefined) {
-    text = `${units.toString()} units of token ${shortAddress(token)}`;
+    text = `${formatUnits(units, 0)} units of token ${shortAddress(token)}`;
     unknownToken = true;
   } else {
     text = `${formatUnits(units, decimals)} ${reg?.symbol ?? `of token ${shortAddress(token)}`}`;
@@ -918,7 +932,8 @@ function amountView(r: RenderCtx, token: Address, units: bigint): AmountView {
   if (decimals !== undefined) {
     if (snap && snap.allowed)
       view.usd = { text: formatUsd6(usdValue(units, decimals, snap.usdPerToken)), source: "phone" };
-    else if (adv) view.usd = { text: formatUsd6(usdValue(units, decimals, adv.usdPerToken)), source: "browser" };
+    else if (adv && adv.decimals === decimals)
+      view.usd = { text: formatUsd6(usdValue(units, decimals, adv.usdPerToken)), source: "browser" };
   }
   return view;
 }
@@ -1087,8 +1102,10 @@ function finish(
     if (a.loosening && a.timing.waitSeconds === 0n && a.id !== "account.vaultSetRecoverySigner") {
       warnings.push({
         code: "direct-loosening",
-        title: "This change usually has to wait",
-        body: "It raises risk, so your account only accepts it after the waiting period. Sent like this, it will be refused by the network.",
+        title: a.currentFromBrowser ? "This change may have to wait" : "This change usually has to wait",
+        body: a.currentFromBrowser
+          ? "This phone can't tell whether it raises risk. If it does, your account only accepts it after the waiting period, and sent like this it will be refused by the network."
+          : "It raises risk, so your account only accepts it after the waiting period. Sent like this, it will be refused by the network.",
       });
     }
     if (a.currentFromBrowser) {
@@ -1113,7 +1130,7 @@ function finish(
       "timelockDelay",
       "timelockThresholdUsd",
     ] as const) {
-      const mine = snap.settings[k];
+      const mine = snap.settings[k] ?? snap.reported?.[k];
       const theirs = req.policy[k];
       if (mine !== undefined && theirs !== undefined && BigInt(mine) !== theirs) diffs.push(k);
     }
@@ -1203,9 +1220,11 @@ export function updateSnapshots(review: Review, snapshots: AccountSnapshot[], no
     : { account, chainId, signers: [], settings: {}, tokens: {}, updatedAt: now };
   if (review.structure.sender && !next.signers.some((s) => isAddressEqual(s, review.structure.sender!)))
     next.signers.push(review.structure.sender);
-  // Seed unknown settings from the browser's report the first time (labelled as such at the time of signing).
+  // Remember what the browser reported at signing time, kept apart from `settings` (which only ever holds values
+  // this phone signed): a lie on the first approval must not become the trusted "from" value of the next one.
   const pol = review.request.policy;
-  if (!existing && pol) {
+  if (pol) {
+    const reported = { ...next.reported };
     for (const k of [
       "capUsdPerDay",
       "perTxMaxUsd",
@@ -1213,9 +1232,9 @@ export function updateSnapshots(review: Review, snapshots: AccountSnapshot[], no
       "timelockDelay",
       "timelockThresholdUsd",
     ] as const) {
-      if (pol[k] !== undefined) next.settings[k] = pol[k];
+      if (pol[k] !== undefined) reported[k] = pol[k];
     }
-    if (pol.maxHotFrames !== undefined) next.settings.maxHotFrames = pol.maxHotFrames;
+    next.reported = reported;
   }
   const payload = decodeAccountCalls(review);
   for (const c of payload) {

@@ -32,6 +32,13 @@ export interface AccountSnapshot {
   > & {
     maxHotFrames?: number;
   };
+  /**
+   * What the browser reported (advisory key 12) at the time this phone last signed for the account. Untrusted: it only
+   * serves the E-74 tripwire ("changed since this phone last signed"), never a "from" value or a loosening decision.
+   */
+  reported?: Partial<
+    Record<"capUsdPerDay" | "perTxMaxUsd" | "maxFeeWeiPerTx" | "timelockDelay" | "timelockThresholdUsd", bigint>
+  >;
   tokens: Record<string, TokenSetting>;
   updatedAt: number;
 }
