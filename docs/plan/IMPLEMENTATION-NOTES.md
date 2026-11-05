@@ -553,3 +553,78 @@ one `ILeakedPolicyTypes`.
 - leanSphincs-s becomes a **second registered `IPQVerifier`** that users can choose as "Path A on any mempool", pending an independent review of its security argument.
 - The extension's router picks Path A whenever the vault signer's scheme VERIFY gas plus overhead fits the target mempool's budget.
 Follow-up: a leanSphincs-s adapter + signer in `@leaked/pq-signer`, behind a feature flag until reviewed.
+
+## Contracts follow-ups and gate G1 (2026-11-06)
+
+Code: `contracts/src/roles/{PQRoleSigner,RoleSignerFactory,FeeProfile,GuardianSigner}.sol`,
+`contracts/src/interfaces/ILeakedAccountRoles.sol`, `contracts/script/CheckFeeProfile.s.sol`; tests `contracts/test/roles`;
+devnet run `contracts/devnet-tests/g1` (`bun run test`, funding anvil #0 → one derived deployer key; results in
+`last-run.json`). `src/account` untouched.
+
+- **Role signers are clones.** `RoleSignerFactory` (same constructor and `createRoleSigner`/`predictRoleSigner` ABI;
+  `devnet/deploy/deploy.ts` and `devnet-tests/pq` need no change) deploys one `PQRoleSigner` implementation (opcode
+  helpers, `feeParam`, `stakingRegistry`) and Solady ERC-1167-with-args clones. Args `account ‖ verifier ‖ pk ‖ sigLength
+  ‖ role` (105 B) are read with **EXTCODECOPY on `ADDRESS`**, not CODECOPY: under DELEGATECALL, CODECOPY copies the
+  implementation. VERIFY thus reads one storage slot (`payerKey` + `uint96 maxFee`, packed). `initialize` is factory-only
+  and runs in the creating call. The salt binds every argument plus `defaultMaxFee`. The implementation refuses to act
+  (`NotClone`). The companion's role-signer ABI lines (`verifyFrame`, `executePQ`, `relay`, setters) are unchanged.
+- **Account ↔ vault-signer CREATE2 cycle (found here).** The account's address commits to `vaultSigner` (in `initData`),
+  and a bound signer's address commits to `account`. So a vault signer and its account cannot both be counterfactual,
+  and the real account could not be wired to a bound VaultSigner at all. Vault rotation is the only other route, and it
+  takes 7 days. Fix: `account = address(0)` deploys an **unbound** signer. `_forward` then admits a target only if its
+  `getRoles()` names the signer in its role (`vaultSigner`/`pendingVaultSigner` for role 1, `recoverySigner` for role 2).
+  That check runs in execution only; VERIFY is unchanged. G1 uses an unbound VaultSigner and a bound RecoverySigner. The
+  recovery signer is installed after the account exists (`vaultSetRecoverySigner` is instant from none).
+- **Instance cost: the < 300k target holds only without state gas.** Foundry measures 222,645 gas. On the Amsterdam+
+  devnet a clone costs **575,718** (vs 11,265,863 for the old constructor-deployed signer, ~20×). The floor for any
+  150-byte contract there is 452,187 (`eth_estimateGas` of a bare CREATE; an empty CREATE costs 211,189, so code
+  deposit is ~1.6k gas/byte). The 45-byte proxy plus new account alone is over 280k, so no clone design reaches 300k on
+  this chain. The remaining ~124k are the factory call, `initialize` (one fresh slot) and two events. Factory deploy
+  (including the implementation) 15,243,341.
+- **Fee-profile assertion.** `FeeProfile.check(devnet, feeParam)` runs in the `PQRoleSigner` implementation and
+  `GuardianSigner` constructors. It refuses MAX_FEE on `ERC8421_WORKSHOP` (0x04 is per-gas there), so a mismatched
+  factory fails to deploy. It also refuses any non-fee TXPARAM. `EIP7906_WORKSHOP` is unprobed, so both are accepted
+  there. `script/CheckFeeProfile.s.sol` (read-only `forge script --rpc-url`) checks a deployed factory, its
+  implementation and the given signers/guardians against the chain id. The G1 run passes it (5 contracts). It cannot
+  cover `LeakedAccountImpl`: `PER_GAS_MAX_FEE` has no getter.
+- **Lint on the clone path.** Clone runtime = the 45-byte Solady proxy (`CALLDATACOPY … GAS DELEGATECALL …`, GAS
+  directly before DELEGATECALL) to the implementation, checked byte-for-byte on chain. Implementation bytecode pre-filter:
+  only the 4 execution-side SSTOREs (`initialize` and 3 setters) and solc's trailing INVALID. Dynamic trace of every
+  role-signer VERIFY: no banned opcode, no LOG, no transient storage, no writes, and SLOADs only on the clone. DELEGATECALL
+  callees are the implementation and the APPROVE helper. That chain (clone → implementation → helper) is how **APPROVE
+  acts on the clone (= tx.sender)**, as demonstrated by every mined role tx.
+- **Interfaces/docs.** `ILeakedAccountRoles` gains `vaultSetTrustedVerifier`, `executeQueued`/`executeUpgrade`/
+  `executeMigrate` and the role views `getRoles`/`getVaultBucket`/`isQueued`/`isValueVerifier`/`isTrustedVerifier`, with
+  selector parity tested. §10.3.1/§10.3.2/§10.3.6 of `10-contracts.md` were synced with the built account and the clones.
+
+### G1 results (local devnet, 2026-11-06; every tx simulated first with `{trace:true}` and gated on frame 0)
+
+Deployed: account `0x553d9CB1…7721` (AccountFactory, tx `0x4994bd22…21d5`), VaultSigner clone `0x7fcBC2B8…734f`
+(unbound), RecoverySigner clone `0x6C09aD55…94a9` (bound), GuardianSigner `0xd05e3236…eff9` (5,353,231 gas), C13 keys from
+`@leaked/pq-signer` (signing 3.7–5.2 s in bun, 12 signatures).
+
+| Gate item | Tx | Result | Frame gas (VERIFY / SENDER exec / SENDER state) |
+|---|---|---|---|
+| setup: vault installs RecoverySigner, enables GuardianSigner (Path B) | `0x7871ec80…6d8c`, `0xec668e44…c5e5` | mined | 36,213 / 160,708 / 97,920 |
+| (a) hot payment $3, ethrex `eth_sendRawTransaction` | `0xfd695417d82b2b1ac34e8591005309ad0a771f5def373d230452df5abdda0892` | mined | **45,750** / 53,213 (tank 3,000) |
+| (b1) Path B `vaultSetCap` $10 → $6 (instant tightening) | `0x207875c04334fa94cb329e7514454baae188846c429fd34a9f59ee39ec3a0260` | mined, cap 6 | **36,213** / 195,297 |
+| (b2) Path B `vaultExecute` 0.01 ETH ($30 ≤ $100 instant allowance) | `0xaf1290c6a9a3fdddedddbbe1222ba1487c8dd8cd77d22d8b27556488ca3bc290` | mined, ETH arrived | 36,213 / 200,469 / 183,600 |
+| (c) forged PQ witness, Path B | `0xc94bb3bad7bfaf287880b7a69755f2affbdac24914fb7a7f7f1b35d8698b18ad` | mined, SENDER **reverted**; balances, cap, vault allowance unchanged; signer paid 286,698 gas, nonce +1 | 36,213 / 56,857 |
+| (c) forged PQ witness, Path A | simulated only | VERIFY reverts (`InvalidPQSignature`); never submitted | – |
+| (d) over-cap hot tx ($7.50 ≤ perTx $8, > $6 bucket) | `0xa5fe6c0f846d05eb568d017c9ab67cf388a787363c7dcde38b747add76c7d45f` | mined, SENDER reverted, account unchanged, **tank paid 112,867 gas** | 45,750 / 40,788 |
+| (e1) vault queues loosening (cap → $20, `KIND_LOOSEN`) | `0x052a4d8c40263095135efab0226246bbadf4843cf76bf5dcc56ca0bd512d237a` | op `0xfb415188…9e71` PENDING | 36,213 / 193,411 / 293,760 |
+| (e2) RecoverySigner `recoveryCancel(op)` (Path B, bound clone) | `0xcde0c8ea619966e11b530b3c708a87518b46029216ddd4aa951e5481746939ef` | op CANCELLED, cap still $6 | 36,213 / 159,353 |
+| (f1) GuardianSigner freeze (frame tx, public mempool) | `0xd24af2081106a3074f68fcb7f04c5f5c1d2318e5b225def09533111c9127e7b8` | frozen 72 h | 25,942 / 51,840 / 97,920 |
+| (f2) hot payment while frozen | simulated only | VERIFY reverts (`FrozenOnlyClear`); not submitted (poisoned-lane rule) | – |
+| (f3) Path B `vaultUnfreeze` | `0xa098bbb3c255278754166afd6b070679187bd0d8cc50622ee06fb007cceca908` | unfrozen | 36,213 / 174,073 |
+| (f4) Path B `vaultExtendFreeze(now + 40 s)` (short-expiry freeze) | `0xd32ed7081ea3d7d18280e1ad1c713012a449b2622fa3685c1804e57825393a8b` | frozen; a hot payment simulates as rejected | 36,213 / 175,008 |
+| (f6) hot `clearExpiredFreeze()` after expiry | `0xb3d2adc3a5917fbcdcf97c5fafa34a65dce2a73e34da0f2ee671a14135483e7c` | mined, unfrozen | 44,852 / 26,478 |
+| (f7) hot payment after clear | `0x81d6b95c778d80cc7707fce7423c67377e31a48c23cd27b3aa77a476874250c3` | mined | 45,750 / 53,213 |
+| (g1) VaultSigner stakes 0.012 ETH (Path B `executePQ → self.stake`) | `0x2abdeaef7bcf5b1e0753d4495b5f3196ceb7caba912a51137f38be56e2ea978c` | `getDepositInfo = (0.012 ETH, 86400, 0)` | 36,213 / 165,030 / 195,840 |
+| (g2) Path A `relay → vaultSetCap` $6 → $5, BUDGET-010 sidecar :14340 | `0x7af8a2955794bf0c5fcabd883b969cd88a2f8d3cc3b973161ce60cca30f1356b` (block 1103) | stock sidecar: `300100 exceeds MAX_VERIFY_GAS 100000`; ethrex simulate: `prefix gas budget exceeded`; **patched sidecar admitted, mined**, cap 5 | **151,701** (PQ verify inside) / 74,087 |
+
+- G1 as worded (§5.2) holds: a hot tx and a Path-B C13 vault tx are both mined from the public mempool; a forged vault
+  signature moves nothing; an over-cap hot tx reverts and charges only the tank.
+- The clone hop costs ~1.5k gas in VERIFY: Path B 36,213 vs 34,754, Path A 151,701 vs 148,098 (M4 run).
+- `clearExpiredFreeze` could not be shown for a guardian freeze: it is fixed at 72 h and there is no time travel on the
+  devnet. It was shown with the vault's `vaultExtendFreeze` short freeze instead. It is the same `frozenUntil` path.
