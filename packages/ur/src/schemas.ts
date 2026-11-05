@@ -80,8 +80,8 @@ export interface AdvisoryTokenPrice {
   token: Hex;
   /** 2: decimals, as the Vault set them (`vaultSetToken`). */
   decimals: number;
-  /** 3: `usdPer1e18`: 6-decimal USD per 10^18 normalised units (plan §10.3.2/§10.3.3). */
-  usdPer1e18: bigint;
+  /** 3: `usdPerToken`: 6-decimal USD per one whole token, as `vaultSetToken` / `TokenConfigured` (ILeakedAccount.TokenCfg). */
+  usdPerToken: bigint;
 }
 
 /**
@@ -103,6 +103,10 @@ export interface AdvisoryPolicy {
   timelockThresholdUsd?: bigint;
   /** 6: pinned token prices. */
   tokens?: AdvisoryTokenPrice[];
+  /** 7: `maxFeeWeiPerTx`, wei. */
+  maxFeeWeiPerTx?: bigint;
+  /** 8: `maxHotFrames`. */
+  maxHotFrames?: number;
 }
 
 export interface SignRequest {
@@ -140,7 +144,7 @@ export interface SignRequest {
 
 const SIGN_REQUEST_KEYS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13] as const;
 const INTENT_KEYS = [1, 2, 3, 4, 5, 6] as const;
-const POLICY_KEYS = [1, 2, 3, 4, 5, 6] as const;
+const POLICY_KEYS = [1, 2, 3, 4, 5, 6, 7, 8] as const;
 const PRICE_KEYS = [1, 2, 3] as const;
 
 function bytesN(h: Hex | undefined, n: number, what: string): Uint8Array | undefined {
@@ -233,11 +237,13 @@ export function encodeSignRequest(r: SignRequest): Uint8Array {
           const e = new Map<number, unknown>();
           e.set(1, bytesN(t.token, 20, "policy.tokens.token"));
           e.set(2, t.decimals);
-          e.set(3, cborUint(t.usdPer1e18));
+          e.set(3, cborUint(t.usdPerToken));
           return e;
         }),
       );
     }
+    put(p, 7, r.policy.maxFeeWeiPerTx === undefined ? undefined : cborUint(r.policy.maxFeeWeiPerTx));
+    put(p, 8, r.policy.maxHotFrames);
     m.set(12, p);
   }
   put(m, 13, bytesN(r.payer, 20, "payer"));
@@ -311,7 +317,7 @@ export function decodeSignRequest(cbor: Uint8Array): SignRequest {
         const e: AdvisoryTokenPrice = {
           token: lowerAddr(t.bytes(1, true, { size: 20 })),
           decimals: t.smallUint(2, true, 36),
-          usdPer1e18: t.uint(3, true, (1n << 128n) - 1n),
+          usdPerToken: t.uint(3, true, (1n << 128n) - 1n),
         };
         t.done();
         return e;
@@ -320,6 +326,10 @@ export function decodeSignRequest(cbor: Uint8Array): SignRequest {
       const seen = new Set(list.map((t) => t.token));
       if (seen.size !== list.length) throw new UrSchemaError("duplicate token", `${path}.12.6`);
     }
+    const maxFee = pr.uint(7, false, (1n << 128n) - 1n);
+    if (maxFee !== undefined) policy.maxFeeWeiPerTx = maxFee;
+    const frames = pr.smallUint(8, false, 255);
+    if (frames !== undefined) policy.maxHotFrames = frames;
     pr.done();
     out.policy = policy;
   }

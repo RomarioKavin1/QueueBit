@@ -46,9 +46,11 @@ export const fullRequest = (payloadLen = 1200): SignRequest => ({
     perTxMaxUsd: 20_000_000n,
     timelockDelay: 172_800n,
     timelockThresholdUsd: 1_000_000_000n,
+    maxFeeWeiPerTx: 2_000_000_000_000_000n,
+    maxHotFrames: 4,
     tokens: [
-      { token: "0x0000000000000000000000000000000000000000", decimals: 18, usdPer1e18: 3_000_000_000n },
-      { token: hex(bytes(20, 12)), decimals: 6, usdPer1e18: 1_000_000n },
+      { token: "0x0000000000000000000000000000000000000000", decimals: 18, usdPerToken: 3_000_000_000n },
+      { token: hex(bytes(20, 12)), decimals: 6, usdPerToken: 1_000_000n },
     ],
   },
 });
