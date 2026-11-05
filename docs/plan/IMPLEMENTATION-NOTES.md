@@ -246,7 +246,7 @@ semantics.
   `compilation_restrictions`). `BenchAccount.yul` is a minimal 8141 sender written for the bench: it calls each
   unmodified upstream verifier directly (no adapter hop except ETHFALCON's flat-witness wrapper), so its VERIFY gas is
   verifier + the minimum glue. `pnpm --filter bench run all` reproduces everything; `run ci` is Forge-only.
-- **The devnet does not charge the EIP-8141 text's floor exactly.** Every receipt (16 txs) is
+- **The devnet does not charge the EIP-8141 text's floor exactly.** Every receipt (16 Path A/B txs + 3 probes) is
   `EIP formula + 64 × len(rlp(nonce_keys) ‖ rlp(nonce_seq))`: ethrex `9aa3645d`
   (`crates/common/types/transaction.rs` `calldata_tokens`/`data_cost`) also prices EIP-8250's nonce calldata (3 bytes =
   192 gas for a fresh account), and its standard intrinsic weights witness bytes 4/16 instead of pricing elided bytes
@@ -259,20 +259,22 @@ semantics.
   drops it otherwise (source comment: "never retried"); a plain call returned success and the tx never landed. Pass
   the optional `targetBlock` (head + 2) and retry; the bench does, and uses it only for txs no sidecar admits
   (ETHFALCON at 1.55M; SLH-DSA, see next).
-- **BUDGET-010 sidecar (14340) blocks every SHA-2 SLH-DSA verifier, independent of budget.** With the account staked,
-  a 931k SLH-DSA-SHA2-128s VERIFY prefix is rejected with `payer accesses un-deployed contract address 0x…02`: the
-  ERC-7562 code-less-address rule treats the SHA-256 precompile as an undeployed contract. Keccak-based schemes are
-  unaffected (C13 at 137k and PORST r=16 at 158k were admitted staked). Precompiles need an allow-list in that rule
-  (input for the sidecar PR, §40 P6).
+- **BUDGET-010 sidecar (14340) and precompiles.** On the first run the staked SLH-DSA-SHA2-128s prefix (931k limit)
+  was rejected with `payer accesses un-deployed contract address 0x…02 with opcode STATICCALL`: the ERC-7562
+  code-less-address rule's `precompiles` list defaults to empty (also recorded in `upstream/skandha-budget-010/PR.md`).
+  After the patched sidecar's config listed `0x01`–`0x11`, the re-run was admitted and mined, as was
+  SLH-DSA-SHA2-128-24 (231k). With the account staked, every scheme up to 1M was admitted (C13, C7, both PORST sets,
+  both SLH-DSA sets); ETHFALCON (1.55M) was rejected by budget and mined through the builder hook.
 - **C7 VERIFY = 100,271 gas**, C13 111,140, leanSphincs-s ~43.6k: only leanSphincs-s passes the stock 100k sidecar in a
   VERIFY frame. Total tx gas is floor-bound for every hash-based scheme (C13 250,682, C7 251,706, leanSphincs-s
   281,146), so signature bytes decide fees and VERIFY gas decides admission, as §1.2 predicted.
 - **SLH-DSA-SHA2-128s port (time-boxed, done):** `bench/contracts/src/SlhDsaSha2_128s.sol` accepts every noble 0.7.1
-  signature and rejects one-bit changes; ~830–890k gas isolated, 831,679 in a VERIFY frame: fits only the staked 1M
-  budget by gas, and is admission-blocked by the precompile rule above. Not audited; benchmark only.
+  signature and rejects one-bit changes. Gas: 826–889k isolated (the spread is digest-dependent), 868,099 in the
+  measured VERIFY frame (831,679 on the first run), about 1.02M per tx. Fits only the staked 1M budget, with ~10%
+  margin at the worst observed digest. Not audited; benchmark only.
 - **Signing times are laptop numbers under load** (the amd64-emulated devnet running): the upstream C SLH-DSA-128-24
   signer took 7.5–8.6 min per call (it regenerates the 2²² tree; upstream quotes 1–3 min), C7's Python reference
-  ~17 s. Treat both as reference-implementation figures, not product signers.
+  16–23 s. Treat both as reference-implementation figures, not product signers.
 - **NiceTry FORS+C is listed with published numbers only** (no licence in the repo; nothing copied or run).
 - **Lockfile not committed by the bench**: `pnpm-lock.yaml` also carries other workstreams' uncommitted importers
   (companion), so the `bench` importer and `@noble/post-quantum@0.7.1` entries should land with the next lockfile
