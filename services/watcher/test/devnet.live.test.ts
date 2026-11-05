@@ -125,6 +125,34 @@ async function reusableDeployment(
   };
 }
 
+type AbiParam = { name?: string; type: string; components?: readonly AbiParam[] };
+
+/** The zero value of an ABI parameter (nested tuples included). */
+function zeroOf(p: AbiParam): unknown {
+  if (p.type === "tuple") return Object.fromEntries((p.components ?? []).map((c) => [c.name, zeroOf(c)]));
+  if (p.type.endsWith("]")) return [];
+  if (p.type === "address") return "0x0000000000000000000000000000000000000000";
+  if (p.type === "bool") return false;
+  if (p.type === "string") return "";
+  if (p.type.startsWith("bytes")) return p.type === "bytes" ? "0x" : `0x${"0".repeat(2 * Number(p.type.slice(5)))}`;
+  return 0n;
+}
+
+/** `initialize`'s `InitConfig` from the artifact, with `known` fields set and every other field at its zero value. */
+function initConfig(abi: Abi, known: Record<string, unknown>): Record<string, unknown> {
+  const fn = abi.find((x) => x.type === "function" && x.name === "initialize") as
+    | { inputs: readonly AbiParam[] }
+    | undefined;
+  const cfg = fn?.inputs[0];
+  if (!cfg || cfg.type !== "tuple") throw new Error("initialize(InitConfig) not in the artifact");
+  const out = zeroOf(cfg) as Record<string, unknown>;
+  for (const [k, v] of Object.entries(known)) {
+    if (!(k in out)) throw new Error(`InitConfig has no field "${k}" any more: update the watcher devnet test`);
+    out[k] = v;
+  }
+  return out;
+}
+
 async function deploy(a: ReturnType<typeof art>, args: unknown[], gas: bigint): Promise<Address> {
   const r = await legacy(funder, {
     data: encodeDeployData({ abi: a.abi, bytecode: a.bytecode, args: args as never }),
@@ -175,11 +203,14 @@ describe.skipIf(!LIVE)("watcher on the local devnet", () => {
     const vault = privateKeyToAccount(generatePrivateKey());
     const guardian = privateKeyToAccount(generatePrivateKey());
     const recovery = privateKeyToAccount(generatePrivateKey()).address;
+    // `InitConfig` is built from the artifact's own field list: fields this test does not set (e.g. the bound
+    // role-signer parameters, the recipient mode) take their zero value, which `initialize` treats as "explicit
+    // signer address" / "default", so the test keeps working when the contracts add fields.
     const initData = encodeFunctionData({
       abi: implA.abi,
       functionName: "initialize",
       args: [
-        {
+        initConfig(implA.abi, {
           hotKey: hot.address,
           vaultSigner: vault.address,
           recoverySigner: recovery,
@@ -193,7 +224,7 @@ describe.skipIf(!LIVE)("watcher on the local devnet", () => {
           timelockDelay: 3600,
           timelockThresholdUsd: 100n * USD,
           ethUsdPrice: 3_000n * USD,
-        },
+        }),
       ],
     });
     const salt = keccak256(stringToHex(`leaked-watcher-devnet-${Date.now()}`));
