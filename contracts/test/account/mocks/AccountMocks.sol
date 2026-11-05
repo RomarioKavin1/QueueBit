@@ -3,6 +3,8 @@ pragma solidity 0.8.28;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
+import {SignatureChecker} from "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
 import {Devnet} from "@forshtat/hegota-support/contracts/HegotaSupport.sol";
 import {LeakedAccountImpl} from "../../../src/account/LeakedAccountImpl.sol";
 
@@ -21,6 +23,44 @@ contract MockToken is ERC20 {
 
     function mint(address to, uint256 amount) external {
         _mint(to, amount);
+    }
+}
+
+/// USDC-style (FiatTokenV2_2) ERC-2612 permit: a contract owner's signature is checked with EIP-1271, so the account
+/// can approve a spender with nothing but `isValidSignature(digest, sig)` answering the magic value.
+contract PermitToken1271 is ERC20, EIP712 {
+    bytes32 public constant PERMIT_TYPEHASH =
+        keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
+    mapping(address => uint256) public nonces;
+
+    constructor(string memory n) ERC20(n, n) EIP712(n, "2") {}
+
+    function mint(address to, uint256 a) external {
+        _mint(to, a);
+    }
+
+    function DOMAIN_SEPARATOR() external view returns (bytes32) {
+        return _domainSeparatorV4();
+    }
+
+    function permitDigest(address owner, address spender, uint256 value, uint256 deadline)
+        public
+        view
+        returns (bytes32)
+    {
+        return _hashTypedDataV4(keccak256(abi.encode(PERMIT_TYPEHASH, owner, spender, value, nonces[owner], deadline)));
+    }
+
+    function permit(address owner, address spender, uint256 value, uint256 deadline, bytes calldata signature)
+        external
+    {
+        require(block.timestamp <= deadline, "expired");
+        require(
+            SignatureChecker.isValidSignatureNow(owner, permitDigest(owner, spender, value, deadline), signature),
+            "bad sig"
+        );
+        nonces[owner]++;
+        _approve(owner, spender, value);
     }
 }
 

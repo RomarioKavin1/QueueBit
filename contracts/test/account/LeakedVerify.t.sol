@@ -356,8 +356,8 @@ contract LeakedVerifyTest is AccountTestBase {
 
     function test_rule7_maxFeeExposure() public {
         _beginHotTx(_pay(5 * USD));
-        // 410k gas of limits x 200 gwei = 0.082 ETH > 0.05 ETH bound.
-        simSetFees(1 gwei, 200 gwei, 0.001 ether);
+        // MAX_COST (what the payer is charged: maxFeePerGas x (intrinsic + 410k of limits)) = 0.082 ETH > 0.05 bound.
+        simSetFees(1 gwei, 200 gwei, 0.082 ether);
         _signHotTx();
         _expectInvalidVerify(0, ILeakedAccount.FeeTooHigh.selector);
     }
@@ -483,8 +483,10 @@ contract LeakedVerifyTest is AccountTestBase {
                 ? abi.encodeCall(LeakedAccountImpl.clearExpiredFreeze, ())
                 : abi.encodeCall(LeakedAccountRoles.vaultFreeze, ());
 
+        uint256 gasSum = 80_000 + (includePay ? 30_000 : 0) + uint256(extraFrames) * 50_000 + 200_000;
         simBegin(address(account));
-        simSetFees(1 gwei, uint256(maxFeeGwei) * 1 gwei, 0.001 ether);
+        // the devnet's MAX_COST: maxFeePerGas x (limits + intrinsic); 21k of intrinsic gas here
+        simSetFees(1 gwei, uint256(maxFeeGwei) * 1 gwei, uint256(maxFeeGwei) * 1 gwei * (gasSum + 21_000));
         simVerify(ONLY_VERIFY, address(0), 80_000, _verifyData());
         if (includePay) simVerify(PAY, tank, 30_000, "");
         address target = senderToSelf ? address(0) : alice;
@@ -497,10 +499,9 @@ contract LeakedVerifyTest is AccountTestBase {
         _signHotTx();
 
         uint256 n = 1 + (includePay ? 1 : 0) + extraFrames + 1;
-        uint256 gasSum = 80_000 + (includePay ? 30_000 : 0) + uint256(extraFrames) * 50_000 + 200_000;
         bool expect = includePay && n <= 4 && senderMode == MODE_SENDER && senderToSelf && value == 0
             && (senderFlags & 0x3) == 0 && selPick != 2 && (selPick == 1 || declared <= PER_TX)
-            && uint256(maxFeeGwei) * 1 gwei * gasSum <= MAX_FEE_WEI;
+            && uint256(maxFeeGwei) * 1 gwei * (gasSum + 21_000) <= MAX_FEE_WEI;
 
         simEnter(0);
         vm.prank(ENTRY_POINT);

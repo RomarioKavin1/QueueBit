@@ -31,8 +31,11 @@ abstract contract LeakedVerify is HegotaSupport, ILeakedAccount {
     bytes4 internal constant CLEAR_FREEZE_SELECTOR = 0x1127bd60; // clearExpiredFreeze()
 
     /// True on profiles where TXPARAM(MAX_FEE) is the per-gas `maxFeePerGas` (the chain-1337 `ethrex-eip8141-tracer`
-    /// profile, 50-devnet-review F5): the per-tx bound is then `maxFeePerGas * sum(frame gas limits)`. False where
-    /// MAX_FEE is the EIP master's total fee budget (bounded directly). Fixed per implementation (§10 R-5).
+    /// profile, 50-devnet-review F5): the per-tx bound is then on TXPARAM(MAX_COST) (0x06), ethrex's maximum cost
+    /// in wei, which is `maxFeePerGas x (intrinsic gas + sum of frame limits)`: the calldata of the SENDER frames is
+    /// charged to the payer too, so `maxFeePerGas x sum(limits)` alone would understate the exposure by an amount
+    /// the hot key controls (audit 2026-11-06, H3). False where MAX_FEE is the EIP master's total fee budget
+    /// (bounded directly). Fixed per implementation (§10 R-5); the role signers make the same choice (`feeParam`).
     bool internal immutable PER_GAS_MAX_FEE;
 
     constructor(Devnet devnet, bool perGasMaxFee) HegotaSupport(devnet) {
@@ -88,23 +91,20 @@ abstract contract LeakedVerify is HegotaSupport, ILeakedAccount {
         }
 
         // Frames before ours: already run; DEFAULT (e.g. a deploy frame) or VERIFY frames that approve nothing
-        // (e.g. expiry_verify). Their gas still counts toward the fee bound below.
-        uint256 gasSum;
+        // (e.g. expiry_verify), and none of them carries value (a frame's value is the sender's ETH).
         for (uint256 i; i < cur; ++i) {
             uint256 mode = frameparam(i, FrameParam.MODE);
             if (mode == uint256(FrameMode.SENDER)) revert BadFrameBefore(i);
             if (mode == uint256(FrameMode.VERIFY) && frameparam(i, FrameParam.ALLOWED_SCOPE) != 0) {
                 revert BadFrameBefore(i);
             }
-            gasSum += _frameGas(i);
+            if (frameparam(i, FrameParam.VALUE) != 0) revert BadFrameBefore(i);
         }
-        gasSum += _frameGas(cur);
 
         // Steps 6 and 8: every later frame (but the pay frame) is a SENDER frame into this account's hot entry.
         uint256 declaredSum;
         uint256 senderFrames;
         for (uint256 i = cur + 1; i < n; ++i) {
-            gasSum += _frameGas(i);
             if (i == payIdx) continue;
             if (frameparam(i, FrameParam.MODE) != uint256(FrameMode.SENDER)) revert BadSenderFrame(i);
             if (address(uint160(frameparam(i, FrameParam.RESOLVED_TARGET))) != address(this)) revert BadSenderFrame(i);
@@ -130,21 +130,16 @@ abstract contract LeakedVerify is HegotaSupport, ILeakedAccount {
         uint256 perTxMax = $.perTxMaxUsd;
         if (declaredSum > perTxMax) revert DeclaredOverPerTxMax(declaredSum, perTxMax);
 
-        // Step 7 (H3): fee exposure. One SLOAD (slot 2).
+        // Step 7 (H3): fee exposure, the whole amount the payer can be charged for this transaction. One SLOAD
+        // (slot 2).
         uint256 maxFeeWei = $.maxFeeWeiPerTx;
         uint256 maxPrio = $.maxPriorityFeePerGas;
         if (txparam(TxParam.MAX_PRIORITY_FEE_PER_GAS) > maxPrio) revert FeeTooHigh();
-        uint256 maxFee = txparam(TxParam.MAX_FEE);
-        uint256 exposure = PER_GAS_MAX_FEE ? maxFee * gasSum : maxFee;
+        uint256 exposure = txparam(PER_GAS_MAX_FEE ? TxParam.MAX_COST : TxParam.MAX_FEE);
         if (exposure > maxFeeWei) revert FeeTooHigh();
         if (txparam(TxParam.BLOB_COUNT) != 0) revert BlobsNotAllowed();
 
         // Step 9: I-3 - PAYMENT only in the vault-enabled self-pay layout (checked above).
         approve(Scope(allowed));
-    }
-
-    /// Execution plus state gas limit of frame `i` (FRAMEPARAM 0x01 and 0x09; both answer for any frame).
-    function _frameGas(uint256 i) private view returns (uint256) {
-        return frameparam(i, FrameParam.EXECUTION_GAS_LIMIT) + frameparam(i, FrameParam.STATE_GAS_LIMIT);
     }
 }

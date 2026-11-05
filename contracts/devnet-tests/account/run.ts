@@ -205,11 +205,19 @@ function frameGas(frames: unknown): bigint | null {
 async function simulate(label: string, tx: FrameTx, expectValid = true) {
   const sim = await rpc.node.simulateFrameTransaction(encodeTx(profile, tx), { trace: true });
   const trace = traceSummary(sim.erc7562Trace);
+  // TXPARAM(MAX_COST) (0x06) is what VERIFY bounds (H3): record how it relates to maxFeePerGas x sum(frame limits),
+  // i.e. whether the intrinsic (calldata) gas the payer is also charged for is included.
+  const limitsSum = tx.frames.reduce((s, f) => s + BigInt(f.limits.execution) + BigInt(f.limits.state), 0n);
+  const maxCost = sim.maxCost;
   const out = {
     canonicalMempoolValid: sim.valid,
     violation: sim.violation,
     prefixShape: sim.prefixShape,
     payer: sim.payer,
+    maxCost,
+    maxCostGas: maxCost === null ? null : maxCost / FEES.maxFeePerGas,
+    frameLimitsSum: limitsSum,
+    intrinsicGasInMaxCost: maxCost === null ? null : maxCost / FEES.maxFeePerGas - limitsSum,
     executionStatus: sim.executionStatus,
     executionError: sim.executionError,
     gasUsed: sim.gasUsed,
