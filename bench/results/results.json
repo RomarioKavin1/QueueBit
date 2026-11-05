@@ -1,0 +1,1384 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-11-05T23:00:56.413Z",
+  "environment": {
+    "mode": "devnet",
+    "forge": "forge Version: 1.3.5-stable",
+    "solc": "0.8.34 (see bench/contracts/foundry.toml)",
+    "node": "v26.0.0",
+    "platform": "darwin-arm64",
+    "rpc": "http://localhost:8545",
+    "sidecar": "http://localhost:14337/rpc",
+    "clientVersion": "ethrex/v23.0.0-eip8141-tracer-9aa3645d795945c64400f41a70aace0edfa7f383/x86_64-unknown-linux-gnu/rustc-v1.93.1",
+    "sidecarVersion": "skandha/v4.1.1-",
+    "chainId": 1337,
+    "blockAtStart": 1051,
+    "funder": "0x976EA74026E726554dB657fA54763abd0C3a0aa9",
+    "payer": "0xD5c43817b97aDA693533126f7dfA9753b4AB370C",
+    "measuredAt": "2026-11-05T22:59:45.022Z",
+    "patchedSidecar": "http://localhost:14340/rpc",
+    "patchedSidecarBudgets": "{\"rule\":\"BUDGET-010\",\"maxVerifyGasPerEntity\":100000,\"maxVerifyGasStakedEntity\":1000000,\"signatureCostAttributedTo\":\"sender\",\"maxVerifyStateGas\":500000}"
+  },
+  "methodology": {
+    "eip8141": "ethereum/EIPs af5ea76, EIPS/eip-8141.md (Draft)",
+    "floorPerToken8141": 16,
+    "floorPerByte8141": 64,
+    "floorPerToken7623": 10,
+    "budgets": [100000, 250000, 1000000, 2500000],
+    "maxVerifyGasStock": 100000,
+    "pathA": "[VERIFY(self): PQ verify + APPROVE, SENDER(self): send 1 wei], signatures [ARBITRARY witness]",
+    "pathB": "[VERIFY(self): payer SECP256K1 check + APPROVE, SENDER(self): PQ verify + send 1 wei], signatures [ARBITRARY, SECP256K1]",
+    "budgetRule": "fits(B) iff tightLimit(VERIFY gas used) + 100 (ARBITRARY intrinsic) <= B, tightLimit = used + used/63 + 2,000 rounded up to 1,000 (the 1/64 the frame keeps back across STATICCALL). Node answers override it where a node with that budget was asked: stock sidecar at 100k, BUDGET-010 sidecar (staked account) at 1M",
+    "floorCrossCheck": "every receipt is compared with two formulas: the EIP-8141 text, and the devnet ethrex build's (forshtat/ethrex 9aa3645d, crates/common/types/transaction.rs), which also prices the EIP-8250 nonce calldata rlp(nonce_keys)||rlp(nonce_seq) (3 bytes = 192 gas here) and weights witness bytes 4/16 in the standard intrinsic",
+    "signingTimes": "wall clock on one laptop (Apple Silicon) while the amd64-emulated devnet was running; indicative only, and the Python/C reference signers are not product signers"
+  },
+  "schemes": [
+    {
+      "id": "sphincs-c13",
+      "name": "SPHINCS- C13",
+      "family": "WOTS+C / FORS+C over keccak256 (h=22 d=2 a=19 k=7 w=8)",
+      "stateless": true,
+      "sigBytes": 3688,
+      "pkBytes": 32,
+      "witnessBytes": 3688,
+      "license": "MIT",
+      "auditStatus": "research prototype; two AI-assisted reviews; upstream: \"not audited, not production-safe\"; Lean 4 / Verity refinement proof of the verifier against a byte spec",
+      "upstream": {
+        "repo": "https://github.com/nconsigny/SPHINCS-",
+        "commit": "4c76aaf113d326df9adede63d015f3b394ab84f4",
+        "verifier": "src/keccak/SPHINCs-C13Asm.sol"
+      },
+      "signer": {
+        "impl": "@leaked/pq-signer (Rust/WASM, bit-identical to upstream signer-c13)",
+        "note": "WASM in Node, one thread"
+      },
+      "signing": {
+        "status": "measured",
+        "value": {
+          "n": 7,
+          "min": 2397.1,
+          "mean": 3217.8,
+          "max": 5161.626250000001
+        },
+        "method": "wall clock of @leaked/pq-signer (Rust/WASM, bit-identical to upstream signer-c13) on the bench machine (darwin-arm64 node v26.0.0), digest in, witness out"
+      },
+      "forgeVerify": {
+        "status": "measured",
+        "value": {
+          "n": 5,
+          "min": 107049,
+          "mean": 107050.2,
+          "max": 107052
+        },
+        "method": "Forge: gasleft() around a cold external STATICCALL with BenchAccount's exact calldata"
+      },
+      "pathA": {
+        "status": "measured",
+        "value": {
+          "limits": [137000, 60000],
+          "frameGasUsed": [111140, 12289],
+          "pqFrameGas": 111140,
+          "verifyFrameGas": 111140,
+          "prefixValidationGas": 137100,
+          "intrinsicGas": 72410,
+          "calldataFloor8141": 250490,
+          "calldataFloor7623": 161450,
+          "predictedGasUsed": 250490,
+          "intrinsicGasDevnet": 72218,
+          "calldataFloorDevnet": 250682,
+          "predictedGasUsedDevnet": 250682,
+          "receiptMatchesDevnetFormula": true,
+          "floorBound": true,
+          "simulatedGasUsed": 250682,
+          "txGasUsed": {
+            "status": "measured",
+            "value": 250682,
+            "method": "receipt gasUsed (ethrex eth_getTransactionReceipt)"
+          },
+          "receiptMatchesFormula": false,
+          "simulate": {
+            "canonicalMempoolValid": false,
+            "violation": "prefix gas budget exceeded: 137100 > 100000 (MAX_VERIFY_GAS)",
+            "prefixShape": "SelfVerify"
+          },
+          "admission": [
+            {
+              "endpoint": "sidecar eth_sendFrameTransaction (stock, MAX_VERIFY_GAS 100k)",
+              "accepted": false,
+              "error": "eth_sendFrameTransaction: validation prefix execution gas sum 137000 + signature-verification cost 100 = 137100 exceeds MAX_VERIFY_GAS 100000"
+            },
+            {
+              "endpoint": "patched sidecar eth_sendFrameTransaction (BUDGET-010: 100k unstaked / 1M staked; account staked)",
+              "accepted": true
+            }
+          ],
+          "inclusion": {
+            "via": "patched sidecar eth_sendFrameTransaction (BUDGET-010: 100k unstaked / 1M staked; account staked)",
+            "txHash": "0x6ca697ba5d8e98b286cb8c7c7b60bbd7c24f8834c76dee58385d0e634fe2206d",
+            "blockNumber": 802,
+            "status": "0x1"
+          },
+          "witnessBytes": 3688
+        },
+        "method": "local devnet frame tx: ethrex_simulateFrameTransaction {trace:true} + mined receipt frameReceipts"
+      },
+      "pathB": {
+        "status": "measured",
+        "value": {
+          "limits": [30000, 137000],
+          "frameGasUsed": [370, 123225],
+          "pqFrameGas": 123225,
+          "verifyFrameGas": 370,
+          "prefixValidationGas": 32900,
+          "intrinsicGas": 76570,
+          "calldataFloor8141": 258730,
+          "calldataFloor7623": 167650,
+          "predictedGasUsed": 258730,
+          "intrinsicGasDevnet": 76390,
+          "calldataFloorDevnet": 258922,
+          "predictedGasUsedDevnet": 258922,
+          "receiptMatchesDevnetFormula": true,
+          "floorBound": true,
+          "simulatedGasUsed": 258922,
+          "txGasUsed": {
+            "status": "measured",
+            "value": 258922,
+            "method": "receipt gasUsed (ethrex eth_getTransactionReceipt)"
+          },
+          "receiptMatchesFormula": false,
+          "simulate": {
+            "canonicalMempoolValid": true,
+            "violation": null,
+            "prefixShape": "SelfVerify"
+          },
+          "admission": [
+            {
+              "endpoint": "sidecar eth_sendFrameTransaction (stock, MAX_VERIFY_GAS 100k)",
+              "accepted": true
+            }
+          ],
+          "inclusion": {
+            "via": "sidecar eth_sendFrameTransaction (stock, MAX_VERIFY_GAS 100k)",
+            "txHash": "0x55e9f7ed58e32081e5ff1237e8ab4fc013d5aca826516b7572b342cd1796a66c",
+            "blockNumber": 805,
+            "status": "0x1"
+          },
+          "witnessBytes": 3688
+        },
+        "method": "local devnet frame tx: ethrex_simulateFrameTransaction {trace:true} + mined receipt frameReceipts"
+      },
+      "budgets": {
+        "100000": {
+          "fits": false,
+          "basis": "simulate+sidecar"
+        },
+        "250000": {
+          "fits": true,
+          "basis": "computed from measured VERIFY gas"
+        },
+        "1000000": {
+          "fits": true,
+          "basis": "simulate+sidecar"
+        },
+        "2500000": {
+          "fits": true,
+          "basis": "computed from measured VERIFY gas"
+        }
+      },
+      "notes": [
+        "Budget 2^22 signatures per key at 128-bit (upstream docs/variants.md).",
+        "Keygen 136 ms on the bench machine.",
+        "Receipt gasUsed 250682 differs from the EIP-8141 formula 250490 (tx 0x6ca697ba5d8e98b286cb8c7c7b60bbd7c24f8834c76dee58385d0e634fe2206d).",
+        "Receipt gasUsed 258922 differs from the EIP-8141 formula 258730 (tx 0x55e9f7ed58e32081e5ff1237e8ab4fc013d5aca826516b7572b342cd1796a66c)."
+      ]
+    },
+    {
+      "id": "sphincs-c7",
+      "name": "SPHINCS- C7",
+      "family": "WOTS+C / FORS+C over keccak256 (h=24 d=2 a=16 k=8 w=8)",
+      "stateless": true,
+      "sigBytes": 3704,
+      "pkBytes": 32,
+      "witnessBytes": 3704,
+      "license": "MIT",
+      "auditStatus": "research prototype; two AI-assisted reviews; upstream: \"not audited, not production-safe\"; no proof (C7 carries the Oct-2026 loop optimisations C13 lacks)",
+      "upstream": {
+        "repo": "https://github.com/nconsigny/SPHINCS-",
+        "commit": "4c76aaf113d326df9adede63d015f3b394ab84f4",
+        "verifier": "src/keccak/SPHINCs-C7Asm.sol"
+      },
+      "signer": {
+        "impl": "upstream Python reference script/signer.py c7",
+        "note": "pure Python + multiprocessing; not a product signer"
+      },
+      "signing": {
+        "status": "measured",
+        "value": {
+          "n": 5,
+          "min": 16376.9,
+          "mean": 19515,
+          "max": 22650.579929351807
+        },
+        "method": "wall clock of upstream Python reference script/signer.py c7 on the bench machine (darwin-arm64 node v26.0.0), digest in, witness out"
+      },
+      "forgeVerify": {
+        "status": "measured",
+        "value": {
+          "n": 3,
+          "min": 96193,
+          "mean": 96193.7,
+          "max": 96194
+        },
+        "method": "Forge: gasleft() around a cold external STATICCALL with BenchAccount's exact calldata"
+      },
+      "pathA": {
+        "status": "measured",
+        "value": {
+          "limits": [231000, 60000],
+          "frameGasUsed": [100271, 12289],
+          "pqFrameGas": 100271,
+          "verifyFrameGas": 100271,
+          "prefixValidationGas": 231100,
+          "intrinsicGas": 72666,
+          "calldataFloor8141": 251514,
+          "calldataFloor7623": 162090,
+          "predictedGasUsed": 251514,
+          "intrinsicGasDevnet": 72522,
+          "calldataFloorDevnet": 251706,
+          "predictedGasUsedDevnet": 251706,
+          "receiptMatchesDevnetFormula": true,
+          "floorBound": true,
+          "simulatedGasUsed": 251706,
+          "txGasUsed": {
+            "status": "measured",
+            "value": 251706,
+            "method": "receipt gasUsed (ethrex eth_getTransactionReceipt)"
+          },
+          "receiptMatchesFormula": false,
+          "simulate": {
+            "canonicalMempoolValid": false,
+            "violation": "prefix gas budget exceeded: 231100 > 100000 (MAX_VERIFY_GAS)",
+            "prefixShape": "SelfVerify"
+          },
+          "admission": [
+            {
+              "endpoint": "sidecar eth_sendFrameTransaction (stock, MAX_VERIFY_GAS 100k)",
+              "accepted": false,
+              "error": "eth_sendFrameTransaction: validation prefix execution gas sum 231000 + signature-verification cost 100 = 231100 exceeds MAX_VERIFY_GAS 100000"
+            },
+            {
+              "endpoint": "patched sidecar eth_sendFrameTransaction (BUDGET-010: 100k unstaked / 1M staked; account staked)",
+              "accepted": true
+            }
+          ],
+          "inclusion": {
+            "via": "patched sidecar eth_sendFrameTransaction (BUDGET-010: 100k unstaked / 1M staked; account staked)",
+            "txHash": "0x48a12cfbb885941b372bce9f6668b5e7a9139c15d5540aa557744dd774a8d9be",
+            "blockNumber": 813,
+            "status": "0x1"
+          },
+          "witnessBytes": 3704
+        },
+        "method": "local devnet frame tx: ethrex_simulateFrameTransaction {trace:true} + mined receipt frameReceipts"
+      },
+      "pathB": {
+        "status": "measured",
+        "value": {
+          "limits": [30000, 231000],
+          "frameGasUsed": [370, 112356],
+          "pqFrameGas": 112356,
+          "verifyFrameGas": 370,
+          "prefixValidationGas": 32900,
+          "intrinsicGas": 76826,
+          "calldataFloor8141": 259754,
+          "calldataFloor7623": 168290,
+          "predictedGasUsed": 259754,
+          "intrinsicGasDevnet": 76610,
+          "calldataFloorDevnet": 259946,
+          "predictedGasUsedDevnet": 259946,
+          "receiptMatchesDevnetFormula": true,
+          "floorBound": true,
+          "simulatedGasUsed": 259946,
+          "txGasUsed": {
+            "status": "measured",
+            "value": 259946,
+            "method": "receipt gasUsed (ethrex eth_getTransactionReceipt)"
+          },
+          "receiptMatchesFormula": false,
+          "simulate": {
+            "canonicalMempoolValid": true,
+            "violation": null,
+            "prefixShape": "SelfVerify"
+          },
+          "admission": [
+            {
+              "endpoint": "sidecar eth_sendFrameTransaction (stock, MAX_VERIFY_GAS 100k)",
+              "accepted": true
+            }
+          ],
+          "inclusion": {
+            "via": "sidecar eth_sendFrameTransaction (stock, MAX_VERIFY_GAS 100k)",
+            "txHash": "0x444e6e1325f952710975dc9f94be8ed0bd62d7be9b45fe18c6e8b8c04eba617d",
+            "blockNumber": 819,
+            "status": "0x1"
+          },
+          "witnessBytes": 3704
+        },
+        "method": "local devnet frame tx: ethrex_simulateFrameTransaction {trace:true} + mined receipt frameReceipts"
+      },
+      "budgets": {
+        "100000": {
+          "fits": false,
+          "basis": "simulate+sidecar"
+        },
+        "250000": {
+          "fits": true,
+          "basis": "computed from measured VERIFY gas"
+        },
+        "1000000": {
+          "fits": true,
+          "basis": "simulate+sidecar"
+        },
+        "2500000": {
+          "fits": true,
+          "basis": "computed from measured VERIFY gas"
+        }
+      },
+      "notes": [
+        "The ethresear.ch post 25165 calls this parameter set \"C13\"; the repo renamed it C7.",
+        "Keygen 21,948 ms on the bench machine.",
+        "Receipt gasUsed 251706 differs from the EIP-8141 formula 251514 (tx 0x48a12cfbb885941b372bce9f6668b5e7a9139c15d5540aa557744dd774a8d9be).",
+        "Receipt gasUsed 259946 differs from the EIP-8141 formula 259754 (tx 0x444e6e1325f952710975dc9f94be8ed0bd62d7be9b45fe18c6e8b8c04eba617d)."
+      ]
+    },
+    {
+      "id": "leansphincs-s",
+      "name": "leanSphincs-s",
+      "family": "leanSphincs (one XMSS layer h=26, FORS k=13 a=12, WOTS+C w=4) over keccak256",
+      "stateless": true,
+      "sigBytes": 4164,
+      "pkBytes": 32,
+      "witnessBytes": 4164,
+      "license": "MIT (upstream crate MIT OR Apache-2.0)",
+      "auditStatus": "research prototype; lifetime 2^26 is an estimate, not proved; not audited",
+      "upstream": {
+        "repo": "https://github.com/nconsigny/SPHINCS-",
+        "commit": "4c76aaf113d326df9adede63d015f3b394ab84f4",
+        "verifier": "src/keccak/LeanSphincs-SAsm.sol"
+      },
+      "signer": {
+        "impl": "upstream Rust lssk, Light tier key file (16 KiB cache)",
+        "note": "Light tier lifetime 20K signatures"
+      },
+      "signing": {
+        "status": "measured",
+        "value": {
+          "n": 7,
+          "min": 10.3,
+          "mean": 15.4,
+          "max": 29.581458999979077
+        },
+        "method": "wall clock of upstream Rust lssk, Light tier key file (16 KiB cache) on the bench machine (darwin-arm64 node v26.0.0), digest in, witness out"
+      },
+      "forgeVerify": {
+        "status": "measured",
+        "value": {
+          "n": 5,
+          "min": 39325,
+          "mean": 39480.4,
+          "max": 39625
+        },
+        "method": "Forge: gasleft() around a cold external STATICCALL with BenchAccount's exact calldata"
+      },
+      "pathA": {
+        "status": "measured",
+        "value": {
+          "limits": [68000, 60000],
+          "frameGasUsed": [43529, 12289],
+          "pqFrameGas": 43529,
+          "verifyFrameGas": 43529,
+          "prefixValidationGas": 68100,
+          "intrinsicGas": 80026,
+          "calldataFloor8141": 280954,
+          "calldataFloor7623": 180490,
+          "predictedGasUsed": 280954,
+          "intrinsicGasDevnet": 79858,
+          "calldataFloorDevnet": 281146,
+          "predictedGasUsedDevnet": 281146,
+          "receiptMatchesDevnetFormula": true,
+          "floorBound": true,
+          "simulatedGasUsed": 281146,
+          "txGasUsed": {
+            "status": "measured",
+            "value": 281146,
+            "method": "receipt gasUsed (ethrex eth_getTransactionReceipt)"
+          },
+          "receiptMatchesFormula": false,
+          "simulate": {
+            "canonicalMempoolValid": true,
+            "violation": null,
+            "prefixShape": "SelfVerify"
+          },
+          "admission": [
+            {
+              "endpoint": "sidecar eth_sendFrameTransaction (stock, MAX_VERIFY_GAS 100k)",
+              "accepted": true
+            }
+          ],
+          "inclusion": {
+            "via": "sidecar eth_sendFrameTransaction (stock, MAX_VERIFY_GAS 100k)",
+            "txHash": "0x26d8752dd6972e55bc1bfd819e086b7c01684fde926ce66fdc4bd2f3932aa769",
+            "blockNumber": 824,
+            "status": "0x1"
+          },
+          "witnessBytes": 4164
+        },
+        "method": "local devnet frame tx: ethrex_simulateFrameTransaction {trace:true} + mined receipt frameReceipts"
+      },
+      "pathB": {
+        "status": "measured",
+        "value": {
+          "limits": [30000, 68000],
+          "frameGasUsed": [370, 55785],
+          "pqFrameGas": 55785,
+          "verifyFrameGas": 370,
+          "prefixValidationGas": 32900,
+          "intrinsicGas": 84186,
+          "calldataFloor8141": 289194,
+          "calldataFloor7623": 186690,
+          "predictedGasUsed": 289194,
+          "intrinsicGasDevnet": 84054,
+          "calldataFloorDevnet": 289386,
+          "predictedGasUsedDevnet": 289386,
+          "receiptMatchesDevnetFormula": true,
+          "floorBound": true,
+          "simulatedGasUsed": 289386,
+          "txGasUsed": {
+            "status": "measured",
+            "value": 289386,
+            "method": "receipt gasUsed (ethrex eth_getTransactionReceipt)"
+          },
+          "receiptMatchesFormula": false,
+          "simulate": {
+            "canonicalMempoolValid": true,
+            "violation": null,
+            "prefixShape": "SelfVerify"
+          },
+          "admission": [
+            {
+              "endpoint": "sidecar eth_sendFrameTransaction (stock, MAX_VERIFY_GAS 100k)",
+              "accepted": true
+            }
+          ],
+          "inclusion": {
+            "via": "sidecar eth_sendFrameTransaction (stock, MAX_VERIFY_GAS 100k)",
+            "txHash": "0x1dcad43601dafd6fd0daf6d7cc129d99383d5e6044985094ee77958ac389c033",
+            "blockNumber": 826,
+            "status": "0x1"
+          },
+          "witnessBytes": 4164
+        },
+        "method": "local devnet frame tx: ethrex_simulateFrameTransaction {trace:true} + mined receipt frameReceipts"
+      },
+      "budgets": {
+        "100000": {
+          "fits": true,
+          "basis": "simulate+sidecar"
+        },
+        "250000": {
+          "fits": true,
+          "basis": "computed from measured VERIFY gas"
+        },
+        "1000000": {
+          "fits": true,
+          "basis": "computed from measured VERIFY gas"
+        },
+        "2500000": {
+          "fits": true,
+          "basis": "computed from measured VERIFY gas"
+        }
+      },
+      "notes": [
+        "Parameters by T. Wambsgans (leanSPHINCS) / sphincs.art; keccak port and verifier by N. Consigny.",
+        "Keygen 351 ms on the bench machine.",
+        "Receipt gasUsed 281146 differs from the EIP-8141 formula 280954 (tx 0x26d8752dd6972e55bc1bfd819e086b7c01684fde926ce66fdc4bd2f3932aa769).",
+        "Receipt gasUsed 289386 differs from the EIP-8141 formula 289194 (tx 0x1dcad43601dafd6fd0daf6d7cc129d99383d5e6044985094ee77958ac389c033)."
+      ]
+    },
+    {
+      "id": "slh-dsa-sha2-128-24",
+      "name": "SLH-DSA-SHA2-128-24",
+      "family": "FIPS 205 algorithm, NIST SP 800-230 ipd parameter set (h=22 d=1 a=24 k=6 w=4), SHA-256 precompile",
+      "stateless": true,
+      "sigBytes": 3856,
+      "pkBytes": 32,
+      "witnessBytes": 3856,
+      "license": "MIT",
+      "auditStatus": "matches NIST/ACVP external KATs (upstream); not audited",
+      "upstream": {
+        "repo": "https://github.com/nconsigny/SPHINCS-",
+        "commit": "4c76aaf113d326df9adede63d015f3b394ab84f4",
+        "verifier": "src/sha/SLH-DSA-SHA2-128-24verifier.sol"
+      },
+      "signer": {
+        "impl": "upstream C fork of the sphincsplus reference (signers/sphincsplus-128-24)",
+        "note": "regenerates the 2^22 XMSS tree per call"
+      },
+      "signing": {
+        "status": "measured",
+        "value": {
+          "n": 4,
+          "min": 448798.1,
+          "mean": 481027.7,
+          "max": 517040.3
+        },
+        "method": "wall clock of upstream C fork of the sphincsplus reference (signers/sphincsplus-128-24) on the bench machine (darwin-arm64 node v26.0.0), digest in, witness out"
+      },
+      "forgeVerify": {
+        "status": "measured",
+        "value": {
+          "n": 2,
+          "min": 146734,
+          "mean": 147363.5,
+          "max": 147993
+        },
+        "method": "Forge: gasleft() around a cold external STATICCALL with BenchAccount's exact calldata"
+      },
+      "pathA": {
+        "status": "measured",
+        "value": {
+          "limits": [231000, 60000],
+          "frameGasUsed": [146252, 12289],
+          "pqFrameGas": 146252,
+          "verifyFrameGas": 146252,
+          "prefixValidationGas": 231100,
+          "intrinsicGas": 75098,
+          "calldataFloor8141": 261242,
+          "calldataFloor7623": 168170,
+          "predictedGasUsed": 261242,
+          "intrinsicGasDevnet": 75014,
+          "calldataFloorDevnet": 261434,
+          "predictedGasUsedDevnet": 261434,
+          "receiptMatchesDevnetFormula": true,
+          "floorBound": true,
+          "simulatedGasUsed": 261434,
+          "txGasUsed": {
+            "status": "measured",
+            "value": 261434,
+            "method": "receipt gasUsed (ethrex eth_getTransactionReceipt)"
+          },
+          "receiptMatchesFormula": false,
+          "simulate": {
+            "canonicalMempoolValid": false,
+            "violation": "prefix gas budget exceeded: 231100 > 100000 (MAX_VERIFY_GAS)",
+            "prefixShape": "SelfVerify"
+          },
+          "admission": [
+            {
+              "endpoint": "sidecar eth_sendFrameTransaction (stock, MAX_VERIFY_GAS 100k)",
+              "accepted": false,
+              "error": "eth_sendFrameTransaction: validation prefix execution gas sum 231000 + signature-verification cost 100 = 231100 exceeds MAX_VERIFY_GAS 100000"
+            },
+            {
+              "endpoint": "patched sidecar eth_sendFrameTransaction (BUDGET-010: 100k unstaked / 1M staked; account staked)",
+              "accepted": true
+            }
+          ],
+          "inclusion": {
+            "via": "patched sidecar eth_sendFrameTransaction (BUDGET-010: 100k unstaked / 1M staked; account staked)",
+            "txHash": "0x31dde3ec665b8b82706bd5301b97b613a04f1df88b5b3518b3dea442e1db8779",
+            "blockNumber": 966,
+            "status": "0x1"
+          },
+          "witnessBytes": 3856
+        },
+        "method": "local devnet frame tx: ethrex_simulateFrameTransaction {trace:true} + mined receipt frameReceipts"
+      },
+      "pathB": {
+        "status": "measured",
+        "value": {
+          "limits": [30000, 231000],
+          "frameGasUsed": [370, 158337],
+          "pqFrameGas": 158337,
+          "verifyFrameGas": 370,
+          "prefixValidationGas": 32900,
+          "intrinsicGas": 79258,
+          "calldataFloor8141": 269482,
+          "calldataFloor7623": 174370,
+          "predictedGasUsed": 269482,
+          "intrinsicGasDevnet": 79126,
+          "calldataFloorDevnet": 269674,
+          "predictedGasUsedDevnet": 269674,
+          "receiptMatchesDevnetFormula": true,
+          "floorBound": true,
+          "simulatedGasUsed": 269674,
+          "txGasUsed": {
+            "status": "measured",
+            "value": 269674,
+            "method": "receipt gasUsed (ethrex eth_getTransactionReceipt)"
+          },
+          "receiptMatchesFormula": false,
+          "simulate": {
+            "canonicalMempoolValid": true,
+            "violation": null,
+            "prefixShape": "SelfVerify"
+          },
+          "admission": [
+            {
+              "endpoint": "sidecar eth_sendFrameTransaction (stock, MAX_VERIFY_GAS 100k)",
+              "accepted": true
+            }
+          ],
+          "inclusion": {
+            "via": "sidecar eth_sendFrameTransaction (stock, MAX_VERIFY_GAS 100k)",
+            "txHash": "0xc3eeea9fda09c25614b28c575ab54d2f1bd618265540123c09bb5cf9f2295fb5",
+            "blockNumber": 1048,
+            "status": "0x1"
+          },
+          "witnessBytes": 3856
+        },
+        "method": "local devnet frame tx: ethrex_simulateFrameTransaction {trace:true} + mined receipt frameReceipts"
+      },
+      "budgets": {
+        "100000": {
+          "fits": false,
+          "basis": "simulate+sidecar"
+        },
+        "250000": {
+          "fits": true,
+          "basis": "computed from measured VERIFY gas"
+        },
+        "1000000": {
+          "fits": true,
+          "basis": "simulate+sidecar"
+        },
+        "2500000": {
+          "fits": true,
+          "basis": "computed from measured VERIFY gas"
+        }
+      },
+      "notes": [
+        "2^24 is a recommended per-key usage cap carried by FORS (upstream README).",
+        "Keygen 463,024 ms on the bench machine.",
+        "Receipt gasUsed 261434 differs from the EIP-8141 formula 261242 (tx 0x31dde3ec665b8b82706bd5301b97b613a04f1df88b5b3518b3dea442e1db8779).",
+        "Receipt gasUsed 269674 differs from the EIP-8141 formula 269482 (tx 0xc3eeea9fda09c25614b28c575ab54d2f1bd618265540123c09bb5cf9f2295fb5)."
+      ]
+    },
+    {
+      "id": "slh-dsa-sha2-128s",
+      "name": "SLH-DSA-SHA2-128s",
+      "family": "FIPS 205 final parameter set (h=63 d=7 a=12 k=14 w=16), SHA-256 precompile",
+      "stateless": true,
+      "sigBytes": 7856,
+      "pkBytes": 32,
+      "witnessBytes": 7856,
+      "license": "MIT (bench port)",
+      "auditStatus": "bench port written for this milestone (time-boxed); checked only against noble signatures; not audited",
+      "upstream": {
+        "repo": "this repo (bench/contracts/src/SlhDsaSha2_128s.sol), structure from SPHINCS- SLH-DSA-SHA2-128-24",
+        "commit": "-",
+        "verifier": "bench/contracts/src/SlhDsaSha2_128s.sol"
+      },
+      "signer": {
+        "impl": "@noble/post-quantum 0.7.1 slh_dsa_sha2_128s",
+        "note": "pure JS"
+      },
+      "signing": {
+        "status": "measured",
+        "value": {
+          "n": 7,
+          "min": 1045.7,
+          "mean": 1229.4,
+          "max": 2265.1
+        },
+        "method": "wall clock of @noble/post-quantum 0.7.1 slh_dsa_sha2_128s on the bench machine (darwin-arm64 node v26.0.0), digest in, witness out"
+      },
+      "forgeVerify": {
+        "status": "measured",
+        "value": {
+          "n": 5,
+          "min": 826626,
+          "mean": 852697.4,
+          "max": 889311
+        },
+        "method": "Forge: gasleft() around a cold external STATICCALL with BenchAccount's exact calldata"
+      },
+      "pathA": {
+        "status": "measured",
+        "value": {
+          "limits": [931000, 60000],
+          "frameGasUsed": [868099, 12289],
+          "pqFrameGas": 868099,
+          "verifyFrameGas": 868099,
+          "prefixValidationGas": 931100,
+          "intrinsicGas": 139098,
+          "calldataFloor8141": 517242,
+          "calldataFloor7623": 328170,
+          "predictedGasUsed": 1019486,
+          "intrinsicGasDevnet": 138726,
+          "calldataFloorDevnet": 517434,
+          "predictedGasUsedDevnet": 1019114,
+          "receiptMatchesDevnetFormula": true,
+          "floorBound": false,
+          "simulatedGasUsed": 1019114,
+          "txGasUsed": {
+            "status": "measured",
+            "value": 1019114,
+            "method": "receipt gasUsed (ethrex eth_getTransactionReceipt)"
+          },
+          "receiptMatchesFormula": false,
+          "simulate": {
+            "canonicalMempoolValid": false,
+            "violation": "prefix gas budget exceeded: 931100 > 100000 (MAX_VERIFY_GAS)",
+            "prefixShape": "SelfVerify"
+          },
+          "admission": [
+            {
+              "endpoint": "sidecar eth_sendFrameTransaction (stock, MAX_VERIFY_GAS 100k)",
+              "accepted": false,
+              "error": "eth_sendFrameTransaction: validation prefix execution gas sum 931000 + signature-verification cost 100 = 931100 exceeds MAX_VERIFY_GAS 100000"
+            },
+            {
+              "endpoint": "patched sidecar eth_sendFrameTransaction (BUDGET-010: 100k unstaked / 1M staked; account staked)",
+              "accepted": true
+            }
+          ],
+          "inclusion": {
+            "via": "patched sidecar eth_sendFrameTransaction (BUDGET-010: 100k unstaked / 1M staked; account staked)",
+            "txHash": "0x63cf7df7c153163b5ad3134b5fb4c8d0f17d9200b019677716f3526abc528dc8",
+            "blockNumber": 1058,
+            "status": "0x1"
+          },
+          "witnessBytes": 7856
+        },
+        "method": "local devnet frame tx: ethrex_simulateFrameTransaction {trace:true} + mined receipt frameReceipts"
+      },
+      "pathB": {
+        "status": "measured",
+        "value": {
+          "limits": [30000, 931000],
+          "frameGasUsed": [370, 875039],
+          "pqFrameGas": 875039,
+          "verifyFrameGas": 370,
+          "prefixValidationGas": 32900,
+          "intrinsicGas": 143258,
+          "calldataFloor8141": 525482,
+          "calldataFloor7623": 334370,
+          "predictedGasUsed": 1018667,
+          "intrinsicGasDevnet": 142850,
+          "calldataFloorDevnet": 525674,
+          "predictedGasUsedDevnet": 1018259,
+          "receiptMatchesDevnetFormula": true,
+          "floorBound": false,
+          "simulatedGasUsed": 1018259,
+          "txGasUsed": {
+            "status": "measured",
+            "value": 1018259,
+            "method": "receipt gasUsed (ethrex eth_getTransactionReceipt)"
+          },
+          "receiptMatchesFormula": false,
+          "simulate": {
+            "canonicalMempoolValid": true,
+            "violation": null,
+            "prefixShape": "SelfVerify"
+          },
+          "admission": [
+            {
+              "endpoint": "sidecar eth_sendFrameTransaction (stock, MAX_VERIFY_GAS 100k)",
+              "accepted": true
+            }
+          ],
+          "inclusion": {
+            "via": "sidecar eth_sendFrameTransaction (stock, MAX_VERIFY_GAS 100k)",
+            "txHash": "0x7874e0a44c8c48b82c4d058d7b10be10a31533c93addc459efbd6565a3f2d282",
+            "blockNumber": 1060,
+            "status": "0x1"
+          },
+          "witnessBytes": 7856
+        },
+        "method": "local devnet frame tx: ethrex_simulateFrameTransaction {trace:true} + mined receipt frameReceipts"
+      },
+      "budgets": {
+        "100000": {
+          "fits": false,
+          "basis": "simulate+sidecar"
+        },
+        "250000": {
+          "fits": false,
+          "basis": "computed from measured VERIFY gas"
+        },
+        "1000000": {
+          "fits": true,
+          "basis": "simulate+sidecar"
+        },
+        "2500000": {
+          "fits": true,
+          "basis": "computed from measured VERIFY gas"
+        }
+      },
+      "notes": [
+        "Signature budget 2^64 (FIPS 205).",
+        "Keygen 139 ms on the bench machine.",
+        "Receipt gasUsed 1019114 differs from the EIP-8141 formula 1019486 (tx 0x63cf7df7c153163b5ad3134b5fb4c8d0f17d9200b019677716f3526abc528dc8).",
+        "Receipt gasUsed 1018259 differs from the EIP-8141 formula 1018667 (tx 0x7874e0a44c8c48b82c4d058d7b10be10a31533c93addc459efbd6565a3f2d282)."
+      ]
+    },
+    {
+      "id": "porst-r16",
+      "name": "PORST r=16",
+      "family": "PORS + Merkle multiproof, H=16 K=38, keccak256",
+      "stateless": false,
+      "sigBytes": 13165,
+      "pkBytes": 32,
+      "witnessBytes": 13440,
+      "license": "MIT",
+      "auditStatus": "unaudited hackathon code",
+      "upstream": {
+        "repo": "https://github.com/duncancmt/porst",
+        "commit": "82a5e8c45c2d17615bbe2d17ad20d3b47500bab8",
+        "verifier": "src/PORST.sol"
+      },
+      "signer": {
+        "impl": "bench TypeScript signer (bench/src/porst.ts)",
+        "note": "witness length varies per signature"
+      },
+      "signing": {
+        "status": "measured",
+        "value": {
+          "n": 12,
+          "min": 61.1,
+          "mean": 77.5,
+          "max": 144.8567500000354
+        },
+        "method": "wall clock of bench TypeScript signer (bench/src/porst.ts) on the bench machine (darwin-arm64 node v26.0.0), digest in, witness out"
+      },
+      "forgeVerify": {
+        "status": "measured",
+        "value": {
+          "n": 10,
+          "min": 121196,
+          "mean": 125088.3,
+          "max": 128410
+        },
+        "method": "Forge: gasleft() around a cold external STATICCALL with BenchAccount's exact calldata"
+      },
+      "pathA": {
+        "status": "measured",
+        "value": {
+          "limits": [158000, 60000],
+          "frameGasUsed": [132261, 12289],
+          "pqFrameGas": 132261,
+          "verifyFrameGas": 132261,
+          "prefixValidationGas": 158100,
+          "intrinsicGas": 228442,
+          "calldataFloor8141": 874618,
+          "calldataFloor7623": 551530,
+          "predictedGasUsed": 874618,
+          "intrinsicGasDevnet": 227878,
+          "calldataFloorDevnet": 874810,
+          "predictedGasUsedDevnet": 874810,
+          "receiptMatchesDevnetFormula": true,
+          "floorBound": true,
+          "simulatedGasUsed": 874810,
+          "txGasUsed": {
+            "status": "measured",
+            "value": 874810,
+            "method": "receipt gasUsed (ethrex eth_getTransactionReceipt)"
+          },
+          "receiptMatchesFormula": false,
+          "simulate": {
+            "canonicalMempoolValid": false,
+            "violation": "prefix gas budget exceeded: 158100 > 100000 (MAX_VERIFY_GAS)",
+            "prefixShape": "SelfVerify"
+          },
+          "admission": [
+            {
+              "endpoint": "sidecar eth_sendFrameTransaction (stock, MAX_VERIFY_GAS 100k)",
+              "accepted": false,
+              "error": "eth_sendFrameTransaction: validation prefix execution gas sum 158000 + signature-verification cost 100 = 158100 exceeds MAX_VERIFY_GAS 100000"
+            },
+            {
+              "endpoint": "patched sidecar eth_sendFrameTransaction (BUDGET-010: 100k unstaked / 1M staked; account staked)",
+              "accepted": true
+            }
+          ],
+          "inclusion": {
+            "via": "patched sidecar eth_sendFrameTransaction (BUDGET-010: 100k unstaked / 1M staked; account staked)",
+            "txHash": "0x98f0f0bffd4b58d255f27df4d61ae600efa6240f0aec5eff0ef8dd3adbc14b24",
+            "blockNumber": 841,
+            "status": "0x1"
+          },
+          "witnessBytes": 13440
+        },
+        "method": "local devnet frame tx: ethrex_simulateFrameTransaction {trace:true} + mined receipt frameReceipts"
+      },
+      "pathB": {
+        "status": "measured",
+        "value": {
+          "limits": [30000, 158000],
+          "frameGasUsed": [370, 145797],
+          "pqFrameGas": 145797,
+          "verifyFrameGas": 370,
+          "prefixValidationGas": 32900,
+          "intrinsicGas": 234138,
+          "calldataFloor8141": 889002,
+          "calldataFloor7623": 561570,
+          "predictedGasUsed": 889002,
+          "intrinsicGasDevnet": 233466,
+          "calldataFloorDevnet": 889194,
+          "predictedGasUsedDevnet": 889194,
+          "receiptMatchesDevnetFormula": true,
+          "floorBound": true,
+          "simulatedGasUsed": 889194,
+          "txGasUsed": {
+            "status": "measured",
+            "value": 889194,
+            "method": "receipt gasUsed (ethrex eth_getTransactionReceipt)"
+          },
+          "receiptMatchesFormula": false,
+          "simulate": {
+            "canonicalMempoolValid": true,
+            "violation": null,
+            "prefixShape": "SelfVerify"
+          },
+          "admission": [
+            {
+              "endpoint": "sidecar eth_sendFrameTransaction (stock, MAX_VERIFY_GAS 100k)",
+              "accepted": true
+            }
+          ],
+          "inclusion": {
+            "via": "sidecar eth_sendFrameTransaction (stock, MAX_VERIFY_GAS 100k)",
+            "txHash": "0xbc5879d3837211fa7b20f35a8406c8da8645046bd17167565ffb5061d577cf8a",
+            "blockNumber": 842,
+            "status": "0x1"
+          },
+          "witnessBytes": 13536
+        },
+        "method": "local devnet frame tx: ethrex_simulateFrameTransaction {trace:true} + mined receipt frameReceipts"
+      },
+      "budgets": {
+        "100000": {
+          "fits": false,
+          "basis": "simulate+sidecar"
+        },
+        "250000": {
+          "fits": true,
+          "basis": "computed from measured VERIFY gas"
+        },
+        "1000000": {
+          "fits": true,
+          "basis": "simulate+sidecar"
+        },
+        "2500000": {
+          "fits": true,
+          "basis": "computed from measured VERIFY gas"
+        }
+      },
+      "notes": [
+        "Variable-length witness, unpadded: the verifier rejects trailing bytes, so a fixed-length encoding needs an adapter (plan §2.5 rule 3). The chain-1337 sig hash elides ARBITRARY bytes entirely, so length is not committed here.",
+        "Witness length varies: 12704-13568 B over 10 Forge vectors (mean shown).",
+        "Keygen 1,002 ms on the bench machine.",
+        "Receipt gasUsed 874810 differs from the EIP-8141 formula 874618 (tx 0x98f0f0bffd4b58d255f27df4d61ae600efa6240f0aec5eff0ef8dd3adbc14b24).",
+        "Receipt gasUsed 889194 differs from the EIP-8141 formula 889002 (tx 0xbc5879d3837211fa7b20f35a8406c8da8645046bd17167565ffb5061d577cf8a)."
+      ],
+      "statefulNote": "few-time: at most r=16 signatures per key (258-bit by the header formula); the signer must count"
+    },
+    {
+      "id": "porst-r256",
+      "name": "PORST r=256",
+      "family": "PORS + Merkle multiproof, H=24 K=23, keccak256",
+      "stateless": false,
+      "sigBytes": 14422,
+      "pkBytes": 32,
+      "witnessBytes": 14400,
+      "license": "MIT",
+      "auditStatus": "unaudited hackathon code; r=256 constants are the upstream header table's row, recompiled here",
+      "upstream": {
+        "repo": "https://github.com/duncancmt/porst",
+        "commit": "82a5e8c45c2d17615bbe2d17ad20d3b47500bab8",
+        "verifier": "src/PORST.sol (TREE_HEIGHT=24, SUBSET_SIZE=23)"
+      },
+      "signer": {
+        "impl": "bench TypeScript signer (bench/src/porst.ts)",
+        "note": "keygen 2^24 leaves (~50M keccak)"
+      },
+      "signing": {
+        "status": "measured",
+        "value": {
+          "n": 12,
+          "min": 46.76250000000073,
+          "mean": 76.8,
+          "max": 86.7
+        },
+        "method": "wall clock of bench TypeScript signer (bench/src/porst.ts) on the bench machine (darwin-arm64 node v26.0.0), digest in, witness out"
+      },
+      "forgeVerify": {
+        "status": "measured",
+        "value": {
+          "n": 10,
+          "min": 114062,
+          "mean": 116687.3,
+          "max": 118557
+        },
+        "method": "Forge: gasleft() around a cold external STATICCALL with BenchAccount's exact calldata"
+      },
+      "pathA": {
+        "status": "measured",
+        "value": {
+          "limits": [148000, 60000],
+          "frameGasUsed": [123118, 12289],
+          "pqFrameGas": 123118,
+          "verifyFrameGas": 123118,
+          "prefixValidationGas": 148100,
+          "intrinsicGas": 243802,
+          "calldataFloor8141": 936058,
+          "calldataFloor7623": 589930,
+          "predictedGasUsed": 936058,
+          "intrinsicGasDevnet": 243226,
+          "calldataFloorDevnet": 936250,
+          "predictedGasUsedDevnet": 936250,
+          "receiptMatchesDevnetFormula": true,
+          "floorBound": true,
+          "simulatedGasUsed": 936250,
+          "txGasUsed": {
+            "status": "measured",
+            "value": 936250,
+            "method": "receipt gasUsed (ethrex eth_getTransactionReceipt)"
+          },
+          "receiptMatchesFormula": false,
+          "simulate": {
+            "canonicalMempoolValid": false,
+            "violation": "prefix gas budget exceeded: 148100 > 100000 (MAX_VERIFY_GAS)",
+            "prefixShape": "SelfVerify"
+          },
+          "admission": [
+            {
+              "endpoint": "sidecar eth_sendFrameTransaction (stock, MAX_VERIFY_GAS 100k)",
+              "accepted": false,
+              "error": "eth_sendFrameTransaction: validation prefix execution gas sum 148000 + signature-verification cost 100 = 148100 exceeds MAX_VERIFY_GAS 100000"
+            },
+            {
+              "endpoint": "patched sidecar eth_sendFrameTransaction (BUDGET-010: 100k unstaked / 1M staked; account staked)",
+              "accepted": true
+            }
+          ],
+          "inclusion": {
+            "via": "patched sidecar eth_sendFrameTransaction (BUDGET-010: 100k unstaked / 1M staked; account staked)",
+            "txHash": "0xa635ddda53398958ab461f683411486566aeb88ae4ea043d28292411312ca859",
+            "blockNumber": 976,
+            "status": "0x1"
+          },
+          "witnessBytes": 14400
+        },
+        "method": "local devnet frame tx: ethrex_simulateFrameTransaction {trace:true} + mined receipt frameReceipts"
+      },
+      "pathB": {
+        "status": "measured",
+        "value": {
+          "limits": [30000, 148000],
+          "frameGasUsed": [370, 136370],
+          "pqFrameGas": 136370,
+          "verifyFrameGas": 370,
+          "prefixValidationGas": 32900,
+          "intrinsicGas": 251034,
+          "calldataFloor8141": 956586,
+          "calldataFloor7623": 603810,
+          "predictedGasUsed": 956586,
+          "intrinsicGasDevnet": 250554,
+          "calldataFloorDevnet": 956778,
+          "predictedGasUsedDevnet": 956778,
+          "receiptMatchesDevnetFormula": true,
+          "floorBound": true,
+          "simulatedGasUsed": 956778,
+          "txGasUsed": {
+            "status": "measured",
+            "value": 956778,
+            "method": "receipt gasUsed (ethrex eth_getTransactionReceipt)"
+          },
+          "receiptMatchesFormula": false,
+          "simulate": {
+            "canonicalMempoolValid": true,
+            "violation": null,
+            "prefixShape": "SelfVerify"
+          },
+          "admission": [
+            {
+              "endpoint": "sidecar eth_sendFrameTransaction (stock, MAX_VERIFY_GAS 100k)",
+              "accepted": true
+            }
+          ],
+          "inclusion": {
+            "via": "sidecar eth_sendFrameTransaction (stock, MAX_VERIFY_GAS 100k)",
+            "txHash": "0x293d60d5c4253c566a7dea3bd3697e4fea5206c560902852a45933fa37a15d3e",
+            "blockNumber": 978,
+            "status": "0x1"
+          },
+          "witnessBytes": 14592
+        },
+        "method": "local devnet frame tx: ethrex_simulateFrameTransaction {trace:true} + mined receipt frameReceipts"
+      },
+      "budgets": {
+        "100000": {
+          "fits": false,
+          "basis": "simulate+sidecar"
+        },
+        "250000": {
+          "fits": true,
+          "basis": "computed from measured VERIFY gas"
+        },
+        "1000000": {
+          "fits": true,
+          "basis": "simulate+sidecar"
+        },
+        "2500000": {
+          "fits": true,
+          "basis": "computed from measured VERIFY gas"
+        }
+      },
+      "notes": [
+        "Variable-length witness, unpadded (see PORST r=16).",
+        "Witness length varies: 14144-14688 B over 10 Forge vectors (mean shown).",
+        "Keygen 204,190 ms on the bench machine.",
+        "Receipt gasUsed 936250 differs from the EIP-8141 formula 936058 (tx 0xa635ddda53398958ab461f683411486566aeb88ae4ea043d28292411312ca859).",
+        "Receipt gasUsed 956778 differs from the EIP-8141 formula 956586 (tx 0x293d60d5c4253c566a7dea3bd3697e4fea5206c560902852a45933fa37a15d3e)."
+      ],
+      "statefulNote": "few-time: at most r=256 signatures per key; the signer must count"
+    },
+    {
+      "id": "ethfalcon",
+      "name": "ETHFALCON (Falcon-512, keccak XOF)",
+      "family": "lattice (NTRU), Falcon-512 with a keccak-CTR hash-to-point (not FN-DSA)",
+      "stateless": true,
+      "sigBytes": 1064,
+      "pkBytes": 1024,
+      "witnessBytes": 2088,
+      "license": "MIT",
+      "auditStatus": "upstream: \"experimental work, not audited: DO NOT USE IN PRODUCTION\"",
+      "upstream": {
+        "repo": "https://github.com/ZKNoxHQ/ETHFALCON",
+        "commit": "43ac863e30281bb7821748178d39967367d54bc2",
+        "verifier": "src/ZKNOX_ethfalcon.sol (main)"
+      },
+      "signer": {
+        "impl": "upstream Python reference (pythonref/sign_cli.py)",
+        "note": "pure Python"
+      },
+      "signing": {
+        "status": "measured",
+        "value": {
+          "n": 7,
+          "min": 39.2,
+          "mean": 40.4,
+          "max": 42.15502738952637
+        },
+        "method": "wall clock of upstream Python reference (pythonref/sign_cli.py) on the bench machine (darwin-arm64 node v26.0.0), digest in, witness out"
+      },
+      "forgeVerify": {
+        "status": "measured",
+        "value": {
+          "n": 5,
+          "min": 1499041,
+          "mean": 1499853.6,
+          "max": 1500738
+        },
+        "method": "Forge: gasleft() around a cold external STATICCALL with BenchAccount's exact calldata"
+      },
+      "pathA": {
+        "status": "measured",
+        "value": {
+          "limits": [1552000, 60000],
+          "frameGasUsed": [1502525, 12289],
+          "pqFrameGas": 1502525,
+          "verifyFrameGas": 1502525,
+          "prefixValidationGas": 1552100,
+          "intrinsicGas": 46810,
+          "calldataFloor8141": 148090,
+          "calldataFloor7623": 97450,
+          "predictedGasUsed": 1561624,
+          "intrinsicGasDevnet": 44014,
+          "calldataFloorDevnet": 148282,
+          "predictedGasUsedDevnet": 1558828,
+          "receiptMatchesDevnetFormula": true,
+          "floorBound": false,
+          "simulatedGasUsed": 1558828,
+          "txGasUsed": {
+            "status": "measured",
+            "value": 1558828,
+            "method": "receipt gasUsed (ethrex eth_getTransactionReceipt)"
+          },
+          "receiptMatchesFormula": false,
+          "simulate": {
+            "canonicalMempoolValid": false,
+            "violation": "prefix gas budget exceeded: 1552100 > 100000 (MAX_VERIFY_GAS)",
+            "prefixShape": "SelfVerify"
+          },
+          "admission": [
+            {
+              "endpoint": "sidecar eth_sendFrameTransaction (stock, MAX_VERIFY_GAS 100k)",
+              "accepted": false,
+              "error": "eth_sendFrameTransaction: validation prefix execution gas sum 1552000 + signature-verification cost 100 = 1552100 exceeds MAX_VERIFY_GAS 100000"
+            },
+            {
+              "endpoint": "patched sidecar eth_sendFrameTransaction (BUDGET-010: 100k unstaked / 1M staked; account staked)",
+              "accepted": false,
+              "error": "eth_sendFrameTransaction: BUDGET-010: sender+payer 0x1BdFFFFf5030D4a90d769035F4877e0219faC61D verification gas 1552100 (limits.execution 1552000 + signature-verification cost 100) exceeds MAX_VERIFY_GAS_STAKED_ENTITY 1000000, the limit even for a staked entity"
+            },
+            {
+              "endpoint": "ethrex eth_sendRawTransaction (canonical mempool)",
+              "accepted": false,
+              "error": "eth_sendRawTransaction: Invalid params: Frame transaction prefix gas budget (frames + sig cost) exceeds MAX_VERIFY_GAS"
+            },
+            {
+              "endpoint": "ethrex_submitPrivilegedFrameTransaction (builder hook, skips admission)",
+              "accepted": true
+            }
+          ],
+          "inclusion": {
+            "via": "ethrex_submitPrivilegedFrameTransaction (builder hook, skips admission)",
+            "txHash": "0x7759e2688dcd363c75042ac9c09fb383ab6783cc2473b6b08f5581ad02ee7a60",
+            "blockNumber": 847,
+            "status": "0x1"
+          },
+          "witnessBytes": 2088
+        },
+        "method": "local devnet frame tx: ethrex_simulateFrameTransaction {trace:true} + mined receipt frameReceipts"
+      },
+      "pathB": {
+        "status": "measured",
+        "value": {
+          "limits": [30000, 1552000],
+          "frameGasUsed": [370, 1515446],
+          "pqFrameGas": 1515446,
+          "verifyFrameGas": 370,
+          "prefixValidationGas": 32900,
+          "intrinsicGas": 50970,
+          "calldataFloor8141": 156330,
+          "calldataFloor7623": 103650,
+          "predictedGasUsed": 1566786,
+          "intrinsicGasDevnet": 48306,
+          "calldataFloorDevnet": 156522,
+          "predictedGasUsedDevnet": 1564122,
+          "receiptMatchesDevnetFormula": true,
+          "floorBound": false,
+          "simulatedGasUsed": 1564122,
+          "txGasUsed": {
+            "status": "measured",
+            "value": 1564122,
+            "method": "receipt gasUsed (ethrex eth_getTransactionReceipt)"
+          },
+          "receiptMatchesFormula": false,
+          "simulate": {
+            "canonicalMempoolValid": true,
+            "violation": null,
+            "prefixShape": "SelfVerify"
+          },
+          "admission": [
+            {
+              "endpoint": "sidecar eth_sendFrameTransaction (stock, MAX_VERIFY_GAS 100k)",
+              "accepted": true
+            }
+          ],
+          "inclusion": {
+            "via": "sidecar eth_sendFrameTransaction (stock, MAX_VERIFY_GAS 100k)",
+            "txHash": "0x384a0e6e10b2dca933f7f79231e76b81acc18b1d0f483c97dba15b2d3f9af997",
+            "blockNumber": 851,
+            "status": "0x1"
+          },
+          "witnessBytes": 2088
+        },
+        "method": "local devnet frame tx: ethrex_simulateFrameTransaction {trace:true} + mined receipt frameReceipts"
+      },
+      "budgets": {
+        "100000": {
+          "fits": false,
+          "basis": "simulate+sidecar"
+        },
+        "250000": {
+          "fits": false,
+          "basis": "computed from measured VERIFY gas"
+        },
+        "1000000": {
+          "fits": false,
+          "basis": "simulate+sidecar"
+        },
+        "2500000": {
+          "fits": true,
+          "basis": "computed from measured VERIFY gas"
+        }
+      },
+      "notes": [
+        "Sig bytes = salt(40) + s2 as 32 compacted words (1,024); pk = the NTT-form key as 32 compacted words (1,024). The key rides in the witness (2,088 B) and is bound by keccak256(ntth) == the account's 32-byte commitment.",
+        "Measured: the main-branch ETHFALCON verifier (hashToPointEVM + falcon_core) behind a flat-witness adapter.",
+        "Keygen 2,916 ms on the bench machine.",
+        "Receipt gasUsed 1558828 differs from the EIP-8141 formula 1561624 (tx 0x7759e2688dcd363c75042ac9c09fb383ab6783cc2473b6b08f5581ad02ee7a60).",
+        "Receipt gasUsed 1564122 differs from the EIP-8141 formula 1566786 (tx 0x384a0e6e10b2dca933f7f79231e76b81acc18b1d0f483c97dba15b2d3f9af997)."
+      ],
+      "published": {
+        "exp/pq-verifier-gas ZKNOX_falcon8.verify": "447,047 gas (upstream README, experimental branch, not measured here)"
+      }
+    },
+    {
+      "id": "fors-c-nicetry",
+      "name": "FORS+C (NiceTry)",
+      "family": "FORS+C few-time (K=26 A=5), keccak256, one key per operation",
+      "stateless": false,
+      "sigBytes": 2448,
+      "pkBytes": 32,
+      "witnessBytes": null,
+      "license": "none published (no LICENSE file at 67b04de)",
+      "auditStatus": "unaudited; upstream: parameters \"still in a tuning phase\"",
+      "upstream": {
+        "repo": "https://github.com/RivaLabs-Core/NiceTry",
+        "commit": "67b04de3e9562f48759826c279c70a8087b4f8ae",
+        "verifier": "src/Verifiers/ForsVerifier.sol"
+      },
+      "signer": {
+        "impl": "-",
+        "note": "-"
+      },
+      "signing": {
+        "status": "not measured",
+        "reason": "The repository has no licence, so its verifier and signer were not copied or run; measuring it would need its code. Published numbers only."
+      },
+      "forgeVerify": {
+        "status": "not measured",
+        "reason": "The repository has no licence, so its verifier and signer were not copied or run; measuring it would need its code. Published numbers only."
+      },
+      "pathA": {
+        "status": "not measured",
+        "reason": "The repository has no licence, so its verifier and signer were not copied or run; measuring it would need its code. Published numbers only."
+      },
+      "pathB": {
+        "status": "not measured",
+        "reason": "The repository has no licence, so its verifier and signer were not copied or run; measuring it would need its code. Published numbers only."
+      },
+      "budgets": {
+        "100000": {
+          "fits": null,
+          "basis": "not measured"
+        },
+        "250000": {
+          "fits": null,
+          "basis": "not measured"
+        },
+        "1000000": {
+          "fits": null,
+          "basis": "not measured"
+        },
+        "2500000": {
+          "fits": null,
+          "basis": "not measured"
+        }
+      },
+      "notes": [
+        "Credit: Riva Labs. Listed for completeness; ask Riva Labs for a licence before including a measured row."
+      ],
+      "statefulNote": "one-time by policy: the account rotates the FORS key on every operation (q=2 → 104 bits, q=5 → 70)",
+      "published": {
+        "signature bytes": "2,448 (ForsVerifier.sol:86)",
+        "verify gas": "~35k (README:14)"
+      }
+    }
+  ]
+}
