@@ -185,3 +185,56 @@ Deployed: `C13Verifier` `0xe8bbb5f2…a9fc` (tx `0x907d9fdc…a511`), `MockLeake
   and keeps a re-sign fallback. Path A went through the privileged RPC, not a source-patched sidecar (no
   `devnet/patched-sidecar/` was built; the README recipe stays the route for BUDGET-010 work).
 - **Setup gas that bit:** a mock `setRoles` writing 3 fresh slots ran out at 200,000 (state gas); the script uses 3M.
+
+## P6: BUDGET-010 sidecar PR + patched sidecar (2026-11-06)
+
+**Source.** `upstream/skandha-budget-010/` holds the PR against `forshtat/mempool-workshop-sidecar`. Its base is
+`2e22ff0a`, the commit the devnet image `skandha/v4.1.1-` is built from; both scratchpad clones matched it. The PR is
+stored as a 5-patch `git am` series plus `apply.sh`, which clones it into the git-ignored `sidecar/`. `PR.md` covers
+the motivation, the diff and the ethrex-side change. Nothing is vendored.
+
+**Semantics.**
+- Budgets are per entity address. The sender is `tx.sender`, the payer is the `pay`/`self_verify` target, and the
+  factory is the `deploy` target.
+- `pre_verify` counts toward its approving entity. The signature cost counts toward the sender.
+- `expiry_verify` counts toward no entity (ERC Definitions 4) and is held to 100k on its own. This is a maintainer
+  call, flagged in `PR.md`.
+- Limits are 100k unstaked and 1M staked. Staked means `ReputationService.checkStake` passes and the entity is not a
+  default-code account.
+- The check is explorer rule `BUDGET-010`, after `structure` and before simulation. Stake is looked up only above 100k.
+- The prefix-wide `MAX_VERIFY_STATE_GAS` stays. The ERC's "no state cap" is left as a separate follow-up.
+- Budgets are configurable: `maxVerifyGasPerEntity` / `maxVerifyGasStakedEntity`, or `SKANDHA_MAX_VERIFY_GAS_*`.
+- `skandha_config.budgets` advertises them.
+- Unit tests (`bunx vitest run` in `packages/executor`): 416 pass (master 386). The 5 suites under `test/unit/` were
+  already broken on master.
+
+**Relay path.** The sidecar submits only via `ethrex_submitPrivilegedFrameTransaction`, unauthenticated and
+devnet/builder-only, which skips ethrex's combined `MAX_VERIFY_GAS`. ethrex's `eth_sendRawTransaction` and simulate
+still apply it. Simulate still returns `erc7562Trace` when the budget is exceeded, so admission works with no ethrex
+change. `PR.md` describes the alt-mempool admission mode ethrex would need upstream.
+
+**Running it.** `devnet/patched-sidecar/up-patched.sh` builds `leaked/sidecar:budget-010` (native arch) and starts it
+via `compose.override.yml`:
+- endpoint **`http://localhost:14340/rpc`**, container IP `172.28.0.40`, in-network `skandha-budget:14337`;
+- next to the stock sidecar on `:14337`;
+- `up.sh` is untouched.
+
+Port 14338 / `.7` were taken by the privacy workstream's flat-1M sidecar. The bench should use 14340 for BUDGET-010
+semantics.
+
+**E2E** (`devnet/patched-sidecar/tests/budget010.e2e.ts`, anvil #9, all checks PASS). Fresh VerifyBisect wallet
+`0xa15bb661…e468`, deployed in tx `0xab7e2745…d831`.
+
+| Step | Result |
+|---|---|
+| `skandha_config.budgets` | `{rule: BUDGET-010, 100000, 1000000, sender, maxVerifyStateGas 500000}`; the stock sidecar advertises none |
+| unstaked, VERIFY limit 150k | patched: `BUDGET-010: sender+payer 0xA15B… verification gas 152800 (… + signature-verification cost 2800) exceeds MAX_VERIFY_GAS_PER_ENTITY 100000 for an unstaked entity …`; stock: `… exceeds MAX_VERIFY_GAS 100000`; ethrex raw: rejected; simulate: `canonicalMempoolValid false` but traced |
+| stake 0.012 ETH / 86400 via the patched sidecar | `0xb830e574…c653` OnChain; `getDepositInfo = (0.012 ETH, 86400, 0)` |
+| staked, same 150k shape | ethrex raw still rejects; the patched sidecar admits `0x1007c4db…0f40`, OnChain in block 782 via the privileged route, both frames success (VERIFY used 5,455) |
+| staked, VERIFY limit 1.1M | `BUDGET-010: … 1102800 … exceeds MAX_VERIFY_GAS_STAKED_ENTITY 1000000, the limit even for a staked entity` |
+| explorer | `BUDGET-010` fail / pass `sender+payer 62800/100000` / pass `sender+payer 152800/1000000 (staked)` / fail |
+
+- The PQ "poisoned lane" quirk did not reproduce here. An ethrex `eth_sendRawTransaction` rejection (gas cap) of
+  nonce N was followed by a privileged submission of a different tx at the same nonce, and it mined in both runs.
+- PoolPayer, from the privacy run's preliminary simulate (`contracts/devnet-tests/privacy/results/e2e-run.log`): the
+  `pay` frame used 303,334 gas, the sender 100 + 2,800. Exactly the shape BUDGET-010 admits once the payer is staked.

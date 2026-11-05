@@ -48,7 +48,7 @@ Rationale).
    cannot raise its limit and it is held to `perEntity` on its own. **Maintainer call:** the ERC sets no bound here,
    and this keeps a huge declared limit from being free. The rejection reason names the rule, roles, entity, sum
    (execution + signature cost), the limit and the stake status. For example:
-   `BUDGET-010: sender+payer 0x700b… verification gas 152800 (limits.execution 150000 + signature-verification cost 2800) exceeds MAX_VERIFY_GAS_PER_ENTITY 100000 for an unstaked entity (a staked entity may use up to MAX_VERIFY_GAS_STAKED_ENTITY 1000000)`.
+   `BUDGET-010: sender+payer 0xA15B… verification gas 152800 (limits.execution 150000 + signature-verification cost 2800) exceeds MAX_VERIFY_GAS_PER_ENTITY 100000 for an unstaked entity (a staked entity may use up to MAX_VERIFY_GAS_STAKED_ENTITY 1000000)`.
 3. **Stake** (`FrameTxValidationService.isStakedEntity`). The entity's Staking Registry deposit goes through the
    existing `ReputationService.checkStake`, the same predicate `requireStakeSlot` and the reputation gate use:
    stake ≥ `minStake`, delay ≥ `minUnstakeDelay`, no withdrawal, not banned, or whitelisted. A default-code entity
