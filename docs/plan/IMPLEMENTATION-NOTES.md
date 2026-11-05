@@ -746,3 +746,76 @@ Code: `apps/extension/src/background/{account,engine,routing,policy,payments,act
   - **Safe7579:** yes, single owner `0xdEaD`; emergency exit is vault-only.
   - **Kernel v3.3:** yes, hot 1271 off.
 - **To mirror the next account change** (Open recipient mode by default, vault bound in initialize): `LeakedPolicyHook` gains the same `RecipientMode`; `LeakedRoleExecutor` derives role signers the same way. Tracked as a follow-up once the account change is reviewed.
+
+## `@leaked/privacy` (privacy P1–P3 + P7 core, plan 40 §1, §2.12, §6, §7, §8.1; 2026-11-06)
+
+Code: `packages/privacy` (no UI). It has 70 unit tests (`pnpm --filter @leaked/privacy test`) and one local-devnet e2e
+(`LOCAL_DEVNET=1`, `test/e2e.devnet.test.ts`).
+
+- **License gate (plan §1 row 15): no Kohaku dependency.** `@kohaku-eth/privacy-pools` declares MIT but pulls in
+  `@kohaku-eth/plugins` (no license) and `@saga-sync/client` (GPL-3.0-only). The Host is our own structural type
+  (`src/host/types.ts`, Kohaku member names). The PP v1 client (sync, notes, deposit, withdraw) is written here.
+  Details are in THIRD_PARTY.md.
+- **Host adapters.**
+  - `EncryptedStorage`: AES-256-GCM per value, the full key as AAD (a swapped ciphertext fails), fail-closed on any
+    decrypt error, and `lock()`/`unlock()`. The backend is injectable (`chromeStorageBackend`).
+  - `anonNetwork`: every request carries `anonOptions.isolationKey` and a caller cannot override it. It has an audit hook.
+    Keys come from `isolationKeyFor(addr, chainId)` = sha256, or `freshIsolationKey()` for one withdrawal.
+  - `VaultKeystore` throws for every path, including Kohaku's `m/28784'/1'/0'`, unless a vault flow delegated it.
+  - `createHostProvider` sends `call`/`getBalance`/`getStorageAt`/`getCode` through an optional `VerifiedReads` hook.
+    `heliosVerifiedReads(heliosProvider)` wraps an injected `@a16z/helios` provider, which is not a dependency
+    (WASM, beacon API, no beacon chain on the 8141 devnet). Logs always use raw RPC. `readsVerified` drives the badge.
+- **Vault EnvelopeSigner over QR.**
+  - `createNoteSignRequest` emits a `ur:leaked-sign-request` tx-type 2 in the companion's exact JSON shape (domain
+    keys, decimal uint64s).
+  - `acceptNoteSignature` checks the request id and that the signature recovers to the payer over the digest.
+  - The secrets are `trunc31(keccak(tag ‖ r ‖ lowS(s)))`. Tests show that the software signer, vault-over-QR, high-s,
+    v 0/1 vs 27/28 and ERC-2098 compact signatures all give identical notes.
+  - The secret manager runs a determinism double-sign (one extra scan per session) and caches signatures in
+    `EncryptedStorage`. The PoolPayer sender key is derived from the change note's signature (tag `signer`), so a
+    stranded withdrawal can be recovered from the vault.
+- **Sync fails closed.**
+  - Paged `eth_getLogs` (5,000 blocks, a refused page is split in two).
+  - Contiguous `LeafInserted` sizes; note that `_index` is the **size after insert**, 1-based.
+  - Each event's root is recomputed. Every deposit and change commitment must be a leaf.
+  - Finally `currentRoot()`/`currentTreeSize()` at `toBlock` through the verified-reads path.
+  - Tests cover dropped, injected, duplicate, foreign and lying-root logs, and a leaf substituted with self-consistent
+    forged roots (caught only by the on-chain root).
+  - The ASP labels must hash to `latestRoot()` exactly. `NoRootsAvailable()` means nothing is approved yet.
+- **Prover.**
+  - `Prover` interface; `createGroth16Prover` takes an injected engine (snarkjs is GPL) and artifacts as bytes, with
+    sha256 pins and a self-verify against the vkey.
+  - `serveProver`/`createWorkerProver` form a postMessage RPC for the offscreen-document Worker.
+  - A real proof from in-memory artifacts passes in about 2 s.
+  - `@zk-kit/lean-imt` reports `index` NaN for a one-leaf tree, so it is mapped to 0.
+- **Withdraw modes:**
+  - (a) the 0xbow relayer client (`/relayer/quote`, `/relayer/request`). The committed RelayData must pay us, and its
+    BPS must equal the quoted value and be ≤ the on-chain `maxRelayFeeBPS`.
+  - (b) `FramePaymasterBroadcaster`. Default sidecar `http://localhost:14340/rpc`.
+- **Follows the PoolPayer security review (a8ce107, b2cd1dd).** The v1 shape is exactly `[only_verify(fresh EOA),
+  pay(verify), DEFAULT settle(1), DEFAULT refund()]`, with no tail and no expiry frame. `checkPoolPayerTx` mirrors
+  `verify`:
+  - BLOB_COUNT 0, an 836-byte pay frame, ≤ 2,048 unpriced bytes, ≤ 4 signatures, no value frames;
+  - recipients ≠ PoolPayer, plus the min-gas, context, scope and fee checks;
+  - the constants are checked against `PoolPayer.sol` and the selectors against `contracts/out`.
+  - Refund limit 180k (MIN 150k).
+- **Fee: exactly at cost, no margin.** The quote simulates the shape with a worst-case placeholder: all-nonzero proof
+  words and fee = `type(uint96).max`. Then `fee := maxCost`. That is an upper bound, so the devnet e2e's +1 % is not
+  needed: PoolPayer accepted `fee == placeholder maxCost`. `build` re-simulates and asserts `maxCost ≤ fee ≤ quote`.
+- **Guardrails (§7).** Modes are exactly `relayer | frame-paymaster` (`assertWithdrawMode`), and the package exports
+  no server. `rejectFeeOptions` refuses `fee/feeBps/margin/markup/operatorFee/feeRecipient`. Tests cover all of these.
+- **Local devnet e2e (2026-11-06).**
+  - Funding: sub-account `0xFf8F0cfC…bf5B` (key `keccak("leaked/privacy-package-e2e/v1")`), topped up from anvil #5
+    (`0xb0316251…076a`), then its own nonce stream.
+  - Fresh PP v1: Entrypoint `0x2386a554…e1b5`, pool `0xa5c0d741…ba60`, PoolPayer `0x0bc0b30d…3f93` (staked 0.012 ETH).
+  - Vault-QR deposit `0xad18ebc2…70e5` (2 scans), then `updateRoot` `0x056ca60c…8800`.
+  - Withdrawal `0xcf4e4e3a…4517` through **14340**: `New → Submitted → OnChain`. Frames 100 / **306,006** /
+    472,169 (+587,520 state) / 25,796.
+  - Fee 7.878e15 wei, refund 6.465e15. The fresh sender received 48,586,700,990,106,907 wei, which is exactly
+    `amount − fee + refund`. The re-sync finds the change note `(0, 1)` = 0.05 ETH.
+- **Open items.**
+  - The ASP source is static (devnet). The 0xbow IPFS/API format is still to be implemented.
+  - `externalSyncProvider` (saga CDN) is typed but not wired.
+  - The extension must decide on GPL snarkjs vs another Groth16 engine.
+  - The LEAKED-account-as-sender case is still the §10 open item.
+  - No change is needed in `contracts/src/privacy`.

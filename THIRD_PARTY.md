@@ -209,3 +209,23 @@ Foundry submodules added for the tests only (test hosts and the EntryPoint; neve
 
 Test-only shims in `contracts/test/modules/hosts/HostArtifacts.sol` subclass `MSAAdvanced` and `Safe7579` to override
 `entryPoint()` (both hard-code the v0.7 address); no upstream file is modified.
+
+## `@leaked/privacy` (privacy milestones P1–P3, P7 core)
+
+**Kohaku license gate (checked 2026-11-06 with `npm view <pkg>@<ver> license`).** `@kohaku-eth/privacy-pools@0.1.0-alpha.38`
+declares `MIT`, but it hard-depends on `@kohaku-eth/plugins@0.0.1-alpha.20` (**no license field**, and the Kohaku repo
+has no LICENSE file), `@saga-sync/client` (**GPL-3.0-only**) and `maci-crypto@2.5.0` (no license field). So neither
+package is a dependency and no Kohaku code is copied. `packages/privacy/src/host/types.ts` is our own structural `Host`
+type written from the documented shape (plan 40 §1.2), keeping the member names. `src/envelope/envelope.ts` implements
+the note-secret derivation of Kohaku's `signature-keys.ts`. It was read as a specification and rewritten here, so the
+same vault key yields the same notes. **Gate:** do not add any `@kohaku-eth/*` package until the maintainers give
+written license confirmation (plan §1 row 15).
+
+The package's dependencies, all bundled into the extension later: `viem` 2.57.16 (MIT), `poseidon-lite` 0.3.0 (MIT),
+`@zk-kit/lean-imt` 2.2.2 (MIT; `@zk-kit/utils` MIT), and the workspace packages `@leaked/frames`, `@leaked/rpc` and `@leaked/ur`.
+Test-only, never imported by `src/` and never distributed: `snarkjs@0.7.5` (**GPL-3.0**). The Groth16 engine is
+injected through the `Groth16Backend` interface, so shipping the prover is the extension's decision: bundling snarkjs makes
+that bundle GPL-3.0 combined work. `@fatsolutions/privacy-pools-core-circuits@1.0.5` (Apache-2.0) is test-only too. Its
+withdraw artifacts are pinned by sha256 in `src/pp/prover.ts` (wasm `36cda227…5c10`, zkey `2a893b42…de677`, vkey
+`666bd098…d21e`). Formulas in `src/pp/crypto.ts` are adapted from this repo's `contracts/devnet-tests/privacy/src/pp.ts`.
+The Privacy Pools v1 ABI fragments in `src/pp/abi.ts` are written from the deployed ABI.
