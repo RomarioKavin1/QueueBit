@@ -150,6 +150,7 @@ export interface ReputationEntry {
   isBlacklisted: boolean;
   stake: Hex | string;
   unstakeDelaySec: number;
-  withdrawTime: number;
+  /** The live sidecar answers a hex quantity (`"0x0"`), the docs a number. */
+  withdrawTime: Hex | number;
   isStaked: boolean;
 }
