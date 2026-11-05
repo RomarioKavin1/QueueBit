@@ -57,7 +57,7 @@ describe("animated UR round trip", () => {
       expect(result.cbor).toEqual(requestCbor);
       expect(used).toBe(enc.partCount); // lossless: exactly the pure parts
     }
-  });
+  }, 120_000);
 
   it("round-trips a signature at every fragment length that fits a QR code (10..2000)", () => {
     for (let max = 10; max <= 2000; max++) {

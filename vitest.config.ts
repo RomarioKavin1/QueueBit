@@ -5,10 +5,10 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   resolve: { conditions: ["source"] },
   test: {
-    projects: ["packages/*", "apps/*"],
+    projects: ["packages/*", "apps/*", "services/*"],
     coverage: {
       provider: "v8",
-      include: ["packages/*/src/**/*.ts", "apps/*/src/**/*.{ts,tsx}"],
+      include: ["packages/*/src/**/*.ts", "apps/*/src/**/*.{ts,tsx}", "services/*/src/**/*.ts"],
       reporter: ["text", "html"],
     },
   },
