@@ -29,13 +29,31 @@ export class PermissionsStore {
     return Object.values(await this.all()).sort((a, b) => b.grantedAt - a.grantedAt);
   }
 
-  async grant(origin: string, accounts: Address[]): Promise<OriginPermission> {
+  async grant(origin: string, accounts: Address[], chainId?: number): Promise<OriginPermission> {
     const o = normalizeOrigin(origin);
     const all = await this.all();
-    const perm: OriginPermission = { origin: o, accounts: [...accounts], grantedAt: all[o]?.grantedAt ?? this.now() };
+    const perm: OriginPermission = {
+      origin: o,
+      accounts: [...accounts],
+      grantedAt: all[o]?.grantedAt ?? this.now(),
+      ...((chainId ?? all[o]?.chainId) !== undefined ? { chainId: chainId ?? all[o]!.chainId! } : {}),
+    };
     await this.kv.set(StorageKeys.permissions, { ...all, [o]: perm });
     await this.markKnown(o);
     return perm;
+  }
+
+  /** The site's chain (per-origin chain); undefined for an unconnected site or an M0 record. */
+  async chainOf(origin: string): Promise<number | undefined> {
+    return (await this.get(origin))?.chainId;
+  }
+
+  async setChain(origin: string, chainId: number): Promise<void> {
+    const o = normalizeOrigin(origin);
+    const all = await this.all();
+    const cur = all[o];
+    if (!cur) return;
+    await this.kv.set(StorageKeys.permissions, { ...all, [o]: { ...cur, chainId } });
   }
 
   async revoke(origin: string): Promise<boolean> {

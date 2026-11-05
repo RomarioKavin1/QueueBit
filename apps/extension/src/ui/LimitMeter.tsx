@@ -13,6 +13,8 @@ export interface LimitMeterProps {
   state?: LimitState;
   /** Label shown while the numbers are a preview (no on-chain bucket yet). */
   previewNote?: string;
+  /** `none` state: the line under "No daily limit yet". */
+  noneBody?: string;
   pausedUntil?: Date;
   className?: string;
 }
@@ -50,6 +52,7 @@ export function LimitMeter({
   state,
   previewNote,
   pausedUntil,
+  noneBody,
   className,
 }: LimitMeterProps) {
   const s = state ?? limitStateFor(capUsd, usedUsd);
@@ -60,8 +63,8 @@ export function LimitMeter({
           <TriangleIcon />
         </span>
         <div>
-          <p className="t-strong text-limit">No daily limit</p>
-          <p className="t-small">Set up the Vault so a stolen browser can only spend a little.</p>
+          <p className="t-strong text-limit">No daily limit yet</p>
+          <p className="t-small">{noneBody ?? "Set up the Vault so a stolen browser can only spend a little."}</p>
         </div>
       </div>
     );

@@ -21,18 +21,20 @@ import { call } from "../lib/api";
 import { useTheme, useWalletState } from "../lib/hooks";
 import { MenuButton } from "../common/Menu";
 import { UnlockForm } from "../common/Unlock";
+import { ActivateScreen } from "./Activate";
 import { Home } from "./Home";
+import { SendScreen } from "./Send";
 import { SettingsScreen } from "./Settings";
-import { ActivityTab, AppsTab, SendTab } from "./Tabs";
+import { ActivityTab, AppsTab } from "./Tabs";
 
-type Tab = "home" | "send" | "activity" | "apps";
+export type Tab = "home" | "send" | "activity" | "apps";
 
 export function openFullApp(hash = "") {
   void browser.tabs.create({ url: browser.runtime.getURL(`/app.html${hash}`) });
 }
 
 /** The 360 × 600 popup (ux-spec §2.2). Also rendered inside the full-tab app for M0. */
-export function PopupApp({ inTab = false }: { inTab?: boolean }) {
+export function PopupApp({ inTab = false, initialTab = "home" }: { inTab?: boolean; initialTab?: Tab }) {
   const { state, error } = useWalletState();
   useTheme(state?.settings.theme);
 
@@ -80,18 +82,23 @@ export function PopupApp({ inTab = false }: { inTab?: boolean }) {
       </Frame>
     );
   }
-  return <Unlocked state={state} close={close} />;
+  return <Unlocked state={state} close={close} initialTab={initialTab} />;
 }
 
-function Unlocked({ state, close }: { state: WalletState; close: () => void }) {
-  const [tab, setTab] = useState<Tab>("home");
-  const [settings, setSettings] = useState(false);
+function Unlocked({ state, close, initialTab }: { state: WalletState; close: () => void; initialTab: Tab }) {
+  const [tab, setTab] = useState<Tab>(initialTab);
+  const [screen, setScreen] = useState<"tabs" | "settings" | "activate">("tabs");
+  const [sendPrefill, setSendPrefill] = useState<{ to: string } | undefined>(undefined);
 
-  if (settings) {
+  if (screen !== "tabs") {
     return (
       <Frame>
         <div className="flex-1 overflow-y-auto">
-          <SettingsScreen state={state} onBack={() => setSettings(false)} />
+          {screen === "settings" ? (
+            <SettingsScreen state={state} onBack={() => setScreen("tabs")} />
+          ) : (
+            <ActivateScreen state={state} onBack={() => setScreen("tabs")} />
+          )}
         </div>
       </Frame>
     );
@@ -107,7 +114,7 @@ function Unlocked({ state, close }: { state: WalletState; close: () => void }) {
           label="More"
           icon={<MoreIcon />}
           items={[
-            { label: "Settings", icon: <SettingsIcon size={18} />, onSelect: () => setSettings(true) },
+            { label: "Settings", icon: <SettingsIcon size={18} />, onSelect: () => setScreen("settings") },
             { label: "Lock now", icon: <LockIcon size={18} />, onSelect: () => void call("keyring:lock") },
             {
               label: "Open full app",
@@ -122,13 +129,26 @@ function Unlocked({ state, close }: { state: WalletState; close: () => void }) {
       </header>
       <main className="flex-1 overflow-y-auto" id="main">
         {tab === "home" && (
-          <Home state={state} onSend={() => setTab("send")} onOpenApp={() => (openFullApp("#onboarding"), close())} />
+          <Home
+            state={state}
+            onSend={(prefill) => (setSendPrefill(prefill), setTab("send"))}
+            onActivate={() => setScreen("activate")}
+            onOpenApp={() => (openFullApp("#onboarding"), close())}
+          />
         )}
-        {tab === "send" && <SendTab />}
+        {tab === "send" && (
+          <SendScreen
+            key={sendPrefill?.to ?? "send"}
+            state={state}
+            {...(sendPrefill ? { prefill: sendPrefill } : {})}
+            onExit={() => (setSendPrefill(undefined), setTab("home"))}
+            onActivity={() => (setSendPrefill(undefined), setTab("activity"))}
+          />
+        )}
         {tab === "activity" && <ActivityTab />}
         {tab === "apps" && <AppsTab />}
       </main>
-      <TabBar tab={tab} onChange={setTab} />
+      <TabBar tab={tab} onChange={(t) => (setSendPrefill(undefined), setTab(t))} />
     </Frame>
   );
 }
@@ -143,7 +163,7 @@ function NetworkSwitcher({ chainId }: { chainId: number }) {
         id="network-switcher"
         value={String(chainId)}
         onChange={(e) => void call("settings:update", { selectedChainId: Number(e.target.value) })}
-        className="t-small min-h-9 cursor-pointer appearance-none rounded-full border border-line bg-surface py-1 pr-7 pl-6 font-semibold text-fg hover:bg-surface-2"
+        className="t-small min-h-9 cursor-pointer appearance-none rounded-full border border-line bg-surface py-1 pr-7 pl-3 font-semibold text-fg hover:bg-surface-2"
       >
         {NETWORKS.map((n) => (
           <option key={n.chainId} value={n.chainId}>
@@ -151,10 +171,6 @@ function NetworkSwitcher({ chainId }: { chainId: number }) {
           </option>
         ))}
       </select>
-      <span
-        aria-hidden="true"
-        className="pointer-events-none absolute top-1/2 left-2.5 size-2 -translate-y-1/2 rounded-full bg-safe"
-      />
       <span aria-hidden="true" className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-muted">
         <ChevronDownIcon size={14} />
       </span>

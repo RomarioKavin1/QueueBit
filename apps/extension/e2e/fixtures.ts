@@ -115,6 +115,39 @@ export async function accountFromStorage(serviceWorker: Worker): Promise<string>
   });
 }
 
+/** Everyday key and fee-tank addresses from the keyring record. */
+export async function keyringAccounts(serviceWorker: Worker): Promise<{ everyday: string; feeTank: string }> {
+  return serviceWorker.evaluate(async () => {
+    const storage = (
+      globalThis as unknown as { chrome: { storage: { local: { get(k: string): Promise<Record<string, unknown>> } } } }
+    ).chrome.storage.local;
+    const r = await storage.get("leaked:keyring");
+    return (r["leaked:keyring"] as { accounts: { everyday: string; feeTank: string } }).accounts;
+  });
+}
+
+/** The native (smart) account a site sees on `chainId`, once the wallet computed it (it does on first use). */
+export async function smartAccount(serviceWorker: Worker, chainId = 1337): Promise<string> {
+  let address: string | undefined;
+  await expect
+    .poll(
+      async () =>
+        (address = await serviceWorker.evaluate(async (id) => {
+          const storage = (
+            globalThis as unknown as {
+              chrome: { storage: { local: { get(k: string): Promise<Record<string, unknown>> } } };
+            }
+          ).chrome.storage.local;
+          const r = await storage.get("leaked:accountPlans");
+          const plans = r["leaked:accountPlans"] as Record<string, { address: string }> | undefined;
+          return plans?.[String(id)]?.address;
+        }, chainId)),
+      { timeout: 15_000 },
+    )
+    .toMatch(/^0x[0-9a-fA-F]{40}$/u);
+  return address!;
+}
+
 /**
  * Terminate the extension's service worker, as Chrome does after 30 s idle (plan §30 §10.1 "SW-kill-and-resume").
  * CDP `ServiceWorker.stopAllWorkers` from a page session stops it (`Target.closeTarget` on the worker target does not).

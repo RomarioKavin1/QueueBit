@@ -2,6 +2,7 @@ import type { Page } from "@playwright/test";
 import {
   PASSWORD,
   accountFromStorage,
+  smartAccount,
   expect,
   isFreshServiceWorker,
   killServiceWorker,
@@ -68,12 +69,11 @@ test("onboarding: create an account, then the popup shows Home", async ({ contex
   expect(dump).not.toContain(PASSWORD);
 
   const popup = await openPopup(context, extensionId);
-  await expect(popup.getByRole("heading", { name: /Balance on Alt-mempool devnet/u })).toBeVisible();
-  await expect(popup.getByRole("meter", { name: /Everyday spending left/u })).toHaveAttribute(
-    "aria-valuetext",
-    "$500 of $500 left",
-  );
-  await expect(popup.getByText("No Vault yet: there is no daily limit on this account.")).toBeVisible();
+  await expect(popup.getByRole("heading", { name: /Balance on Local devnet/u })).toBeVisible();
+  // Not activated yet: the amber "No daily limit yet" card instead of the meter (ux-spec §3.2 states).
+  await expect(popup.getByText("No daily limit yet")).toBeVisible({ timeout: 30_000 });
+  await expect(popup.getByText(/Your \$500 limit \(up to \$200 per payment\) starts when you activate/u)).toBeVisible();
+  await expect(popup.getByRole("button", { name: "Activate account" })).toBeVisible();
   // The balance is a live read from the devnet RPC; offline runs show the E-21 message instead.
   await expect(popup.getByTestId("balance").or(popup.getByText("Can't reach the network right now."))).toBeVisible({
     timeout: 30_000,
@@ -113,7 +113,8 @@ test("a dapp discovers LEAKED via EIP-6963, connects, and gets the account", asy
   dappUrl,
 }) => {
   await onboard(context, extensionId);
-  const account = await accountFromStorage(serviceWorker);
+  const account = await smartAccount(serviceWorker);
+  expect(account).not.toBe(await accountFromStorage(serviceWorker));
   const dapp = await context.newPage();
   await dapp.goto(dappUrl);
 
@@ -136,10 +137,10 @@ test("a dapp discovers LEAKED via EIP-6963, connects, and gets the account", asy
   await expect.poll(() => dapp.evaluate(() => (window as unknown as Win).__result)).toEqual([account]);
   expect(await rpc(dapp, "eth_accounts")).toEqual({ result: [account] });
 
-  // M0 method surface.
-  const unsupported = await rpc(dapp, "eth_sendTransaction", [{}]);
+  // Method surface: malformed sends are -32602; personal_sign arrives in M3.
+  expect((await rpc(dapp, "eth_sendTransaction", [{}])).error?.code).toBe(-32602);
+  const unsupported = await rpc(dapp, "personal_sign", ["0x68656c6c6f", account]);
   expect(unsupported.error?.code).toBe(4200);
-  expect(unsupported.error?.message).toMatch(/eth_sendTransaction/u);
   expect((await rpc(dapp, "wallet_switchEthereumChain", [{ chainId: "0x1" }])).error?.code).toBe(4902);
   expect(await rpc(dapp, "wallet_switchEthereumChain", [{ chainId: "0xaa36a7" }])).toEqual({ result: null });
   await expect
@@ -155,6 +156,9 @@ test("a dapp discovers LEAKED via EIP-6963, connects, and gets the account", asy
   // The popup's Apps tab lists the site; disconnecting it empties eth_accounts.
   const popup = await openPopup(context, extensionId);
   await popup.getByRole("button", { name: "Apps" }).click();
+  // "site · chain": the site moved itself to Sepolia; the wallet's own network did not change.
+  await expect(popup.getByTestId("app-row")).toHaveText(`${new URL(dappUrl).host} · Sepolia`);
+  await expect(popup.getByLabel("Network")).toHaveValue("1337");
   await popup.getByRole("button", { name: `Disconnect ${new URL(dappUrl).host}` }).click();
   await expect(popup.getByText("No sites connected")).toBeVisible();
   expect(await rpc(dapp, "eth_accounts")).toEqual({ result: [] });
@@ -168,7 +172,7 @@ test("read RPC passthrough (eth_blockNumber, eth_getBalance) reaches the devnet"
 }) => {
   test.skip(!!process.env.OFFLINE, "needs network");
   await onboard(context, extensionId);
-  const account = await accountFromStorage(serviceWorker);
+  const account = await smartAccount(serviceWorker);
   const dapp = await context.newPage();
   await dapp.goto(dappUrl);
   const block = await rpc(dapp, "eth_blockNumber");
@@ -184,7 +188,7 @@ test("service-worker restart mid-approval picks up where it left off", async ({
   dappUrl,
 }) => {
   await onboard(context, extensionId);
-  const account = await accountFromStorage(serviceWorker);
+  const account = await smartAccount(serviceWorker);
   const dapp = await context.newPage();
   await dapp.goto(dappUrl);
 

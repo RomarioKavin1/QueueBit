@@ -39,4 +39,6 @@ export const StorageKeys = {
   session: "leaked:session",
   /** storage.session */
   approvals: "leaked:approvals",
+  accountPlans: "leaked:accountPlans",
+  activity: "leaked:activity",
 } as const;

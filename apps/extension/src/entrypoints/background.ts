@@ -2,8 +2,9 @@ import { browser, type Browser } from "wxt/browser";
 import { defineBackground } from "wxt/utils/define-background";
 import { chromeApprovalWindows, chromeKV } from "../background/chrome";
 import { KeyringError } from "../background/keyring";
-import { getBalance, readRpc } from "../background/rpc";
-import { Wallet } from "../background/wallet";
+import { getBalance, nodeClient, publicClient, readRpc } from "../background/rpc";
+import { PaymentsError, Wallet } from "../background/wallet";
+import { EngineError } from "../background/engine";
 import { ProviderRpcError, serializeError } from "../shared/errors";
 import {
   PROVIDER_PORT,
@@ -28,6 +29,10 @@ export default defineBackground({
       windows: chromeApprovalWindows,
       readRpc,
       getBalance,
+      io: { publicClient, node: nodeClient },
+      async openApp(hash) {
+        await browser.tabs.create({ url: browser.runtime.getURL(`/app.html${hash}`) });
+      },
       emit(event, data, origin) {
         for (const [port, portOrigin] of ports) {
           if (origin !== undefined && portOrigin !== origin) continue;
@@ -88,7 +93,9 @@ export default defineBackground({
             ok: false,
             error: {
               message: err instanceof Error ? err.message : "Something went wrong.",
-              ...(err instanceof KeyringError ? { reason: err.reason } : {}),
+              ...(err instanceof KeyringError || err instanceof PaymentsError || err instanceof EngineError
+                ? { reason: err.reason }
+                : {}),
             },
           }),
       );
@@ -99,7 +106,11 @@ export default defineBackground({
     browser.windows.onRemoved.addListener((windowId) => void wallet.approvals.onWindowRemoved(windowId));
 
     browser.alarms.onAlarm.addListener((alarm) => {
-      if (alarm.name === AUTOLOCK_ALARM) void wallet.autoLockCheck();
+      if (alarm.name === AUTOLOCK_ALARM) {
+        void wallet.autoLockCheck();
+        // Pending payments are also polled here, so a status survives the popup closing and SW restarts.
+        void wallet.payments?.refreshPending().catch(() => undefined);
+      }
     });
     void browser.alarms.get(AUTOLOCK_ALARM).then((a) => {
       // Chrome 120+: 30 s is the minimum period (plan §30 §2.4).
@@ -112,6 +123,7 @@ export default defineBackground({
 
     // A pending approval in storage.session at startup means the previous SW instance died mid-approval.
     void wallet.approvals.resumeAfterRestart();
+    void wallet.payments?.rehydrate().catch(() => undefined);
   },
 });
 

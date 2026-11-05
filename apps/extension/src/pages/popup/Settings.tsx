@@ -2,8 +2,10 @@ import { useState } from "react";
 import { NETWORKS } from "../../shared/chains";
 import { AUTO_LOCK_CHOICES, type Theme, type WalletState } from "../../shared/types";
 import { AddressChip, ArrowLeftIcon, Button, Card, LockIcon, PasswordField, SelectField } from "../../ui";
-import { formatMinutes } from "../../ui/format";
+import { formatMinutes, formatUsd } from "../../ui/format";
 import { call, UiCallError } from "../lib/api";
+import { useAsync } from "../lib/hooks";
+import { eth } from "../lib/money";
 import { ResetSheet } from "../common/Unlock";
 
 export function SettingsScreen({ state, onBack }: { state: WalletState; onBack: () => void }) {
@@ -24,6 +26,8 @@ export function SettingsScreen({ state, onBack }: { state: WalletState; onBack: 
         <h1 className="t-title">Settings</h1>
       </header>
       <div className="flex flex-col gap-5 p-4">
+        <AccountSection chainId={s.selectedChainId} />
+
         <section className="flex flex-col gap-3" aria-labelledby="gen-h">
           <h2 id="gen-h" className="t-small font-semibold tracking-wide text-muted uppercase">
             General
@@ -66,7 +70,9 @@ export function SettingsScreen({ state, onBack }: { state: WalletState; onBack: 
               Pays network fees for everyday payments; a thief can only burn this. Topping it up counts as an everyday
               payment.
             </p>
-            <div className="mt-2">{state.accounts && <AddressChip address={state.accounts.feeTank} />}</div>
+            <div className="mt-2">
+              {state.accounts && <AddressChip address={state.accounts.feeTank} name="Fee tank" />}
+            </div>
           </Card>
         </section>
 
@@ -84,6 +90,68 @@ export function SettingsScreen({ state, onBack }: { state: WalletState; onBack: 
       </div>
       <ResetSheet open={resetOpen} onClose={() => setResetOpen(false)} />
     </div>
+  );
+}
+
+/** Account status on the current network (plan §30 §7 Settings; ux-spec §3.13). */
+function AccountSection({ chainId }: { chainId: number }) {
+  const status = useAsync(() => call("account:status", { chainId }), [chainId]);
+  const st = status.data;
+  const net = NETWORKS.find((n) => n.chainId === chainId);
+  const rows: Array<[string, React.ReactNode]> = st
+    ? [
+        ["Address", <AddressChip key="a" address={st.address} chain={net?.accountKind} />],
+        [
+          "Status",
+          !st.supported ? (
+            (st.unsupportedReason ?? "Not available on this network")
+          ) : st.deployed ? (
+            <span key="s" className="text-safe">
+              Active
+            </span>
+          ) : st.activation ? (
+            "Activating…"
+          ) : (
+            "Not activated yet"
+          ),
+        ],
+        ...(st.supported
+          ? ([
+              [
+                "Daily limit",
+                `${formatUsd(st.limits.capUsd)} in any 24 hours · ${formatUsd(st.limits.perTxMaxUsd)} per payment${st.deployed ? ` · ${formatUsd(st.limits.availableUsd)} left` : " (set at activation)"}`,
+              ],
+              ["Allowed recipients", "Your fee tank. Adding others needs the Vault."],
+              [
+                "Vault",
+                st.vault === "stand-in"
+                  ? "Not paired: on this test network a shared test key stands in for it."
+                  : "Not paired",
+              ],
+              ["Recovery key", "Not set"],
+              ["Fee tank", eth(st.tankWei, 6)],
+            ] as Array<[string, React.ReactNode]>)
+          : []),
+      ]
+    : [];
+  return (
+    <section className="flex flex-col gap-2" aria-labelledby="acct-h">
+      <h2 id="acct-h" className="t-small font-semibold tracking-wide text-muted uppercase">
+        Account
+      </h2>
+      {!st ? (
+        <p className="t-small text-muted">{status.error ? "Can't reach the network right now." : "Loading…"}</p>
+      ) : (
+        <dl className="divide-y divide-line rounded-md border border-line" data-testid="account-status">
+          {rows.map(([k, v]) => (
+            <div key={k} className="flex flex-col gap-0.5 px-3 py-2">
+              <dt className="t-small text-muted">{k}</dt>
+              <dd className="t-body">{v}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+    </section>
   );
 }
 

@@ -1,5 +1,7 @@
 import type { BucketReading } from "../background/bucket";
+import type { ActivityEntry } from "../background/activity";
 import type { SerializedRpcError } from "./errors";
+import type { AccountStatus, SendPreview } from "./views";
 import type { Approval, BalanceResult, KnownSite, OriginPermission, Settings, SetupState, WalletState } from "./types";
 
 /**
@@ -19,6 +21,15 @@ export interface ApprovalView {
   approval: Approval;
   knownSite?: KnownSite;
   alreadyConnected: boolean;
+  /** The address the site sees on the approval's chain. */
+  account?: `0x${string}`;
+}
+
+export interface SendRequest {
+  chainId?: number;
+  to: `0x${string}`;
+  /** wei, decimal string */
+  valueWei: string;
 }
 
 export interface UiApi {
@@ -38,6 +49,14 @@ export interface UiApi {
   "permissions:revoke": { req: { origin: string }; res: null };
   "approval:get": { req: { id: string }; res: ApprovalView | null };
   "approval:resolve": { req: { id: string; approved: boolean }; res: null };
+  /** Transaction approvals: the route and fee for what the site asked (simulates; can take a few seconds). */
+  "approval:preview": { req: { id: string }; res: SendPreview };
+  "account:status": { req: { chainId?: number }; res: AccountStatus };
+  "account:activate": { req: { chainId?: number }; res: ActivityEntry };
+  "send:preview": { req: SendRequest; res: SendPreview };
+  "send:submit": { req: SendRequest; res: ActivityEntry };
+  "activity:list": { req: undefined; res: ActivityEntry[] };
+  "activity:replace": { req: { id: string; mode: "speed-up" | "cancel" }; res: ActivityEntry };
 }
 
 export type UiType = keyof UiApi;

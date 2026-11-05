@@ -14,6 +14,13 @@ export const RpcErrorCode = {
   internal: -32603,
   /** EIP-1474 "Limit exceeded": too many requests waiting for the user. */
   limitExceeded: -32005,
+  // EIP-5792
+  unsupportedCapability: 5700,
+  unsupportedChain: 5710,
+  duplicateId: 5720,
+  unknownBundle: 5730,
+  bundleTooLarge: 5740,
+  atomicityNotSupported: 5760,
 } as const;
 
 export interface SerializedRpcError {

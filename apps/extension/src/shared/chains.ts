@@ -1,4 +1,6 @@
 import { DEVNET_1337 } from "@leaked/rpc";
+import { localDeployment } from "../generated/contracts";
+import { BUILD } from "./build";
 
 /**
  * The fixed network table (plan §30 §8). Sites cannot add networks (`wallet_addEthereumChain` is refused), so a
@@ -6,13 +8,27 @@ import { DEVNET_1337 } from "@leaked/rpc";
  */
 export type Backend = "frame" | "4337";
 
+/** Where the native (frame) account lives on a chain: the contracts the counterfactual address is computed from. */
+export interface AccountDeployment {
+  factory: `0x${string}`;
+  accountImpl: `0x${string}`;
+  /** The Vault signer used until Vault pairing exists (M4): a public devnet key, so only on test networks. */
+  vaultStandIn: `0x${string}`;
+}
+
 export interface Network {
   chainId: number;
   /** User-facing name (ux-spec §3.13 "Networks"). */
   name: string;
   shortName: string;
   rpcUrl: string;
+  /** ERC-8421 alt-mempool sidecar (frame backend). */
+  sidecarUrl?: string;
   backend: Backend;
+  /** `@leaked/frames` codec profile (frame backend), chosen by chain id. */
+  profileId?: string;
+  /** Frame backend: the account contracts on this chain, or undefined when LEAKED has none deployed there yet. */
+  deployment?: AccountDeployment;
   /** ux-spec §1.2: "Native account" (frame backend) / "Compatible account" (4337 backend). */
   accountKind: string;
   currency: { symbol: string; decimals: number };
@@ -22,18 +38,50 @@ export interface Network {
   testnet: boolean;
 }
 
+/**
+ * Chain 1337 is the alt-mempool devnet. A `local-devnet` build (e2e, development) points it at the local fork in
+ * devnet/ and the contracts devnet/deploy put there; a normal build uses the public devnet, where LEAKED has no
+ * account contracts yet (activation is then unavailable and says so).
+ */
+const devnet: Network = BUILD.localDevnet
+  ? {
+      chainId: DEVNET_1337.chainId,
+      name: "Local devnet",
+      shortName: "Local devnet",
+      rpcUrl: "http://localhost:8545",
+      sidecarUrl: "http://localhost:14337/rpc",
+      backend: "frame",
+      profileId: "ethrex-eip8141-tracer",
+      ...(localDeployment
+        ? {
+            deployment: {
+              factory: localDeployment.factory,
+              accountImpl: localDeployment.accountImpl,
+              vaultStandIn: localDeployment.testVault,
+            },
+          }
+        : {}),
+      accountKind: "Native account",
+      currency: { symbol: "ETH", decimals: 18 },
+      note: "Your local copy of the native-account test network. Test money only.",
+      testnet: true,
+    }
+  : {
+      chainId: DEVNET_1337.chainId,
+      name: "Alt-mempool devnet",
+      shortName: "Devnet",
+      rpcUrl: DEVNET_1337.nodeUrl,
+      sidecarUrl: DEVNET_1337.sidecarUrl,
+      backend: "frame",
+      profileId: "ethrex-eip8141-tracer",
+      accountKind: "Native account",
+      currency: { symbol: "ETH", decimals: 18 },
+      note: "Test network for native LEAKED accounts. Test money only.",
+      testnet: true,
+    };
+
 export const NETWORKS: readonly Network[] = [
-  {
-    chainId: DEVNET_1337.chainId,
-    name: "Alt-mempool devnet",
-    shortName: "Devnet",
-    rpcUrl: DEVNET_1337.nodeUrl,
-    backend: "frame",
-    accountKind: "Native account",
-    currency: { symbol: "ETH", decimals: 18 },
-    note: "Test network for native LEAKED accounts. Test money only.",
-    testnet: true,
-  },
+  devnet,
   {
     chainId: 11155111,
     name: "Sepolia",

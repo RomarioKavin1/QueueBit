@@ -18,6 +18,7 @@ import {
 import { cx } from "../../ui/cx";
 import { formatUsd } from "../../ui/format";
 import { call, UiCallError } from "../lib/api";
+import { useAsync } from "../lib/hooks";
 import { SoonBadge } from "../common/EmptyState";
 
 export type Step = "welcome" | "create" | "import" | "words" | "limit" | "network" | "vault" | "recovery" | "done";
@@ -689,10 +690,12 @@ function RecoveryStub({ headingRef, go }: StepProps) {
 
 function Done({ headingRef, state }: { headingRef: StepProps["headingRef"]; state: WalletState }) {
   const net = getNetwork(state.settings.selectedChainId);
+  const status = useAsync(() => call("account:status", { chainId: net.chainId }), [net.chainId]);
+  const address = status.data?.address ?? state.accounts?.everyday;
   const rows: Array<[string, ReactNode]> = [
     [
       "Daily limit",
-      `${formatUsd(state.setup.dailyLimitUsd)} in any 24 hours · ${formatUsd(state.setup.perPaymentUsd)} per payment (starts with the Vault)`,
+      `${formatUsd(state.setup.dailyLimitUsd)} in any 24 hours · ${formatUsd(state.setup.perPaymentUsd)} per payment (starts when you activate your account)`,
     ],
     ["Vault", "Not paired yet"],
     ["Recovery key", "Not set yet"],
@@ -712,13 +715,18 @@ function Done({ headingRef, state }: { headingRef: StepProps["headingRef"]; stat
         ))}
         <div className="flex flex-col gap-1 px-4 py-3 sm:flex-row sm:items-center sm:gap-4">
           <dt className="t-strong sm:w-32">Your address</dt>
-          <dd>{state.accounts && <AddressChip address={state.accounts.everyday} chain={net.accountKind} />}</dd>
+          <dd className="flex flex-col gap-1">
+            {address && <AddressChip address={address} chain={net.accountKind} />}
+            <span className="t-small text-muted" data-testid="done-address-note">
+              Not activated yet: you can receive now; activate it from the wallet to start paying.
+            </span>
+          </dd>
         </div>
       </dl>
       <RiskBanner
         level="limit"
-        title="No Vault yet: there is no daily limit on this account."
-        body="Keep only test money here until Vault pairing arrives."
+        title="No daily limit yet"
+        body="Your limit goes on the network when you activate your account. Until Vault pairing arrives, keep only test money here."
       />
       <Card className="mt-6 bg-surface" heading="Open your wallet">
         <p className="t-body text-muted">

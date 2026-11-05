@@ -181,12 +181,15 @@ describe("connect approvals", () => {
 });
 
 describe("wallet events", () => {
-  it("emits chainChanged on switch and accountsChanged [] to connected sites on lock", async () => {
+  it("keeps a connected site on its own chain; switching it emits only to that site; lock empties accounts", async () => {
     const { wallet, emit } = makeWallet();
     await wallet.keyring.import(MNEMONIC, "password-1");
-    await wallet.permissions.grant(ORIGIN, [ACCOUNT]);
+    await wallet.permissions.grant(ORIGIN, [ACCOUNT], 1337);
     await wallet.handleUi("settings:update", { selectedChainId: 11155111 });
-    expect(emit).toHaveBeenCalledWith("chainChanged", "0xaa36a7");
+    expect(emit).not.toHaveBeenCalledWith("chainChanged", expect.anything());
+    expect((await wallet.providerState(ORIGIN)).chainId).toBe("0x539");
+    await wallet.setOriginChain(ORIGIN, 11155111);
+    expect(emit).toHaveBeenCalledWith("chainChanged", "0xaa36a7", ORIGIN);
     await wallet.handleUi("keyring:lock", undefined);
     expect(emit).toHaveBeenCalledWith("accountsChanged", [], ORIGIN);
     expect(await wallet.providerState(ORIGIN)).toEqual({ chainId: "0xaa36a7", accounts: [] });

@@ -1,11 +1,15 @@
 import { useState } from "react";
 import { getNetwork } from "../../shared/chains";
 import type { WalletState } from "../../shared/types";
+import type { AccountStatus } from "../../shared/views";
 import {
   AddressChip,
   Button,
+  Card,
   CheckIcon,
+  FuelIcon,
   LimitMeter,
+  QrCode,
   ReceiveIcon,
   RefreshIcon,
   RiskBanner,
@@ -13,18 +17,29 @@ import {
   Sheet,
   Skeleton,
 } from "../../ui";
-import { formatAmount, formatRelative, groupedAddress } from "../../ui/format";
+import { formatRelative, formatUsd, groupedAddress } from "../../ui/format";
 import { call } from "../lib/api";
-import { useAsync } from "../lib/hooks";
+import { useAsync, usePoll } from "../lib/hooks";
+import { eth, usdOf } from "../lib/money";
 
-export function Home({ state, onSend, onOpenApp }: { state: WalletState; onSend: () => void; onOpenApp: () => void }) {
+export function Home({
+  state,
+  onSend,
+  onActivate,
+  onOpenApp,
+}: {
+  state: WalletState;
+  onSend: (prefill?: { to: string }) => void;
+  onActivate: () => void;
+  onOpenApp: () => void;
+}) {
   const chainId = state.settings.selectedChainId;
   const net = getNetwork(chainId);
-  const account = state.accounts!.everyday;
-  const balance = useAsync(() => call("wallet:balance", { chainId }), [chainId, account]);
-  const bucket = useAsync(() => call("wallet:bucket"), [chainId, state.setup.dailyLimitUsd, state.setup.perPaymentUsd]);
+  const status = useAsync(() => call("account:status", { chainId }), [chainId]);
+  const bucket = useAsync(() => call("wallet:bucket"), [chainId]);
   const [receiveOpen, setReceiveOpen] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const s = status.data;
+  usePoll(() => Promise.all([status.reload(), bucket.reload()]), 3000, Boolean(s?.activation && !s.deployed));
 
   return (
     <div className="flex flex-col gap-4 p-4">
@@ -36,11 +51,14 @@ export function Home({ state, onSend, onOpenApp }: { state: WalletState; onSend:
           action={{ label: "Continue setup", onClick: onOpenApp }}
         />
       )}
-      <RiskBanner
-        level="limit"
-        title="No Vault yet: there is no daily limit on this account."
-        body="Pairing your phone as the Vault arrives in the next update. Until then, keep only test money here."
-      />
+      {s?.frozen && <RiskBanner level="limit" title="Everyday spending is paused" body="Your phone can resume it." />}
+      {s?.deployed && s.vault === "stand-in" && (
+        <RiskBanner
+          level="limit"
+          title="Vault not paired yet"
+          body="On this test network a shared test key stands in for the Vault, so keep only test money here."
+        />
+      )}
 
       <section aria-labelledby="balance-h">
         <div className="flex items-center justify-between">
@@ -49,40 +67,44 @@ export function Home({ state, onSend, onOpenApp }: { state: WalletState; onSend:
           </h2>
           <button
             type="button"
-            onClick={() => void balance.reload()}
+            onClick={() => void Promise.all([status.reload(), bucket.reload()])}
             aria-label="Refresh balance"
             className="grid size-8 place-items-center rounded-sm text-muted hover:bg-surface-2 hover:text-fg"
           >
             <RefreshIcon size={16} />
           </button>
         </div>
-        {balance.data ? (
-          <p className="t-display mt-0.5" data-testid="balance">
-            {formatAmount(balance.data.wei, balance.data.decimals)}{" "}
-            <span className="t-title text-muted">{balance.data.symbol}</span>
-          </p>
-        ) : balance.error ? null : (
+        {s && !s.error ? (
+          <>
+            <p className="t-display mt-0.5" data-testid="balance">
+              {eth(s.accountWei, 4).replace(" ETH", "")} <span className="t-title text-muted">ETH</span>
+            </p>
+            {s.ethUsdPrice > 0 && <p className="t-small text-muted">{usdOf(s.accountWei, s.ethUsdPrice)}</p>}
+          </>
+        ) : status.error || s?.error ? null : (
           <Skeleton className="mt-1 h-[34px] w-40" label="Loading balance" />
         )}
-        {balance.error && !balance.data ? (
+        {status.error || s?.error ? (
           <p role="status" className="t-small mt-1 text-limit">
             Can't reach the network right now.{" "}
-            <button type="button" className="underline underline-offset-2" onClick={() => void balance.reload()}>
+            <button type="button" className="underline underline-offset-2" onClick={() => void status.reload()}>
               Retry
             </button>
           </p>
         ) : (
-          <div className="mt-1 flex flex-wrap items-center gap-2">
-            <AddressChip address={account} chain={net.accountKind} />
-            {balance.data && (
-              <span className="t-small text-muted">Updated {formatRelative(balance.data.fetchedAt)}</span>
-            )}
-          </div>
+          s && (
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <AddressChip address={s.address} chain={net.accountKind} />
+              <span className="t-small text-muted">
+                {s.deployed ? "Active" : "Not activated yet"} · updated {formatRelative(s.readAt)}
+              </span>
+            </div>
+          )
         )}
       </section>
 
       <div className="grid grid-cols-2 gap-2">
-        <Button icon={<SendIcon size={18} />} onClick={onSend}>
+        <Button icon={<SendIcon size={18} />} onClick={() => onSend()} disabled={!s?.deployed}>
           Send
         </Button>
         <Button variant="secondary" icon={<ReceiveIcon size={18} />} onClick={() => setReceiveOpen(true)}>
@@ -90,58 +112,127 @@ export function Home({ state, onSend, onOpenApp }: { state: WalletState; onSend:
         </Button>
       </div>
 
+      {s && !s.deployed && <ActivationCard status={s} onActivate={onActivate} />}
+
       <section aria-labelledby="everyday-h" className="flex flex-col gap-2">
         <h2 id="everyday-h" className="t-strong">
           Everyday spending
         </h2>
         {bucket.data ? (
-          <LimitMeter
-            capUsd={bucket.data.capUsd}
-            usedUsd={bucket.data.usedUsd}
-            perTxMaxUsd={bucket.data.perTxMaxUsd}
-            {...(bucket.data.nextRefill
-              ? { nextRefill: { usd: bucket.data.nextRefill.usd, at: new Date(bucket.data.nextRefill.at) } }
-              : {})}
-            previewNote={
-              bucket.data.source === "placeholder"
-                ? "Preview of the limit you chose. Nothing is enforced until your Vault is paired."
-                : undefined
-            }
-          />
+          bucket.data.source === "none" ? (
+            <LimitMeter
+              capUsd={bucket.data.capUsd}
+              usedUsd={0}
+              perTxMaxUsd={bucket.data.perTxMaxUsd}
+              state="none"
+              noneBody={
+                s?.supported === false
+                  ? (s.unsupportedReason ?? "Nothing is enforced on this network yet.")
+                  : `Your ${formatUsd(bucket.data.capUsd)} limit (up to ${formatUsd(bucket.data.perTxMaxUsd)} per payment) starts when you activate your account.`
+              }
+            />
+          ) : (
+            <LimitMeter
+              capUsd={bucket.data.capUsd}
+              usedUsd={bucket.data.usedUsd}
+              perTxMaxUsd={bucket.data.perTxMaxUsd}
+              {...(bucket.data.frozen ? { state: "paused" as const } : {})}
+              {...(bucket.data.nextRefill
+                ? { nextRefill: { usd: bucket.data.nextRefill.usd, at: new Date(bucket.data.nextRefill.at) } }
+                : {})}
+            />
+          )
+        ) : bucket.error ? (
+          <p className="t-small text-limit">Can't read your daily limit right now.</p>
         ) : (
           <Skeleton className="h-[120px] w-full" label="Loading daily limit" />
         )}
-        <p className="t-small text-muted">Bigger payments will ask your phone.</p>
+        <p className="t-small text-muted">Bigger payments ask your phone.</p>
       </section>
 
+      {s?.deployed && <FeeTankRow status={s} onTopUp={() => onSend({ to: s.tank })} />}
+
       <Sheet open={receiveOpen} title="Receive" onClose={() => setReceiveOpen(false)}>
-        <p className="t-small text-muted">
-          Your address on {net.name} ({net.accountKind}). Send only on the network shown.
-        </p>
-        <p className="t-mono mt-3 rounded-md bg-surface p-3 break-all" data-testid="receive-address">
-          {groupedAddress(account)}
-        </p>
-        <div className="mt-4 flex gap-2">
+        {s && <ReceiveBody status={s} networkName={net.name} kind={net.accountKind} />}
+        <div className="mt-4">
           <Button variant="secondary" block onClick={() => setReceiveOpen(false)}>
             Close
           </Button>
-          <Button
-            block
-            icon={copied ? <CheckIcon size={16} /> : undefined}
-            onClick={() => {
-              void navigator.clipboard?.writeText(account).then(() => {
-                setCopied(true);
-                setTimeout(() => setCopied(false), 1500);
-              });
-            }}
-          >
-            {copied ? "Copied" : "Copy address"}
-          </Button>
         </div>
-        <p className="sr-only" aria-live="polite">
-          {copied ? "Address copied" : ""}
-        </p>
       </Sheet>
     </div>
+  );
+}
+
+function ReceiveBody({ status, networkName, kind }: { status: AccountStatus; networkName: string; kind: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="flex flex-col items-center gap-3">
+      <p className="t-small self-start text-muted">
+        Your address on {networkName} ({kind}). Send only on the network shown.
+        {!status.deployed && " Not activated yet: you can already receive here."}
+      </p>
+      <QrCode value={status.address} label={`QR code of your address ${groupedAddress(status.address)}`} />
+      <p className="t-mono w-full rounded-md bg-surface p-3 text-center break-all" data-testid="receive-address">
+        {groupedAddress(status.address)}
+      </p>
+      <Button
+        block
+        icon={copied ? <CheckIcon size={16} /> : undefined}
+        onClick={() => {
+          void navigator.clipboard?.writeText(status.address).then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+          });
+        }}
+      >
+        {copied ? "Copied" : "Copy address"}
+      </Button>
+      <p className="sr-only" aria-live="polite">
+        {copied ? "Address copied" : ""}
+      </p>
+    </div>
+  );
+}
+
+function ActivationCard({ status, onActivate }: { status: AccountStatus; onActivate: () => void }) {
+  if (!status.supported) return null;
+  return (
+    <Card className="border-brand" heading={status.activation ? "Activating your account…" : "Activate your account"}>
+      <p className="t-small text-muted">
+        {status.activation
+          ? "Waiting for the network to confirm. This takes a few seconds."
+          : "Activation puts your daily limit on the network. Until then your account can receive but not pay."}
+      </p>
+      {!status.activation && (
+        <div className="mt-3">
+          <Button block onClick={onActivate}>
+            Activate account
+          </Button>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function FeeTankRow({ status, onTopUp }: { status: AccountStatus; onTopUp: () => void }) {
+  const low = BigInt(status.tankWei) < 2_000_000_000_000_000n;
+  return (
+    <section aria-labelledby="tank-h" className="flex items-center gap-3 rounded-md border border-line p-3">
+      <span className={low ? "text-limit" : "text-muted"}>
+        <FuelIcon size={20} />
+      </span>
+      <div className="min-w-0 flex-1">
+        <h2 id="tank-h" className="t-strong">
+          Fee tank <span className="font-normal text-muted">{eth(status.tankWei, 4)}</span>
+        </h2>
+        <p className="t-small text-muted">
+          {low ? "Low: top it up so everyday payments keep working." : "Pays network fees for everyday payments."}
+        </p>
+      </div>
+      <Button size="sm" variant="secondary" onClick={onTopUp}>
+        Top up
+      </Button>
+    </section>
   );
 }

@@ -1,8 +1,10 @@
 import { useEffect, useId, useRef, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 /**
  * Modal confirmation sheet (ux-spec §6.4 ActionSheet): focus moves in and is trapped; Escape and the scrim close it;
- * focus returns to the opener on close.
+ * focus returns to the opener on close. The sheet renders outside the app root, and the app root is `inert` while it
+ * is open (UX review M1), so pointer, keyboard and screen-reader users cannot reach the page behind it.
  */
 export function Sheet({
   open,
@@ -17,10 +19,16 @@ export function Sheet({
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const titleId = useId();
+  // The latest onClose, so a parent re-render (a new inline callback) does not re-run the focus/inert effect.
+  const close = useRef(onClose);
+  close.current = onClose;
   useEffect(() => {
     if (!open) return;
     const opener = document.activeElement as HTMLElement | null;
     const el = ref.current;
+    const root = document.getElementById("root");
+    const wasInert = root?.inert ?? false;
+    if (root) root.inert = true;
     const focusables = () =>
       [
         ...(el?.querySelectorAll<HTMLElement>(
@@ -31,7 +39,7 @@ export function Sheet({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
-        onClose();
+        close.current();
       } else if (e.key === "Tab") {
         const f = focusables();
         if (f.length === 0) return;
@@ -49,16 +57,17 @@ export function Sheet({
     document.addEventListener("keydown", onKey);
     return () => {
       document.removeEventListener("keydown", onKey);
+      if (root) root.inert = wasInert;
       opener?.focus?.();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-end justify-center"
       style={{ background: "var(--scrim)" }}
-      onMouseDown={(e) => e.target === e.currentTarget && onClose()}
+      onMouseDown={(e) => e.target === e.currentTarget && close.current()}
     >
       <div
         ref={ref}
@@ -73,6 +82,7 @@ export function Sheet({
         </h2>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

@@ -74,3 +74,12 @@ export function useTheme(theme: Theme | undefined) {
     else root.dataset.theme = theme;
   }, [theme]);
 }
+
+/** Re-run `reload` every `ms` while `active` (e.g. while a payment is confirming). */
+export function usePoll(reload: () => unknown, ms: number, active: boolean) {
+  useEffect(() => {
+    if (!active) return;
+    const t = setInterval(() => void reload(), ms);
+    return () => clearInterval(t);
+  }, [reload, ms, active]);
+}

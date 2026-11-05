@@ -38,6 +38,11 @@ export interface OriginPermission {
   origin: string;
   accounts: Address[];
   grantedAt: number;
+  /**
+   * The chain this site is on (ux-spec review M1: per-origin chain). Requests from the site are bound to it;
+   * `wallet_switchEthereumChain` changes it for this site only. Missing on M0 records: the wallet's selected chain.
+   */
+  chainId?: number;
 }
 
 export interface KnownSite {
@@ -46,7 +51,7 @@ export interface KnownSite {
   lastConnectedAt?: number;
 }
 
-export type ApprovalKind = "connect";
+export type ApprovalKind = "connect" | "transaction";
 export type ApprovalStatus = "pending" | "approved" | "rejected";
 
 export interface Approval {
@@ -66,6 +71,22 @@ export interface Approval {
   firstVisit: boolean;
   /** The request came from a frame embedded in another page (`MessageSender.frameId !== 0`), not the page itself. */
   embedded?: boolean;
+  /** `transaction` approvals: what the site asked to send. */
+  tx?: ApprovalTx;
+  /** Set when an approved transaction was sent (the dapp request returns it). */
+  result?: { activityId: string; hash: `0x${string}`; batchId?: string };
+  /** Set when the request ended without sending because it needs the Vault or is blocked (dapp gets 4100). */
+  denial?: { leakedRule: string; explanation: string; remedy?: string };
+  /** The route the approval window showed, when it was not an everyday payment: closing it returns this denial. */
+  routeDenial?: { leakedRule: string; explanation: string; remedy?: string };
+}
+
+export interface ApprovalTx {
+  source: "eth_sendTransaction" | "wallet_sendCalls";
+  /** wei values as decimal strings */
+  calls: Array<{ target: Address; value: string; data: `0x${string}` }>;
+  /** wallet_sendCalls: the app-supplied id, if any. */
+  batchId?: string;
 }
 
 export interface WalletState {

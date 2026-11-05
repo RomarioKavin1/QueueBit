@@ -16,12 +16,23 @@ function deps(over: Partial<RouterDeps> & { outcome?: ApprovalOutcome } = {}) {
   const d: RouterDeps & { setUnlocked(v: boolean): void } = {
     permissions,
     getChainId: async () => chainId,
-    setChainId: vi.fn(async (id: number) => {
-      chainId = id;
+    setOriginChain: vi.fn(async (origin: string, id: number) => {
+      await permissions.setChain(origin, id);
     }),
     hasKeyring: async () => true,
     isUnlocked: async () => unlocked,
     getAccount: async () => ACCOUNT,
+    requestTransaction: vi.fn(async (_ctx, _chain, tx) => ({
+      hash: HASH,
+      activityId: "a1",
+      ...(tx.batchId ? { batchId: tx.batchId } : {}),
+    })),
+    callsStatus: vi.fn(async (_o: string, id: string) =>
+      id === HASH ? { version: "2.0.0", id, chainId: "0x539" as const, status: 200, atomic: true } : null,
+    ),
+    batchIdTaken: vi.fn(async (_o: string, id: string) => id === "taken"),
+    capabilities: vi.fn(async () => ({ atomic: { status: "supported" } })),
+    showActivity: vi.fn(async () => undefined),
     requestConnect: vi.fn(async ({ origin }: { origin: string }) => {
       const outcome = over.outcome ?? "approved";
       if (outcome === "approved") await permissions.grant(origin, [ACCOUNT]);
@@ -33,8 +44,12 @@ function deps(over: Partial<RouterDeps> & { outcome?: ApprovalOutcome } = {}) {
     },
     ...over,
   };
+  void (chainId = 1337);
   return d;
 }
+
+const HASH = `0x${"ab".repeat(32)}` as const;
+const TO = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8";
 
 const ctx = { origin: ORIGIN, requestId: "r1" };
 const call = (d: RouterDeps, method: string, params?: unknown) => routeProviderRequest(ctx, { method, params }, d);
@@ -107,9 +122,75 @@ describe("provider router", () => {
       expect((await rpcError(call(d, "wallet_switchEthereumChain", bad))).code).toBe(-32602);
     }
     // Switching to the current chain is a no-op.
-    (d.setChainId as ReturnType<typeof vi.fn>).mockClear();
+    (d.setOriginChain as ReturnType<typeof vi.fn>).mockClear();
     await call(d, "wallet_switchEthereumChain", [{ chainId: "0xaa36a7" }]);
-    expect(d.setChainId).not.toHaveBeenCalled();
+    expect(d.setOriginChain).not.toHaveBeenCalled();
+  });
+
+  it("binds each site to its own chain (per-origin chain)", async () => {
+    const d = deps();
+    await d.permissions.grant(ORIGIN, [ACCOUNT], 1337);
+    await d.permissions.grant("https://other.example", [ACCOUNT], 1337);
+    await call(d, "wallet_switchEthereumChain", [{ chainId: "0xaa36a7" }]);
+    expect(await call(d, "eth_chainId")).toBe("0xaa36a7");
+    const other = { origin: "https://other.example", requestId: "o" };
+    expect(await routeProviderRequest(other, { method: "eth_chainId" }, d)).toBe("0x539");
+    // Reads go to the site's chain.
+    await call(d, "eth_getBalance", [ACCOUNT, "latest"]);
+    expect(d.readRpc).toHaveBeenLastCalledWith(11155111, "eth_getBalance", [ACCOUNT, "latest"]);
+  });
+
+  it("eth_sendTransaction needs a connection, checks from/to, and returns the tx hash", async () => {
+    const d = deps();
+    expect((await rpcError(call(d, "eth_sendTransaction", [{ to: TO, value: "0x1" }]))).code).toBe(4100);
+    await d.permissions.grant(ORIGIN, [ACCOUNT], 1337);
+    expect(await call(d, "eth_sendTransaction", [{ from: ACCOUNT, to: TO, value: "0x10" }])).toBe(HASH);
+    expect(d.requestTransaction).toHaveBeenCalledWith(ctx, 1337, {
+      source: "eth_sendTransaction",
+      calls: [{ target: TO, value: "16", data: "0x" }],
+    });
+    expect((await rpcError(call(d, "eth_sendTransaction", [{ from: TO, to: TO }]))).code).toBe(4100);
+    expect((await rpcError(call(d, "eth_sendTransaction", [{ data: "0x60" }]))).code).toBe(-32602);
+    expect((await rpcError(call(d, "eth_sendTransaction", [{ to: TO, value: "12" }]))).code).toBe(-32602);
+    expect((await rpcError(call(d, "eth_sendTransaction", [{ to: TO, data: "0xabc" }]))).code).toBe(-32602);
+    expect((await rpcError(call(d, "eth_sendTransaction", [{ to: TO, chainId: "0x1" }]))).code).toBe(-32602);
+  });
+
+  it("wallet_sendCalls validates the batch (EIP-5792 codes) and honours an app id", async () => {
+    const d = deps();
+    await d.permissions.grant(ORIGIN, [ACCOUNT], 1337);
+    const batch = (over: Record<string, unknown> = {}) => [
+      { version: "2.0.0", chainId: "0x539", atomicRequired: true, calls: [{ to: TO, value: "0x1" }], ...over },
+    ];
+    expect(await call(d, "wallet_sendCalls", batch())).toEqual({ id: HASH });
+    expect(await call(d, "wallet_sendCalls", batch({ id: "mine" }))).toEqual({ id: "mine" });
+    expect((await rpcError(call(d, "wallet_sendCalls", batch({ id: "taken" })))).code).toBe(5720);
+    expect((await rpcError(call(d, "wallet_sendCalls", batch({ chainId: "0x1" })))).code).toBe(5710);
+    expect((await rpcError(call(d, "wallet_sendCalls", batch({ capabilities: { paymasterService: {} } })))).code).toBe(
+      5700,
+    );
+    expect(
+      await call(d, "wallet_sendCalls", batch({ capabilities: { paymasterService: { optional: true } } })),
+    ).toEqual({
+      id: HASH,
+    });
+    const nine = Array.from({ length: 9 }, () => ({ to: TO }));
+    expect((await rpcError(call(d, "wallet_sendCalls", batch({ calls: nine })))).code).toBe(5740);
+    expect((await rpcError(call(d, "wallet_sendCalls", batch({ calls: [] })))).code).toBe(-32602);
+  });
+
+  it("wallet_getCallsStatus answers known ids and 5730 otherwise; getCapabilities is per chain", async () => {
+    const d = deps();
+    await d.permissions.grant(ORIGIN, [ACCOUNT], 1337);
+    expect(await call(d, "wallet_getCallsStatus", [HASH])).toMatchObject({ status: 200, atomic: true });
+    expect((await rpcError(call(d, "wallet_getCallsStatus", ["nope"]))).code).toBe(5730);
+    expect(await call(d, "wallet_getCapabilities", [ACCOUNT])).toEqual({
+      "0x539": { atomic: { status: "supported" } },
+    });
+    expect(await call(d, "wallet_getCapabilities", [ACCOUNT, ["0x539", "0xaa36a7"]])).toEqual({
+      "0x539": { atomic: { status: "supported" } },
+    });
+    expect((await rpcError(call(d, "wallet_getCapabilities", [TO]))).code).toBe(4100);
   });
 
   it.each([...READ_METHODS])("forwards %s to the read RPC of the selected chain", async (method) => {
@@ -119,15 +200,25 @@ describe("provider router", () => {
     expect(d.readRpc).toHaveBeenCalledWith(1337, method, params);
   });
 
-  it.each([
-    "eth_sendTransaction",
-    "personal_sign",
-    "eth_signTypedData_v4",
-    "wallet_sendCalls",
-    "eth_estimateGas",
-    "eth_subscribe",
-    "foo_bar",
-  ])("%s is 4200 unsupported with a clear message", async (method) => {
+  it("signatures: sign-in / ERC-2612 arrive in M3 (4200); Permit2 and orders need the Vault (4100 + leakedRule)", async () => {
+    const d = deps();
+    expect((await rpcError(call(d, "personal_sign", ["0x68656c6c6f", ACCOUNT]))).code).toBe(4100); // not connected
+    await d.permissions.grant(ORIGIN, [ACCOUNT], 1337);
+    const sign = await rpcError(call(d, "personal_sign", ["0x68656c6c6f", ACCOUNT]));
+    expect(sign.code).toBe(4200);
+    expect(sign.data).toMatchObject({ leakedRule: "SIG-SIGN-IN" });
+    const p2 = {
+      primaryType: "PermitSingle",
+      types: { PermitSingle: [{ name: "spender", type: "address" }] },
+      domain: {},
+    };
+    const e = await rpcError(call(d, "eth_signTypedData_v4", [ACCOUNT, JSON.stringify(p2)]));
+    expect(e.code).toBe(4100);
+    expect(e.data).toMatchObject({ leakedRule: "SIG-PERMIT2" });
+    expect(e.message).toMatch(/Vault/u);
+  });
+
+  it.each(["eth_subscribe", "foo_bar"])("%s is 4200 unsupported with a clear message", async (method) => {
     const e = await rpcError(call(deps(), method, []));
     expect(e.code).toBe(4200);
     expect(e.message).toContain(method);

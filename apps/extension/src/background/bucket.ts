@@ -1,47 +1,49 @@
-import type { Address } from "viem";
 import type { SetupState } from "../shared/types";
+import type { AccountStatus } from "../shared/views";
 
 /**
- * The rolling 24-hour everyday bucket the LimitMeter shows (ux-spec §3.2 "LimitMeter semantics").
+ * The rolling 24-hour everyday bucket the LimitMeter shows (ux-spec §3.2 "LimitMeter semantics"), from the account's
+ * `getBucket() returns (available, lastUpdate, cap, fullAt)`. The refill is continuous, so "frees up at" is `fullAt`:
+ * when everything spent in the last 24 h is available again. Prices and limits come from the account itself, never an
+ * external API (risk R12).
  */
 export interface BucketReading {
   capUsd: number;
   usedUsd: number;
   availableUsd: number;
   perTxMaxUsd: number;
-  /** Earliest spend that expires out of the 24 h window, if any. */
+  /** When the used part is back (the bucket is full again), if anything is used. */
   nextRefill?: { usd: number; at: number };
   /**
-   * `placeholder`: the account is not deployed, so there is no on-chain bucket yet; values are the limits chosen at
-   * setup with nothing used. `chain`: read from the account (M1+).
+   * `none`: the account is not active on this network, so nothing is enforced yet (the amber "No daily limit yet"
+   * card); the cap/per-payment values are the limits the activation will set. `chain`: read from the account.
    */
-  source: "placeholder" | "chain";
+  source: "none" | "chain";
+  frozen?: boolean;
   readAt: number;
 }
 
-export interface BucketSource {
-  /**
-   * TODO(M1): implement against the account view `getBucket() returns (available, lastUpdate, cap)` and
-   * `getHotConfig()` (10-contracts §10.11), read through the private connection, and derive `nextRefill` from
-   * `HotExecuted(txSigHash, usdDebited, available)` events over the last 24 h (30-extension §6.5). Prices come from
-   * the account's own config, never an external API (risk R12).
-   */
-  getBucket(account: Address, chainId: number): Promise<BucketReading>;
-}
-
-/** M0 source: no account is deployed yet, so the bucket is the setup intent with nothing used. */
-export function placeholderBucketSource(getSetup: () => Promise<SetupState>, now = Date.now): BucketSource {
+export function bucketFromStatus(status: AccountStatus, setup: SetupState): BucketReading {
+  if (!status.deployed) {
+    return {
+      capUsd: setup.dailyLimitUsd,
+      usedUsd: 0,
+      availableUsd: setup.dailyLimitUsd,
+      perTxMaxUsd: setup.perPaymentUsd,
+      source: "none",
+      readAt: status.readAt,
+    };
+  }
+  const { capUsd, availableUsd, perTxMaxUsd, fullAt } = status.limits;
+  const usedUsd = Math.max(0, capUsd - availableUsd);
   return {
-    async getBucket() {
-      const setup = await getSetup();
-      return {
-        capUsd: setup.dailyLimitUsd,
-        usedUsd: 0,
-        availableUsd: setup.dailyLimitUsd,
-        perTxMaxUsd: setup.perPaymentUsd,
-        source: "placeholder",
-        readAt: now(),
-      };
-    },
+    capUsd,
+    usedUsd,
+    availableUsd,
+    perTxMaxUsd,
+    ...(usedUsd > 0 && fullAt ? { nextRefill: { usd: usedUsd, at: fullAt * 1000 } } : {}),
+    source: "chain",
+    frozen: status.frozen,
+    readAt: status.readAt,
   };
 }

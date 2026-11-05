@@ -85,7 +85,7 @@ export class ApprovalStore {
 
 export type ApprovalOutcome = Exclude<ApprovalStatus, "pending">;
 
-export type ApprovalInit = Pick<Approval, "kind" | "origin" | "chainId" | "firstVisit" | "embedded">;
+export type ApprovalInit = Pick<Approval, "kind" | "origin" | "chainId" | "firstVisit" | "embedded" | "tx">;
 
 /**
  * Upper bound on approvals waiting at once. Each one is a window, and a page can embed any number of cross-origin
@@ -132,11 +132,17 @@ export class ApprovalBroker {
   }
 
   async request(init: ApprovalInit, requestId: string): Promise<ApprovalOutcome> {
+    return (await this.requestRecord(init, requestId)).status as ApprovalOutcome;
+  }
+
+  /** Like `request`, but resolves with the finished approval record (its `result` / `denial`). */
+  async requestRecord(init: ApprovalInit, requestId: string): Promise<Approval> {
     const approval = await this.serialized(async () => {
       let approval = await this.store.findByRequestId(init.origin, requestId);
       if (approval && approval.status !== "pending") return approval;
 
-      if (!approval) {
+      // A repeated connect request joins the one waiting; every transaction is its own approval.
+      if (!approval && init.kind === "connect") {
         approval = await this.store.findPending(init.origin, init.kind);
         if (approval) await this.store.attachRequest(approval.id, requestId);
       }
@@ -152,20 +158,25 @@ export class ApprovalBroker {
       }
       return approval;
     });
-    if (approval.status !== "pending") return approval.status;
+    if (approval.status !== "pending") return approval;
 
     const id = approval.id;
-    return new Promise<ApprovalOutcome>((resolve) => {
+    await new Promise<ApprovalOutcome>((resolve) => {
       const list = this.waiters.get(id) ?? [];
       list.push(resolve);
       this.waiters.set(id, list);
     });
+    return (await this.store.get(id)) ?? { ...approval, status: "rejected" };
   }
 
-  async resolve(id: string, outcome: ApprovalOutcome): Promise<Approval | undefined> {
+  async resolve(
+    id: string,
+    outcome: ApprovalOutcome,
+    extra: Pick<Approval, "result" | "denial"> = {},
+  ): Promise<Approval | undefined> {
     const cur = await this.store.get(id);
     if (!cur || cur.status !== "pending") return cur;
-    const next = await this.store.update(id, { status: outcome, resolvedAt: this.now() });
+    const next = await this.store.update(id, { ...extra, status: outcome, resolvedAt: this.now() });
     for (const w of this.waiters.get(id) ?? []) w(outcome);
     this.waiters.delete(id);
     return next;

@@ -223,6 +223,25 @@ export class KeyringController {
     return fn(secret.mnemonic);
   }
 
+  /**
+   * Run `fn` with the everyday and fee-tank private keys (signing, plan §30 §4.2). Both are derived for the call and
+   * zeroed afterwards; they never leave the service worker.
+   */
+  async withHotKeys<T>(fn: (keys: { everyday: `0x${string}`; feeTank: `0x${string}` }) => T | Promise<T>): Promise<T> {
+    return this.withMnemonic(async (mnemonic) => {
+      const seed = mnemonicToSeedSync(mnemonic);
+      const everyday = derivePrivateKey(seed, EVERYDAY_PATH(0));
+      const feeTank = derivePrivateKey(seed, FEE_TANK_PATH(0));
+      seed.fill(0);
+      try {
+        return await fn({ everyday: `0x${bytesToHex(everyday)}`, feeTank: `0x${bytesToHex(feeTank)}` });
+      } finally {
+        everyday.fill(0);
+        feeTank.fill(0);
+      }
+    });
+  }
+
   /** Danger zone: remove the everyday key from this browser. Money stays in the account. */
   async reset(): Promise<void> {
     await this.lock();

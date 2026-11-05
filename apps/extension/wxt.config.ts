@@ -2,8 +2,14 @@ import tailwindcss from "@tailwindcss/vite";
 import { defaultClientConditions } from "vite";
 import { defineConfig } from "wxt";
 
-// Host permissions cover only the fixed read RPCs (plan §30 §2.5: no <all_urls>, no dapp-supplied RPC URLs).
-const RPC_HOSTS = ["https://altmempool.forshtat.com/*", "https://ethereum-sepolia-rpc.publicnode.com/*"];
+// Host permissions cover only the fixed RPCs (plan §30 §2.5: no <all_urls>, no dapp-supplied RPC URLs). A
+// local-devnet build (VITE_LEAKED_LOCAL_DEVNET=1: e2e, development) also reaches the devnet fork on localhost.
+const LOCAL_DEVNET = process.env.VITE_LEAKED_LOCAL_DEVNET === "1";
+const RPC_HOSTS = [
+  "https://altmempool.forshtat.com/*",
+  "https://ethereum-sepolia-rpc.publicnode.com/*",
+  ...(LOCAL_DEVNET ? ["http://localhost/*"] : []),
+];
 
 export default defineConfig({
   srcDir: "src",

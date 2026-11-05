@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
+import { approvalId, reject, useArmed } from "./shared";
+import { TransactionBody } from "./TransactionBody";
 import { browser, type Browser } from "wxt/browser";
 import { getNetwork } from "../../shared/chains";
 import { StorageKeys } from "../../shared/kv";
@@ -9,8 +11,6 @@ import { call, UiCallError } from "../lib/api";
 import { useTheme, useWalletState } from "../lib/hooks";
 import { UnlockForm } from "../common/Unlock";
 import { Frame, openFullApp } from "../popup/PopupApp";
-
-const approvalId = new URLSearchParams(location.search).get("id") ?? "";
 
 /** The dapp approval window (ux-spec §3.5, 360 × 600). M0: Connect only. */
 export function ApproveApp() {
@@ -48,7 +48,7 @@ export function ApproveApp() {
   if (view === null || view.approval.status !== "pending") {
     return (
       <Frame fill>
-        <Finished status={view?.approval.status ?? "gone"} />
+        <Finished status={view?.approval.status ?? "gone"} {...(view ? { kind: view.approval.kind } : {})} />
       </Frame>
     );
   }
@@ -63,7 +63,9 @@ export function ApproveApp() {
         <div className="min-w-0">
           <h1 className="t-title break-words">
             <span data-testid="approval-origin">{host}</span>{" "}
-            <span className="font-normal text-muted">wants to connect</span>
+            <span className="font-normal text-muted">
+              {view.approval.kind === "transaction" ? "wants to make a payment" : "wants to connect"}
+            </span>
           </h1>
           <p className="t-small text-muted">
             {view.approval.origin.startsWith("http:") ? "Not secure (http) · " : ""}
@@ -93,42 +95,13 @@ export function ApproveApp() {
             Cancel request
           </Button>
         </div>
+      ) : view.approval.kind === "transaction" ? (
+        <TransactionBody view={view} />
       ) : (
-        <ConnectBody view={view} account={state.accounts!.everyday} />
+        <ConnectBody view={view} account={view.account ?? state.accounts!.everyday} />
       )}
     </Frame>
   );
-}
-
-async function reject() {
-  await call("approval:resolve", { id: approvalId, approved: false }).catch(() => undefined);
-  window.close();
-}
-
-/**
- * The approval window opens focused, at a predictable spot, the moment a page asks. A page that gets the user clicking
- * or pressing Enter repeatedly could land that input on Connect. The primary action therefore stays disabled for a
- * short arming period after the window appears or regains focus (the same guard MetaMask and Rabby apply).
- */
-const ARM_DELAY_MS = 500;
-
-function useArmed(): boolean {
-  const [armed, setArmed] = useState(false);
-  useEffect(() => {
-    let t: ReturnType<typeof setTimeout> | undefined;
-    const arm = () => {
-      clearTimeout(t);
-      setArmed(false);
-      t = setTimeout(() => setArmed(true), ARM_DELAY_MS);
-    };
-    arm();
-    window.addEventListener("focus", arm);
-    return () => {
-      clearTimeout(t);
-      window.removeEventListener("focus", arm);
-    };
-  }, []);
-  return armed;
 }
 
 function ConnectBody({ view, account }: { view: ApprovalView; account: string }) {
@@ -236,7 +209,7 @@ function List({ title, negative, items }: { title: string; negative?: boolean; i
   );
 }
 
-function Finished({ status }: { status: string }) {
+function Finished({ status, kind }: { status: string; kind?: string }) {
   useEffect(() => {
     const t = setTimeout(() => window.close(), 1500);
     return () => clearTimeout(t);
@@ -246,7 +219,9 @@ function Finished({ status }: { status: string }) {
       <LogoMark size={48} />
       <p className="t-strong">
         {status === "approved"
-          ? "Connected"
+          ? kind === "transaction"
+            ? "Sent. You can follow it in Activity."
+            : "Connected"
           : status === "rejected"
             ? "Request cancelled"
             : "This request has finished"}

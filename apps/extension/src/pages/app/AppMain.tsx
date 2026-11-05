@@ -3,7 +3,9 @@ import { LogoMark, Spinner } from "../../ui";
 import { useTheme, useWalletState } from "../lib/hooks";
 import { UnlockForm } from "../common/Unlock";
 import { PopupApp } from "../popup/PopupApp";
+import { BUILD } from "../../shared/build";
 import { Gallery } from "./Gallery";
+import { VaultPlaceholder } from "./VaultPlaceholder";
 import { Onboarding, type Step } from "./Onboarding";
 
 function useHash() {
@@ -36,7 +38,9 @@ export function AppMain() {
       </div>
     );
   }
-  if (route === "design") return <Gallery />;
+  // The component gallery is a development tool: production builds do not route to it (UX review M1).
+  if (route === "design" && BUILD.designGallery) return <Gallery />;
+  if (route === "vault") return <VaultPlaceholder />;
 
   const go = (s: Step) => {
     location.hash = `#onboarding/${s}`;
@@ -70,7 +74,7 @@ export function AppMain() {
           <span className="t-title">LEAKED</span>
         </div>
         <div className="overflow-hidden rounded-lg border border-line">
-          <PopupApp inTab />
+          <PopupApp inTab {...(route === "activity" ? { initialTab: "activity" as const } : {})} />
         </div>
       </div>
     </div>
