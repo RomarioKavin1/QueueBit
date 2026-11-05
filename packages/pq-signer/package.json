@@ -1,0 +1,39 @@
+{
+  "name": "@leaked/pq-signer",
+  "version": "0.1.0",
+  "description": "SPHINCS- C13 post-quantum signer (Rust/WASM) for the LEAKED vault and recovery keys",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": true,
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./vectors/c13.json": "./vectors/c13.json"
+  },
+  "files": [
+    "dist",
+    "wasm",
+    "vectors",
+    "README.md",
+    "BENCH.md"
+  ],
+  "scripts": {
+    "build:wasm": "bash scripts/build-wasm.sh",
+    "build": "bash scripts/build-wasm.sh && tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:rust": "cd rust && cargo test --release",
+    "bench": "node bench/wasm-bench.mjs",
+    "bench:native": "cd rust && cargo run --release --bin leaked-pq -- bench",
+    "vectors": "cd rust && cargo run --release --example gen_vectors -- ../vectors/c13.json",
+    "crosscheck:onchain": "bash scripts/onchain-crosscheck.sh"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.6",
+    "typescript": "6.0.3",
+    "vitest": "5.1.0"
+  }
+}
