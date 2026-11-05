@@ -987,3 +987,7 @@ Implements the "Groth16 engine" decision above. `packages/groth16`, MIT; `@leake
   no copyleft), or move to arkworks 0.5 to drop `foldhash` (`subtle` remains under any RustCrypto-based stack).
 - **Open.** `withdraw.wasm` is circom output with circom's runtime arithmetic embedded; whether circom's GPL reaches
   it is a legal question about the pinned artifact (not this engine). Not audited.
+
+## Decision (2026-11-06): license exceptions for `@leaked/groth16`
+- **Accepted:** `subtle` (BSD-3-Clause; notice reproduced in THIRD_PARTY.md) and `foldhash` (Zlib). Both are permissive with no copyleft, and both are required by arkworks. The shipped extension stays MIT-compatible.
+- **Open (legal review, not engineering):** `withdraw.wasm` is circom compiler output embedding circom's field-arithmetic runtime, and circom itself is GPL-3.0. Whether the generated artifact is covered depends on the artifact's own license (see the circuits package license above) and on circom's position on generated code. Ask a lawyer or 0xbow before a store release.
