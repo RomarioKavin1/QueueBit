@@ -258,6 +258,15 @@ importers:
         specifier: 1.12.0
         version: 1.12.0
 
+  packages/watcher-core:
+    dependencies:
+      '@leaked/frames':
+        specifier: workspace:*
+        version: link:../frames
+      viem:
+        specifier: 2.57.16
+        version: 2.57.16(typescript@6.0.3)(zod@4.6.7)
+
 packages:
 
   '@1natsu/wait-element@5.0.0':

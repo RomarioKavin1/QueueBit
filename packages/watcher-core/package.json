@@ -1,0 +1,29 @@
+{
+  "name": "@leaked/watcher-core",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Watcher/alerts core shared by the extension light mode and the self-hosted watcher: event decoding for both backends, alert model and copy, blocked-payment derivation from frame receipts, timelock tracking, rules, dedup, HMAC",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "gen:abi": "node scripts/gen-abi.mjs"
+  },
+  "dependencies": {
+    "@leaked/frames": "workspace:*",
+    "viem": "2.57.16"
+  }
+}
