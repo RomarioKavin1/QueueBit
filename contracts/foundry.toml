@@ -12,6 +12,8 @@ via_ir = true
 optimizer = true
 optimizer_runs = 200
 bytecode_hash = "none"
+# KAT set C of @leaked/pq-signer, read by test/pq (C13Verifier) and test/roles.
+fs_permissions = [{ access = "read", path = "../packages/pq-signer/vectors" }]
 remappings = [
   "forge-std/=lib/forge-std/src/",
   "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
@@ -32,3 +34,5 @@ fuzz = { runs = 10000 }
 
 [fmt]
 line_length = 120
+# forge fmt only parses Solidity; standalone Yul objects (src/pq/vendor/*.yul) make `forge fmt --check` fail.
+ignore = ["**/*.yul"]
