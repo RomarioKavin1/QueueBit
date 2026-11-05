@@ -4,10 +4,12 @@
 //   cd contracts && forge build && cd devnet-tests/g1 && bun install && bun run test
 //
 // Deploys the real stack: LeakedAccountRoles + LeakedAccountImpl (ERC8421_WORKSHOP, per-gas MAX_FEE) behind an
-// AccountFactory proxy, C13Verifier, RoleSignerFactory (clone implementation), a VaultSigner clone (unbound: the
-// account's address commits to it), a RecoverySigner clone (bound to the account) and a GuardianSigner. C13 keys and
-// signatures from @leaked/pq-signer. Then:
-//   (a) a hot payment, public mempool;
+// AccountFactory proxy, C13Verifier, RoleSignerFactory (clone implementation), and a GuardianSigner. The account is
+// created in bound mode: its InitConfig carries the vault's and the recovery's C13 public keys, and `initialize`
+// DERIVES both signers (`predictRoleSigner(salt, role, account, pk, C13Verifier, payerKey)`); the VaultSigner and
+// RecoverySigner clones, bound to the account, are deployed afterwards by an unrelated party (lazy, deterministic).
+// C13 keys and signatures from @leaked/pq-signer. Then:
+//   (a) an Open-mode hot payment to an arbitrary (never allowlisted) recipient, public mempool;
 //   (b) Path B vault actions through VaultSigner.executePQ: an instant tightening (lower daily cap) and a vault spend
 //       within the instant allowance, public mempool;
 //   (c) a forged vault PQ signature: Path B is mined with its SENDER frame reverted and nothing changed; Path A is
@@ -188,15 +190,16 @@ async function createClone(role: number, account: Address, pk: Hex, payer: Addre
   return { address: predicted, tx: c.hash, gasUsed: c.gasUsed, code };
 }
 
-// VaultSigner: unbound (account = 0). The account's CREATE2 address commits to its vault signer (initialize data),
-// so the vault signer cannot also commit to the account; it serves whichever account names it in getRoles().
-const vaultC = await createClone(1, "0x0000000000000000000000000000000000000000", bytesToHex(vaultPQ.publicKey), vaultPayer.address, parseEther("1"));
-const vaultSigner = vaultC.address;
-
+// Bound mode: the account's address commits to the vault's and recovery's PQ parameters (initialize data) and
+// initialize derives the signer addresses from them and the account's own address: no cycle, both counterfactual.
+const ZERO = "0x0000000000000000000000000000000000000000" as Address;
 const initCfg = {
   hotKey: hot.address,
-  vaultSigner,
-  recoverySigner: "0x0000000000000000000000000000000000000000" as Address, // installed below (first install instant)
+  roleSignerFactory: rsFactoryD.address,
+  vault: { salt: runSalt, pk: bytesToHex(vaultPQ.publicKey), verifier: verifierD.address, payerKey: vaultPayer.address },
+  recovery: { salt: runSalt, pk: bytesToHex(recoveryPQ.publicKey), verifier: verifierD.address, payerKey: recoveryPayer.address },
+  vaultSigner: ZERO,
+  recoverySigner: ZERO,
   tank: tank.address,
   capUsdPerDay: 10n * USD,
   perTxMaxUsd: 8n * USD,
@@ -207,6 +210,7 @@ const initCfg = {
   timelockDelay: 3600, // MIN_TIMELOCK
   timelockThresholdUsd: 100n * USD,
   ethUsdPrice: ETH_PRICE,
+  recipientMode: 0, // Open (the default)
 };
 const initData = encodeFunctionData({ abi: implArt.abi, functionName: "initialize", args: [initCfg] });
 const accSalt = keccak256(stringToHex(`leaked/devnet-tests/g1/account/${runSalt}`));
@@ -222,9 +226,23 @@ const createdAcc = await call(
   { gas: 10_000_000n },
 );
 
-// RecoverySigner: bound to the account (account arg read from its code by EXTCODECOPY).
+// The signers initialize derived: nothing deployed there yet.
+const [derivedVault, derivedRecovery] = (await pub.readContract({
+  address: account,
+  abi: rolesArt.abi,
+  functionName: "getRoles",
+})) as readonly [Address, Address, Address, number, number];
+const derivedHadCode = ((await pub.getCode({ address: derivedVault })) ?? "0x") !== "0x";
+if (derivedHadCode) throw new Error("derived VaultSigner already has code before its lazy deployment");
+// Lazy deployment of both clones (bound to the account; account arg read from their code by EXTCODECOPY) by a party
+// unrelated to the account (the G1 deployer key): createRoleSigner is permissionless and deterministic.
+const vaultC = await createClone(1, account, bytesToHex(vaultPQ.publicKey), vaultPayer.address, parseEther("1"));
 const recoveryC = await createClone(2, account, bytesToHex(recoveryPQ.publicKey), recoveryPayer.address, parseEther("1"));
+const vaultSigner = vaultC.address;
 const recoverySigner = recoveryC.address;
+if (vaultSigner !== derivedVault || recoverySigner !== derivedRecovery) {
+  throw new Error(`lazy clones ${vaultSigner}/${recoverySigner} != derived ${derivedVault}/${derivedRecovery}`);
+}
 
 const guardianD = await deploy(
   guardianArt,
@@ -243,8 +261,21 @@ for (const [to, v] of [
 
 results.wiring = {
   account: { address: account, createTx: createdAcc.hash, createGas: createdAcc.gasUsed },
-  vaultSigner: { address: vaultSigner, mode: "unbound (account arg = 0)", tx: vaultC.tx, gasUsed: vaultC.gasUsed },
-  recoverySigner: { address: recoverySigner, mode: "bound to the account", tx: recoveryC.tx, gasUsed: recoveryC.gasUsed },
+  vaultSigner: {
+    address: vaultSigner,
+    mode: "bound to the account, derived by initialize, clone deployed lazily",
+    derivedByInitialize: derivedVault,
+    codeBeforeLazyDeploy: derivedHadCode,
+    tx: vaultC.tx,
+    gasUsed: vaultC.gasUsed,
+  },
+  recoverySigner: {
+    address: recoverySigner,
+    mode: "bound to the account, derived by initialize, clone deployed lazily",
+    derivedByInitialize: derivedRecovery,
+    tx: recoveryC.tx,
+    gasUsed: recoveryC.gasUsed,
+  },
   guardianSigner: { address: guardian, tx: guardianD.hash, gasUsed: guardianD.gasUsed },
 };
 log("wiring", results.wiring);
@@ -287,7 +318,7 @@ const readSigner = <T>(address: Address, functionName: string) =>
   results.clones = clones;
   log("clones", clones);
   if (!clones.vaultCodeIsProxyToImpl || !clones.recoveryCodeIsProxyToImpl) throw new Error("clone code shape");
-  if (v.account !== "0x0000000000000000000000000000000000000000" || r.account !== account) throw new Error("clone account arg");
+  if (v.account !== account || r.account !== account) throw new Error("clone account arg");
   if (v.role !== 1 || r.role !== 2 || v.sigLength !== BigInt(SIG_LENGTH) || v.verifier.toLowerCase() !== verifierD.address.toLowerCase()) {
     throw new Error("clone args");
   }
@@ -583,28 +614,34 @@ const bal = (a: Address) => rpc.node.getBalance(a);
 // ------------------------------------------------------------------- role wiring via Path B (setup) ----------
 
 {
-  const a = await pathB("setup: vault installs the RecoverySigner (first install, instant)", VAULT, account, enc("vaultSetRecoverySigner", [recoverySigner]));
+  // Both role signers were wired by initialize (bound mode): only the guardian is added here.
   const b = await pathB("setup: vault enables the GuardianSigner", VAULT, account, enc("vaultSetGuardian", [guardian, true]));
   const roles = await readAcc<readonly [Address, Address, Address, number, number]>("getRoles");
   if (roles[0] !== vaultSigner || roles[1] !== recoverySigner) throw new Error(`roles not wired: ${json(roles)}`);
-  results.setup = { vaultSetRecoverySigner: a.out, vaultSetGuardian: b.out, getRoles: roles };
+  results.setup = { vaultSetGuardian: b.out, getRoles: roles };
 }
 
 // -------------------------------------------------------------------------------- (a) hot payment ----------
 {
-  const topUp = parseEther("0.001"); // $3 to the tank (allowlisted at initialize)
-  const before = { tank: await bal(tank.address), account: await bal(account), bucket: await bucket() };
+  // RecipientMode.Open (the default): an everyday payment to an address the vault never allowlisted.
+  const payee = privateKeyToAccount(generatePrivateKey()).address;
+  const mode = Number(await readAcc<number>("recipientMode"));
+  const payeeIsTarget = await readAcc<boolean>("isTarget", [payee]);
+  if (mode !== 0 || payeeIsTarget) throw new Error(`(a) expected Open mode and an unlisted payee: ${mode} ${payeeIsTarget}`);
+  const pay = parseEther("0.001"); // $3
+  const before = { payee: await bal(payee), account: await bal(account), bucket: await bucket() };
   const { r, out } = await sendPublic(
-    "(a) hot payment",
-    await hotTx(hotExecute(3n * USD, [{ target: tank.address, value: topUp, data: "0x" }])),
+    "(a) Open-mode hot payment to an arbitrary recipient",
+    await hotTx(hotExecute(3n * USD, [{ target: payee, value: pay, data: "0x" }])),
     HOT_OWN,
     80_000n,
   );
-  const after = { tank: await bal(tank.address), account: await bal(account), bucket: await bucket() };
+  const after = { payee: await bal(payee), account: await bal(account), bucket: await bucket() };
   if (r.frameReceipts[2]?.status !== "success") throw new Error("(a) SENDER frame failed");
-  if (after.account !== before.account - topUp) throw new Error("(a) account delta != payment");
-  results.a_hotPayment = { ...out, before, after };
-  checklist.a = `PASS: hot payment mined via public mempool (${out.hash}); VERIFY ${out.verifyGas} gas`;
+  if (after.account !== before.account - pay || after.payee !== before.payee + pay) throw new Error("(a) balance deltas != payment");
+  if (before.bucket.available - after.bucket.available < 2_900_000n) throw new Error("(a) bucket not debited");
+  results.a_hotPayment = { ...out, recipientMode: "Open", payee, payeeIsTarget, before, after };
+  checklist.a = `PASS: Open-mode hot payment to an arbitrary recipient ${payee} mined via public mempool (${out.hash}); VERIFY ${out.verifyGas} gas; bucket debited`;
 }
 
 // ------------------------------------------------------------------------ (b) Path B vault actions ----------
