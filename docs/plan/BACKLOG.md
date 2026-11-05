@@ -1,0 +1,32 @@
+# Backlog: follow-ups from reviews (2026-11-06)
+
+Each entry is tagged with its source. Remove an entry when it lands, and cite the commit.
+
+## Extension
+- [ ] M4: onboarding pairs the Vault **before** the account address is computed (needs the account's vault binding in initialize, which is in progress). Fix the "plan frozen on first account:status" limits mismatch as part of the same rework (M1 review).
+- [ ] `wallet_getCapabilities` exposes `capRemainingUsd` to any connected site, which is a cross-site signal. Restrict it to the connecting origin's needs, or drop it (M1 review).
+- [ ] `parseSimFrames` treats a status-less frame as succeeded. Decide whether to keep that tolerant default (M1 review).
+- [ ] Postmessage channel nonce against co-installed extensions (M0 review, deferred).
+- [ ] Show the top-level origin on embedded-frame requests (M0 review).
+- [ ] Wire the watcher light mode (`@leaked/watcher-core`) and the privacy tab (`@leaked/privacy` + `@leaked/groth16`) into the extension.
+
+## Companion
+- [ ] Manual, verified PWA update (no silent `skipWaiting` + `claim`); show the build id prominently (companion review).
+- [ ] A passphrase strength check beyond 8 characters; avoid `autoComplete="current-password"` password-manager sync (companion review).
+- [ ] Encrypt the activity log (it stores amounts and recipients in clear) (companion review).
+- [ ] Cross-origin navigation as an exfil channel: document the limitation, or add a navigation guard (companion review).
+
+## Contracts
+- [ ] Mirror the account's Open recipient mode and initialize-derived vault binding in the 7579 modules (module review).
+- [ ] `registerPermit` covers ERC-2612 only; add typed registration for EIP-3009 and Permit2 (account audit).
+- [ ] Vault policy guidance for non-monitored assets moved by session targets (account audit).
+- [ ] Document that a recovery-key compromise means an uncancellable 7-day vault takeover (account audit).
+- [ ] PoolPayer: enforce "no user tail frames" in `verify` (v1 decision); make `setOperator` two-step; calibrate `MIN_SETTLE_GAS` / `MAX_INTRINSIC_GAS` for mainnet (PoolPayer audit).
+- [ ] `recoveryStartVaultRotation` reverts if the hook was retired; migration flows must rotate first (module review).
+- [ ] Kernel `MAGIC_VALUE_SIG_REPLAYABLE`: the hot key can sign chain-agnostic userOps (module review, low).
+
+## Infra / upstream
+- [ ] Open the BUDGET-010 PR upstream (needs the user's GitHub account).
+- [ ] A separate small PR: a sensible default `precompiles` list in the sidecar.
+- [ ] Post the PQ benchmark write-up to ethresear.ch (user).
+- [ ] Watcher: alerts for vault actions pending in the alt mempool; Privacy Pools events.
