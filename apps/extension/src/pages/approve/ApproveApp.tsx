@@ -48,7 +48,11 @@ export function ApproveApp() {
   if (view === null || view.approval.status !== "pending") {
     return (
       <Frame fill>
-        <Finished status={view?.approval.status ?? "gone"} {...(view ? { kind: view.approval.kind } : {})} />
+        <Finished
+          status={view?.approval.status ?? "gone"}
+          {...(view ? { kind: view.approval.kind } : {})}
+          {...(view?.approval.denial ? { denial: view.approval.denial } : {})}
+        />
       </Frame>
     );
   }
@@ -209,23 +213,41 @@ function List({ title, negative, items }: { title: string; negative?: boolean; i
   );
 }
 
-function Finished({ status, kind }: { status: string; kind?: string }) {
+function Finished({
+  status,
+  kind,
+  denial,
+}: {
+  status: string;
+  kind?: string;
+  /** The payment was not sent because the account would refuse it (re-checked at Approve): say why, don't vanish. */
+  denial?: { explanation: string; remedy?: string };
+}) {
   useEffect(() => {
+    if (denial) return undefined;
     const t = setTimeout(() => window.close(), 1500);
     return () => clearTimeout(t);
-  }, []);
+  }, [denial]);
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
+    <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center" role="status">
       <LogoMark size={48} />
       <p className="t-strong">
         {status === "approved"
           ? kind === "transaction"
             ? "Sent. You can follow it in Activity."
             : "Connected"
-          : status === "rejected"
-            ? "Request cancelled"
-            : "This request has finished"}
+          : denial
+            ? "Not sent"
+            : status === "rejected"
+              ? "Request cancelled"
+              : "This request has finished"}
       </p>
+      {denial && (
+        <p className="t-body text-muted" data-testid="approval-denial">
+          {denial.explanation}
+          {denial.remedy ? ` ${denial.remedy}` : ""}
+        </p>
+      )}
       <Button variant="secondary" onClick={() => window.close()}>
         Close
       </Button>

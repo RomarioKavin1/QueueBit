@@ -76,8 +76,9 @@ export function ActivateScreen({ state, onBack }: { state: WalletState; onBack: 
         ) : (
           <>
             <p className="t-body">
-              Activation puts your limits on {net.name}: {formatUsd(state.setup.dailyLimitUsd)} in any 24 hours, up to{" "}
-              {formatUsd(state.setup.perPaymentUsd)} per payment. Your fee tank pays the one-time network fee.
+              Activation puts your limits on {net.name}: {formatUsd(s.limits.capUsd || state.setup.dailyLimitUsd)} in
+              any 24 hours, up to {formatUsd(s.limits.perTxMaxUsd || state.setup.perPaymentUsd)} per payment. Your fee
+              tank pays the one-time network fee.
             </p>
             <Timeline steps={steps} label="Activation steps" />
             {!tankOk && (

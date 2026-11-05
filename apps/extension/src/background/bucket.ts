@@ -25,11 +25,16 @@ export interface BucketReading {
 
 export function bucketFromStatus(status: AccountStatus, setup: SetupState): BucketReading {
   if (!status.deployed) {
+    // The limits the activation will set are the frozen plan's (`status.limits`, from the init config), not the
+    // setup form's: the plan is fixed when the address is first computed and does not follow later edits. Fall back to
+    // the setup intent where no plan exists yet (unsupported network, or the network could not be read).
+    const planned = status.supported && status.limits.capUsd > 0;
+    const capUsd = planned ? status.limits.capUsd : setup.dailyLimitUsd;
     return {
-      capUsd: setup.dailyLimitUsd,
+      capUsd,
       usedUsd: 0,
-      availableUsd: setup.dailyLimitUsd,
-      perTxMaxUsd: setup.perPaymentUsd,
+      availableUsd: capUsd,
+      perTxMaxUsd: planned ? status.limits.perTxMaxUsd : setup.perPaymentUsd,
       source: "none",
       readAt: status.readAt,
     };

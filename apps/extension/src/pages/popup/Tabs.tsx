@@ -6,6 +6,7 @@ import {
   AppsIcon,
   Button,
   CheckCircleIcon,
+  CloseIcon,
   GlobeIcon,
   HourglassIcon,
   OctagonIcon,
@@ -49,10 +50,17 @@ export function ActivityTab() {
 }
 
 function StatusIcon({ e }: { e: ActivityEntry }) {
-  if (e.status === "confirmed" || e.status === "cancelled")
+  if (e.status === "confirmed")
     return (
       <span className="text-safe">
         <CheckCircleIcon size={20} />
+      </span>
+    );
+  // Nothing was sent: neither a success (green) nor a failure (red).
+  if (e.status === "cancelled" || e.status === "replaced")
+    return (
+      <span className="text-muted">
+        <CloseIcon size={20} />
       </span>
     );
   if (e.status === "failed")
