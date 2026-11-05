@@ -1,0 +1,83 @@
+{
+  "contracts/lib/account-abstraction": {
+    "rev": "4cbc06072cdc19fd60f285c5997f4f7f57a588de"
+  },
+  "contracts/lib/erc7579-implementation": {
+    "rev": "99cbd34479b9d125651316ff2d92f38611ddf665"
+  },
+  "contracts/lib/erc7579-safe7579-dep": {
+    "rev": "16138d1afd4e9711f6c1425133538837bd7787b5"
+  },
+  "contracts/lib/forge-std": {
+    "rev": "f3dae6e6ee381f25eb6a246f7da9b85c91a68219"
+  },
+  "contracts/lib/hegota-support": {
+    "rev": "2377188af5684fcb199437efed39e7a096c2a744"
+  },
+  "contracts/lib/kernel": {
+    "rev": "cd697c7e21715d015e0643af22310a99aa17433b"
+  },
+  "contracts/lib/openzeppelin-contracts": {
+    "rev": "cab19933c33c2ad1d4c7a84864a3601dddfd16f3"
+  },
+  "contracts/lib/safe-smart-account": {
+    "rev": "bf943f80fec5ac647159d26161446ac5d716a294"
+  },
+  "contracts/lib/safe7579": {
+    "rev": "9f507f33b0f40d4c5f49f34565ddc7a12bd641cd"
+  },
+  "contracts/lib/sentinellist": {
+    "rev": "6dff696f39fb55bfdde9581544d788932f145e47"
+  },
+  "contracts/lib/solady": {
+    "rev": "acd959aa4bd04720d640bf4e6a5c71037510cc4b"
+  },
+  "lib/account-abstraction": {
+    "tag": {
+      "name": "v0.8.0",
+      "rev": "4cbc06072cdc19fd60f285c5997f4f7f57a588de"
+    }
+  },
+  "lib/checknsignatures": {
+    "rev": "f8389c1"
+  },
+  "lib/erc7579-implementation": {
+    "rev": "99cbd34"
+  },
+  "lib/erc7579-safe7579-dep": {
+    "rev": "16138d1"
+  },
+  "lib/forge-std": {
+    "rev": "f3dae6e6ee381f25eb6a246f7da9b85c91a68219"
+  },
+  "lib/hegota-support": {
+    "rev": "2377188af5684fcb199437efed39e7a096c2a744"
+  },
+  "lib/kernel": {
+    "tag": {
+      "name": "v3.3",
+      "rev": "cd697c7e21715d015e0643af22310a99aa17433b"
+    }
+  },
+  "lib/openzeppelin-contracts": {
+    "rev": "cab19933c33c2ad1d4c7a84864a3601dddfd16f3"
+  },
+  "lib/safe-smart-account": {
+    "tag": {
+      "name": "v1.4.1",
+      "rev": "bf943f80fec5ac647159d26161446ac5d716a294"
+    }
+  },
+  "lib/safe7579": {
+    "rev": "9f507f3"
+  },
+  "lib/sentinellist": {
+    "tag": {
+      "name": "v1.0.0",
+      "rev": "6dff696f39fb55bfdde9581544d788932f145e47"
+    }
+  },
+  "lib/solady": {
+    "rev": "acd959aa4bd04720d640bf4e6a5c71037510cc4b"
+  }
+}
