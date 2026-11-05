@@ -682,3 +682,55 @@ Code: `apps/extension/src/background/{account,engine,routing,policy,payments,act
   frames `success` → per-payment and not-allowed classified, nothing sent); Playwright e2e 8/8 including the whole M1
   flow (onboarding → activate → fund → hot send mined and in Activity → over-limit "needs your phone" before submission
   → dapp `eth_sendTransaction` via the approval window → `wallet_sendCalls` batch, `wallet_getCallsStatus` 200) in ~40 s.
+
+## Watcher / alerts (privacy-infra milestone P9, plan 40 §5, §8.1) (2026-11-06)
+
+- **Layout.** `packages/watcher-core` (`@leaked/watcher-core`, pure TS, no I/O: what the extension light mode will
+  import) and `services/watcher` (`@leaked/watcher`, Node service, Dockerfile, README). Funding key for the devnet
+  test: anvil #9 only.
+- **Event ABI from the artifacts.** `packages/watcher-core/scripts/gen-abi.mjs` writes `src/generated/abi.ts` from
+  `contracts/out` (account impl + roles module, policy hook + role executor, `IEntryPoint`'s two userOp events,
+  `PQRoleSigner`) plus the `KIND_*` values read from `LeakedAccountBase.sol`; `test/abi-drift.test.ts` fails when it is
+  stale (skips without `forge build`). Regenerate with `pnpm --filter @leaked/watcher-core gen:abi`.
+- **Things that leave no log** (ILeakedAccount "Paths that cannot log"): an over-limit hot batch reverts its SENDER
+  frame, so the service also reads each block's transactions whose `sender` is a watched frame account, and a
+  `hotExecute` SENDER frame with receipt status `0x0` becomes `hotBlocked`. The reason is fixed with `getBucket()` at
+  the parent block refilled to the block time: `hotExecute` debits at most the declared USD, so `declared > available`
+  ⇒ over the limit, else "another rule". No trace API is needed (ethrex `debug_traceTransaction` refuses blocks beyond
+  its re-execution window; `ethrex_simulateFrameTransaction` at an old block fails with "state root missing"). The
+  4337 backend does log it: EntryPoint `UserOperationRevertReason` with `OverCap`. Registered-hash/7739 1271 accepts
+  are views and invisible; that is documented, not worked around.
+- **Rules.** Only on-chain facts. Account creation (`initialize`: everyday key set from zero without
+  `BunkerDisabled`) is silent; one alert per action (a Recovery-started replacement folds its pause; Lockdown folds its
+  key wipe; an executed scheduled change folds the setters it ran). A queued loosening/update/move the watcher cannot
+  attribute is **urgent** (the extension passes `initiated()` to downgrade its own); a large payment is a warning;
+  3 blocked payments in an hour ⇒ urgent "Repeated blocked payments". Guardian vs Vault pause comes from roles when
+  known, else from the `until` shape (Vault = `uint48` max).
+- **Deadlines.** Ops/rotation: `pending → ready` at eta; timed pause: `expired` at `until`; a finalised Vault
+  replacement voids the old Vault's ops (`scheduled-void`). `WatcherCore.alarms()` gives the light mode its
+  `chrome.alarms.create(name, {when})` list.
+- **Copy** follows ux-spec §1.2; a test checks every alert kind for amounts, addresses and the banned words. ntfy push
+  carries title/body only; the SSE stream and webhook carry the structured `ref` to authenticated clients.
+- **HMAC** (WebCrypto, works in the MV3 worker): webhook `x-leaked-signature: t=…,v1=…` (5 min skew), stream
+  envelopes `{v,t,alert,sig}` signed with the caller's key (a spoofed server cannot inject "all clear"), request auth
+  `LEAKED-HMAC id,t,sig` over `METHOD\npath\nt` (header or query for EventSource). Pairing QR:
+  `{url, topic, keyId, hmacKey}` (`parsePairing`; ux-spec §3.10 lists `{url, topic, hmacKey}`; `keyId` added so one
+  watcher can serve several devices).
+- **Reorgs.** Blocks are processed `confirmations` deep; the last `reorgWindow` hashes and per-block core snapshots
+  are kept; a mismatch rewinds to the common ancestor, reprocesses, and publishes `retract` for alerts whose tx did not
+  return. Alert ids = hash(chain, account, kind, tx hash, position), so re-inclusion in another block is not a
+  duplicate.
+- **Results.** core 71 tests (decoding against the real devnet logs/receipts of the account run, synthesized 4337 /
+  EntryPoint / role-signer logs from the generated ABI, rules, eta, HMAC incl. RFC 4231, drift); service 21 tests
+  (mock chain: confirmations, paging/halving, reorg retract/re-include, checkpoints in file and SQLite; HTTP 401 for
+  missing/malformed/unknown/wrong/stale keys, SSE replay + live + retract, stream cap, 429; webhook verified by a
+  receiver; ntfy has no addresses); **live devnet** (`LIVE_DEVNET=1 pnpm --filter @leaked/watcher test`, ~67 s, reused
+  the `devnet/deploy` CREATE2 deployment): over-limit attempt (block 1298, SENDER `0x0`, no logs) → "Over the limit:
+  payment blocked" with reason over-limit; Vault-queued loosening → urgent "Limit change scheduled"; Guardian pause →
+  "Paused by your Guardian"; all within 6 blocks, every SSE envelope and webhook body verified. Docker image builds
+  (`docker build -f services/watcher/Dockerfile .`, uses `services/watcher/Dockerfile.dockerignore`) and serves
+  `/healthz` against the devnet.
+- **Open.** The root `vitest.config.ts` lists `projects: ["packages/*", "apps/*"]`, so a root `pnpm test` does not run
+  `services/watcher`; add `"services/*"` there (outside this milestone's paths). Not built yet: the sidecar
+  `skandha_subscribe` feed for pending (pre-chain) vault actions, Telegram/email channels, Privacy Pools
+  `RootUpdated`/`Withdrawn` for the user's labels, and the extension light-mode wiring (the extension workstream).
