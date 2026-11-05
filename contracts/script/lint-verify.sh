@@ -7,7 +7,10 @@
 #      self-test: VerifyLintBadTarget must fail;
 #   2. source: LeakedVerify.sol must not use time/block/gas/balance/transient/log constructs, SIGDATACOPY,
 #      FRAMEPARAM STATUS/*_GAS_USED, or SIGPARAM RESOLVED_SIGNER before the entry's SCHEME check;
-#   3. dynamic: VerifyOpcodesTest (opcodes actually executed in every VERIFY branch) must pass, not skip.
+#   3. dynamic: VerifyOpcodesTest (opcodes actually executed in every VERIFY branch) must pass, not skip;
+#   4. I-2 (slot disjointness): the walker never reads the recipient policy (`recipientsOpen` / `RecipientMode` /
+#      `targets`), the mode lives in an appended execution-only slot, and the Audit I-2 tests (both recipient
+#      modes) pass: VERIFY reads only slots 0-2 and nothing a hot batch or the mode setter writes.
 # Run from anywhere: contracts/script/lint-verify.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -46,6 +49,7 @@ check 'tload|tstore|\bemit\b|sstore|create2?\(|selfdestruct' "transient storage,
 check 'sigdatacopy' "SIGDATACOPY (halts on SECP256K1 entries; the hot path has none to copy)"
 check 'FrameParam\.(STATUS|EXECUTION_GAS_USED|STATE_GAS_USED)' "FRAMEPARAM STATUS/*_GAS_USED (halts for the running frame)"
 check 'RollingCap|IERC20|\.call\(|staticcall\(|delegatecall\(' "external calls or execution-side libraries"
+check 'recipientsOpen|RecipientMode|\.targets\b|vaultSigner|recoverySigner' "the walker must not read the recipient policy or the role signers"
 # RESOLVED_SIGNER only for entry 0, and only after entry 0's SCHEME is checked to be SECP256K1
 rs=$(grep -nE 'SigParam\.RESOLVED_SIGNER' <<<"$code" | cut -d: -f1 || true)
 sc=$(grep -nE 'sigparam\(0, SigParam\.SCHEME\) != SCHEME_SECP256K1' <<<"$code" | head -1 | cut -d: -f1 || true)
@@ -72,6 +76,24 @@ if grep -qE 'Suite result: ok\. 3 passed; 0 failed; 0 skipped' <<<"$out"; then
 else
   echo "$out" | grep -E 'PASS|FAIL|SKIP|Suite result' || echo "$out" | tail -20
   echo "lint-verify: VerifyOpcodesTest did not pass all 3 traced branches"
+  fail=1
+fi
+
+echo "== 4. I-2: recipient mode outside the VERIFY slots"
+layout=src/account/LeakedAccountStorage.sol
+# `recipientsOpen` must be declared after the last pre-existing field (append-only, never in slots 0-2).
+lr=$(grep -nE '^\s*bool recipientsOpen;' "$layout" | cut -d: -f1 || true)
+lf=$(grep -nE 'mapping\(bytes32 hash => address consumer\) registeredFor;' "$layout" | cut -d: -f1 || true)
+if [ -z "$lr" ] || [ -z "$lf" ] || [ "$lr" -le "$lf" ]; then
+  echo "lint-verify: $layout: recipientsOpen must be appended after registeredFor (execution-only slot)"
+  fail=1
+fi
+out=$(forge test --match-path test/account/Audit.t.sol --match-test 'test_I2_' 2>&1 || true)
+if grep -qE 'Suite result: ok\. 2 passed' <<<"$out" && [ "$(grep -cE 'Suite result: ok\. 2 passed; 0 failed' <<<"$out")" -eq 2 ]; then
+  echo "lint-verify: I-2 OK (Open and Strict suites)"
+else
+  echo "$out" | grep -E 'PASS|FAIL|Suite result' || echo "$out" | tail -20
+  echo "lint-verify: Audit I-2 tests did not pass in both recipient modes"
   fail=1
 fi
 
