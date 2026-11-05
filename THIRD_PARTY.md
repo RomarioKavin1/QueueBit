@@ -262,3 +262,97 @@ that bundle GPL-3.0 combined work. `@fatsolutions/privacy-pools-core-circuits@1.
 withdraw artifacts are pinned by sha256 in `src/pp/prover.ts` (wasm `36cda227…5c10`, zkey `2a893b42…de677`, vkey
 `666bd098…d21e`). Formulas in `src/pp/crypto.ts` are adapted from this repo's `contracts/devnet-tests/privacy/src/pp.ts`.
 The Privacy Pools v1 ABI fragments in `src/pp/abi.ts` are written from the deployed ABI.
+
+## `@leaked/groth16` (the shipped Groth16 engine)
+
+**No code copied.** The zkey reader, the circom R1CS-to-QAP reduction and both witness-calculator glues
+(`src/witness.ts`, `rust/src/witness.rs`) are written here from the file formats and the circom witness module's
+import/export interface. circom's generated `witness_calculator.js` (`iden3/circom`, `code_producers/src/wasm_elements/common/`)
+is **GPL-3.0** (the repo's `COPYING`; the file has no header of its own), so it is not used, copied or bundled.
+
+**Rust crates compiled into `wasm/leaked_groth16_bg.wasm`** (checked 2026-11-06 with `cargo tree -e normal --features
+wasm --target wasm32-unknown-unknown --format "{p} {l}"`, against each crate's Cargo metadata and LICENSE file):
+the arkworks crates `ark-groth16`, `ark-bn254`, `ark-ec`, `ark-ff`, `ark-poly`, `ark-relations`, `ark-serialize`,
+`ark-std`, `ark-snark`, `ark-crypto-primitives` 0.6.0 (all MIT OR Apache-2.0), `wasm-bindgen` 0.2.117, and their
+dependencies: all MIT and/or Apache-2.0 (dual-licensed crates offering MIT are taken under MIT: `byteorder`
+Unlicense-or-MIT, `zerocopy` BSD-2-or-Apache-or-MIT), **except two**, both hard transitive dependencies of arkworks
+0.6 that cannot be switched off:
+
+| Crate | Pulled in by | License | Obligation |
+|---|---|---|---|
+| `subtle` 2.6.1 | `digest` 0.10 (RustCrypto) ← `ark-ff`, `ark-serialize`, `ark-crypto-primitives` | **BSD-3-Clause** | reproduce the notice below with binary distributions |
+| `foldhash` 0.1.5 | `ark-relations` 0.6 (hash maps of its constraint system) | **Zlib** | none for binaries (source notice kept) |
+
+Both are permissive and MIT-compatible (no copyleft), but they are not MIT/Apache-2.0: the engine's "MIT/Apache only"
+rule needs an explicit exception for them (IMPLEMENTATION-NOTES.md). Build-time only, not in the binary: proc-macro
+crates (`ark-ff-asm`, `ark-ff-macros`, `educe`, `syn`, `unicode-ident` (MIT OR Apache-2.0) AND Unicode-3.0, ...).
+
+**Native-only** (CLI, Rust tests, benchmark; never shipped): `wasmi` 2.0.0 (MIT OR Apache-2.0, the witness-module
+interpreter), `serde_json`, `num-bigint`, `rand`, `rayon` (all MIT OR Apache-2.0).
+
+**npm.** Runtime: `@leaked/privacy` (workspace). Test-only, never imported by `src/`: `snarkjs@0.7.5` (**GPL-3.0**,
+the cross-check oracle) and `@fatsolutions/privacy-pools-core-circuits@1.0.5` (Apache-2.0, the pinned artifacts).
+The on-chain check compiles a temp copy of this repo's `contracts/test/privacy/WithdrawalGroth16Verifier.sol` (MIT).
+
+**Open (not a code dependency):** the circuit's `withdraw.wasm` is circom output and embeds circom's field-arithmetic
+runtime code. The artifact is distributed under Apache-2.0 by its publisher; whether circom's GPL-3.0 reaches that
+embedded runtime is a question for legal review before the CRX ships it (it concerns the pinned artifact, not this
+engine, which would run any circom 2 witness module).
+
+The BSD-3-Clause license text of `subtle` (`subtle-2.6.1/LICENSE`):
+
+```
+Copyright (c) 2016-2017 Isis Agora Lovecruft, Henry de Valence. All rights reserved.
+Copyright (c) 2016-2024 Isis Agora Lovecruft. All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+1. Redistributions of source code must retain the above copyright
+notice, this list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright
+notice, this list of conditions and the following disclaimer in the
+documentation and/or other materials provided with the distribution.
+
+3. Neither the name of the copyright holder nor the names of its
+contributors may be used to endorse or promote products derived from
+this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS
+IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED
+TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+```
+
+The Zlib license text of `foldhash` (`foldhash-0.1.5/LICENSE`):
+
+```
+Copyright (c) 2024 Orson Peters
+
+This software is provided 'as-is', without any express or implied warranty. In
+no event will the authors be held liable for any damages arising from the use of
+this software.
+
+Permission is granted to anyone to use this software for any purpose, including
+commercial applications, and to alter it and redistribute it freely, subject to
+the following restrictions:
+
+1. The origin of this software must not be misrepresented; you must not claim
+    that you wrote the original software. If you use this software in a product,
+    an acknowledgment in the product documentation would be appreciated but is
+    not required.
+
+2. Altered source versions must be plainly marked as such, and must not be
+    misrepresented as being the original software.
+
+3. This notice may not be removed or altered from any source distribution.
+```

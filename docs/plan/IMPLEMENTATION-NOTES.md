@@ -955,3 +955,35 @@ verifyFrame(0)) limit 99,900, SENDER(self, relay(mock, vaultExecute(0.001 ETH)))
 - Open before any real funds: an independent review of the leanSphincs-s lifetime argument at b = 13 (upstream:
   estimate, not proved) and of the verifier (no formal proof, unlike C13); the UI keeps the scheme behind its
   experimental flag.
+
+## @leaked/groth16: the arkworks Groth16 engine (2026-11-06)
+Implements the "Groth16 engine" decision above. `packages/groth16`, MIT; `@leaked/privacy` is unchanged.
+- **Shape.** Rust crate `leaked-groth16` (arkworks 0.6: ark-groth16, ark-bn254) → wasm-bindgen 0.2.117 → committed,
+  reproducible `wasm/` (663 KB, inlined base64; CI job `groth16-wasm` rebuilds and diffs, as `pq-signer-wasm` does;
+  panic paths are remapped so the bytes do not depend on the build machine). TS: `createArkworksGroth16()`
+  implements `Groth16Backend` (`fullProve` **and** `verify`, so `createGroth16Prover`'s self-check always runs: the
+  privacy review's point; `test/privacy-integration.test.ts` asserts the call). `createDefaultProver` /
+  `serveDefaultProver` are the default wiring for the offscreen-document Worker.
+- **Own code, not ark-circom.** A zkey reader (snarkjs binfile; coefficients are double-Montgomery, points
+  single-Montgomery; the public-input rows are dropped and re-added by the reduction) and circom's R1CS-to-QAP
+  reduction (A·B − C on the odd 2n-th-root coset, no division by Z), plugged into ark-groth16's
+  `create_proof_with_reduction_and_matrices`. ark-circom would pull wasmer into the WASM build.
+- **Witness generation.** circom's `witness_calculator.js` is GPL-3.0 (iden3/circom `COPYING`), so it is not used.
+  Our glue is written from the witness module's interface and runs the circuit in the host's WebAssembly engine (V8:
+  33 ms; CSP needs only `'wasm-unsafe-eval'`). The same glue on wasmi (MIT/Apache) serves the native CLI and Rust
+  tests (161 ms). Cross-checked element for element against snarkjs' calculator.
+- **No bogus proofs.** Circuit assertion failures surface as `WitnessError` (circom code 4); any witness that gets
+  past them is refused by the core, which verifies each proof against the zkey's own vk before returning it
+  (`ConstraintUnsatisfiedError`).
+- **Verified.** Same zkey + inputs: our proof verifies with snarkjs and with a forge-compiled temp copy of
+  `WithdrawalGroth16Verifier` (the MIT verifier with the deployed key); snarkjs' proof verifies with ours; tampered
+  proofs/signals are rejected by both. Native Rust tests check the zkey's vk equals the pinned `withdraw.vkey`.
+- **Times (M3, withdraw circuit).** WASM in Node 2.39 s full prove (single-threaded) vs snarkjs 1.65 s
+  (multi-threaded); native 0.79 s (1 thread) / 0.20 s (rayon). Threaded WASM needs a cross-origin-isolated offscreen
+  document (SharedArrayBuffer); deferred. BENCH.md.
+- **License exceptions needed.** Two hard transitive arkworks deps are permissive but not MIT/Apache: `subtle`
+  (BSD-3-Clause, via RustCrypto `digest`; notice reproduced in THIRD_PARTY.md) and `foldhash` (Zlib, via
+  `ark-relations` 0.6). Everything else in the WASM is MIT and/or Apache-2.0. **Decide:** accept both (recommended;
+  no copyleft), or move to arkworks 0.5 to drop `foldhash` (`subtle` remains under any RustCrypto-based stack).
+- **Open.** `withdraw.wasm` is circom output with circom's runtime arithmetic embedded; whether circom's GPL reaches
+  it is a legal question about the pinned artifact (not this engine). Not audited.
