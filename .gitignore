@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.output/
+.wxt/
+out/
+cache/
+broadcast/
+target/
+*.log
+.env
+.env.*
+!.env.sample
+.DS_Store
+coverage/
+playwright-report/
+test-results/
+devnet/data/
