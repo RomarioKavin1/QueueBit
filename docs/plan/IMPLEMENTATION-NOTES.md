@@ -819,3 +819,10 @@ Code: `packages/privacy` (no UI). It has 70 unit tests (`pnpm --filter @leaked/p
   - The extension must decide on GPL snarkjs vs another Groth16 engine.
   - The LEAKED-account-as-sender case is still the §10 open item.
   - No change is needed in `contracts/src/privacy`.
+
+## Decision (2026-11-06): the Groth16 engine in the shipped extension
+`@leaked/privacy` takes the Groth16 engine as an injected interface. snarkjs is GPL-3.0, and bundling it would make the extension bundle GPL. **The extension stays MIT:**
+- The production prover is an **arkworks-based engine** (ark-groth16 + a circom witness loader, MIT/Apache) compiled to WASM, and runs in the offscreen document.
+- snarkjs stays a test-only dev dependency, used as the cross-check oracle: the same zkey and inputs must give a proof that verifies on-chain.
+- Before adopting a witness-generation component, check its license (circom's generated witness code and any wasm runtime).
+Kohaku packages are not dependencies: `@kohaku-eth/plugins` has no license, and `@saga-sync/client` is GPL-3.0-only. Revisit when Kohaku publishes a LICENSE.
