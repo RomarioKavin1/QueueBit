@@ -55,6 +55,28 @@ contract SimWallet is HegotaSupport(Devnet.ERC8421_WORKSHOP) {
         approve(Scope.EXECUTION_AND_PAYMENT);
     }
 
+    event Verified(uint256 frame);
+
+    /// Emits a log in VERIFY: LOG is not allowed in a STATICCALL.
+    function verifyAndEmit() external {
+        emit Verified(txparam(TxParam.CURRENT_FRAME_INDEX));
+        approve(Scope.EXECUTION_AND_PAYMENT);
+    }
+
+    /// Reads another account's balance in VERIFY (BALANCE is banned in the validation prefix; so is SELFBALANCE,
+    /// which Foundry does not record).
+    function verifyReadingBalance(address who) external {
+        require(who.balance > 0);
+        approve(Scope.EXECUTION_AND_PAYMENT);
+    }
+
+    /// Calls an address without code in VERIFY (CALL* to a non-contract is rejected by the public mempool).
+    function verifyCallingNoCode(address who) external {
+        (bool ok,) = who.staticcall("");
+        require(ok);
+        approve(Scope.EXECUTION_AND_PAYMENT);
+    }
+
     /// A bespoke scheme in an ARBITRARY entry: witness = abi.encode(sigHash, owner).
     function verifyArbitrary() external {
         uint256 len = sigparam(0, SigParam.SIGNATURE_LENGTH);

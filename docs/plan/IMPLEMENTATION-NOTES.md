@@ -23,6 +23,18 @@ Where the build differs from, or settles, something in the plan. Newest last. Ea
 - Not modelled (revert `FrameSimUnsupported`): P256 signatures, EIP-8250 keyed-nonce TXPARAMs 0x0D–0x10, EIP-7906
   opcodes. The sig hash in the simulator is opaque (set by the test or a stand-in hash); real hashes come from
   `@leaked/frames`.
+- **What passes FrameSim but fails on the devnet (review 2026-11-06).** A LOG in VERIFY is now a static violation
+  and BALANCE (of another account) or a CALL*/EXTCODE* to a code-less address are reported in
+  `FrameOutcome.bannedAccesses`, but the simulator still cannot see: the other banned opcodes (SELFBALANCE, TIMESTAMP, NUMBER,
+  GAS outside `*CALL`, GASPRICE, BASEFEE, BLOCKHASH, ...; any `block.*`/`gasleft()` in VERIFY-reachable code),
+  TSTORE/TLOAD (reverts in VERIFY on chain and is discarded between frames; here it persists), gas (helper reads cost
+  a model call, not 2 gas; halts revert with data instead of burning the helper's gas), 2929 warm/cold accounting,
+  and the sidecar's `MAX_VERIFY_GAS = 100_000` prefix budget. `TXPARAM(MAX_FEE)` is whatever `simSetFees` sets; on
+  the devnet it is `maxFeePerGas`. Rule for implementers: VERIFY-reachable code must not emit events, read
+  `block.*`, `tx.gasprice`, balances or `gasleft()`, or touch transient storage; `RollingCap` (TIMESTAMP) stays on
+  the execution side. Conformance hook to add with M6: deploy the account on the local `devnet/`, build the same
+  shapes with `@leaked/frames` (`hotSpendTx`, `roleSignerPath*Tx`), and assert `ethrex_simulateFrameTransaction
+  {trace: true}` reports `canonicalMempoolValid` with per-frame `gasUsed` under the 80k VERIFY budget.
 
 ### `@leaked/frames`
 

@@ -285,6 +285,32 @@ contract FrameSimTest is FrameSim {
         _selfRelay(_verify(), _bump());
         SimResult memory r = simRunValid();
         assertEq(r.frames[0].foreignSloads, 0);
+        assertEq(r.frames[0].bannedAccesses, 0);
+    }
+
+    function test_verifyThatEmitsALogIsInvalid() public {
+        _selfRelay(abi.encodeCall(SimWallet.verifyAndEmit, ()), _bump());
+        SimResult memory r = simRun();
+        assertEq(uint256(r.reason), uint256(InvalidReason.VERIFY_NOT_STATIC));
+        assertTrue(r.frames[0].staticViolation);
+        assertEq(wallet.counter(), 0);
+    }
+
+    function test_balanceReadInVerifyIsReported() public {
+        _selfRelay(abi.encodeCall(SimWallet.verifyReadingBalance, (tank)), _bump());
+        SimResult memory r = simRunValid(); // protocol-valid, mempool-rejected
+        assertEq(r.frames[0].bannedAccesses, 1);
+        assertEq(r.frames[0].firstBannedAccess, "BALANCE in the validation prefix");
+    }
+
+    function test_callToAnAddressWithoutCodeInVerifyIsReported() public {
+        _selfRelay(abi.encodeCall(SimWallet.verifyCallingNoCode, (stranger)), _bump());
+        SimResult memory r = simRunValid();
+        assertEq(r.frames[0].bannedAccesses, 1);
+        assertEq(r.frames[0].firstBannedAccess, "CALL*/EXTCODE* to an address without code");
+        // A precompile is fine.
+        _selfRelay(abi.encodeCall(SimWallet.verifyCallingNoCode, (address(1))), _bump());
+        assertEq(simRunValid().frames[0].bannedAccesses, 0);
     }
 
     // ---------------------------------------------------------------------------- ARBITRARY witness ------

@@ -44,11 +44,16 @@ import {
 ///        run with all available gas by default and `gasUsed` is only indicative. `simEnforceGasLimits(true)` passes
 ///        `limits.execution` as the call's gas instead. Intrinsic gas, state gas and fee settlement are not
 ///        modelled: PAYMENT approvals debit `maxCost` from the payer and bump the sender's nonce, nothing else;
-///      - STATICCALL for VERIFY frames is emulated: the frame runs as a normal call under state-diff recording, and
-///        any storage write, value transfer, CREATE or SELFDESTRUCT outside the model makes it a static violation;
+///      - STATICCALL for VERIFY frames is emulated: the frame runs as a normal call under state-diff and log
+///        recording, and any storage write, log, value transfer, CREATE or SELFDESTRUCT outside the model makes it a
+///        static violation. TSTORE is not seen (Foundry does not record transient storage): on chain it reverts in
+///        VERIFY and is discarded between frames, here it persists for the whole `simRun`;
 ///      - P256 signatures, EIP-8250 keyed-nonce TXPARAMs, EIP-7906 opcodes (they revert `FrameSimUnsupported`);
-///      - mempool rules beyond the storage-read report (`FrameOutcome.foreignSloads`): banned opcodes are checked
-///        separately (§10.1.4 item 2).
+///      - mempool rules beyond what the state diff shows (`FrameOutcome.foreignSloads`, `bannedAccesses` for
+///        BALANCE and calls to code-less addresses): SELFBALANCE, TIMESTAMP, NUMBER, GAS, GASPRICE, BASEFEE and the
+///        other banned opcodes pass here and fail on the devnet (§10.1.4 item 2, §10.1.5);
+///      - exceptional halts of the opcodes revert with `FrameSimHalt` data instead of burning the helper call's gas,
+///        so a `try`/`catch` around a helper read behaves differently here than on chain.
 ///      Helper addresses: HegotaSupport CREATEs one helper per opcode the devnet has, in `Opcode` order, from the
 ///      constructor, so they sit at `computeCreateAddress(account, 1..n)`. With a proxy, attach to the
 ///      implementation (the helpers are the implementation's immutables).
@@ -98,12 +103,17 @@ abstract contract FrameSim is Test {
         uint8 status;
         uint256 gasUsed;
         bytes returnData;
-        /// VERIFY frames: a storage write, value transfer, CREATE or SELFDESTRUCT outside the model.
+        /// VERIFY frames: a storage write, log, value transfer, CREATE or SELFDESTRUCT outside the model.
         bool staticViolation;
         /// VERIFY frames: SLOADs of accounts other than tx.sender (the canonical mempool rejects these).
         uint256 foreignSloads;
         address firstForeignAccount;
         bytes32 firstForeignSlot;
+        /// VERIFY frames: accesses the public mempool rejects that Foundry can see: BALANCE (not SELFBALANCE), and
+        /// CALL* / EXTCODE* to an address that is neither a contract nor a precompile (other than tx.sender). Other
+        /// banned opcodes (TIMESTAMP, NUMBER, GAS, ...) are not detected here: the devnet trace is authoritative.
+        uint256 bannedAccesses;
+        string firstBannedAccess;
     }
 
     struct SimResult {
@@ -390,6 +400,7 @@ abstract contract FrameSim is Test {
         uint256 snap;
         if (verify) {
             snap = vm.snapshotState();
+            vm.recordLogs();
             vm.startStateDiffRecording();
         }
 
@@ -414,6 +425,8 @@ abstract contract FrameSim is Test {
         if (verify) {
             Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
             _inspectVerify(o, acc, address(m), m.sender());
+            // LOG is not allowed in a STATICCALL (a reverted frame's logs are already discarded).
+            if (ok && vm.getRecordedLogs().length > 0) o.staticViolation = true;
             if (o.staticViolation) {
                 vm.revertToState(snap);
                 ok = false;
@@ -441,7 +454,7 @@ abstract contract FrameSim is Test {
 
     function _inspectVerify(FrameOutcome memory o, Vm.AccountAccess[] memory acc, address model, address sender)
         private
-        pure
+        view
     {
         for (uint256 a; a < acc.length; a++) {
             Vm.AccountAccess memory x = acc[a];
@@ -450,6 +463,18 @@ abstract contract FrameSim is Test {
                     o.staticViolation = true;
                 }
                 if (x.kind == VmSafe.AccountAccessKind.Call && x.value > 0) o.staticViolation = true;
+                // The model's own balance check (APPROVE's rule) and calls into the model are the protocol, not
+                // the contract under test.
+                if (x.accessor != model && x.account != model) {
+                    if (x.kind == VmSafe.AccountAccessKind.Balance) {
+                        _banned(o, "BALANCE in the validation prefix");
+                    } else if (
+                        _isCallOrExtcode(x.kind) && x.account != sender && x.account.code.length == 0
+                            && uint160(x.account) > 0x100
+                    ) {
+                        _banned(o, "CALL*/EXTCODE* to an address without code");
+                    }
+                }
             }
             for (uint256 s; s < x.storageAccesses.length; s++) {
                 Vm.StorageAccess memory st = x.storageAccesses[s];
@@ -465,6 +490,18 @@ abstract contract FrameSim is Test {
                 }
             }
         }
+    }
+
+    function _banned(FrameOutcome memory o, string memory what) private pure {
+        if (o.bannedAccesses == 0) o.firstBannedAccess = what;
+        o.bannedAccesses++;
+    }
+
+    function _isCallOrExtcode(VmSafe.AccountAccessKind k) private pure returns (bool) {
+        return k == VmSafe.AccountAccessKind.Call || k == VmSafe.AccountAccessKind.StaticCall
+            || k == VmSafe.AccountAccessKind.DelegateCall || k == VmSafe.AccountAccessKind.CallCode
+            || k == VmSafe.AccountAccessKind.Extcodesize || k == VmSafe.AccountAccessKind.Extcodehash
+            || k == VmSafe.AccountAccessKind.Extcodecopy;
     }
 
     /// The static constraints of EIP-8141 §"Constraints" that the model can express.
