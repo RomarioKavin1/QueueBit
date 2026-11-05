@@ -11,10 +11,17 @@
 //    empty signature and with the 36-byte marker -> 0x1626ba7e, an unregistered hash -> 0xffffffff.
 // 4. Over-cap hot tx: admitted (declared <= per-tx max), the SENDER frame reverts OverCap, only the tank pays.
 // 5. Guardian freeze (legacy tx from the guardian EOA), then a hot tx: rejected in VERIFY (simulate + submit).
+// 6. Recipient mode: the account is Open (default), so a hot ETH payment to a fresh, never-allowlisted address is
+//    mined; the vault tightens to Strict (instant) and the same payment then simulates VERIFY-valid with a failing
+//    SENDER frame (never submitted); Strict -> Open directly reverts MustQueue.
+// 7. Bound mode: a second account whose InitConfig carries a C13 vault pk (RoleSignerFactory/C13Verifier from
+//    devnet/deploy/addresses.local.json) stores vaultSigner == predictRoleSigner(salt, 1, account, pk, ...).
+// This account itself is created in explicit (unbound) mode, with an EOA as its vault (backward compatibility, and
+// the role calls are plain legacy txs); G1 (devnet-tests/g1) runs the bound VaultSigner end to end.
 // Every frame tx is first run through ethrex_simulateFrameTransaction {trace:true}; the gate is canonicalMempoolValid,
 // frame-0 gasUsed < 80k, and a clean ERC-7562 trace of frame 0 (no banned opcode, no transient storage, no writes,
 // no storage read outside the account). Results go to stdout and ./last-run.json.
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import {
   concatHex,
   encodeFunctionData,
@@ -36,6 +43,7 @@ const VERIFY_GAS = 80_000n; // + tank 10,000 + 2 x 2,800 (secp) <= MAX_VERIFY_GA
 const TANK_GAS = 10_000n;
 const BODY = { execution: 300_000n, state: 200_000n };
 const DEVNET_ERC8421_WORKSHOP = 0;
+const ZERO = "0x0000000000000000000000000000000000000000" as Address;
 
 const results: Record<string, unknown> = { startedAt: new Date().toISOString() };
 
@@ -67,8 +75,12 @@ results.deploy = {
 };
 log("deployed", results.deploy);
 
+const NO_SIGNER = { salt: `0x${"0".repeat(64)}` as Hex, pk: `0x${"0".repeat(64)}` as Hex, verifier: ZERO, payerKey: ZERO };
 const initCfg = {
   hotKey: hot.address,
+  roleSignerFactory: ZERO,
+  vault: NO_SIGNER,
+  recovery: NO_SIGNER,
   vaultSigner: vault.address,
   recoverySigner: recovery,
   tank: tank.address,
@@ -81,6 +93,7 @@ const initCfg = {
   timelockDelay: 48 * 3600,
   timelockThresholdUsd: 100n * USD,
   ethUsdPrice: ETH_PRICE,
+  recipientMode: 0, // Open
 };
 const initData = encodeFunctionData({ abi: implArt.abi, functionName: "initialize", args: [initCfg] });
 const salt = keccak256(stringToHex(`leaked-devnet-${Date.now()}`));
@@ -366,6 +379,85 @@ const bal = (a: Address) => rpc.node.getBalance(a);
   };
 }
 
+// ------------------------------------------------------------------------------ 6. recipient mode ----------
+{
+  const mode = async () => Number(await read<number>("recipientMode"));
+  if ((await mode()) !== 0) throw new Error("account is not Open by default");
+  const anyone = privateKeyToAccount(generatePrivateKey()).address; // never allowlisted
+  if (await read<boolean>("isTarget", [anyone])) throw new Error("fresh address is a target?");
+  const pay = parseEther("0.0005"); // $1.50; the bucket refills continuously, so wait for room if needed
+  for (let i = 0; i < 60 && (await bucket()).available < 2n * USD; i++) await new Promise((r) => setTimeout(r, 5_000));
+  const before = { anyone: await bal(anyone), bucket: await bucket() };
+  const { r, out } = await sendHot("Open mode: hot payment to an arbitrary recipient", await hotTx(2n * USD, [{ target: anyone, value: pay, data: "0x" }]));
+  if (r.frameReceipts[2]?.status !== "success") throw new Error("Open-mode payment SENDER frame failed");
+  if ((await bal(anyone)) !== before.anyone + pay) throw new Error("recipient did not receive the payment");
+  const tighten = await call(
+    account,
+    encodeFunctionData({ abi: rolesArt.abi, functionName: "vaultSetRecipientMode", args: [1] }),
+    { from: vault },
+  );
+  if ((await mode()) !== 1) throw new Error("not Strict after vaultSetRecipientMode(Strict)");
+  const strictTx = await hotTx(2n * USD, [{ target: anyone, value: pay, data: "0x" }]);
+  const strictSim = await simulate("Strict mode: same payment (VERIFY-valid, SENDER must fail; not submitted)", strictTx);
+  const senderOk = (strictSim.frames as { succeeded?: boolean; status?: string }[] | undefined)?.[2];
+  if (senderOk && (senderOk.succeeded === true || senderOk.status === "success")) {
+    throw new Error("Strict mode SENDER frame would succeed for a non-allowlisted recipient");
+  }
+  let loosenError = "";
+  try {
+    await pub.simulateContract({ account: vault, address: account, abi: accountAbi, functionName: "vaultSetRecipientMode", args: [0] as never });
+  } catch (e) {
+    loosenError = (e as Error).message.includes("MustQueue") ? "MustQueue" : (e as Error).message.slice(0, 200);
+  }
+  if (loosenError !== "MustQueue") throw new Error(`Strict -> Open directly: expected MustQueue, got ${loosenError}`);
+  results.recipientMode = {
+    openPayment: { ...out, recipient: anyone, amount: pay, before, afterBucket: await bucket() },
+    tightenHash: tighten.hash,
+    tightenGas: tighten.gasUsed,
+    strictSimulation: { valid: strictSim.canonicalMempoolValid, frames: strictSim.frames, verifyGas: strictSim.verifyFrameGas },
+    strictToOpenDirect: loosenError,
+  };
+}
+
+// --------------------------------------------------------------------------- 7. bound derivation ----------
+{
+  const dep = JSON.parse(readFileSync(new URL("../../../devnet/deploy/addresses.local.json", import.meta.url), "utf8"));
+  const rsf = dep.contracts.RoleSignerFactory.address as Address;
+  const c13 = dep.contracts.C13Verifier.address as Address;
+  const rsfArt = artifact("RoleSignerFactory.sol", "RoleSignerFactory");
+  const vaultPk = keccak256(stringToHex(`leaked-devnet-bound-vault-pk-${Date.now()}`));
+  const vaultPayer = privateKeyToAccount(generatePrivateKey()).address;
+  const bSalt = keccak256(stringToHex(`leaked-devnet-bound-${Date.now()}`));
+  const cfg = {
+    ...initCfg,
+    roleSignerFactory: rsf,
+    vault: { salt: bSalt, pk: vaultPk, verifier: c13, payerKey: vaultPayer },
+    vaultSigner: ZERO,
+  };
+  const bInit = encodeFunctionData({ abi: implArt.abi, functionName: "initialize", args: [cfg] });
+  const bAccount = (await pub.readContract({
+    address: factoryD.address,
+    abi: factoryArt.abi,
+    functionName: "predictAccount",
+    args: [bSalt, implD.address, bInit],
+  })) as Address;
+  const bCreated = await call(
+    factoryD.address,
+    encodeFunctionData({ abi: factoryArt.abi, functionName: "createAccount", args: [bSalt, implD.address, bInit] }),
+    { gas: 10_000_000n },
+  );
+  const expected = (await pub.readContract({
+    address: rsf,
+    abi: rsfArt.abi,
+    functionName: "predictRoleSigner",
+    args: [bSalt, 1, bAccount, vaultPk, c13, vaultPayer],
+  })) as Address;
+  const [stored] = (await pub.readContract({ address: bAccount, abi: accountAbi, functionName: "getRoles" })) as [Address];
+  if (stored.toLowerCase() !== expected.toLowerCase()) throw new Error(`bound vault ${stored} != predicted ${expected}`);
+  results.boundDerivation = { account: bAccount, createHash: bCreated.hash, createGas: bCreated.gasUsed, vaultSigner: stored };
+  log("bound derivation", results.boundDerivation);
+}
+
 results.finishedAt = new Date().toISOString();
 writeFileSync(new URL("./last-run.json", import.meta.url), json(results));
 log("ACCOUNT DEVNET OK", {
@@ -373,4 +465,6 @@ log("ACCOUNT DEVNET OK", {
   hotPayment: (results.hotPayment as { hash: unknown }).hash,
   registerHash: (results.registerHash as { hash: unknown }).hash,
   overCap: (results.overCap as { hash: unknown }).hash,
+  openPayment: (results.recipientMode as { openPayment: { hash: unknown } }).openPayment.hash,
+  boundVault: (results.boundDerivation as { vaultSigner: unknown }).vaultSigner,
 });
