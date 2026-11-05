@@ -145,6 +145,33 @@ describe("rules", () => {
     expect(alerts.map((a) => a.kind)).toEqual(["guardian-changed", "paused", "resumed"]);
   });
 
+  it("recipient mode (Open/Strict): instant tightening -> info; folded at creation and under an executed queued op", () => {
+    const core = new WatcherCore({ targets });
+    // Open -> Strict is an instant Vault setter: a settings change, nothing to cancel.
+    const [strict] = core.ingest([ev("RecipientModeSet", { mode: 1 })]);
+    expect(strict).toMatchObject({ kind: "settings-changed", severity: "info", action: { deepLink: "#limits" } });
+    // Emitted by `initialize` next to the first everyday key: creation is silent.
+    const t = txh(0x40);
+    expect(
+      core.ingest([
+        ev("HotKeyRotated", { oldKey: `0x${"0".repeat(40)}`, newKey: VAULT }, { tx: t, logIndex: 0 }),
+        ev("RecipientModeSet", { mode: 0 }, { tx: t, logIndex: 1 }),
+      ]),
+    ).toEqual([]);
+    // Strict -> Open is a queued loosening: `Queued` announced it (urgent); its execution is one "done" alert.
+    const opId = txh(0x41);
+    expect(core.ingest([ev("Queued", { opId, kind: 1, eta: T0 + H48 })])[0]!.kind).toBe("change-scheduled");
+    const t2 = txh(0x42);
+    expect(
+      core
+        .ingest([
+          ev("RecipientModeSet", { mode: 0 }, { tx: t2, logIndex: 0 }),
+          ev("QueueExecuted", { opId }, { tx: t2, logIndex: 1 }),
+        ])
+        .map((a) => a.kind),
+    ).toEqual(["scheduled-done"]);
+  });
+
   it("repeated blocked payments -> one urgent alert per window", () => {
     const core = new WatcherCore({ targets, blockedThreshold: 3, blockedWindowSec: 3600 });
     const blocked = (i: number, t: number): WatchedEvent => ({

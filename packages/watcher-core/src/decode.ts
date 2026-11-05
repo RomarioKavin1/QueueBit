@@ -117,6 +117,9 @@ function toAccountEvent(name: string, a: Args, emitter: Address): AccountEvent |
       return { type: "policyChanged", what: "trusted-verifier" };
     case "FeePolicyUpdated":
       return { type: "policyChanged", what: "fees" };
+    case "RecipientModeSet":
+      // Open -> Strict is an instant tightening; Strict -> Open is a queued loosening (announced by `Queued`).
+      return { type: "policyChanged", what: "recipients" };
     case "Upgraded":
       return { type: "upgraded", impl: addr(a.implementation) };
     case "Migrated":

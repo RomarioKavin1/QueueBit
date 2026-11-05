@@ -72,7 +72,10 @@ export type AccountEvent =
   | { type: "guardianSet"; guardian: Address; enabled: boolean }
   | { type: "capUpdated" }
   | { type: "timelockUpdated" }
-  | { type: "policyChanged"; what: "token" | "target" | "session" | "value-verifier" | "trusted-verifier" | "fees" }
+  | {
+      type: "policyChanged";
+      what: "token" | "target" | "session" | "value-verifier" | "trusted-verifier" | "fees" | "recipients";
+    }
   | { type: "upgraded"; impl: Address }
   | { type: "migrated"; to: Address }
   | { type: "activity"; what: "hot" | "vault" | "session" | "hash-registered" }

@@ -868,12 +868,74 @@ export const frameAccountAbi = [
   },
   {
     type: "event",
+    name: "RecipientModeSet",
+    inputs: [
+      {
+        name: "mode",
+        type: "uint8",
+        indexed: false,
+        internalType: "enum ILeakedAccount.RecipientMode",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
     name: "RecoverySignerSet",
     inputs: [
       {
         name: "signer",
         type: "address",
         indexed: true,
+        internalType: "address",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "RoleSignerDerived",
+    inputs: [
+      {
+        name: "role",
+        type: "uint8",
+        indexed: true,
+        internalType: "uint8",
+      },
+      {
+        name: "signer",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "factory",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "salt",
+        type: "bytes32",
+        indexed: false,
+        internalType: "bytes32",
+      },
+      {
+        name: "pk",
+        type: "bytes32",
+        indexed: false,
+        internalType: "bytes32",
+      },
+      {
+        name: "verifier",
+        type: "address",
+        indexed: false,
+        internalType: "address",
+      },
+      {
+        name: "payerKey",
+        type: "address",
+        indexed: false,
         internalType: "address",
       },
     ],
