@@ -441,3 +441,105 @@ beyond the unreturned `seen`.
   e2e drives); the recovery ceremony's middle step (Vault approval of `vaultSetRecoverySigner`) happens after the
   test-ok QR, as ux-spec §4.6 orders it; 4337 requests (tx-type 1) are refused (E-76). The root `vitest` config only
   lists `packages/*`, so the companion's unit tests run via `pnpm --filter @leaked/companion test`.
+
+## Contracts M7: ERC-4337 / ERC-7579 backend (§10.4, §10.9 M7)
+
+Code: `contracts/src/modules/{LeakedHotValidator,LeakedPolicyHook,LeakedRoleExecutor}.sol`, `interfaces/`, `lib/
+LeakedExecDecoder.sol`. Tests: `contracts/test/modules` (130 tests: 40-41 per host on the reference MSA, Safe7579 and
+Kernel v3.3; real-C13 test; ERC-7562 storage test; invariants). E2e: `contracts/devnet-tests/4337` (`bun run e2e.ts`,
+anvil). Pins and licenses: THIRD_PARTY.md.
+
+**EntryPoint: v0.8.0, as §10.4.3 pins.** Verified 2026-11-06: `0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108` =
+CREATE2(`0x4e59b448…956C`, salt `0x0a59dbff790c23c976a548690c27297883cc66b4c67024f9117b0238995e35e9`, initcode of
+`account-abstraction@v0.8.0` `deployments/ethereum/EntryPoint.json`); that initcode is byte-identical to the input of
+mainnet tx `0xae4eafd1…3129`, and `cast code` at the address on mainnet and Sepolia equals the artifact's runtime up to
+immutables. The v0.7 address (`0x0000000071727De2…a032`, plan [UNVERIFIED]) has code on Sepolia. Tests and the e2e
+deploy that exact initcode through the CREATE2 deployer, so they run the mainnet bytecode at the canonical address.
+
+**Design as built.**
+- `LeakedPolicyHook` is the policy store and the only stateful hot-side module: hot key, freeze/bunker, per-tx and fee
+  bounds, rolling bucket (`src/lib/RollingCap`), prices, allowlist, sessions, registered hashes, trusted/denied 1271
+  verifiers. `LeakedHotValidator` is stateless and reads it. `LeakedRoleExecutor` holds the PQ roles (verifier, vault
+  and recovery pk, separate nonce lanes, timelock queue, vault instant bucket, guardians, rotation) and is the **only**
+  writer of hook policy (`onlyExecutor`; loosening needs the executor's transient queued context).
+- A vault batch (`vaultExec`/`vaultQueue`) mixes spends (through `executeFromExecutor`, single mode, per call) and config
+  calls made directly to the hook's setters or the executor's role setters, with `account` as first argument (checked).
+  Calls targeting the account itself (module install/uninstall) are queued-only. Digests are EIP-712 in the executor's
+  domain (`VaultExec(address account,uint256 nonce,bytes32 callsHash,uint256 usdValue)` per §10.11, plus `VaultQueue`,
+  `VaultCancel`, `RecoveryCancel`, `RecoveryRotate`, `RecoveryCancelRotation`); `callsHash = keccak256(abi.encode(calls))`.
+- The hook exempts calls whose `msgSender` is the executor and everything nested in them (transient depth counter,
+  e.g. the MSA's own `withHook` on the `uninstallModule` self-call); the executor refuses to run during a hot batch.
+- Audit fixes of the frame-native account mirrored (coordinator, commits `e43dfea..21400db`): C1 `registerPermit`
+  (on-chain ERC-2612 digest, value debited, consumable by the token alone; opaque `registerHash` hashes never validate
+  for tokens/Permit2/untrusted contracts), H1 hot verifier rule (hot 1271 only for code-less callers or vault-trusted
+  verifiers via `setTrustedVerifier`, queued), M2 (approval-selector sessions need an allowlisted token). L1 is
+  frame-only. PoC tests: `test_C1_poc_selfDeclaredPermitDoesNotDrain`, `test_7739_personalSign_hotVerifierRule`,
+  `test_session_approvalNeedsAllowlistedToken`.
+
+**Deviations from the frame-native semantics (deliberate).**
+- No `declaredUsd`: ERC-7579 `execute` has no field for it. Validation computes the batch's static USD value (ETH
+  sends, ERC-20 transfers, registered hashes) and refuses it above `perTxMaxUsd` or the daily cap (M-b). The rolling
+  bucket needs the clock, so a batch that fits statically but not the bucket is included and reverts in `postCheck`
+  (the account pays that op's gas, bounded by `maxFeeWei`; e2e: 272,743 gas). Same exposure as the frame-native tank.
+- Sessions: a hook sees only batch-level balance deltas, so every session called in a batch is charged the batch's
+  whole residual outflow (max(0, delta − static debits)); with `approve` + `swap` both sessions are charged, which fails
+  closed. Session expiry is checked in execution only ([OP-011] bans TIMESTAMP in validation).
+- Modules are not upgradeable: no queued upgrade/migrate; migration is a (queued) vault spend, module changes are queued
+  vault ops. An uninstalled hook marks the account `retired` and refuses reinstall (a revived allowlist would be
+  stale).
+- Only `execute(single|batch, default exec)` is hot-reachable; TRY/DELEGATECALL/STATIC, mode selectors and payloads are
+  refused, and the calldata must be canonically ABI-encoded (the validator parses what the host parses again).
+
+**Hosts (plan §10.4.3, R-6).**
+- **R-6 resolved for Kernel v3.3** (`cd697c7`): its `IHook` is the standard 3-argument ERC-7579 form
+  (`kernel/src/interfaces/IERC7579Modules.sol:72-77` at v3.3); the 4-argument `preCheck(bytes32 id, …)` the plan
+  cites is Kernel master (`c960b42`, v4 beta). Hooks are bound per validator and per executor: installing the
+  executor with the hook (`installModule(2, executor, hook ‖ abi.encode(executorData, hookData))`) makes executor
+  calls hit it (tested). A validator with a hook forces userOps through `executeUserOp` (`Kernel.sol:269`), so the
+  validator accepts `executeUserOp.selector ‖ execute(…)`. **Kernel 1271 is unsupported**: Kernel passes the validator
+  `hashTypedData(Kernel(bytes32 hash))` in its own domain (`ValidationManager._toWrappedHash`), so registered hashes and
+  ERC-7739 never match; the tests assert that.
+- The reference MSA (`99cbd34`) and Safe7579 (`9f507f3`) hard-code the **v0.7** EntryPoint (`AccountBase.sol:26`,
+  `AccessControl.sol:36`); tests use subclasses that override `entryPoint()`. A production v0.8 deployment needs host
+  builds that accept v0.8 [UNVERIFIED: whether Rhinestone publishes one]; Kernel takes the EntryPoint as a constructor
+  argument.
+- Safe7579: the Safe's owner path bypasses 7579 hooks, so the Safe must have one owner nobody holds a key for
+  (`0xdead` in tests); an empty 1271 signature goes to the Safe's `signedMessages`, so registered hashes need the
+  36-byte marker (`validator ‖ REGISTERED_MARKER ‖ hash`); its module calls go through
+  `execTransactionFromModuleReturnData`, so revert data is not bubbled.
+- MSA/Safe7579 select the validator from the nonce key's top 20 bytes; Kernel's root validator is key 0. 1271 data is
+  `validator(20) ‖ sig` (MSA, Safe7579) or `0x00 ‖ sig` (Kernel root); the 7739 sentinel therefore needs that prefix.
+
+**ERC-7562.** Validation reads only hook slots associated with the account (`_policies[account]` offsets 0-5;
+nested mappings keyed account-last) — asserted on all three hosts with `vm.startMappingRecording` (every slot
+`keccak256(account ‖ x) + n`, n <= 128); the validator and executor storage are untouched. Caveat [STO-022]: a first
+userOp with `initCode` reads associated storage of a non-entity contract, which needs a staked factory; the e2e
+creates the account by a plain transaction instead. Opcode rules ([OP-011] etc.) are by construction (no
+`block.*`/`BALANCE`/`TLOAD` on the validation path) and not traced: anvil has no bundler collector tracer.
+
+**Gas (measured).** Anvil e2e (`last-run.json`): hot ETH userOp `actualGasUsed` 331,016 (handleOps tx 220,844);
+over-cap op that reverts in `postCheck` 272,743; vault exec relayed by a SimpleAccount userOp **460,444** (tx 408,404;
+4,260 B calldata, 3,688 B C13 witness; PQ sign 3.8 s in bun); account creation 648,062. Foundry: direct `vaultExec`
+228,923 (C13 verify ≈ 110k inside); relayed userOp 456,530; hot ETH userOp 388k (MSA) / 412k (Kernel) / 417k (Safe7579).
+The PQ check runs in **execution**, so the relayer's validation is plain ECDSA (`verificationGasLimit` 100k was
+enough): the public-bundler verification-gas caps the plan marks [UNVERIFIED] do not apply to this path. What remains
+unverified is a public bundler's handling of a 4.2 KB-calldata op (preVerificationGas pricing) — try on Sepolia.
+
+**Bundler.** The e2e uses a minimal submitter (eth_call simulation of `handleOps`, then a `handleOps` tx), not Alto:
+Alto's safe mode needs a tracer anvil does not provide, and unsafe mode would add nothing over the submitter here.
+
+**Build notes.** Safe v1.4.1 does not compile under via-IR (stack too deep), so `foundry.toml` adds a
+`legacy-pipeline` compiler profile restricted to `lib/safe-smart-account/**`; Safe7579 and the MSA compile in that job
+(`test/modules/hosts/HostArtifacts.sol`), Kernel in its own file under via-IR (24,488 B; 29,767 B under the legacy
+pipeline, over EIP-170). With two profiles forge 1.3.5's name-based `vm.getCode("File.sol:Name")` finds nothing, so
+the harness deploys hosts from artifact paths (`out/...json`; `fs_permissions` read on `out`). The privacy suite's
+`test/privacy/vendor/.../Entrypoint.sol` and `EntryPoint.sol` collide in `out/` on case-insensitive macOS — another
+reason the EntryPoint is deployed from its canonical JSON instead of compiled. `forge build --sizes` still fails on
+the privacy vendor's `PoseidonT3`/`PoseidonT4` (not M7). Safe7579 needs `erc7579-implementation@16138d1` (its lockfile
+pin, context-remapped) and a file-level remapping for its `src/lib/ModeLib.sol` import.
+
+**For later (shared refactoring, not done: `src/account` and `src/lib` are under review).** The token config / price
+quote (`mulDiv` ceil), monitored-asset snapshot and outflow, I-6 approval check and tighten/loosen classification are
+duplicated between `LeakedAccountBase`/`LeakedAccountRoles` and `LeakedPolicyHook`/`LeakedRoleExecutor`. Proposal: a
+`src/lib/LeakedPolicyLib.sol` (pure/view helpers over a `TokenCfg` + balances interface) used by both, and the types in
+one `ILeakedPolicyTypes`.

@@ -184,3 +184,28 @@ No third-party source was copied into `packages/ur` or `apps/companion`. Data ta
 Pools `PrivacyPoolNote` EIP-712 domain and types and the 0xbow entrypoint addresses (from `kohaku`
 `privacy-pools/src/account/signature-keys.ts` and `config.ts`, as cited in plan §40 §1.3–1.4), used as constants in
 `apps/companion/src/registry/leaked.descriptors.json`. The companion's icons are original.
+
+### Contracts M7 (ERC-4337 / ERC-7579 backend)
+
+No third-party source was copied into `contracts/src/modules`. The minimal ERC-4337/7579 interfaces in
+`src/modules/interfaces/IERC7579Modules.sol` are written from the ERC texts (struct and selector layouts are
+standard-defined); `LeakedHotValidator` uses OpenZeppelin's `ERC7739Utils` from the existing `lib/openzeppelin-contracts`.
+ModuleKit (`rhinestonewtf/modulekit`, AGPL/GPL, unmaintained since 2026-09) is **not** used: the test harness in
+`contracts/test/modules` re-implements the ModuleKit pattern without its code.
+
+Foundry submodules added for the tests only (test hosts and the EntryPoint; never imported by `src/`), pinned in
+`contracts/foundry.lock`:
+
+| Submodule (`contracts/lib/`) | Upstream @ pin | License | Used for |
+|---|---|---|---|
+| `account-abstraction` | `eth-infinitism/account-abstraction` tag `v0.8.0` @ `4cbc060` | GPL-3.0 (core); some interfaces MIT | `SimpleAccount` relayer in tests; `deployments/ethereum/EntryPoint.json` initcode, deployed as-is (test + anvil e2e) |
+| `erc7579-implementation` | `erc7579/erc7579-implementation` @ `99cbd34` | MIT | reference `MSAAdvanced`, `MSAFactory`, `Bootstrap` |
+| `erc7579-safe7579-dep` | same repo @ `16138d1` (Safe7579's lockfile pin) | MIT | types/`AccountBase` imported by Safe7579 |
+| `sentinellist` | `rhinestonewtf/sentinellist` `v1.0.0` @ `6dff696` | MIT | MSA / Safe7579 dependency |
+| `safe7579` | `rhinestonewtf/safe7579` @ `9f507f3` | GPL-3.0 | Safe7579 adapter + launchpad |
+| `safe-smart-account` | `safe-global/safe-smart-account` `v1.4.1` @ `bf943f8` | LGPL-3.0-only | `Safe` singleton, `SafeProxyFactory` |
+| `checknsignatures` | `rhinestonewtf/checknsignatures` @ `f8389c1` (Safe7579's lockfile pin) | MIT | Safe7579 dependency |
+| `kernel` | `zerodevapp/kernel` tag `v3.3` @ `cd697c7` (with its own `lib/solady`, `lib/ExcessivelySafeCall`) | MIT | Kernel v3.3 + `KernelFactory` |
+
+Test-only shims in `contracts/test/modules/hosts/HostArtifacts.sol` subclass `MSAAdvanced` and `Safe7579` to override
+`entryPoint()` (both hard-code the v0.7 address); no upstream file is modified.

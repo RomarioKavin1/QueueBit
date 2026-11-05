@@ -1,0 +1,51 @@
+{
+  "date": "2026-11-05T22:59:34.035Z",
+  "rpc": "http://127.0.0.1:8547",
+  "chainId": 31337,
+  "entryPoint": {
+    "address": "0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108",
+    "codeHash": "0x0a58ad57e3f8266dcc99cda79b0d3d784a4cedc4e972f33a8a2c5cecbb9e67b4"
+  },
+  "contracts": {
+    "verifier": "0xe7f1725e7734ce288f8367e1bb143e90bb3f0512",
+    "executor": "0x9fe46736679d2d9a65f0992f2272de9f3c7fa6e0",
+    "hook": "0xcf7ed3acca5a467e9e704c703e8d87f634fb0fc9",
+    "validator": "0xdc64a140aa3e981100a9beca4e685f962f0cf6c9",
+    "msaImpl": "0x5fc8d32690cc91d4c39d9d3abcbd16989f875707",
+    "account": "0x1330De3cb3a013A86fD394aE15F38f5DA01A87Bb"
+  },
+  "accountCreationGas": "648062",
+  "hotWithinCap": {
+    "submitted": true,
+    "txHash": "0xf7e332b5bab27fb501f5c70856fa034342bad20c8746cf643d67f9dd5a82bc3a",
+    "txGasUsed": "220844",
+    "success": true,
+    "actualGasUsed": "331016",
+    "recipientBalance": "100000000000000000",
+    "bucketAvailable": "700000000"
+  },
+  "overPerTxRejected": {
+    "submitted": false,
+    "reason": "FailedOpWithRevert(AA23 reverted) PerTxMaxExceeded(600000000,500000000)"
+  },
+  "overCapRejected": {
+    "submitted": true,
+    "txHash": "0xc0e5c65e6e2f7522c9e1f2bdd93ae5d433c6f27cca5566bbf90c0906c5b8c2f1",
+    "txGasUsed": "159894",
+    "success": false,
+    "actualGasUsed": "272743",
+    "revertReason": "OverCap(300000000,250000000)",
+    "recipientUnchanged": true
+  },
+  "vaultExecRelayed": {
+    "submitted": true,
+    "txHash": "0xd1da6371c63264b544c92f44ca2aa0acaa9f98c0673e12c7843b23a636e1c566",
+    "txGasUsed": "408404",
+    "success": true,
+    "actualGasUsed": "460444",
+    "pqSignMs": 3766,
+    "sigBytes": 3688,
+    "callDataBytes": 4260,
+    "destBalance": "1000000000000000000"
+  }
+}
