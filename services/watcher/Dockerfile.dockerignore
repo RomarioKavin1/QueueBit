@@ -1,0 +1,18 @@
+# Used by BuildKit for `docker build -f services/watcher/Dockerfile .` (context = repository root).
+**
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!tsconfig.base.json
+!packages/frames/package.json
+!packages/frames/tsconfig*.json
+!packages/frames/src/**
+!packages/rpc/package.json
+!packages/rpc/tsconfig*.json
+!packages/rpc/src/**
+!packages/watcher-core/package.json
+!packages/watcher-core/tsconfig*.json
+!packages/watcher-core/src/**
+!services/watcher/package.json
+!services/watcher/tsconfig*.json
+!services/watcher/src/**

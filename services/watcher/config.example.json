@@ -1,0 +1,21 @@
+{
+  "rpcUrl": "http://localhost:8545",
+  "chainId": 1337,
+  "confirmations": 2,
+  "pollIntervalMs": 6000,
+  "startBlock": "latest",
+  "maxBlockRange": 2000,
+  "reorgWindow": 64,
+  "scanFrameTxs": true,
+  "accounts": [{ "address": "0x0000000000000000000000000000000000000000", "backend": "frame" }],
+  "modules": [],
+  "roleSigners": [],
+  "store": "sqlite:./data/watcher.db",
+  "http": { "host": "127.0.0.1", "port": 8787 },
+  "apiKeys": [{ "id": "extension", "secret": "0x<64 hex chars: openssl rand -hex 32>" }],
+  "rateLimit": { "perMinute": 60, "burst": 20, "maxStreamsPerKey": 4 },
+  "webhook": { "url": "https://example.invalid/leaked-hook", "secret": "0x<64 hex chars>", "minSeverity": "info" },
+  "ntfy": { "url": "https://ntfy.sh", "topic": "<long random topic>", "minSeverity": "warning" },
+  "blockedThreshold": 3,
+  "blockedWindowSec": 3600
+}
