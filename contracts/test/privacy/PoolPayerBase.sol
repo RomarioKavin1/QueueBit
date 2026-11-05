@@ -88,6 +88,7 @@ abstract contract PoolPayerBase is FrameSim {
         return PoolPayer.Config({
             devnet: Devnet.ERC8421_WORKSHOP,
             entrypoint: address(entrypoint),
+            pool: address(pool),
             registry: address(registry),
             operator: operator,
             feeParam: TxParam.MAX_COST,
@@ -113,6 +114,9 @@ abstract contract PoolPayerBase is FrameSim {
         );
         pool = new PrivacyPoolSimple(address(entrypoint), address(verifier), address(verifier));
         registry = new MockStakingRegistry();
+        IERC20 asset = IERC20(pool.ASSET());
+        vm.prank(owner);
+        entrypoint.registerPool(asset, IPrivacyPool(address(pool)), 0, 0, 0);
         payer = new PoolPayer(_config());
         griefer = new RevertingReceiver();
         assertEq(address(pool), Fx.POOL, "fixture: pool address");
@@ -124,9 +128,6 @@ abstract contract PoolPayerBase is FrameSim {
         vm.deal(address(payer), FLOAT);
         vm.txGasPrice(GAS_PRICE);
 
-        IERC20 asset = IERC20(pool.ASSET());
-        vm.prank(owner);
-        entrypoint.registerPool(asset, IPrivacyPool(address(pool)), 0, 0, 0);
         vm.deal(depositor, 10 ether);
         vm.startPrank(depositor);
         entrypoint.deposit{value: Fx.NOTE_VALUE}(Fx.PRECOMMITMENT_1);

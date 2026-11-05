@@ -42,7 +42,7 @@ import {
 ///         3. the pay frame must carry state gas (APPROVE creates the fresh sender account).
 /// @dev    VERIFY-reachable code (`verify`, `quote`, the frame-shape helpers) reads no `block.*`, `tx.gasprice`,
 ///         balances, `gasleft()` or transient storage and emits no events (IMPLEMENTATION-NOTES, FrameSim blind spots);
-///         it reads only immutables, the pool, the Entrypoint and the verifier (STORAGE-032, staked payer). `GAS` is
+///         it reads only immutables, the pool, the Entrypoint (latest ASP root) and the verifier (STORAGE-032, staked payer). `GAS` is
 ///         used only as a `*CALL` operand. The halting reads of 50-devnet-review F6 (STATUS / *_GAS_USED of the running
 ///         frame) are never made: `settle` reads the STATUS of frame i (< its own), `refund` the gas of frames < itself.
 contract PoolPayer is HegotaSupport {
@@ -79,6 +79,8 @@ contract PoolPayer is HegotaSupport {
     struct Config {
         Devnet devnet;
         address entrypoint;
+        /// The native-ETH pool (v1). Its scope and verifier are immutables of the pool, cached here.
+        address pool;
         address registry;
         address operator;
         /// `TxParam.MAX_COST` (ethrex-eip8141-tracer devnet: what APPROVE collects) or `TxParam.MAX_FEE` (EIP text,
@@ -100,6 +102,9 @@ contract PoolPayer is HegotaSupport {
     // ------------------------------------------------------------------------------------------------ state ------
 
     IPrivacyPoolsEntrypoint public immutable ENTRYPOINT;
+    IPrivacyPoolsPool public immutable POOL;
+    uint256 public immutable SCOPE;
+    IPrivacyPoolsWithdrawalVerifier public immutable VERIFIER;
     IERC8421StakingRegistry public immutable REGISTRY;
     TxParam public immutable FEE_PARAM;
     uint256 public immutable INTRINSIC_GAS;
@@ -169,13 +174,24 @@ contract PoolPayer is HegotaSupport {
     // ------------------------------------------------------------------------------------------ construction ------
 
     constructor(Config memory c) payable HegotaSupport(c.devnet) {
-        if (c.entrypoint == address(0) || c.registry == address(0) || c.operator == address(0)) revert InvalidConfig();
+        if (c.entrypoint == address(0) || c.pool == address(0) || c.registry == address(0) || c.operator == address(0))
+        {
+            revert InvalidConfig();
+        }
         if (c.feeParam != TxParam.MAX_COST && c.feeParam != TxParam.MAX_FEE) revert InvalidConfig();
         if (
             c.intrinsicGas > MAX_INTRINSIC_GAS || c.perFrameGas > MAX_PER_FRAME_GAS
                 || c.gasPerDataByte > MAX_GAS_PER_DATA_BYTE || c.refundFrameGas > MAX_REFUND_FRAME_GAS
         ) revert InvalidConfig();
         ENTRYPOINT = IPrivacyPoolsEntrypoint(c.entrypoint);
+        IPrivacyPoolsPool pool = IPrivacyPoolsPool(c.pool);
+        if (pool.ASSET() != NATIVE_ASSET) revert UnsupportedAsset(); // v1: the ETH pool only (§2.6)
+        uint256 scope = pool.SCOPE();
+        if (pool.ENTRYPOINT() != c.entrypoint || ENTRYPOINT.scopeToPool(scope) != c.pool) revert InvalidConfig();
+        POOL = pool;
+        SCOPE = scope;
+        // `PrivacyPool.WITHDRAWAL_VERIFIER` is immutable, so caching it is exact (and saves VERIFY gas).
+        VERIFIER = IPrivacyPoolsWithdrawalVerifier(pool.WITHDRAWAL_VERIFIER());
         REGISTRY = IERC8421StakingRegistry(c.registry);
         FEE_PARAM = c.feeParam;
         INTRINSIC_GAS = c.intrinsicGas;
@@ -204,7 +220,7 @@ contract PoolPayer is HegotaSupport {
     // ------------------------------------------------------------------------------------------- VERIFY ------
 
     /// The `pay` frame. Static: reads only, then APPROVE(PAYMENT).
-    /// @param scope the pool's scope (Entrypoint `scopeToPool`).
+    /// @param scope the pool's scope; must be `SCOPE` (the one ETH pool this PoolPayer serves).
     /// @param rootIndexHint the index in the pool's 64-slot root ring that holds `proof.stateRoot` (saves a scan).
     function verify(
         uint256 scope,
@@ -243,9 +259,8 @@ contract PoolPayer is HegotaSupport {
         }
 
         // 2. Pool and context.
-        IPrivacyPoolsPool pool = IPrivacyPoolsPool(ENTRYPOINT.scopeToPool(scope));
-        if (address(pool) == address(0)) revert PoolNotFound();
-        if (pool.ASSET() != NATIVE_ASSET) revert UnsupportedAsset(); // v1: the ETH pool only (§2.6)
+        if (scope != SCOPE) revert PoolNotFound();
+        IPrivacyPoolsPool pool = POOL;
         uint256[8] calldata s = proof.pubSignals;
         if (s[7] != uint256(keccak256(abi.encode(withdrawal, scope))) % SNARK_SCALAR_FIELD) revert ContextMismatch();
         if (s[4] > MAX_TREE_DEPTH || s[6] > MAX_TREE_DEPTH) revert InvalidTreeDepth();
@@ -263,7 +278,7 @@ contract PoolPayer is HegotaSupport {
         if (fee.fee < q) revert FeeBelowQuote(fee.fee, q);
 
         // 5. The proof.
-        if (!IPrivacyPoolsWithdrawalVerifier(pool.WITHDRAWAL_VERIFIER()).verifyProof(proof.pA, proof.pB, proof.pC, s)) {
+        if (!VERIFIER.verifyProof(proof.pA, proof.pB, proof.pC, s)) {
             revert InvalidProof();
         }
 
@@ -295,13 +310,12 @@ contract PoolPayer is HegotaSupport {
         lastSettled = sigHash;
 
         bytes memory args = framedatacopy(4, frameparam(v, FrameParam.DATA_LENGTH) - 4, v);
-        (uint256 scope, PrivacyPoolsTypes.Withdrawal memory w, PrivacyPoolsTypes.WithdrawProof memory p,) =
+        (, PrivacyPoolsTypes.Withdrawal memory w, PrivacyPoolsTypes.WithdrawProof memory p,) =
             abi.decode(args, (uint256, PrivacyPoolsTypes.Withdrawal, PrivacyPoolsTypes.WithdrawProof, uint32));
         FeeData memory fee = abi.decode(w.data, (FeeData));
 
-        IPrivacyPoolsPool pool = IPrivacyPoolsPool(ENTRYPOINT.scopeToPool(scope));
         uint256 before = address(this).balance;
-        pool.withdraw(w, p); // pool: processooor == msg.sender, context, roots, ASP root, proof; pushes value to us
+        POOL.withdraw(w, p); // pool: processooor == msg.sender, context, roots, ASP root, proof; pushes value to us
         uint256 received = address(this).balance - before;
         if (received < fee.fee) revert WithdrawalShort(received);
 

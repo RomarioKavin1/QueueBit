@@ -29,6 +29,7 @@ interface IPrivacyPoolsPool {
     function ASSET() external view returns (address);
     function SCOPE() external view returns (uint256);
     function WITHDRAWAL_VERIFIER() external view returns (address);
+    function ENTRYPOINT() external view returns (address);
     function dead() external view returns (bool);
 }
 
