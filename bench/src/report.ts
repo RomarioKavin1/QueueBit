@@ -128,6 +128,7 @@ function schemeResult(s: SchemeDef, forge: ForgeGas | undefined, ci: boolean): S
     witnessBytes: wit === null ? null : wit,
     license: s.license,
     auditStatus: s.auditStatus,
+    security: s.security,
     upstream: s.upstream,
     signer: { impl: s.signerDesc.impl, note: s.signerDesc.note },
     signing,
@@ -174,6 +175,10 @@ export function buildResults(ci: boolean): Results {
         "every receipt is compared with two formulas: the EIP-8141 text, and the devnet ethrex build's (forshtat/ethrex 9aa3645d, crates/common/types/transaction.rs), which also prices the EIP-8250 nonce calldata rlp(nonce_keys)||rlp(nonce_seq) (3 bytes = 192 gas here) and weights witness bytes 4/16 in the standard intrinsic",
       signingTimes:
         "wall clock on one laptop (Apple Silicon) while the amd64-emulated devnet was running; indicative only, and the Python/C reference signers are not product signers",
+      sameShape:
+        "every scheme is measured in the same two transactions: VERIFY(self, data 0x01) + SENDER(self, data 0x03||funder, 21 B, an internal 1-wei CALL; the frame itself carries no value), one ARBITRARY entry whose witness is the signature (ETHFALCON: signature + its 1,024-B public key, bound to a 32-B commitment in the account code). The account keeps its 32-B key words in code, reads no storage in VERIFY, and calls the verifier cold; Forge measures the same calldata with vm.cool before each call",
+      securityColumn:
+        "upstream claims at the pinned commits (parameter tables, header comments, READMEs), quoted so rows can be compared; nothing was assessed here. 128-bit classical hash-based claims hold only up to the stated per-key signature cap; keccak256 vs SHA-256 changes gas (native opcode vs precompile 0x02), not the claimed level",
     },
     schemes: SCHEMES.map((s) => schemeResult(s, forge, ci)),
   };
@@ -225,13 +230,16 @@ export function renderMarkdown(r: Results): string {
     "- **Path B**: the PQ verify moved to the SENDER frame (VERIFY only checks a payer ECDSA signature): receipt gasUsed.",
   );
   L.push(
-    "- **Fits**: ERC-8421 budget points. `(node)` = a real admission answer: the stock sidecar (flat 100k) at 100k, the BUDGET-010 sidecar with the account staked at 1M. Unmarked = computed from the measured VERIFY gas (no node runs 250k / 2.5M here).",
+    "- **Fits**: ERC-8421 budget points. `(node)` = a real admission answer: the stock sidecar (flat 100k) at 100k, the BUDGET-010 sidecar with the account staked at 1M. Unmarked = computed from the measured VERIFY gas (no node runs 250k / 2.5M here). A node judges the declared VERIFY `limits.execution` + 100 (the ARBITRARY entry), not the gas used, so a frame that uses U gas needs a limit of about U + U/64 + glue.",
+  );
+  L.push(
+    "- **Security**: the upstream claim at the pinned commit (classical bits at a per-key signature cap, or the NIST category) and the hash the verifier uses. Quoted, not assessed.",
   );
   L.push("");
   L.push(
-    "| Scheme | Sig B | pk B | Verify gas | VERIFY-frame gas | Total tx gas (A) | Floor @8141 (A) | Path B tx gas | 100k | 250k | 1M | 2.5M | Stateless | Sign ms (mean) | Audit / proof | Licence |",
+    "| Scheme | Sig B | pk B | Verify gas | VERIFY-frame gas | Total tx gas (A) | Floor @8141 (A) | Path B tx gas | 100k | 250k | 1M | 2.5M | Stateless | Security (upstream claim) | Sign ms (mean) | Audit / proof | Licence |",
   );
-  L.push("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|");
+  L.push("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|");
   for (const s of r.schemes) {
     const A = s.pathA;
     const txA = pathCell(A, (v) => (v.txGasUsed.status === "measured" ? fmt(v.txGasUsed.value) : "n/m"));
@@ -252,7 +260,7 @@ export function renderMarkdown(r: Results): string {
           ? `n/m (published: ${pub.find(([k]) => /verify/.test(k))?.[1] ?? "-"})`
           : "n/m";
     L.push(
-      `| ${s.name} | ${sig} | ${s.pkBytes === null ? "n/m" : fmt(s.pkBytes)} | ${verifyCol} | ${pathCell(A, (v) => fmt(v.verifyFrameGas))} | ${txA} | ${pathCell(A, (v) => fmt(v.calldataFloor8141))} | ${txB} | ${yn(s.budgets["100000"]!)} | ${yn(s.budgets["250000"]!)} | ${yn(s.budgets["1000000"]!)} | ${yn(s.budgets["2500000"]!)} | ${s.stateless ? "yes" : "no"} | ${cell(s.signing)} | ${s.auditStatus} | ${s.license} |`,
+      `| ${s.name} | ${sig} | ${s.pkBytes === null ? "n/m" : fmt(s.pkBytes)} | ${verifyCol} | ${pathCell(A, (v) => fmt(v.verifyFrameGas))} | ${txA} | ${pathCell(A, (v) => fmt(v.calldataFloor8141))} | ${txB} | ${yn(s.budgets["100000"]!)} | ${yn(s.budgets["250000"]!)} | ${yn(s.budgets["1000000"]!)} | ${yn(s.budgets["2500000"]!)} | ${s.stateless ? "yes" : "no"} | ${s.security} | ${cell(s.signing)} | ${s.auditStatus} | ${s.license} |`,
     );
   }
   L.push("");
@@ -266,6 +274,7 @@ export function renderMarkdown(r: Results): string {
     L.push(`### ${s.name}`);
     L.push("");
     L.push(`- Family: ${s.family}. Stateless: ${s.stateless ? "yes" : `no (${s.statefulNote})`}.`);
+    L.push(`- Security (upstream claim, not assessed here): ${s.security}.`);
     if (s.upstream)
       L.push(
         `- Verifier: ${s.upstream.repo} @ \`${s.upstream.commit.slice(0, 10)}\`, \`${s.upstream.verifier}\`. Signer: ${s.signer.impl} (${s.signer.note}).`,
@@ -315,17 +324,23 @@ export function renderMarkdown(r: Results): string {
   L.push("");
   L.push("## Reproduce");
   L.push("");
+  L.push(
+    "Prerequisites: Node 22+ and pnpm, Foundry (forge 1.3.x), and for the full run also Docker (the devnet), a Rust toolchain (the leanSphincs-s signer), Python 3 with venv, and a C compiler + make (the SLH-DSA-SHA2-128-24 signer). The full run signs with the upstream reference signers; the SLH-DSA-SHA2-128-24 C signer takes about 8 minutes per signature and the PORST r=256 keygen about 3.5 minutes on a laptop.",
+  );
+  L.push("");
   L.push("```sh");
-  L.push("cd devnet && ./up.sh                 # local chain-1337 devnet (first run ~8 min)");
   L.push("pnpm install");
+  L.push(
+    "pnpm --filter bench run ci           # Forge-only: build, unit tests, verify + tamper checks on the committed vectors (no devnet, no signers)",
+  );
+  L.push("cd devnet && ./up.sh && cd ..        # local chain-1337 devnet (first run ~8 min); docker compose");
   L.push(
     "pnpm --filter bench run all          # setup (clones pinned upstreams, venv, signers), vectors, forge, devnet, report",
   );
-  L.push("pnpm --filter bench run ci           # Forge-only smoke from the committed vectors (no devnet, no signers)");
   L.push("```");
   L.push("");
   L.push(
-    "Funds come only from anvil #6 (devnet/README.md). `PATCHED_SIDECAR_URL=...` adds a patched-budget sidecar to the admission probes.",
+    "`run ci` reproduces the Verify-gas column and the tamper rejections from `bench/vectors/*.json`; `run all` regenerates the vectors and every devnet figure. Funds come only from anvil #6 (devnet/README.md). `PATCHED_SIDECAR_URL=...` adds a patched-budget sidecar to the admission probes (the 1M `(node)` verdicts need it, see devnet/README.md for the BUDGET-010 image). Gas figures are deterministic for a given signature; signing times are not.",
   );
   L.push("");
   return L.join("\n");

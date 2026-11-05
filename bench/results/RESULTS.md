@@ -8,19 +8,20 @@ Generated 2026-11-05T23:00:56.413Z by `pnpm --filter bench run all` (mode: devne
 - **VERIFY-frame gas**: Path A, `frameReceipts[0].gasUsed` of the mined frame tx (verifier + SIGPARAM/SIGDATACOPY/APPROVE glue).
 - **Total tx gas**: receipt `gasUsed` of the Path A tx (2 frames, send 1 wei); **floor** is EIP-8141 `calldata_floor_gas` at 64 gas/byte per the EIP text; the devnet's ethrex also charges the 3-byte EIP-8250 nonce calldata (+192), and every receipt matches that variant exactly (per-scheme detail).
 - **Path B**: the PQ verify moved to the SENDER frame (VERIFY only checks a payer ECDSA signature): receipt gasUsed.
-- **Fits**: ERC-8421 budget points. `(node)` = a real admission answer: the stock sidecar (flat 100k) at 100k, the BUDGET-010 sidecar with the account staked at 1M. Unmarked = computed from the measured VERIFY gas (no node runs 250k / 2.5M here).
+- **Fits**: ERC-8421 budget points. `(node)` = a real admission answer: the stock sidecar (flat 100k) at 100k, the BUDGET-010 sidecar with the account staked at 1M. Unmarked = computed from the measured VERIFY gas (no node runs 250k / 2.5M here). A node judges the declared VERIFY `limits.execution` + 100 (the ARBITRARY entry), not the gas used, so a frame that uses U gas needs a limit of about U + U/64 + glue.
+- **Security**: the upstream claim at the pinned commit (classical bits at a per-key signature cap, or the NIST category) and the hash the verifier uses. Quoted, not assessed.
 
-| Scheme | Sig B | pk B | Verify gas | VERIFY-frame gas | Total tx gas (A) | Floor @8141 (A) | Path B tx gas | 100k | 250k | 1M | 2.5M | Stateless | Sign ms (mean) | Audit / proof | Licence |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| SPHINCS- C13 | 3,688 | 32 | 107,050 | 111,140 | 250,682 | 250,490 | 258,922 | ✗ (node) | ✓ | ✓ (node) | ✓ | yes | 3,218 | research prototype; two AI-assisted reviews; upstream: "not audited, not production-safe"; Lean 4 / Verity refinement proof of the verifier against a byte spec | MIT |
-| SPHINCS- C7 | 3,704 | 32 | 96,194 | 100,271 | 251,706 | 251,514 | 259,946 | ✗ (node) | ✓ | ✓ (node) | ✓ | yes | 19,515 | research prototype; two AI-assisted reviews; upstream: "not audited, not production-safe"; no proof (C7 carries the Oct-2026 loop optimisations C13 lacks) | MIT |
-| leanSphincs-s | 4,164 | 32 | 39,480 | 43,529 | 281,146 | 280,954 | 289,386 | ✓ (node) | ✓ | ✓ | ✓ | yes | 15 | research prototype; lifetime 2^26 is an estimate, not proved; not audited | MIT (upstream crate MIT OR Apache-2.0) |
-| SLH-DSA-SHA2-128-24 | 3,856 | 32 | 147,364 | 146,252 | 261,434 | 261,242 | 269,674 | ✗ (node) | ✓ | ✓ (node) | ✓ | yes | 481,028 | matches NIST/ACVP external KATs (upstream); not audited | MIT |
-| SLH-DSA-SHA2-128s | 7,856 | 32 | 852,697 | 868,099 | 1,019,114 | 517,242 | 1,018,259 | ✗ (node) | ✗ | ✓ (node) | ✓ | yes | 1,229 | bench port written for this milestone (time-boxed); checked only against noble signatures; not audited | MIT (bench port) |
-| PORST r=16 | 13,165 (mean; varies) | 32 | 125,088 | 132,261 | 874,810 | 874,618 | 889,194 | ✗ (node) | ✓ | ✓ (node) | ✓ | no | 78 | unaudited hackathon code | MIT |
-| PORST r=256 | 14,422 (mean; varies) | 32 | 116,687 | 123,118 | 936,250 | 936,058 | 956,778 | ✗ (node) | ✓ | ✓ (node) | ✓ | no | 77 | unaudited hackathon code; r=256 constants are the upstream header table's row, recompiled here | MIT |
-| ETHFALCON (Falcon-512, keccak XOF) | 1,064 (+1,024 key in witness) | 1,024 | 1,499,854 | 1,502,525 | 1,558,828 | 148,090 | 1,564,122 | ✗ (node) | ✗ | ✗ (node) | ✓ | yes | 40 | upstream: "experimental work, not audited: DO NOT USE IN PRODUCTION" | MIT |
-| FORS+C (NiceTry) | 2,448 | 32 | n/m (published: ~35k (README:14)) | n/m | n/m | n/m | n/m | ? | ? | ? | ? | no | n/m | unaudited; upstream: parameters "still in a tuning phase" | none published (no LICENSE file at 67b04de) |
+| Scheme | Sig B | pk B | Verify gas | VERIFY-frame gas | Total tx gas (A) | Floor @8141 (A) | Path B tx gas | 100k | 250k | 1M | 2.5M | Stateless | Security (upstream claim) | Sign ms (mean) | Audit / proof | Licence |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| SPHINCS- C13 | 3,688 | 32 | 107,050 | 111,140 | 250,682 | 250,490 | 258,922 | ✗ (node) | ✓ | ✓ (node) | ✓ | yes | 128-bit classical at <= 2^22 sigs/key (upstream sec_N table); keccak256 | 3,218 | research prototype; two upstream AI-agent-assisted reviews (upstream: "not an independent professional audit"); upstream: "not audited, not production-safe"; Lean 4 / Verity refinement proof of the verifier against a byte spec (three residual assembly axioms remain, upstream verity/README.md) | MIT |
+| SPHINCS- C7 | 3,704 | 32 | 96,194 | 100,271 | 251,706 | 251,514 | 259,946 | ✗ (node) | ✓ | ✓ (node) | ✓ | yes | 128-bit classical at <= 2^24 sigs/key (upstream sec_N table); keccak256 | 19,515 | research prototype; two upstream AI-agent-assisted reviews (upstream: "not an independent professional audit"); upstream: "not audited, not production-safe"; no proof (C7 carries the Oct-2026 loop optimisations C13 lacks) | MIT |
+| leanSphincs-s | 4,164 | 32 | 39,480 | 43,529 | 281,146 | 280,954 | 289,386 | ✓ (node) | ✓ | ✓ | ✓ | yes | ~128-bit classical target (WOTS+C T=128; lifetime 2^26 from a 127-bit cover estimate, not proved; Light tier rated 20K sigs); keccak256 | 15 | research prototype; lifetime 2^26 is an estimate, not proved; not audited | MIT (upstream crate MIT OR Apache-2.0) |
+| SLH-DSA-SHA2-128-24 | 3,856 | 32 | 147,364 | 146,252 | 261,434 | 261,242 | 269,674 | ✗ (node) | ✓ | ✓ (node) | ✓ | yes | 128-bit classical at the 2^24 usage cap, carried by FORS (upstream); SP 800-230 ipd set, not a FIPS 205 set; SHA-256 | 481,028 | matches NIST/ACVP external KATs (upstream); Lean 4 / Verity refinement proof against a byte spec (upstream verity/README.md); not audited | MIT |
+| SLH-DSA-SHA2-128s | 7,856 | 32 | 852,697 | 868,099 | 1,019,114 | 517,242 | 1,018,259 | ✗ (node) | ✗ | ✓ (node) | ✓ | yes | NIST security category 1 (FIPS 205 SLH-DSA-SHA2-128s), 2^64 sigs/key; SHA-256 | 1,229 | bench port written for this milestone (time-boxed); checked only against noble signatures; not audited | MIT (bench port) |
+| PORST r=16 | 13,165 (mean; varies) | 32 | 125,088 | 132,261 | 874,810 | 874,618 | 889,194 | ✗ (node) | ✓ | ✓ (node) | ✓ | no | 258-bit subset-cover bound at <= 16 sigs/key (upstream header table); keccak256 | 78 | unaudited hackathon code | MIT |
+| PORST r=256 | 14,422 (mean; varies) | 32 | 116,687 | 123,118 | 936,250 | 936,058 | 956,778 | ✗ (node) | ✓ | ✓ (node) | ✓ | no | 264-bit subset-cover bound at <= 256 sigs/key (upstream header table); keccak256 | 77 | unaudited hackathon code; r=256 constants are the upstream header table's row, recompiled here | MIT |
+| ETHFALCON (Falcon-512, keccak XOF) | 1,064 (+1,024 key in witness) | 1,024 | 1,499,854 | 1,502,525 | 1,558,828 | 148,090 | 1,564,122 | ✗ (node) | ✗ | ✗ (node) | ✓ | yes | Falcon-512 = NIST security category 1; keccak hash-to-point in place of SHAKE (upstream: "security equivalent"), so not FN-DSA | 40 | upstream: "experimental work, not audited: DO NOT USE IN PRODUCTION" | MIT |
+| FORS+C (NiceTry) | 2,448 | 32 | n/m (published: ~35k (README:14)) | n/m | n/m | n/m | n/m | ? | ? | ? | ? | no | published: 104 bits at q=2 and 70 bits at q=5 sigs/key (upstream README); keccak256 | n/m | unaudited; upstream: parameters "still in a tuning phase" | none published (no LICENSE file at 67b04de) |
 
 † = fits the budget by measured gas, but the BUDGET-010 sidecar rejected the transaction under another rule (see the scheme's notes).
 
@@ -29,6 +30,7 @@ Generated 2026-11-05T23:00:56.413Z by `pnpm --filter bench run all` (mode: devne
 ### SPHINCS- C13
 
 - Family: WOTS+C / FORS+C over keccak256 (h=22 d=2 a=19 k=7 w=8). Stateless: yes.
+- Security (upstream claim, not assessed here): 128-bit classical at <= 2^22 sigs/key (upstream sec_N table); keccak256.
 - Verifier: https://github.com/nconsigny/SPHINCS- @ `4c76aaf113`, `src/keccak/SPHINCs-C13Asm.sol`. Signer: @leaked/pq-signer (Rust/WASM, bit-identical to upstream signer-c13) (WASM in Node, one thread).
 - Signing: min 2,397 / mean 3,218 / max 5,162 ms over 7 signatures.
 - Forge verify: min 107,049 / mean 107,050 / max 107,052 gas over 5 vectors.
@@ -45,6 +47,7 @@ Generated 2026-11-05T23:00:56.413Z by `pnpm --filter bench run all` (mode: devne
 ### SPHINCS- C7
 
 - Family: WOTS+C / FORS+C over keccak256 (h=24 d=2 a=16 k=8 w=8). Stateless: yes.
+- Security (upstream claim, not assessed here): 128-bit classical at <= 2^24 sigs/key (upstream sec_N table); keccak256.
 - Verifier: https://github.com/nconsigny/SPHINCS- @ `4c76aaf113`, `src/keccak/SPHINCs-C7Asm.sol`. Signer: upstream Python reference script/signer.py c7 (pure Python + multiprocessing; not a product signer).
 - Signing: min 16,377 / mean 19,515 / max 22,651 ms over 5 signatures.
 - Forge verify: min 96,193 / mean 96,194 / max 96,194 gas over 3 vectors.
@@ -61,6 +64,7 @@ Generated 2026-11-05T23:00:56.413Z by `pnpm --filter bench run all` (mode: devne
 ### leanSphincs-s
 
 - Family: leanSphincs (one XMSS layer h=26, FORS k=13 a=12, WOTS+C w=4) over keccak256. Stateless: yes.
+- Security (upstream claim, not assessed here): ~128-bit classical target (WOTS+C T=128; lifetime 2^26 from a 127-bit cover estimate, not proved; Light tier rated 20K sigs); keccak256.
 - Verifier: https://github.com/nconsigny/SPHINCS- @ `4c76aaf113`, `src/keccak/LeanSphincs-SAsm.sol`. Signer: upstream Rust lssk, Light tier key file (16 KiB cache) (Light tier lifetime 20K signatures).
 - Signing: min 10 / mean 15 / max 30 ms over 7 signatures.
 - Forge verify: min 39,325 / mean 39,480 / max 39,625 gas over 5 vectors.
@@ -76,6 +80,7 @@ Generated 2026-11-05T23:00:56.413Z by `pnpm --filter bench run all` (mode: devne
 ### SLH-DSA-SHA2-128-24
 
 - Family: FIPS 205 algorithm, NIST SP 800-230 ipd parameter set (h=22 d=1 a=24 k=6 w=4), SHA-256 precompile. Stateless: yes.
+- Security (upstream claim, not assessed here): 128-bit classical at the 2^24 usage cap, carried by FORS (upstream); SP 800-230 ipd set, not a FIPS 205 set; SHA-256.
 - Verifier: https://github.com/nconsigny/SPHINCS- @ `4c76aaf113`, `src/sha/SLH-DSA-SHA2-128-24verifier.sol`. Signer: upstream C fork of the sphincsplus reference (signers/sphincsplus-128-24) (regenerates the 2^22 XMSS tree per call).
 - Signing: min 448,798 / mean 481,028 / max 517,040 ms over 4 signatures.
 - Forge verify: min 146,734 / mean 147,364 / max 147,993 gas over 2 vectors.
@@ -92,6 +97,7 @@ Generated 2026-11-05T23:00:56.413Z by `pnpm --filter bench run all` (mode: devne
 ### SLH-DSA-SHA2-128s
 
 - Family: FIPS 205 final parameter set (h=63 d=7 a=12 k=14 w=16), SHA-256 precompile. Stateless: yes.
+- Security (upstream claim, not assessed here): NIST security category 1 (FIPS 205 SLH-DSA-SHA2-128s), 2^64 sigs/key; SHA-256.
 - Verifier: this repo (bench/contracts/src/SlhDsaSha2_128s.sol), structure from SPHINCS- SLH-DSA-SHA2-128-24 @ `-`, `bench/contracts/src/SlhDsaSha2_128s.sol`. Signer: @noble/post-quantum 0.7.1 slh_dsa_sha2_128s (pure JS).
 - Signing: min 1,046 / mean 1,229 / max 2,265 ms over 7 signatures.
 - Forge verify: min 826,626 / mean 852,697 / max 889,311 gas over 5 vectors.
@@ -108,6 +114,7 @@ Generated 2026-11-05T23:00:56.413Z by `pnpm --filter bench run all` (mode: devne
 ### PORST r=16
 
 - Family: PORS + Merkle multiproof, H=16 K=38, keccak256. Stateless: no (few-time: at most r=16 signatures per key (258-bit by the header formula); the signer must count).
+- Security (upstream claim, not assessed here): 258-bit subset-cover bound at <= 16 sigs/key (upstream header table); keccak256.
 - Verifier: https://github.com/duncancmt/porst @ `82a5e8c45c`, `src/PORST.sol`. Signer: bench TypeScript signer (bench/src/porst.ts) (witness length varies per signature).
 - Signing: min 61 / mean 78 / max 145 ms over 12 signatures.
 - Forge verify: min 121,196 / mean 125,088 / max 128,410 gas over 10 vectors.
@@ -125,6 +132,7 @@ Generated 2026-11-05T23:00:56.413Z by `pnpm --filter bench run all` (mode: devne
 ### PORST r=256
 
 - Family: PORS + Merkle multiproof, H=24 K=23, keccak256. Stateless: no (few-time: at most r=256 signatures per key; the signer must count).
+- Security (upstream claim, not assessed here): 264-bit subset-cover bound at <= 256 sigs/key (upstream header table); keccak256.
 - Verifier: https://github.com/duncancmt/porst @ `82a5e8c45c`, `src/PORST.sol (TREE_HEIGHT=24, SUBSET_SIZE=23)`. Signer: bench TypeScript signer (bench/src/porst.ts) (keygen 2^24 leaves (~50M keccak)).
 - Signing: min 47 / mean 77 / max 87 ms over 12 signatures.
 - Forge verify: min 114,062 / mean 116,687 / max 118,557 gas over 10 vectors.
@@ -142,6 +150,7 @@ Generated 2026-11-05T23:00:56.413Z by `pnpm --filter bench run all` (mode: devne
 ### ETHFALCON (Falcon-512, keccak XOF)
 
 - Family: lattice (NTRU), Falcon-512 with a keccak-CTR hash-to-point (not FN-DSA). Stateless: yes.
+- Security (upstream claim, not assessed here): Falcon-512 = NIST security category 1; keccak hash-to-point in place of SHAKE (upstream: "security equivalent"), so not FN-DSA.
 - Verifier: https://github.com/ZKNoxHQ/ETHFALCON @ `43ac863e30`, `src/ZKNOX_ethfalcon.sol (main)`. Signer: upstream Python reference (pythonref/sign_cli.py) (pure Python).
 - Signing: min 39 / mean 40 / max 42 ms over 7 signatures.
 - Forge verify: min 1,499,041 / mean 1,499,854 / max 1,500,738 gas over 5 vectors.
@@ -162,6 +171,7 @@ Generated 2026-11-05T23:00:56.413Z by `pnpm --filter bench run all` (mode: devne
 ### FORS+C (NiceTry)
 
 - Family: FORS+C few-time (K=26 A=5), keccak256, one key per operation. Stateless: no (one-time by policy: the account rotates the FORS key on every operation (q=2 → 104 bits, q=5 → 70)).
+- Security (upstream claim, not assessed here): published: 104 bits at q=2 and 70 bits at q=5 sigs/key (upstream README); keccak256.
 - Verifier: https://github.com/RivaLabs-Core/NiceTry @ `67b04de3e9`, `src/Verifiers/ForsVerifier.sol`. Signer: - (-).
 - Signing: not measured (The repository has no licence, so its verifier and signer were not copied or run; measuring it would need its code. Published numbers only.).
 - Forge verify: not measured (The repository has no licence, so its verifier and signer were not copied or run; measuring it would need its code. Published numbers only.).
@@ -184,6 +194,8 @@ Generated 2026-11-05T23:00:56.413Z by `pnpm --filter bench run all` (mode: devne
 - `budgetRule`: fits(B) iff tightLimit(VERIFY gas used) + 100 (ARBITRARY intrinsic) <= B, tightLimit = used + used/63 + 2,000 rounded up to 1,000 (the 1/64 the frame keeps back across STATICCALL). Node answers override it where a node with that budget was asked: stock sidecar at 100k, BUDGET-010 sidecar (staked account) at 1M
 - `floorCrossCheck`: every receipt is compared with two formulas: the EIP-8141 text, and the devnet ethrex build's (forshtat/ethrex 9aa3645d, crates/common/types/transaction.rs), which also prices the EIP-8250 nonce calldata rlp(nonce_keys)||rlp(nonce_seq) (3 bytes = 192 gas here) and weights witness bytes 4/16 in the standard intrinsic
 - `signingTimes`: wall clock on one laptop (Apple Silicon) while the amd64-emulated devnet was running; indicative only, and the Python/C reference signers are not product signers
+- `sameShape`: every scheme is measured in the same two transactions: VERIFY(self, data 0x01) + SENDER(self, data 0x03||funder, 21 B, an internal 1-wei CALL; the frame itself carries no value), one ARBITRARY entry whose witness is the signature (ETHFALCON: signature + its 1,024-B public key, bound to a 32-B commitment in the account code). The account keeps its 32-B key words in code, reads no storage in VERIFY, and calls the verifier cold; Forge measures the same calldata with vm.cool before each call
+- `securityColumn`: upstream claims at the pinned commits (parameter tables, header comments, READMEs), quoted so rows can be compared; nothing was assessed here. 128-bit classical hash-based claims hold only up to the stated per-key signature cap; keccak256 vs SHA-256 changes gas (native opcode vs precompile 0x02), not the claimed level
 
 Environment:
 
@@ -206,11 +218,13 @@ Environment:
 
 ## Reproduce
 
+Prerequisites: Node 22+ and pnpm, Foundry (forge 1.3.x), and for the full run also Docker (the devnet), a Rust toolchain (the leanSphincs-s signer), Python 3 with venv, and a C compiler + make (the SLH-DSA-SHA2-128-24 signer). The full run signs with the upstream reference signers; the SLH-DSA-SHA2-128-24 C signer takes about 8 minutes per signature and the PORST r=256 keygen about 3.5 minutes on a laptop.
+
 ```sh
-cd devnet && ./up.sh                 # local chain-1337 devnet (first run ~8 min)
 pnpm install
+pnpm --filter bench run ci           # Forge-only: build, unit tests, verify + tamper checks on the committed vectors (no devnet, no signers)
+cd devnet && ./up.sh && cd ..        # local chain-1337 devnet (first run ~8 min); docker compose
 pnpm --filter bench run all          # setup (clones pinned upstreams, venv, signers), vectors, forge, devnet, report
-pnpm --filter bench run ci           # Forge-only smoke from the committed vectors (no devnet, no signers)
 ```
 
-Funds come only from anvil #6 (devnet/README.md). `PATCHED_SIDECAR_URL=...` adds a patched-budget sidecar to the admission probes.
+`run ci` reproduces the Verify-gas column and the tamper rejections from `bench/vectors/*.json`; `run all` regenerates the vectors and every devnet figure. Funds come only from anvil #6 (devnet/README.md). `PATCHED_SIDECAR_URL=...` adds a patched-budget sidecar to the admission probes (the 1M `(node)` verdicts need it, see devnet/README.md for the BUDGET-010 image). Gas figures are deterministic for a given signature; signing times are not.

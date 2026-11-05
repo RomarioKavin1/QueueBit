@@ -93,6 +93,8 @@ export interface SchemeResult {
   witnessBytes: number | null;
   license: string;
   auditStatus: string;
+  /** Claimed security level and hash, quoted from upstream; not assessed here. */
+  security: string;
   upstream: { repo: string; commit: string; verifier: string } | null;
   signer: { impl: string; note: string };
   /** Wall-clock signing time on the bench machine, ms. */
@@ -215,7 +217,7 @@ function checkPath(e: Errs, x: unknown, p: string): void {
 function checkScheme(e: Errs, s: unknown, i: number): void {
   const p = `schemes[${i}]`;
   if (!isObj(s)) return void e.push(`${p}: not an object`);
-  for (const k of ["id", "name", "family", "license", "auditStatus"]) {
+  for (const k of ["id", "name", "family", "license", "auditStatus", "security"]) {
     need(e, typeof s[k] === "string" && (s[k] as string).length > 0, `${p}.${k} must be a non-empty string`);
   }
   need(e, typeof s.stateless === "boolean", `${p}.stateless must be boolean`);

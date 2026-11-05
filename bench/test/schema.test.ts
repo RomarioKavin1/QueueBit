@@ -45,6 +45,7 @@ const scheme = (over: Partial<SchemeResult> = {}): SchemeResult => ({
   witnessBytes: 4164,
   license: "MIT",
   auditStatus: "none",
+  security: "none claimed",
   upstream: null,
   signer: { impl: "i", note: "n" },
   signing: measured(stats([10, 12]), "wall clock"),

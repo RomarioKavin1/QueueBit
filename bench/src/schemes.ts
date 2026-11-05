@@ -30,6 +30,12 @@ export interface SchemeDef {
   witnessExtra: number;
   license: string;
   auditStatus: string;
+  /**
+   * Claimed security level and hash, quoted from the upstream repo at the pinned commit (its parameter table, header
+   * comment or README). Not assessed by this bench: hash-based rows are classical bit-security claims at a per-key
+   * signature cap, FIPS 205 rows are NIST categories, PORST's figures are its header's subset-cover bound.
+   */
+  security: string;
   upstream: { repo: string; commit: string; verifier: string };
   signerDesc: { impl: string; note: string };
   verifier?: VerifierWiring;
@@ -43,7 +49,8 @@ export interface SchemeDef {
 
 const SPHINCS = { repo: "https://github.com/nconsigny/SPHINCS-", commit: "4c76aaf113d326df9adede63d015f3b394ab84f4" };
 const VERIFY4 = "0x2bf6eda8" as const; // verify(bytes32,bytes32,bytes32,bytes)
-const SPHINCS_STATUS = 'research prototype; two AI-assisted reviews; upstream: "not audited, not production-safe"';
+const SPHINCS_STATUS =
+  'research prototype; two upstream AI-agent-assisted reviews (upstream: "not an independent professional audit"); upstream: "not audited, not production-safe"';
 
 export const SCHEMES: SchemeDef[] = [
   {
@@ -55,7 +62,8 @@ export const SCHEMES: SchemeDef[] = [
     pkBytes: 32,
     witnessExtra: 0,
     license: "MIT",
-    auditStatus: `${SPHINCS_STATUS}; Lean 4 / Verity refinement proof of the verifier against a byte spec`,
+    auditStatus: `${SPHINCS_STATUS}; Lean 4 / Verity refinement proof of the verifier against a byte spec (three residual assembly axioms remain, upstream verity/README.md)`,
+    security: "128-bit classical at <= 2^22 sigs/key (upstream sec_N table); keccak256",
     upstream: { ...SPHINCS, verifier: "src/keccak/SPHINCs-C13Asm.sol" },
     signerDesc: {
       impl: "@leaked/pq-signer (Rust/WASM, bit-identical to upstream signer-c13)",
@@ -82,6 +90,7 @@ export const SCHEMES: SchemeDef[] = [
     witnessExtra: 0,
     license: "MIT",
     auditStatus: `${SPHINCS_STATUS}; no proof (C7 carries the Oct-2026 loop optimisations C13 lacks)`,
+    security: "128-bit classical at <= 2^24 sigs/key (upstream sec_N table); keccak256",
     upstream: { ...SPHINCS, verifier: "src/keccak/SPHINCs-C7Asm.sol" },
     signerDesc: {
       impl: "upstream Python reference script/signer.py c7",
@@ -108,6 +117,8 @@ export const SCHEMES: SchemeDef[] = [
     witnessExtra: 0,
     license: "MIT (upstream crate MIT OR Apache-2.0)",
     auditStatus: "research prototype; lifetime 2^26 is an estimate, not proved; not audited",
+    security:
+      "~128-bit classical target (WOTS+C T=128; lifetime 2^26 from a 127-bit cover estimate, not proved; Light tier rated 20K sigs); keccak256",
     upstream: { ...SPHINCS, verifier: "src/keccak/LeanSphincs-SAsm.sol" },
     signerDesc: {
       impl: "upstream Rust lssk, Light tier key file (16 KiB cache)",
@@ -133,7 +144,10 @@ export const SCHEMES: SchemeDef[] = [
     pkBytes: 32,
     witnessExtra: 0,
     license: "MIT",
-    auditStatus: "matches NIST/ACVP external KATs (upstream); not audited",
+    auditStatus:
+      "matches NIST/ACVP external KATs (upstream); Lean 4 / Verity refinement proof against a byte spec (upstream verity/README.md); not audited",
+    security:
+      "128-bit classical at the 2^24 usage cap, carried by FORS (upstream); SP 800-230 ipd set, not a FIPS 205 set; SHA-256",
     upstream: { ...SPHINCS, verifier: "src/sha/SLH-DSA-SHA2-128-24verifier.sol" },
     signerDesc: {
       impl: "upstream C fork of the sphincsplus reference (signers/sphincsplus-128-24)",
@@ -161,6 +175,7 @@ export const SCHEMES: SchemeDef[] = [
     license: "MIT (bench port)",
     auditStatus:
       "bench port written for this milestone (time-boxed); checked only against noble signatures; not audited",
+    security: "NIST security category 1 (FIPS 205 SLH-DSA-SHA2-128s), 2^64 sigs/key; SHA-256",
     upstream: {
       repo: "this repo (bench/contracts/src/SlhDsaSha2_128s.sol), structure from SPHINCS- SLH-DSA-SHA2-128-24",
       commit: "-",
@@ -189,6 +204,7 @@ export const SCHEMES: SchemeDef[] = [
     witnessExtra: 0,
     license: "MIT",
     auditStatus: "unaudited hackathon code",
+    security: "258-bit subset-cover bound at <= 16 sigs/key (upstream header table); keccak256",
     upstream: {
       repo: "https://github.com/duncancmt/porst",
       commit: "82a5e8c45c2d17615bbe2d17ad20d3b47500bab8",
@@ -219,6 +235,7 @@ export const SCHEMES: SchemeDef[] = [
     witnessExtra: 0,
     license: "MIT",
     auditStatus: "unaudited hackathon code; r=256 constants are the upstream header table's row, recompiled here",
+    security: "264-bit subset-cover bound at <= 256 sigs/key (upstream header table); keccak256",
     upstream: {
       repo: "https://github.com/duncancmt/porst",
       commit: "82a5e8c45c2d17615bbe2d17ad20d3b47500bab8",
@@ -246,6 +263,8 @@ export const SCHEMES: SchemeDef[] = [
     witnessExtra: 1024,
     license: "MIT",
     auditStatus: 'upstream: "experimental work, not audited: DO NOT USE IN PRODUCTION"',
+    security:
+      'Falcon-512 = NIST security category 1; keccak hash-to-point in place of SHAKE (upstream: "security equivalent"), so not FN-DSA',
     upstream: {
       repo: "https://github.com/ZKNoxHQ/ETHFALCON",
       commit: "43ac863e30281bb7821748178d39967367d54bc2",
@@ -281,6 +300,7 @@ export const SCHEMES: SchemeDef[] = [
     witnessExtra: 0,
     license: "none published (no LICENSE file at 67b04de)",
     auditStatus: 'unaudited; upstream: parameters "still in a tuning phase"',
+    security: "published: 104 bits at q=2 and 70 bits at q=5 sigs/key (upstream README); keccak256",
     upstream: {
       repo: "https://github.com/RivaLabs-Core/NiceTry",
       commit: "67b04de3e9562f48759826c279c70a8087b4f8ae",

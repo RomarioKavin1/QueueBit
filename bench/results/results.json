@@ -24,13 +24,20 @@
     "floorPerToken8141": 16,
     "floorPerByte8141": 64,
     "floorPerToken7623": 10,
-    "budgets": [100000, 250000, 1000000, 2500000],
+    "budgets": [
+      100000,
+      250000,
+      1000000,
+      2500000
+    ],
     "maxVerifyGasStock": 100000,
     "pathA": "[VERIFY(self): PQ verify + APPROVE, SENDER(self): send 1 wei], signatures [ARBITRARY witness]",
     "pathB": "[VERIFY(self): payer SECP256K1 check + APPROVE, SENDER(self): PQ verify + send 1 wei], signatures [ARBITRARY, SECP256K1]",
     "budgetRule": "fits(B) iff tightLimit(VERIFY gas used) + 100 (ARBITRARY intrinsic) <= B, tightLimit = used + used/63 + 2,000 rounded up to 1,000 (the 1/64 the frame keeps back across STATICCALL). Node answers override it where a node with that budget was asked: stock sidecar at 100k, BUDGET-010 sidecar (staked account) at 1M",
     "floorCrossCheck": "every receipt is compared with two formulas: the EIP-8141 text, and the devnet ethrex build's (forshtat/ethrex 9aa3645d, crates/common/types/transaction.rs), which also prices the EIP-8250 nonce calldata rlp(nonce_keys)||rlp(nonce_seq) (3 bytes = 192 gas here) and weights witness bytes 4/16 in the standard intrinsic",
-    "signingTimes": "wall clock on one laptop (Apple Silicon) while the amd64-emulated devnet was running; indicative only, and the Python/C reference signers are not product signers"
+    "signingTimes": "wall clock on one laptop (Apple Silicon) while the amd64-emulated devnet was running; indicative only, and the Python/C reference signers are not product signers",
+    "sameShape": "every scheme is measured in the same two transactions: VERIFY(self, data 0x01) + SENDER(self, data 0x03||funder, 21 B, an internal 1-wei CALL; the frame itself carries no value), one ARBITRARY entry whose witness is the signature (ETHFALCON: signature + its 1,024-B public key, bound to a 32-B commitment in the account code). The account keeps its 32-B key words in code, reads no storage in VERIFY, and calls the verifier cold; Forge measures the same calldata with vm.cool before each call",
+    "securityColumn": "upstream claims at the pinned commits (parameter tables, header comments, READMEs), quoted so rows can be compared; nothing was assessed here. 128-bit classical hash-based claims hold only up to the stated per-key signature cap; keccak256 vs SHA-256 changes gas (native opcode vs precompile 0x02), not the claimed level"
   },
   "schemes": [
     {
@@ -42,7 +49,8 @@
       "pkBytes": 32,
       "witnessBytes": 3688,
       "license": "MIT",
-      "auditStatus": "research prototype; two AI-assisted reviews; upstream: \"not audited, not production-safe\"; Lean 4 / Verity refinement proof of the verifier against a byte spec",
+      "auditStatus": "research prototype; two upstream AI-agent-assisted reviews (upstream: \"not an independent professional audit\"); upstream: \"not audited, not production-safe\"; Lean 4 / Verity refinement proof of the verifier against a byte spec (three residual assembly axioms remain, upstream verity/README.md)",
+      "security": "128-bit classical at <= 2^22 sigs/key (upstream sec_N table); keccak256",
       "upstream": {
         "repo": "https://github.com/nconsigny/SPHINCS-",
         "commit": "4c76aaf113d326df9adede63d015f3b394ab84f4",
@@ -75,8 +83,14 @@
       "pathA": {
         "status": "measured",
         "value": {
-          "limits": [137000, 60000],
-          "frameGasUsed": [111140, 12289],
+          "limits": [
+            137000,
+            60000
+          ],
+          "frameGasUsed": [
+            111140,
+            12289
+          ],
           "pqFrameGas": 111140,
           "verifyFrameGas": 111140,
           "prefixValidationGas": 137100,
@@ -125,8 +139,14 @@
       "pathB": {
         "status": "measured",
         "value": {
-          "limits": [30000, 137000],
-          "frameGasUsed": [370, 123225],
+          "limits": [
+            30000,
+            137000
+          ],
+          "frameGasUsed": [
+            370,
+            123225
+          ],
           "pqFrameGas": 123225,
           "verifyFrameGas": 370,
           "prefixValidationGas": 32900,
@@ -201,7 +221,8 @@
       "pkBytes": 32,
       "witnessBytes": 3704,
       "license": "MIT",
-      "auditStatus": "research prototype; two AI-assisted reviews; upstream: \"not audited, not production-safe\"; no proof (C7 carries the Oct-2026 loop optimisations C13 lacks)",
+      "auditStatus": "research prototype; two upstream AI-agent-assisted reviews (upstream: \"not an independent professional audit\"); upstream: \"not audited, not production-safe\"; no proof (C7 carries the Oct-2026 loop optimisations C13 lacks)",
+      "security": "128-bit classical at <= 2^24 sigs/key (upstream sec_N table); keccak256",
       "upstream": {
         "repo": "https://github.com/nconsigny/SPHINCS-",
         "commit": "4c76aaf113d326df9adede63d015f3b394ab84f4",
@@ -234,8 +255,14 @@
       "pathA": {
         "status": "measured",
         "value": {
-          "limits": [231000, 60000],
-          "frameGasUsed": [100271, 12289],
+          "limits": [
+            231000,
+            60000
+          ],
+          "frameGasUsed": [
+            100271,
+            12289
+          ],
           "pqFrameGas": 100271,
           "verifyFrameGas": 100271,
           "prefixValidationGas": 231100,
@@ -284,8 +311,14 @@
       "pathB": {
         "status": "measured",
         "value": {
-          "limits": [30000, 231000],
-          "frameGasUsed": [370, 112356],
+          "limits": [
+            30000,
+            231000
+          ],
+          "frameGasUsed": [
+            370,
+            112356
+          ],
           "pqFrameGas": 112356,
           "verifyFrameGas": 370,
           "prefixValidationGas": 32900,
@@ -361,6 +394,7 @@
       "witnessBytes": 4164,
       "license": "MIT (upstream crate MIT OR Apache-2.0)",
       "auditStatus": "research prototype; lifetime 2^26 is an estimate, not proved; not audited",
+      "security": "~128-bit classical target (WOTS+C T=128; lifetime 2^26 from a 127-bit cover estimate, not proved; Light tier rated 20K sigs); keccak256",
       "upstream": {
         "repo": "https://github.com/nconsigny/SPHINCS-",
         "commit": "4c76aaf113d326df9adede63d015f3b394ab84f4",
@@ -393,8 +427,14 @@
       "pathA": {
         "status": "measured",
         "value": {
-          "limits": [68000, 60000],
-          "frameGasUsed": [43529, 12289],
+          "limits": [
+            68000,
+            60000
+          ],
+          "frameGasUsed": [
+            43529,
+            12289
+          ],
           "pqFrameGas": 43529,
           "verifyFrameGas": 43529,
           "prefixValidationGas": 68100,
@@ -438,8 +478,14 @@
       "pathB": {
         "status": "measured",
         "value": {
-          "limits": [30000, 68000],
-          "frameGasUsed": [370, 55785],
+          "limits": [
+            30000,
+            68000
+          ],
+          "frameGasUsed": [
+            370,
+            55785
+          ],
           "pqFrameGas": 55785,
           "verifyFrameGas": 370,
           "prefixValidationGas": 32900,
@@ -514,7 +560,8 @@
       "pkBytes": 32,
       "witnessBytes": 3856,
       "license": "MIT",
-      "auditStatus": "matches NIST/ACVP external KATs (upstream); not audited",
+      "auditStatus": "matches NIST/ACVP external KATs (upstream); Lean 4 / Verity refinement proof against a byte spec (upstream verity/README.md); not audited",
+      "security": "128-bit classical at the 2^24 usage cap, carried by FORS (upstream); SP 800-230 ipd set, not a FIPS 205 set; SHA-256",
       "upstream": {
         "repo": "https://github.com/nconsigny/SPHINCS-",
         "commit": "4c76aaf113d326df9adede63d015f3b394ab84f4",
@@ -547,8 +594,14 @@
       "pathA": {
         "status": "measured",
         "value": {
-          "limits": [231000, 60000],
-          "frameGasUsed": [146252, 12289],
+          "limits": [
+            231000,
+            60000
+          ],
+          "frameGasUsed": [
+            146252,
+            12289
+          ],
           "pqFrameGas": 146252,
           "verifyFrameGas": 146252,
           "prefixValidationGas": 231100,
@@ -597,8 +650,14 @@
       "pathB": {
         "status": "measured",
         "value": {
-          "limits": [30000, 231000],
-          "frameGasUsed": [370, 158337],
+          "limits": [
+            30000,
+            231000
+          ],
+          "frameGasUsed": [
+            370,
+            158337
+          ],
           "pqFrameGas": 158337,
           "verifyFrameGas": 370,
           "prefixValidationGas": 32900,
@@ -674,6 +733,7 @@
       "witnessBytes": 7856,
       "license": "MIT (bench port)",
       "auditStatus": "bench port written for this milestone (time-boxed); checked only against noble signatures; not audited",
+      "security": "NIST security category 1 (FIPS 205 SLH-DSA-SHA2-128s), 2^64 sigs/key; SHA-256",
       "upstream": {
         "repo": "this repo (bench/contracts/src/SlhDsaSha2_128s.sol), structure from SPHINCS- SLH-DSA-SHA2-128-24",
         "commit": "-",
@@ -706,8 +766,14 @@
       "pathA": {
         "status": "measured",
         "value": {
-          "limits": [931000, 60000],
-          "frameGasUsed": [868099, 12289],
+          "limits": [
+            931000,
+            60000
+          ],
+          "frameGasUsed": [
+            868099,
+            12289
+          ],
           "pqFrameGas": 868099,
           "verifyFrameGas": 868099,
           "prefixValidationGas": 931100,
@@ -756,8 +822,14 @@
       "pathB": {
         "status": "measured",
         "value": {
-          "limits": [30000, 931000],
-          "frameGasUsed": [370, 875039],
+          "limits": [
+            30000,
+            931000
+          ],
+          "frameGasUsed": [
+            370,
+            875039
+          ],
           "pqFrameGas": 875039,
           "verifyFrameGas": 370,
           "prefixValidationGas": 32900,
@@ -833,6 +905,7 @@
       "witnessBytes": 13440,
       "license": "MIT",
       "auditStatus": "unaudited hackathon code",
+      "security": "258-bit subset-cover bound at <= 16 sigs/key (upstream header table); keccak256",
       "upstream": {
         "repo": "https://github.com/duncancmt/porst",
         "commit": "82a5e8c45c2d17615bbe2d17ad20d3b47500bab8",
@@ -865,8 +938,14 @@
       "pathA": {
         "status": "measured",
         "value": {
-          "limits": [158000, 60000],
-          "frameGasUsed": [132261, 12289],
+          "limits": [
+            158000,
+            60000
+          ],
+          "frameGasUsed": [
+            132261,
+            12289
+          ],
           "pqFrameGas": 132261,
           "verifyFrameGas": 132261,
           "prefixValidationGas": 158100,
@@ -915,8 +994,14 @@
       "pathB": {
         "status": "measured",
         "value": {
-          "limits": [30000, 158000],
-          "frameGasUsed": [370, 145797],
+          "limits": [
+            30000,
+            158000
+          ],
+          "frameGasUsed": [
+            370,
+            145797
+          ],
           "pqFrameGas": 145797,
           "verifyFrameGas": 370,
           "prefixValidationGas": 32900,
@@ -994,6 +1079,7 @@
       "witnessBytes": 14400,
       "license": "MIT",
       "auditStatus": "unaudited hackathon code; r=256 constants are the upstream header table's row, recompiled here",
+      "security": "264-bit subset-cover bound at <= 256 sigs/key (upstream header table); keccak256",
       "upstream": {
         "repo": "https://github.com/duncancmt/porst",
         "commit": "82a5e8c45c2d17615bbe2d17ad20d3b47500bab8",
@@ -1026,8 +1112,14 @@
       "pathA": {
         "status": "measured",
         "value": {
-          "limits": [148000, 60000],
-          "frameGasUsed": [123118, 12289],
+          "limits": [
+            148000,
+            60000
+          ],
+          "frameGasUsed": [
+            123118,
+            12289
+          ],
           "pqFrameGas": 123118,
           "verifyFrameGas": 123118,
           "prefixValidationGas": 148100,
@@ -1076,8 +1168,14 @@
       "pathB": {
         "status": "measured",
         "value": {
-          "limits": [30000, 148000],
-          "frameGasUsed": [370, 136370],
+          "limits": [
+            30000,
+            148000
+          ],
+          "frameGasUsed": [
+            370,
+            136370
+          ],
           "pqFrameGas": 136370,
           "verifyFrameGas": 370,
           "prefixValidationGas": 32900,
@@ -1155,6 +1253,7 @@
       "witnessBytes": 2088,
       "license": "MIT",
       "auditStatus": "upstream: \"experimental work, not audited: DO NOT USE IN PRODUCTION\"",
+      "security": "Falcon-512 = NIST security category 1; keccak hash-to-point in place of SHAKE (upstream: \"security equivalent\"), so not FN-DSA",
       "upstream": {
         "repo": "https://github.com/ZKNoxHQ/ETHFALCON",
         "commit": "43ac863e30281bb7821748178d39967367d54bc2",
@@ -1187,8 +1286,14 @@
       "pathA": {
         "status": "measured",
         "value": {
-          "limits": [1552000, 60000],
-          "frameGasUsed": [1502525, 12289],
+          "limits": [
+            1552000,
+            60000
+          ],
+          "frameGasUsed": [
+            1502525,
+            12289
+          ],
           "pqFrameGas": 1502525,
           "verifyFrameGas": 1502525,
           "prefixValidationGas": 1552100,
@@ -1247,8 +1352,14 @@
       "pathB": {
         "status": "measured",
         "value": {
-          "limits": [30000, 1552000],
-          "frameGasUsed": [370, 1515446],
+          "limits": [
+            30000,
+            1552000
+          ],
+          "frameGasUsed": [
+            370,
+            1515446
+          ],
           "pqFrameGas": 1515446,
           "verifyFrameGas": 370,
           "prefixValidationGas": 32900,
@@ -1328,6 +1439,7 @@
       "witnessBytes": null,
       "license": "none published (no LICENSE file at 67b04de)",
       "auditStatus": "unaudited; upstream: parameters \"still in a tuning phase\"",
+      "security": "published: 104 bits at q=2 and 70 bits at q=5 sigs/key (upstream README); keccak256",
       "upstream": {
         "repo": "https://github.com/RivaLabs-Core/NiceTry",
         "commit": "67b04de3e9562f48759826c279c70a8087b4f8ae",
