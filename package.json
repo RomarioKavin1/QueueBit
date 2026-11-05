@@ -1,0 +1,34 @@
+{
+  "name": "leaked-wallet",
+  "private": true,
+  "description": "LEAKED: a browser-extension wallet whose everyday key is safe to leak",
+  "license": "MIT",
+  "type": "module",
+  "packageManager": "pnpm@10.34.1",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "build": "pnpm -r --if-present run build",
+    "test": "vitest run --passWithNoTests",
+    "test:live": "LIVE_DEVNET=1 vitest run",
+    "test:contracts": "cd contracts && forge test",
+    "coverage": "vitest run --coverage",
+    "typecheck": "pnpm -r --if-present run typecheck",
+    "lint": "eslint . && prettier --check .",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "26.6.6",
+    "@vitest/coverage-v8": "5.1.0",
+    "eslint": "10.14.0",
+    "eslint-config-prettier": "10.1.8",
+    "globals": "17.14.0",
+    "prettier": "3.9.10",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.72.1",
+    "vite": "8.3.6",
+    "vitest": "5.1.0"
+  }
+}

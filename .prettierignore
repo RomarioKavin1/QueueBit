@@ -1,0 +1,15 @@
+pnpm-lock.yaml
+docs/
+devnet/
+contracts/lib/
+contracts/out/
+contracts/cache/
+**/dist/
+coverage/
+*.md
+# Generated or upstream data
+**/wasm/
+**/fixtures/
+**/vectors/*.json
+**/rust/
+**/target/
