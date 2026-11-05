@@ -374,3 +374,70 @@ admitted (`New`). Reputation of PoolPayer: before `seen 0 / included 0`; with 10
 Reputation after: `seen 10 / included 0`, `status ok` — the predicted delta (+10 seen, +0 included; 10 // 10 = 1 ≤
 0 + 10, so not throttled; throttling needs ≥ 110 such txs from a clean slate, §2.8). No cancellation-specific penalty
 beyond the unreturned `seen`.
+
+## `@leaked/ur` and the vault companion PWA (section 20 §4, M4-A)
+
+### UR vocabulary (`packages/ur`)
+
+- **Strict CBOR.** Every payload is CBOR Core Deterministic Encoding (cbor2 `cde`), integer-keyed maps; decoders
+  reject unknown keys, wrong types/sizes, non-canonical bytes (checked twice: decoder options and a byte-exact
+  re-encode), and text with control or bidi characters. `request-id` is tag 37 (16-byte UUID).
+- **`ur:leaked-sign-request` key 4** is the frame tx in `@leaked/frames` wire form (`encodeTx`) with every empty-`msg`
+  entry holding its placeholder (PQ entry: `sigLength` zero bytes). §20 §4.2's "the preimage of compute_sig_hash" is
+  ambiguous on length-committing profiles; the wire form is unambiguous and `sigHash(decodeTx(...))` gives the digest.
+  The companion requires the PQ slot to be all-zero and 3,688 bytes (or empty on `empty`-elision profiles).
+- **Additions beyond §20/§30:** key 11 intent gained structured fields (4 recipient, 5 amount, 6 token) so the mismatch
+  check can name *what* differs; **key 12 `policy`** (advisory: account, cap, per-tx max, timelock delay/threshold,
+  pinned token prices, max fee, max hot frames) is how the browser reports the Vault-pinned prices and current limits
+  the phone cannot read; **key 13 `payer`** for **tx-type 2** (EIP-712 typed data in key 4 as UTF-8 JSON: the Privacy
+  Pools `PrivacyPoolNote` envelope). `ur:leaked-signature` gained key 5 `typed-sig` (`r‖s‖v`, v 27/28); key 4
+  `payer-sig` is in `@leaked/frames` entry form `v‖r‖s` (v 0/1) so it drops into entry 1 with `setSignature`.
+- **`ur:leaked-pq-key`** (the pairing UR §30 noted as undefined): `{1 scheme-id, 2 pk, 3 role, 4 payer?}`.
+- **`ur:leaked-recovery-test`** (ux-spec PLAN CHANGE 9.3): `{1 request-id, 2 scheme-id, 3 recovery-pk, 4 witness,
+  5 ok=true}`; the witness signs `keccak256("LEAKED recovery test v1" ‖ schemeId ‖ pk ‖ requestId)`
+  (`recoveryTestChallenge`, pinned and cross-checked with `cast keccak`). It is a full C13 signature, so the
+  "small QR" of the spec is ~10 animated parts.
+- **bc-ur:** `@ngraveio/bc-ur` 2.0.0-beta.9 (MIT, the plan's pin; npm `latest` 1.1.13 lacks the fountain API).
+  Its ESM build imports the bare directory `"buffer/"`, which Node's ESM loader refuses: vitest inlines it
+  (`server.deps.inline`) and bundlers resolve it. Its `@bacons/text-decoder` dependency (React Native entry only)
+  pulls ~190 react-native packages through an auto-installed peer; `pnpm-workspace.yaml` removes it via `overrides`.
+  The receiver checks part headers (≤ 1,024 parts, ≤ 128 KiB) before the library allocates; parts longer than a v40
+  QR (4,400 chars) are refused at both ends.
+- Measured: a C13 `ur:leaked-signature` at 400-byte fragments is 10 parts; with 30% random loss the median receiver
+  completes after < 2.2 displayed frames per part, p95 < 3.5 (100 trials per fragment size, `transport.test.ts`).
+
+### Companion (`apps/companion`)
+
+- **Network:** CSP `connect-src 'none'` (meta in the HTML, header in `_headers` and `vite preview`). The signing
+  worker is built inline (a `blob:` URL), so it inherits the page policy; e2e checks fetch (cross- and same-origin),
+  XHR, WebSocket, sendBeacon and a blob worker are all blocked, and records zero requests while decoding, signing and
+  showing a signature. `sw.js` gets its own policy (`connect-src 'self'`) because it must fetch the build once at
+  install; with one combined policy it cannot install. At runtime it answers only from its precache
+  (`ignoreVary`: `vite preview` sends `Vary: Origin`).
+- **Clear signing** is data-driven from `src/registry/leaked.descriptors.json`. Its `abis`/`selectors` sections are
+  **generated from `contracts/out`** (`pnpm --filter @leaked/companion abi:sync`, `--check` for CI);
+  `test/registry.test.ts` checks every selector against the Solidity sources (no forge needed), that every
+  `vault*`/`recovery*` entry point has a display format, and (when built) against the artifacts. Now synced to the
+  landed account: no `vaultSetDomain`; `vaultSetFeePolicy`, `vaultSetValueVerifier`, `vaultSetTrustedVerifier`,
+  `recoveryFinalizeVaultRotation`, `registerPermit`; queue kinds 0–3 named; `vaultSetToken` prices are
+  **`usdPerToken` (USD-6 per whole token)**, not the plan's `usdPer1e18` (UR key 12 renamed to match).
+  `vaultExecute`'s `usdValue` is not displayed (the account measures outflow and does not trust it).
+- **Advisory data:** key 11 is never rendered; a mismatch names the fields that differ and demotes Approve to
+  "Approve anyway". Key 12 fills "from" values and USD estimates only when the phone has no snapshot of its own, and
+  the UI says so ("as your browser reported"); once the phone has signed for an account, its own snapshot wins and a
+  disagreement raises E-74. Snapshot values are recorded only for instantly-effective changes.
+- **Digest:** the UI decodes and recomputes the sig hash for display; the worker independently decodes the same bytes,
+  recomputes it and refuses unless it equals the displayed one (and refuses unrecognised steps unless the user did
+  the long-press + typed "SIGN UNKNOWN"). Every witness is verified before it leaves the worker.
+- **Keys:** the seed (BIP-39 entropy + optional passphrase) is AES-256-GCM sealed under scrypt (N=2^17, r=8, p=1;
+  the plan says Argon2id: scrypt is audited pure JS in `@noble/hashes`, no second WASM), AAD-bound to the vault pk.
+  **Deviation from ux-spec §4.2:** there is no unlocked session. The passphrase is asked at Approve (as §4.4 says for
+  the PWA) and the key exists only inside one worker call, so "auto-lock" and "zeroise on background" hold trivially.
+  Payer key: BIP-32 `m/44'/60'/8141'/0/0`, RFC 6979 via `@noble/curves`.
+- **Health:** per the product decision, no signature counter: "unlimited safe signatures", with the 2²² design budget
+  explained in small print. **No pending queue on the phone** (the request carries none; ux-spec §9.5 left open).
+- Measured in headless Chromium on an M-series laptop: create (scrypt + keygen) ≈ 1.5 s; sign incl. unlock ≈ 4 s.
+- **Not covered / open:** camera scanning is exercised only with Chromium's fake device (the paste fallback is what
+  e2e drives); the recovery ceremony's middle step (Vault approval of `vaultSetRecoverySigner`) happens after the
+  test-ok QR, as ux-spec §4.6 orders it; 4337 requests (tx-type 1) are refused (E-76). The root `vitest` config only
+  lists `packages/*`, so the companion's unit tests run via `pnpm --filter @leaked/companion test`.

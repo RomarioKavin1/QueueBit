@@ -174,3 +174,13 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+### Bundled into the vault companion build (`apps/companion/dist`)
+
+The PWA build redistributes these npm packages inside its JavaScript bundle (their licences ship in `node_modules`):
+`@ngraveio/bc-ur` 2.0.0-beta.9 (MIT), `cbor2` (MIT), `jsqr` 1.4.0 (**Apache-2.0**, no NOTICE file), `qrcode` 1.5.4
+(MIT), `@scure/bip32`/`@scure/bip39`, `@noble/hashes`/`@noble/curves` (MIT), `viem` (MIT), `react`/`react-dom` (MIT).
+No third-party source was copied into `packages/ur` or `apps/companion`. Data taken from other projects: the Privacy
+Pools `PrivacyPoolNote` EIP-712 domain and types and the 0xbow entrypoint addresses (from `kohaku`
+`privacy-pools/src/account/signature-keys.ts` and `config.ts`, as cited in plan §40 §1.3–1.4), used as constants in
+`apps/companion/src/registry/leaked.descriptors.json`. The companion's icons are original.
