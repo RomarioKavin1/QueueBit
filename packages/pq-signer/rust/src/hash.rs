@@ -104,27 +104,64 @@ pub fn set_w3(a: &mut Adrs, v: u32) {
     a[28..32].copy_from_slice(&v.to_be_bytes());
 }
 
+#[inline(always)]
+fn lanes16(n: &Node) -> (u64, u64) {
+    (
+        u64::from_le_bytes(n[0..8].try_into().unwrap()),
+        u64::from_le_bytes(n[8..16].try_into().unwrap()),
+    )
+}
+
+#[inline(always)]
+fn load_prefix(st: &mut [u64; 25], seed: &Node, a: &Adrs) {
+    let (s0, s1) = lanes16(seed);
+    st[0] = s0;
+    st[1] = s1;
+    for i in 0..4 {
+        st[4 + i] = u64::from_le_bytes(a[8 * i..8 * i + 8].try_into().unwrap());
+    }
+}
+
+#[inline(always)]
+fn squeeze16(st: &[u64; 25]) -> Node {
+    let mut out = [0u8; 16];
+    out[..8].copy_from_slice(&st[0].to_le_bytes());
+    out[8..].copy_from_slice(&st[1].to_le_bytes());
+    out
+}
+
 /// F: `keccak256(seed32 || adrs32 || x32)` truncated (`SPHINCs-C13Asm.sol:128,229`).
+/// Single-block fast path: the 96-byte input is loaded straight into the sponge lanes
+/// (Keccak pad 0x01 at byte 96, 0x80 at byte 135); equal to `keccak256` (tested).
 #[inline(always)]
 pub fn th(seed: &Node, a: &Adrs, x: &Node) -> Node {
-    let mut buf = [0u8; 96];
-    buf[..16].copy_from_slice(seed);
-    buf[32..64].copy_from_slice(a);
-    buf[64..80].copy_from_slice(x);
-    let out = top16(&keccak256(&buf));
-    buf.zeroize(); // x may be a secret (FORS leaf secret, WOTS chain start)
+    let mut st = [0u64; 25];
+    load_prefix(&mut st, seed, a);
+    let (x0, x1) = lanes16(x);
+    st[8] = x0;
+    st[9] = x1;
+    st[12] = 0x01;
+    st[16] = 0x80 << 56;
+    keccak::f1600(&mut st);
+    let out = squeeze16(&st);
+    st.zeroize(); // x may be a secret (FORS leaf secret, WOTS chain start)
     out
 }
 
 /// H: `keccak256(seed32 || adrs32 || left32 || right32)` truncated (`SPHINCs-C13Asm.sol:146,259`).
 #[inline(always)]
 pub fn th_pair(seed: &Node, a: &Adrs, l: &Node, r: &Node) -> Node {
-    let mut buf = [0u8; 128];
-    buf[..16].copy_from_slice(seed);
-    buf[32..64].copy_from_slice(a);
-    buf[64..80].copy_from_slice(l);
-    buf[96..112].copy_from_slice(r);
-    top16(&keccak256(&buf))
+    let mut st = [0u64; 25];
+    load_prefix(&mut st, seed, a);
+    let (l0, l1) = lanes16(l);
+    let (r0, r1) = lanes16(r);
+    st[8] = l0;
+    st[9] = l1;
+    st[12] = r0;
+    st[13] = r1;
+    st[16] = 0x01 | (0x80 << 56);
+    keccak::f1600(&mut st);
+    squeeze16(&st)
 }
 
 /// T_l: `keccak256(seed32 || adrs32 || v_0 32 || ... )` truncated

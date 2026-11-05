@@ -45,3 +45,21 @@ fn keccak_matches_ethereum() {
         hex::encode(leaked_pq::hash::keccak256_parts(&[&[0x61u8; 100], &[0x61u8; 36]]))
     );
 }
+
+#[test]
+fn fast_path_tweakable_hashes_equal_generic_keccak() {
+    use leaked_pq::hash::*;
+    for i in 0u8..50 {
+        let seed = [i; 16];
+        let a = adrs(i as u32, 0x0102030405060708 ^ i as u64, 3, 7, i as u32 + 1, 0xdead_beef);
+        let x = [i.wrapping_mul(31); 16];
+        let y = [i.wrapping_add(9); 16];
+        let mut buf = [0u8; 128];
+        buf[..16].copy_from_slice(&seed);
+        buf[32..64].copy_from_slice(&a);
+        buf[64..80].copy_from_slice(&x);
+        assert_eq!(th(&seed, &a, &x), top16(&keccak256(&buf[..96])));
+        buf[96..112].copy_from_slice(&y);
+        assert_eq!(th_pair(&seed, &a, &x, &y), top16(&keccak256(&buf)));
+    }
+}
