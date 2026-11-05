@@ -36,7 +36,19 @@ import {
   type FrameTx,
 } from "@leaked/frames";
 import { SCHEME_ID, SIG_LENGTH, keygen, sign } from "@leaked/pq-signer";
-import { STAKING_REGISTRY, artifact, call, deploy, ethrexRaw, json, log, pub, rpc, waitReceipt } from "./lib.js";
+import {
+  STAKING_REGISTRY,
+  artifact,
+  call,
+  deploy,
+  ethrexRaw,
+  json,
+  log,
+  pub,
+  rpc,
+  traceSummary,
+  waitReceipt,
+} from "./lib.js";
 
 const profile = getProfile("ethrex-eip8141-tracer");
 const FEES = { maxFeePerGas: 2_000_000_000n, maxPriorityFeePerGas: 1_000_000_000n };
@@ -185,50 +197,6 @@ async function pathA(data: Hex): Promise<FrameTx> {
     body: { data, ...BODY },
   });
   return pqSign(tx);
-}
-
-// EIP-8141 validation-prefix bans (plan §10.1.4) plus transient storage; ethrex reports usedOpcodes by decimal byte.
-const BANNED: Record<number, string> = {
-  0x31: "BALANCE", 0x3a: "GASPRICE", 0x40: "BLOCKHASH", 0x41: "COINBASE", 0x42: "TIMESTAMP", 0x43: "NUMBER",
-  0x44: "PREVRANDAO", 0x45: "GASLIMIT", 0x47: "SELFBALANCE", 0x48: "BASEFEE", 0x4a: "BLOBBASEFEE", 0x55: "SSTORE",
-  0x5c: "TLOAD", 0x5d: "TSTORE", 0xf0: "CREATE", 0xf5: "CREATE2", 0xfe: "INVALID", 0xff: "SELFDESTRUCT",
-};
-
-interface TraceCall {
-  to?: string;
-  usedOpcodes?: Record<string, number>;
-  accessedSlots?: { reads?: Record<string, unknown>; writes?: Record<string, unknown>; transientReads?: Record<string, unknown>; transientWrites?: Record<string, unknown> };
-  calls?: TraceCall[];
-  outOfGas?: boolean;
-}
-
-/** The ERC-7562 trace of the VERIFY frame (frame 0): banned opcodes, storage outside tx.sender, transient storage. */
-function traceSummary(trace: unknown, sender: Address): unknown {
-  if (!Array.isArray(trace)) return trace ?? null;
-  const f0 = trace.find((f: { frameIndex?: number }) => f.frameIndex === 0) as { root?: TraceCall } | undefined;
-  if (!f0?.root) return { error: "no frame-0 trace" };
-  const opcodes: Record<string, number> = {};
-  const foreignReads: string[] = [];
-  let writes = 0;
-  let transient = 0;
-  let outOfGas = false;
-  const walk = (c: TraceCall) => {
-    for (const [k, v] of Object.entries(c.usedOpcodes ?? {})) {
-      const name = BANNED[Number(k)];
-      if (name) opcodes[name] = (opcodes[name] ?? 0) + v;
-    }
-    const sl = c.accessedSlots;
-    if (sl) {
-      const n = Object.keys(sl.reads ?? {}).length;
-      if (n && String(c.to).toLowerCase() !== sender.toLowerCase()) foreignReads.push(`${c.to}:${n}`);
-      writes += Object.keys(sl.writes ?? {}).length;
-      transient += Object.keys(sl.transientReads ?? {}).length + Object.keys(sl.transientWrites ?? {}).length;
-    }
-    if (c.outOfGas) outOfGas = true;
-    for (const x of c.calls ?? []) walk(x);
-  };
-  walk(f0.root);
-  return { verifyBannedOpcodes: opcodes, verifyForeignStorageReads: foreignReads, verifyWrites: writes, verifyTransient: transient, outOfGas };
 }
 
 async function simulate(label: string, tx: FrameTx) {

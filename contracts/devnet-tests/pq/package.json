@@ -6,8 +6,9 @@
   "description": "Devnet integration tests for the LEAKED contracts (run with bun against devnet/; standalone, not a pnpm workspace package). @leaked/* resolve to the workspace sources via tsconfig paths.",
   "scripts": {
     "test": "bun run run.ts",
-    "lint:verify-opcodes": "python3 lint-verify-opcodes.py ../../out/C13Verifier.sol/C13Verifier.json ../../out/PQRoleSigner.sol/PQRoleSigner.json ../../out/GuardianSigner.sol/GuardianSigner.json",
-    "typecheck": "tsc -p tsconfig.json"
+    "lint:verify-opcodes": "python3 lint-verify-opcodes.py ../../out/C13Verifier.sol/C13Verifier.json ../../out/PQRoleSigner.sol/PQRoleSigner.json ../../out/GuardianSigner.sol/GuardianSigner.json ../../out/LeanSphincsSVerifier.sol/LeanSphincsSVerifier.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "lean-path-a": "bun run lean-path-a.ts"
   },
   "dependencies": {
     "viem": "2.57.16"
