@@ -3,8 +3,21 @@ pragma solidity 0.8.28;
 
 /// @title ILeakedAccount
 /// @notice Types, events and errors of the LEAKED frame-native account (`LeakedAccountImpl`). Names follow
-///         `docs/plan/sections/10-contracts.md` §10.3.2 / §10.11; deviations are listed in
-///         `docs/plan/IMPLEMENTATION-NOTES.md` ("Contracts M2/M3").
+///         `docs/plan/sections/10-contracts.md` §10.3.2 / §10.11. Deviations from that text:
+///         - role entry points live in `LeakedAccountRoles`, DELEGATECALLed from the implementation's fallback
+///           (EIP-170: one contract was 30.6 KB); unknown selectors still revert;
+///         - `initialize(InitConfig)` (adds tank, ETH price, priority-fee bound, timelock fields); the tank is
+///           allowlisted as a hot recipient at initialize (UX decision);
+///         - no `vaultSetDomain`/`allowedDomains`: hot-key ERC-7739 is accepted for any app domain (UX decision),
+///           but never when the asking contract is an allowlisted token or a vault-denied "value verifier"
+///           (Permit2 by default; `vaultSetValueVerifier`), so a leaked hot key cannot sign token permits;
+///         - `vaultSetToken` price semantics: `usdPerToken` (USD-6 per whole token); a lower price is loosening;
+///         - `vaultSetFeePolicy(maxPriorityFeePerGas, selfPay, tank)` added; `vaultExecute` draws on a rolling daily
+///           allowance (cap = timelock threshold) and measures outflow instead of trusting `usdValue`;
+///         - a recovery rotation also blocks vault spends/queueing/queued execution and voids older vault ops
+///           (vault epoch); `HotExecuted` carries no sig hash (TXPARAM halts outside a frame tx);
+///         - `getBucket()` returns `(available, lastUpdate, cap, fullAt)`: the refill is continuous, so "frees up
+///           at" is when the bucket is full again.
 /// @dev Paths that cannot log, by construction (the watcher must not rely on them):
 ///      - an over-cap hot batch reverts (`OverCap`), so its SENDER frame leaves no log; the tank's fee burn is
 ///        visible only in the frame receipt (`frameReceipts[i].status == 0`);
