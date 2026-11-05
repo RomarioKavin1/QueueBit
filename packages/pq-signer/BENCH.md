@@ -39,6 +39,37 @@ Compared with the plan's estimates (§3.6, `[EST]`): native laptop 0.05–0.2 s 
 "20 ms powerful CPU" is a model at 512 M keccak-f/s, about 90× what one M3 core does through
 this code (~5.7 M keccak-f/s).
 
+## leanSphincs-s (experimental), measured 2026-11-06
+
+Same machine and toolchain. Light-tier keys (kept subtree 2¹³), no node cache: keygen and every signature rebuild
+the 2¹³-leaf subtree. Commands:
+
+```
+cd rust && cargo run --release --bin leaked-pq -- bench-lean 20     # native
+node bench/wasm-bench.mjs 20 leanSphincsS                             # WASM (the inlined build, Node)
+```
+
+| Operation (n = 20, fresh random key and digest per run) | Native median | Native p95 | WASM (Node) median | WASM p95 |
+|---|---|---|---|---|
+| keygen (2¹³ WOTS+C leaves + 13 surrogates, ~1.85 M keccak calls) | 391 ms | 420 ms | 435 ms | 474 ms |
+| sign (incl. post-sign self-verify) | **425 ms** | 446 ms | **474 ms** | 504 ms |
+| verify | 0.05 ms | 0.06 ms | 0.1 ms | 0.1 ms |
+
+- Signing is ~2.0 M keccak calls: the subtree rebuild for the auth path (2¹³ · 225 + 2¹³ − 1 ≈ 1.85 M, upstream's
+  "none" cache plan), the 13 FORS trees of 2¹² leaves (13 · 10,238 ≈ 133 K), the randomizer grind into the kept
+  subtree (mean 2¹³ one-block digests) and the WOTS+C counter grind (mean ~14.7 K one-permutation tries from a
+  midstate). Spread is small (p95/median ≈ 1.05) because the subtree rebuild dominates and is constant.
+- **5.5× faster than C13 in WASM** (474 ms vs 2.61 s), and well under the plan's 1 s UI threshold on a laptop.
+  Upstream `lssk sign-key` with a Light key file (16 KiB node cache, 8 threads) takes 10–30 ms (bench `signMs`); a
+  cached plan would cut ours by ~12× at the cost of a 16 KiB stateful-looking key file. Not done: the cache is
+  derivable from the seed, but keeping the secret key a fixed 64 bytes keeps the API identical to C13.
+- The devnet run (`contracts/devnet-tests/pq/lean-path-a.ts`, bun, same laptop with the amd64-emulated devnet
+  running) measured keygen 617 ms and sign 873 ms.
+- On-chain: unmodified `LeanSphincsSAsm` external call over KAT C min 39,911 / mean 40,140 / max 42,552 gas
+  (`scripts/onchain-crosscheck.sh`); the `LeanSphincsSVerifier` adapter min 42,085 / mean 42,314 / max 44,726
+  (`contracts/test/pq`), 44,846 cold. In a VaultSigner clone's Path A VERIFY frame on the devnet: **84,465 gas**
+  (verifier call 41,159), under the stock 100 K budget (IMPLEMENTATION-NOTES.md).
+
 ## Not yet measured
 
 | Target | Status |
@@ -47,6 +78,8 @@ this code (~5.7 M keccak-f/s).
 | Android mid-range, Chrome (WASM) | **unmeasured** `[UNVERIFIED]`; 3–5× slower cores than an M3 → roughly 8–13 s per signature `[EST]` |
 | iPhone, Safari (WASM) | **unmeasured** `[UNVERIFIED]`; roughly 3–5 s `[EST]` |
 | native `uniffi` build on phones | not built |
+
+leanSphincs-s phones: unmeasured; at the same 3–5× core ratio roughly 1.5–2.5 s per signature `[EST]`.
 
 Consequences for the companion UI: show a progress indicator for signing (p95 is well above the
 plan's 1 s threshold on every platform) and run `sign` in a Worker. Options if phones are too
