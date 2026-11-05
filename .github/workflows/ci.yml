@@ -54,6 +54,39 @@ jobs:
           bash scripts/build-wasm.sh
           git diff --exit-code -- wasm/
 
+  groth16-wasm:
+    # @leaked/groth16 (the MIT Groth16 engine): same committed-wasm pattern as pq-signer-wasm, plus the snarkjs and
+    # on-chain (forge) cross-checks, which must run here (GROTH16_REQUIRE_FORGE) rather than silently skip.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile # circuit artifacts + snarkjs (test-only)
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: v1.3.5
+      - name: rust toolchain (pinned by packages/groth16/rust/rust-toolchain.toml)
+        working-directory: packages/groth16/rust
+        run: rustup show
+      - name: wasm-bindgen-cli 0.2.117
+        run: cargo install wasm-bindgen-cli --version 0.2.117 --locked
+      - name: rust tests
+        working-directory: packages/groth16/rust
+        run: cargo test --release --features native
+      - name: rebuild wasm and diff
+        working-directory: packages/groth16
+        run: |
+          bash scripts/build-wasm.sh
+          git diff --exit-code -- wasm/
+      - name: cross-checks (snarkjs, forge on-chain verifier, @leaked/privacy prove path)
+        env:
+          GROTH16_REQUIRE_FORGE: "1"
+        run: pnpm vitest run --project groth16
+
   contracts:
     runs-on: ubuntu-latest
     steps:
