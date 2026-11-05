@@ -57,6 +57,8 @@ export class Poller {
   private recent: { n: bigint; hash: Hex }[];
   private readonly snapshots = new Map<bigint, CoreState>();
   private readonly alertsByBlock = new Map<bigint, string[]>();
+  /** Alert id -> block it was raised in, for alerts a reorg orphaned and whose block has not been reprocessed yet. */
+  private readonly pendingOrphans = new Map<string, bigint>();
   private readonly frameAccounts: Set<string>;
   private readonly logAddresses: Address[];
   private range: number;
@@ -91,13 +93,14 @@ export class Poller {
 
   async poll(): Promise<PollResult> {
     const head = await this.o.chain.blockNumber();
-    const safe = head - BigInt(this.o.confirmations);
+    // A chain younger than the confirmation depth has no confirmed block yet: the cursor stays before block 0.
+    const conf = BigInt(this.o.confirmations);
+    const safe = head >= conf ? head - conf : -1n;
     if (this.lastBlock === null) {
       this.lastBlock = this.o.startBlock === "latest" ? safe : this.o.startBlock - 1n;
     }
     const res: PollResult = { head, processedTo: null, alerts: [], retracted: [] };
-    const orphaned = new Set<string>();
-    const reorg = await this.checkReorg(orphaned);
+    const reorg = await this.checkReorg();
     if (reorg) res.reorg = reorg;
     const emitted = new Set<string>();
 
@@ -127,7 +130,16 @@ export class Poller {
       from = to + 1n;
     }
 
-    const gone = [...orphaned].filter((id) => !emitted.has(id));
+    // An orphaned alert is retracted only once its block height has been reprocessed without it: if the reprocessing
+    // stopped early (the node's view was inconsistent) or the new branch is still shorter, it stays pending.
+    const gone: string[] = [];
+    for (const [id, n] of this.pendingOrphans) {
+      if (emitted.has(id)) this.pendingOrphans.delete(id);
+      else if (n <= this.lastBlock) {
+        this.pendingOrphans.delete(id);
+        gone.push(id);
+      }
+    }
     res.retracted = this.o.hub.retract(gone).map((e) => e.alert.id);
     this.core.forget(res.retracted);
     res.alerts.push(...this.o.hub.publish(this.core.tick(this.clock())).map((e) => e.alert));
@@ -142,7 +154,8 @@ export class Poller {
     return out;
   }
 
-  private async checkReorg(orphaned: Set<string>): Promise<{ at: bigint; ancestor: bigint } | undefined> {
+  /** Detects a reorg of the processed blocks; rewinds and queues their alerts in `pendingOrphans`. */
+  private async checkReorg(): Promise<{ at: bigint; ancestor: bigint } | undefined> {
     const top = this.recent.at(-1);
     if (!top) return undefined;
     const b = await this.o.chain.getBlock(top.n, false);
@@ -158,18 +171,20 @@ export class Poller {
       }
     }
     const anc = ancestor ?? this.recent[0]!.n - 1n;
+    let orphaned = 0;
     for (const [n, ids] of this.alertsByBlock) {
       if (n > anc) {
-        for (const id of ids) orphaned.add(id);
+        for (const id of ids) this.pendingOrphans.set(id, n);
+        orphaned += ids.length;
         this.alertsByBlock.delete(n);
       }
     }
     const snap = this.snapshots.get(anc);
     if (snap) this.core = this.o.makeCore(snap);
-    else this.core.forget(orphaned); // beyond the in-memory window: best effort
+    else this.core.forget(this.pendingOrphans.keys()); // beyond the in-memory window: best effort
     for (const n of [...this.snapshots.keys()]) if (n > anc) this.snapshots.delete(n);
     this.recent = this.recent.filter((r) => r.n <= anc);
-    this.log("reorg", { at: top.n.toString(), ancestor: anc.toString(), orphanedAlerts: orphaned.size });
+    this.log("reorg", { at: top.n.toString(), ancestor: anc.toString(), orphanedAlerts: orphaned });
     this.lastBlock = anc;
     return { at: top.n, ancestor: anc };
   }

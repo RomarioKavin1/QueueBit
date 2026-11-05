@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { getAddress, type Address, type Hex } from "viem";
 import { WatcherCore, type CoreState, type MinedFrameReceipt } from "@leaked/watcher-core";
-import type { RawTx } from "../src/chain.js";
+import type { ChainClient, RawTx } from "../src/chain.js";
 import { Hub, type HubEntry } from "../src/hub.js";
 import { Poller, type PollerOptions } from "../src/poller.js";
 import { FileStore, SqliteStore } from "../src/store.js";
@@ -96,6 +96,68 @@ describe("poller", () => {
     // The deadline of the vanished payment went with the rewind; the loosening's stays.
     expect(poller.watcher.deadlines().map((d) => d.opId)).toEqual([opA]);
     expect(idA).toBeDefined();
+  });
+
+  it("does not retract orphaned alerts until their block height is reprocessed (reprocessing interrupted)", async () => {
+    const chain = new MockChain();
+    let failBlock2Once = false;
+    // The node's view goes inconsistent on the first fetch of the new block 2' (a reorg under our feet).
+    const flaky: ChainClient = {
+      chainId: () => chain.chainId(),
+      blockNumber: () => chain.blockNumber(),
+      getBlock: async (n, full) => {
+        if (n === 2n && full && failBlock2Once) {
+          failBlock2Once = false;
+          return null;
+        }
+        return chain.getBlock(n, full);
+      },
+      getLogs: (q) => chain.getLogs(q),
+      getReceipt: (h) => chain.getReceipt(h),
+      call: () => chain.call(),
+    };
+    const { poller, entries } = setup({ confirmations: 0, chain: flaky }, chain);
+    const stays = tx();
+    const vanishes = tx();
+    chain.mine(); // 1
+    chain.mine({
+      logs: [
+        accountLog(ACC, "Queued", { opId: tx(), kind: 1, eta: chain.t0 + H48 }, stays, 0),
+        accountLog(ACC, "Queued", { opId: tx(), kind: 0, eta: chain.t0 + H48 }, vanishes, 1),
+      ],
+    }); // 2
+    await poller.poll();
+    expect(entries.map((e) => e.alert.kind)).toEqual(["change-scheduled", "payment-scheduled"]);
+    const idB = entries[1]!.alert.id;
+
+    chain.reorg(2);
+    chain.mine({ logs: [accountLog(ACC, "Queued", { opId: tx(), kind: 1, eta: chain.t0 + H48 }, stays, 0)] }); // 2'
+    chain.mine(); // 3'
+    failBlock2Once = true;
+    const r1 = await poller.poll();
+    expect(r1.reorg).toEqual({ at: 2n, ancestor: 1n });
+    expect(r1.processedTo).toBe(null); // stopped at the inconsistent block 2'
+    expect(r1.retracted).toEqual([]); // nothing retracted yet: the orphaned blocks were not reprocessed
+    expect(entries).toHaveLength(2);
+
+    const r2 = await poller.poll();
+    expect(r2.processedTo).toBe(3n);
+    expect(r2.retracted).toEqual([idB]); // only the payment vanished; the loosening came back in 2'
+    expect(entries.slice(2).map((e) => [e.type, e.alert.id])).toEqual([["retract", idB]]);
+    expect((await poller.poll()).retracted).toEqual([]);
+  });
+
+  it("starts on a chain younger than the confirmation depth without a negative cursor", async () => {
+    const chain = new MockChain(); // genesis only: head 0
+    const { poller, entries } = setup({ confirmations: 2, startBlock: "latest" }, chain);
+    expect((await poller.poll()).processedTo).toBe(null);
+    expect(poller.cursor).toBe(-1n);
+    chain.mine({ logs: [accountLog(ACC, "BunkerEnabled", {})] }); // 1
+    chain.mineEmpty(3); // head 4, safe 2
+    const r = await poller.poll();
+    expect(r.processedTo).toBe(2n);
+    expect(chain.calls.getBlock).toBeGreaterThan(0);
+    expect(entries.map((e) => e.alert.kind)).toEqual(["lockdown-on"]);
   });
 
   it("re-alerts after a reorg if the same tx comes back after its retraction", async () => {
