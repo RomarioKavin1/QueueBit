@@ -898,3 +898,60 @@ section the unbound-VaultSigner workaround of **"Account ↔ vault-signer CREATE
   address indexed factory, bytes32 salt, bytes32 pk, address verifier, address payerKey)` (initialize only).
   `services/watcher/test/devnet.live.test.ts` encodes the old `InitConfig` and must add `roleSignerFactory: 0`,
   zeroed `vault`/`recovery` params and `recipientMode` (explicit mode keeps its EOA vault).
+
+## leanSphincs-s as a second, experimental PQ scheme: Path A under the stock 100k budget (2026-11-06)
+
+Follow-up of the decision "Path A scheme options after the M3 benchmark". Code: `packages/pq-signer` (`rust/src/lean_s/`,
+`schemes.leanSphincsS` in `src/index.ts`, KATs in `vectors/leansphincs-s{,-upstream}.json`), `contracts/src/pq/
+{LeanSphincsSVerifier.sol,vendor/LeanSphincs-SAsm.sol}`, tests `contracts/test/pq/LeanSphincsS*`, devnet run
+`contracts/devnet-tests/pq/lean-path-a.ts` (`bun run lean-path-a`; result in `last-run-lean.json`, git-ignored).
+
+- **Signer.** Byte-compatible Rust re-implementation of upstream `lssk` (SPHINCS- @ `4c76aaf`), Light tier (kept subtree
+  b = 13, rated 20,000 sigs/key, an estimate). KAT A bit for bit: upstream's fixture (6 vectors, b = 6/10/12), the
+  crate's `known_answer` (b = 11) and the bench's `lssk sign-key` vectors (b = 13). KAT C (32 vectors) also passes
+  upstream's independent Python verifier and the unmodified upstream Solidity verifier. Hedged `R_0` by default;
+  `{deterministic: true}` = upstream. No node cache: the 64-byte secret key stays the C13 shape and every signature
+  rebuilds the subtree (WASM sign 474 ms median vs C13 2.61 s; BENCH.md).
+- **No key reuse across schemes.** Derivation is one function for both schemes, `HMAC-SHA512(key = "leaked/v1/" ‖
+  schemeId ‖ "/" ‖ role ‖ "/" ‖ scope, msg = seed)`; leanSphincs-s has `schemeId = keccak256("leanSphincs-s/keccak/v1")`
+  = `0x5f6989ca…29daed` (tests: `rust/tests/lean_derive.rs`, `test/lean.test.ts`). b = 13 is fixed by that id.
+- **API / flag.** The C13 top-level exports are unchanged; `schemes.c13` / `schemes.leanSphincsS` share the
+  `PQScheme` shape, `schemeById(id)` maps an on-chain `IPQVerifier.schemeId()`. `schemes.leanSphincsS.experimental ===
+  true`, `warning` = "Experimental: no formal proof yet; enables quantum-safe approvals on any mempool". The package
+  README has the proven / not-proven comparison with C13. `wasm/` rebuilt (118 KB, sha256 `88b83ac0…6f4f`), reproduced
+  byte for byte from a clean target.
+- **Adapter.** `LeanSphincsSVerifier` = upstream `LeanSphincsSAsm` (vendored byte-identical, the same code as the
+  bench's copy; `scripts/onchain-crosscheck.sh` checks both against upstream) + the `C13Verifier` adapter shape: length
+  check first, `pk = P ‖ root` split into high-aligned words, self-STATICCALL, revert → false. Foundry over KAT C: min
+  42,085 / mean 42,314 / max 44,726 gas (44,846 cold); `VERIFY_GAS_ESTIMATE` 50,000. Bytecode pre-filter: only solc's
+  trailing INVALID.
+- **FrameSim** (`test/pq/LeanSphincsSPathA.t.sol`): a `RoleSignerFactory` clone with this verifier takes
+  `sigLength = 4164`, Path A and Path B succeed, forged / other-digest / C13 witnesses are rejected (no nonce burnt on
+  Path A). FrameSim's mocked opcodes make its frame gas indicative only (2.2M); the devnet figure below is the
+  measurement.
+
+### Path A on the local devnet through the STOCK sidecar (no stake, no BUDGET-010)
+
+VaultSigner clone `0x26110757cc6C48Ac25dD94C4e7840BAbA48f7eb0` (PQRoleSigner implementation `0xE90a0a30…4a61`, factory
+`0x1c0aeba1…496c`, payer key none: Path A only) bound to a MockLeakedAccount `0xb225fe48…b806`, verifier
+`LeanSphincsSVerifier` `0xfa9707fb…bf6f` (deploy 7,055,152 gas); funded from anvil #2. Tx `[VERIFY(self,
+verifyFrame(0)) limit 99,900, SENDER(self, relay(mock, vaultExecute(0.001 ETH)))]`, one ARBITRARY 4,164-B witness:
+
+| | Result |
+|---|---|
+| `ethrex_simulateFrameTransaction {trace:true}` | `canonicalMempoolValid: true`; VERIFY trace clean (no banned opcode, no write, no transient, storage only the clone's slot 0 read through its implementation) |
+| Stock sidecar `:14337` `eth_sendFrameTransaction` | **accepted**, mined: `0x39ae1b005efcda92d9e765ece9dafbddfd4a630f53cf8164fff3a77e8309ba9e`, block 1461 |
+| **VERIFY frame gas (PQ verify inside, incl. PQRoleSigner overhead)** | **84,465** (receipt `frameReceipts[0]`); verifier call 41,159, so the role-signer glue (clone hop, args via EXTCODECOPY, SIGPARAM/FRAMEPARAM walk, SIGDATACOPY of 4,164 B, slot-0 read, APPROVE) is 43,306 |
+| SENDER frame | 36,353 execution + 281,520 state (fresh recipient account and the mock's writes, Amsterdam+ state gas) |
+| Receipt gasUsed | 588,394 (the bench's self-send shape is 281,146; the difference is the state gas above) |
+| Forged witness (WOTS+C counter flipped) | simulated only: VERIFY reverts (`validation prefix frame reverted`); not submitted (poisoned-lane rule) |
+
+- **Path A fits 100k with 15.4k to spare** at the declared limit (99,900 + 100 ARBITRARY = 100,000). C13 in the same
+  shape is 151,701 (G1 g2). So a leanSphincs-s VaultSigner gets PQ-in-VERIFY on any stock mempool, with no payer ECDSA
+  key and no griefing surface; the router rule of the decision entry (scheme VERIFY gas + overhead ≤ budget) selects it.
+- The shared trace gate in `devnet-tests/pq/lib.ts` now takes the set of "own" addresses (sender + implementation),
+  as G1's does: a clone's slot-0 SLOAD is reported under the implementation's code address. `run.ts` still passes the
+  sender only (unchanged behaviour).
+- Open before any real funds: an independent review of the leanSphincs-s lifetime argument at b = 13 (upstream:
+  estimate, not proved) and of the verifier (no formal proof, unlike C13); the UI keeps the scheme behind its
+  experimental flag.

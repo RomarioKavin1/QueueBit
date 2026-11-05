@@ -15,6 +15,10 @@ packages, Foundry git submodules under `contracts/lib/`) are not listed: their l
 | `packages/pq-signer/rust/tests/fixtures/upstream_c13.json` | same repo, outputs of `signers/signer-wasm` `signer-c13` and `script/signer.py c13` built/run at `4c76aaf` | MIT, as above | KAT set A (generated data, not code) |
 | `packages/pq-signer/onchain/C13Crosscheck.t.sol` + `scripts/onchain-crosscheck.sh` | same repo, `src/keccak/SPHINCs-C13Asm.sol` | MIT, as above | The script copies the unmodified verifier into a temp dir at test time (independently of the vendored copy below) |
 | `contracts/src/pq/vendor/SPHINCs-C13Asm.sol` | same repo @ `4c76aaf113d326df9adede63d015f3b394ab84f4`, `src/keccak/SPHINCs-C13Asm.sol` | MIT, as above (`contracts/src/pq/vendor/LICENSE-SPHINCS-minus`) | The C13 verifier `SphincsC13Asm`, byte-identical below an added provenance comment; `C13Verifier` (the `IPQVerifier` adapter) inherits it |
+| `packages/pq-signer/rust/src/lean_s/{params,hash,scheme}.rs` (leanSphincs-s, experimental) | [`nconsigny/SPHINCS-`](https://github.com/nconsigny/SPHINCS-) @ `4c76aaf`, `signers/leansphincs-s-keccak/src/` (crate `leansphincs-s-keccak`, `lssk`), `docs/leanSphincs-S-keccak.md`, `src/keccak/LeanSphincs-SAsm.sol`; that crate is adapted from [`TomWambsgans/leanXMSS-leanSPHINCS-candidates`](https://github.com/TomWambsgans/leanXMSS-leanSPHINCS-candidates) (`crates/sphincs`, branch `keccak`), itself adapted from [`leanEthereum/leanVM`](https://github.com/leanEthereum/leanVM) (`crates/sphincs`) | MIT, Copyright (c) 2026 Nicolas Consigny; the two upstream crates are MIT OR Apache-2.0 (Copyright (c) 2026 Tom Wambsgans; Copyright (c) 2026 leanEthereum), used here under **MIT** (text below) | leanSphincs-s parameters, 16-byte tweak, `Th`/`ThPair`, message-digest layout, WOTS+C (merged encoding), FORS, pruned-key surrogates, signing algorithm and signature layout, re-implemented in Rust (streaming treehash, hedged `R_0`, zeroization, self-check); verifier logic ported from the spec and the Solidity. File headers carry the attribution chain |
+| `packages/pq-signer/vectors/leansphincs-s-upstream.json` | same repo @ `4c76aaf`, `test/fixtures/leansphincs-s-keccak-kat.json` (verbatim) | MIT, Copyright (c) 2026 Nicolas Consigny | leanSphincs-s KAT set A (generated data, not code) |
+| `packages/pq-signer/onchain/LeanSphincsSCrosscheck.t.sol` (+ `scripts/onchain-crosscheck.sh`) | same repo @ `4c76aaf`, `src/keccak/LeanSphincs-SAsm.sol` | MIT, as above | The script copies the unmodified verifier into a temp dir at test time and checks the vendored copies below against it |
+| `contracts/src/pq/vendor/LeanSphincs-SAsm.sol` | same repo @ `4c76aaf113d326df9adede63d015f3b394ab84f4`, `src/keccak/LeanSphincs-SAsm.sol` | MIT, as above (`contracts/src/pq/vendor/LICENSE-SPHINCS-minus`) | The leanSphincs-s verifier `LeanSphincsSAsm`, byte-identical below an added provenance comment (same code as the bench's copy); `LeanSphincsSVerifier` (the experimental `IPQVerifier` adapter) inherits it |
 | `contracts/src/pq/vendor/SphincsFrameVerify.yul` | same repo @ `4c76aaf`, `src/SphincsFrameVerify.yul` | MIT, as above | The EIP-8141 VERIFY-frame Yul module, byte-identical below an added provenance comment; reference only (hard-codes the chain-1337 opcode bytes), not used by `PQRoleSigner` |
 
 Patterns used without copying code: the etched mock-helper approach of `contracts/test/frame/` follows the mempool
@@ -53,6 +57,35 @@ The full MIT license text of SPHINCS- (`nconsigny/SPHINCS-`, `LICENSE`):
 MIT License
 
 Copyright (c) 2026 Nicolas Consigny <nicolas@ethereum.org>
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+The full MIT license text of the leanSPHINCS candidates crate (`TomWambsgans/leanXMSS-leanSPHINCS-candidates`, as
+shipped in SPHINCS- `signers/leansphincs-s-keccak/LICENSE.upstream`; the crate is dual-licensed MIT OR Apache-2.0 and
+LEAKED uses it under MIT). leanVM's `crates/sphincs` is under the same MIT terms with the copyright line
+"Copyright (c) 2026 leanEthereum":
+
+```
+MIT License
+
+Copyright (c) 2026 Tom Wambsgans
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
