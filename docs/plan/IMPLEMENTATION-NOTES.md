@@ -734,3 +734,15 @@ Code: `apps/extension/src/background/{account,engine,routing,policy,payments,act
   `services/watcher`; add `"services/*"` there (outside this milestone's paths). Not built yet: the sidecar
   `skandha_subscribe` feed for pending (pre-chain) vault actions, Telegram/email channels, Privacy Pools
   `RootUpdated`/`Withdrawn` for the user's labels, and the extension light-mode wiring (the extension workstream).
+
+## 7579 modules after the security review (2026-11-06; supersedes the M7 "Kernel 1271 unsupported" and "Safe keyless owner" prose)
+- Fixes `e232ab7`, `9784a02`:
+  - **A1 (critical):** Safe7579 `emergencyUninstallHook` reached via a hot-registered digest or via 7739 in the Safe's own domain. Fixed: opaque hashes are only for `sender == 0` or vault-trusted verifiers, and 7739 is refused in the host's domain.
+  - **A2:** the validator now fails closed with `HookNotInstalled` when the hook isn't bound.
+  - **A3:** hot 1271 is off on Kernel, enforced at install.
+  - **A5:** Safe owners must all be `0xdEaD`, enforced at install (`HostOwnerNotKeyless`).
+- Host matrix:
+  - **MSA:** yes; needs a v0.8 EntryPoint build.
+  - **Safe7579:** yes, single owner `0xdEaD`; emergency exit is vault-only.
+  - **Kernel v3.3:** yes, hot 1271 off.
+- **To mirror the next account change** (Open recipient mode by default, vault bound in initialize): `LeakedPolicyHook` gains the same `RecipientMode`; `LeakedRoleExecutor` derives role signers the same way. Tracked as a follow-up once the account change is reviewed.
