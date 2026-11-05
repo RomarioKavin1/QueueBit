@@ -108,6 +108,15 @@ describe("FrameEngine (mocked rpc)", () => {
     expect(p.verdict.reason).toMatch(/network fee/u);
   });
 
+  it("fails closed when the simulation reports no MAX_COST (nothing to check the fee bound or the tank against)", async () => {
+    const { engine, sent } = mockRpc({}, { maxCost: null });
+    const p = await engine.prepare(req);
+    expect(p.verdict.admitted).toBe(false);
+    expect(p.verdict.reason).toMatch(/fee bound/u);
+    await expect(engine.submit(p)).rejects.toMatchObject({ reason: "not-admitted" });
+    expect(sent).toHaveLength(0);
+  });
+
   it("reports a failing body frame from the simulation", async () => {
     const { engine } = mockRpc(
       {},

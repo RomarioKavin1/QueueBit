@@ -428,6 +428,14 @@ export class Payments {
           prepared.verdict.reason ?? "The network would not accept the replacement.",
         );
       }
+      // A speed-up re-signs the same payment; if its body would fail now (the limit or an allowed list changed), the
+      // replacement would only burn a fee from the tank. A cancel keeps going: its point is to use up the nonce.
+      if (mode === "speed-up" && !prepared.verdict.bodyOk) {
+        throw new PaymentsError(
+          "not-admitted",
+          "Your account would refuse this payment now, so speeding it up would only cost a network fee. Cancel it instead.",
+        );
+      }
       const hash = await this.engine(entry.chainId).submit(prepared);
       const next = await this.d.activity.update(id, {
         ...(mode === "cancel" ? { kind: "cancel" as const, headline: "Cancelling…" } : {}),
@@ -477,11 +485,13 @@ export class Payments {
       });
     }
     const engine = this.engine(e.chainId);
+    if (!e.wire) return undefined;
+    const account = fromWire(e.wire).sender;
+    const nonce = BigInt(e.nonce);
     for (const hash of [e.hash, ...e.replaced]) {
       const r = await engine.receipt(hash);
       if (!r) continue;
-      const account = fromWire(e.wire!).sender;
-      engine.clearInFlight(account, BigInt(e.nonce));
+      engine.clearInFlight(account, nonce);
       const gasUsed = r.gasUsed ?? r.frameReceipts.reduce((s, f) => s + f.gasUsed.execution + f.gasUsed.state, 0n);
       let perGas = BigInt(e.fees!.maxFeePerGas);
       if (r.blockNumber !== undefined) {
@@ -509,8 +519,23 @@ export class Payments {
         stuck: false,
       });
     }
+    // No receipt for any of our hashes. Reconcile the nonce against the chain (plan §30 §4.5): if a block that is
+    // already one behind the head counts past this nonce, another transaction took the slot (the same account on
+    // another device, or a replacement this wallet no longer knows). One block behind, so a receipt the node has not
+    // indexed yet is never mistaken for someone else's transaction.
+    const head = await client.getBlockNumber();
+    if (head > 0n && (await client.getTransactionCount({ address: account, blockNumber: head - 1n })) > nonce) {
+      engine.clearInFlight(account, nonce);
+      return this.d.activity.update(e.id, {
+        status: "replaced",
+        headline: "Replaced: nothing was sent from here",
+        detail:
+          "Another payment from this account used this slot, possibly from another device. Nothing was sent from this browser.",
+        steps: e.steps.map((s) => ({ ...s, status: "skipped" as const })),
+        stuck: false,
+      });
+    }
     if (e.sentAtBlock) {
-      const head = await client.getBlockNumber();
       const stuck = head - BigInt(e.sentAtBlock) >= 3n;
       if (stuck !== Boolean(e.stuck)) return this.d.activity.update(e.id, { stuck });
     }

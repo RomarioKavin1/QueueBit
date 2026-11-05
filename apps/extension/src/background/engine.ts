@@ -219,7 +219,11 @@ export class FrameEngine {
       final.frames.length > 2 && final.frames.slice(2).every((f) => f.succeeded) && !final.sim.executionError;
     let admitted = final.sim.valid && verifyUsed < VERIFY_GAS;
     let reason = final.sim.violation ?? final.sim.executionError ?? undefined;
-    if (req.maxFeeWeiPerTx !== undefined && maxCostWei > req.maxFeeWeiPerTx) {
+    if (admitted && final.sim.maxCost === null) {
+      // Fail closed: without MAX_COST neither the H3 bound nor the tank's balance can be checked before sending.
+      admitted = false;
+      reason = "The network did not report the fee bound for this transaction.";
+    } else if (req.maxFeeWeiPerTx !== undefined && maxCostWei > req.maxFeeWeiPerTx) {
       admitted = false;
       reason = "The network fee is above what your account allows per payment right now.";
     }
