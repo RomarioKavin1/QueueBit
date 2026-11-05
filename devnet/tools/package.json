@@ -1,0 +1,20 @@
+{
+  "name": "leaked-devnet-tools",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Smoke tests and probes for the LEAKED local EIP-8141 devnet (run with bun; standalone, not a workspace package)",
+  "scripts": {
+    "smoke": "bun run src/smoke.ts",
+    "probe": "bun run src/probe-opcodes.ts",
+    "build:contracts": "forge build --root contracts && bun run src/export-artifacts.ts"
+  },
+  "dependencies": {
+    "@forshtat/hegota-support": "file:./vendor/forshtat-hegota-support-0.0.1.tgz",
+    "viem": "2.57.16"
+  },
+  "devDependencies": {
+    "@types/node": "22.10.2",
+    "typescript": "5.9.3"
+  }
+}

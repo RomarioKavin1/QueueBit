@@ -154,7 +154,7 @@ function relay(address target, bytes calldata data) external;                   
 ### 5.2 Phases and gates
 
 **Phase 0: unblock (weeks 1–2)**
-1. Re-obtain `@forshtat/hegota-support` and the mempool-workshop libs. Fix `prototype/probe.mts` imports. Re-run the PORST probe and confirm opcode bytes on devnet 1337 and the Hegotá devnet (§20 M0, §10 M1).
+1. Re-obtain `@forshtat/hegota-support` and the mempool-workshop libs. Fix `prototype/probe.mts` imports. Re-run the PORST probe and confirm opcode bytes on devnet 1337 and the Hegotá devnet (§20 M0, §10 M1). **Done for chain 1337 on 2026-11-06:** `devnet/` is a local fork of the public devnet (same ethrex build + sidecar), `@forshtat/hegota-support@0.0.1` is vendored (MIT; the workshop repo has no licence and is not copied), opcode bytes/ids are confirmed on both the local fork and the public devnet, and five plan corrections were applied — see [`50-devnet-review.md`](50-devnet-review.md). Still open: the Hegotá devnet (3151908) and the PORST re-run.
 2. **External questions**, each of which can change scope:
    - **Kohaku maintainers (Nicolas Consigny):** written license terms for the `@kohaku-eth/*` packages; the scope of "spending policies for different signers"; interest in the module.
    - **Alex Forshtat (alt mempool):** BUDGET-010 plans and values; acceptance of a PR adding budgets to `skandha_config`.

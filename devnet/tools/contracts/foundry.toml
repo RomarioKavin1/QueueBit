@@ -1,0 +1,9 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = []
+solc_version = "0.8.28"
+evm_version = "cancun"
+optimizer = false
+remappings = ["@forshtat/hegota-support/=../node_modules/@forshtat/hegota-support/"]
+allow_paths = ["../node_modules"]

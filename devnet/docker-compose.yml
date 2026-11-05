@@ -1,0 +1,198 @@
+# LEAKED local EIP-8141 devnet: ethrex (eip8141-tracer fork) + Lighthouse (2 beacon nodes + 1 validator client)
+# + the ERC-8421 mempool sidecar (skandha fork), all on one Docker network with static IPs.
+#
+# Derived from forshtat/mempool-workshop-sidecar deploy/devnet/docker-compose.yml (MIT, (c) 2023 Etherspot /
+# Alex Forshtat, commit 2e22ff0a). Local changes:
+#   - static container IPs (172.28.0.0/24) so lighthouse-beacon's --enr-address is known before it starts;
+#   - lighthouse-beacon-2 dials beacon-1 by multiaddr (--boot-nodes=/ip4/.../tcp/9000) instead of an ENR,
+#     so the whole stack starts with one `docker compose up -d` (no two-step ENR dance);
+#   - platform: linux/amd64 on the two amd64-only images (ethrex, sidecar) for Apple Silicon hosts;
+#   - restart: unless-stopped on the long-running services;
+#   - a `skandha` service (standalone mode, no p2p) with the staking registry address pre-filled.
+#
+# Usage: ./up.sh (never run `docker compose up` by hand the first time; genesis needs GENESIS_TIMESTAMP).
+
+name: leaked-devnet
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24
+
+services:
+  # One-shot: writes genesis.json (EL), genesis.ssz + config.yaml (CL) and a JWT secret into ./data/genesis.
+  genesis:
+    image: ethpandaops/ethereum-genesis-generator:6.1.6
+    environment:
+      - GENESIS_TIMESTAMP
+    volumes:
+      - ./data/genesis:/data
+      - ./genesis.values.env:/config/values.env:ro
+    command: ["all"]
+
+  # One-shot: EIP-2335 keystores for the 32 genesis validators (weak KDF on purpose: throwaway devnet keys).
+  validator-keys:
+    image: protolambda/eth2-val-tools:latest
+    depends_on:
+      genesis:
+        condition: service_completed_successfully
+    volumes:
+      - ./data/validator-keys:/data
+    command:
+      - keystores
+      - --insecure
+      - --source-mnemonic
+      - "sleep moment list remain like wall lake industry canvas wonder ecology elite duck salad naive syrup frame brass utility club odor country obey pudding"
+      - --source-min=0
+      - --source-max=32
+      - --out-loc=/data/keystores
+
+  ethrex:
+    image: ghcr.io/forshtat/ethrex:eip8141-tracer-latest
+    platform: linux/amd64
+    restart: unless-stopped
+    networks:
+      default:
+        ipv4_address: 172.28.0.2
+    volumes:
+      - ./data/genesis:/genesis:ro
+      - ./data/ethrex:/data
+    ports:
+      - "${ETHREX_PORT:-8545}:8545/tcp"
+    command:
+      - "--network=/genesis/metadata/genesis.json"
+      - "--datadir=/data"
+      - "--http.addr=0.0.0.0"
+      - "--http.port=8545"
+      - "--http.api=eth,net,web3,ethrex,debug,admin,txpool"
+      - "--authrpc.addr=0.0.0.0"
+      - "--authrpc.port=8551"
+      - "--authrpc.jwtsecret=/genesis/jwt/jwtsecret"
+      - "--log.level=${ETHREX_LOG_LEVEL:-info}"
+      - "--syncmode=full"
+      - "--p2p.addr=0.0.0.0"
+      - "--p2p.port=30303"
+      - "--discovery.port=30303"
+
+  lighthouse-beacon:
+    image: ethpandaops/lighthouse:focil
+    restart: unless-stopped
+    depends_on:
+      ethrex:
+        condition: service_started
+    networks:
+      default:
+        ipv4_address: 172.28.0.3
+    volumes:
+      - ./data/genesis:/genesis:ro
+      - ./data/lighthouse-beacon:/data
+    ports:
+      - "${BEACON_PORT:-5052}:5052/tcp"
+    entrypoint: ["lighthouse"]
+    command:
+      - bn
+      - --testnet-dir=/genesis/metadata
+      - --datadir=/data
+      - --execution-endpoint=http://ethrex:8551
+      - --execution-jwt=/genesis/jwt/jwtsecret
+      - --debug-level=info
+      - --http
+      - --http-address=0.0.0.0
+      - --http-port=5052
+      - --listen-address=0.0.0.0
+      - --port=9000
+      - --supernode
+      - --allow-insecure-genesis-sync
+      - --ignore-ws-check
+      - --disable-packet-filter
+      - --enr-address=172.28.0.3
+
+  # Passive peer with no validators. A solo Lighthouse never leaves SyncState::Stalled with zero peers and so
+  # never builds a first block; this node exists only to satisfy that gate.
+  lighthouse-beacon-2:
+    image: ethpandaops/lighthouse:focil
+    restart: unless-stopped
+    depends_on:
+      lighthouse-beacon:
+        condition: service_started
+    networks:
+      default:
+        ipv4_address: 172.28.0.4
+    volumes:
+      - ./data/genesis:/genesis:ro
+      - ./data/lighthouse-beacon-2:/data
+    entrypoint: ["lighthouse"]
+    command:
+      - bn
+      - --testnet-dir=/genesis/metadata
+      - --datadir=/data
+      - --execution-endpoint=http://ethrex:8551
+      - --execution-jwt=/genesis/jwt/jwtsecret
+      - --debug-level=info
+      - --http
+      - --http-address=0.0.0.0
+      - --http-port=5052
+      - --listen-address=0.0.0.0
+      - --port=9000
+      - --supernode
+      - --allow-insecure-genesis-sync
+      - --ignore-ws-check
+      - --disable-packet-filter
+      - --enr-address=172.28.0.4
+      - --boot-nodes=/ip4/172.28.0.3/tcp/9000
+
+  lighthouse-validator:
+    image: ethpandaops/lighthouse:focil
+    restart: unless-stopped
+    depends_on:
+      lighthouse-beacon:
+        condition: service_started
+    networks:
+      default:
+        ipv4_address: 172.28.0.5
+    volumes:
+      - ./data/genesis:/genesis:ro
+      - ./data/lighthouse-validator:/data
+      - ./data/validator-keys/keystores/keys:/data/validators
+      - ./data/validator-keys/keystores/secrets:/data/secrets:ro
+    entrypoint: ["lighthouse"]
+    command:
+      - vc
+      - --testnet-dir=/genesis/metadata
+      - --datadir=/data
+      - --secrets-dir=/data/secrets
+      - --beacon-nodes=http://lighthouse-beacon:5052
+      - --init-slashing-protection
+      - --suggested-fee-recipient=0x5544596212F91984C986A919C8026DF0576816f9
+
+  # The alt-mempool sidecar (standalone = no libp2p). Pinned by digest in README.md.
+  skandha:
+    image: ${SKANDHA_IMAGE:-ghcr.io/forshtat/mempool-workshop-sidecar:latest}
+    platform: linux/amd64
+    restart: unless-stopped
+    profiles: ["sidecar"]
+    depends_on:
+      ethrex:
+        condition: service_started
+    networks:
+      default:
+        ipv4_address: 172.28.0.6
+    volumes:
+      - ./skandha/config.json:/usr/app/config.json:ro
+      - ./data/skandha:/usr/app/data
+    ports:
+      - "${SKANDHA_PORT:-14337}:14337/tcp"
+    environment:
+      # anvil test account #8; makes skandha_explorer_faucet work locally (1 ETH per address per hour).
+      - SKANDHA_FAUCET_KEY=${SKANDHA_FAUCET_KEY:-0xdbda1821b80551c9d65939329250298aa3472ba22feea921c0cf5d620ea67b97}
+    command:
+      - standalone
+      - --configFile=/usr/app/config.json
+      - --dataDir=/usr/app/data
+      - --api.address=0.0.0.0
+      - --api.port=14337
+      - --api.wsPort=14337
+      - --executor.bundlingMode=auto
+      - --redirectRpc
+      - --explorer.enable
