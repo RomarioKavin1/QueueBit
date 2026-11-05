@@ -7,8 +7,10 @@ import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.s
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {ERC7739} from "@openzeppelin/contracts/utils/cryptography/signers/draft-ERC7739.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Permit.sol";
 import {RollingCap} from "../lib/RollingCap.sol";
 import {LeakedVerify} from "./LeakedVerify.sol";
 import {LeakedAccountStorage} from "./LeakedAccountStorage.sol";
@@ -45,6 +47,9 @@ contract LeakedAccountImpl is LeakedVerify, LeakedAccountBase, Initializable, UU
     bytes4 private constant ERC20_APPROVE = 0x095ea7b3;
     bytes4 private constant ERC20_INCREASE_ALLOWANCE = 0x39509351;
     bytes4 private constant SET_APPROVAL_FOR_ALL = 0xa22cb465;
+    bytes32 private constant SENTINEL_7739 = 0x7739773977397739773977397739773977397739773977397739773977397739;
+    bytes32 private constant PERMIT_TYPEHASH =
+        keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
 
     /// The role surface (`LeakedAccountRoles`), reached by DELEGATECALL from `fallback()`.
     address public immutable ROLES_MODULE;
@@ -162,16 +167,47 @@ contract LeakedAccountImpl is LeakedVerify, LeakedAccountBase, Initializable, UU
         emit HotExecuted(debit, $.hotBucket.available, n);
     }
 
-    /// @notice Registers a value-bearing hash (permit, order, typed data with value) for ERC-1271, debiting
-    ///         `amount` of `token` (address(0) = ETH) from the hot bucket. Only as a call of a hot batch.
+    /// @notice Registers an opaque hash for ERC-1271, debiting `amount` of `token` (address(0) = ETH) from the hot
+    ///         bucket. Only as a call of a hot batch. The debit is self-declared (the contract cannot read a hash's
+    ///         value), so the hash is honoured only under the hot verifier rule of `isValidSignature`: never for a
+    ///         token, Permit2 or any on-chain verifier the vault has not trusted. Token permits: `registerPermit`.
     function registerHash(bytes32 hash, address token, uint256 amount, uint48 expiry) external {
         if (msg.sender != address(this)) revert OnlySelf();
         if (_tload(T_HOT) == 0) revert NotInHotBatch();
         if (expiry <= block.timestamp || expiry > block.timestamp + MAX_REGISTERED_TTL) revert BadExpiry();
         uint256 usd = quoteUsd(token, amount);
-        _s().registeredHashes[hash] = expiry;
+        LeakedAccountStorage.Layout storage $ = _s();
+        $.registeredHashes[hash] = expiry;
+        delete $.registeredFor[hash];
         _tstore(T_HOT_DEBIT, _tload(T_HOT_DEBIT) + usd);
         emit HashRegistered(hash, token, amount, expiry);
+    }
+
+    /// @notice Registers an ERC-2612 permit of `value` base units of the allowlisted `token` to `spender`: the digest
+    ///         is computed here from the token's `DOMAIN_SEPARATOR()` and `nonces(this)`, so the hot bucket is
+    ///         debited by the permit's own value, and only `token` may consume the hash (its `permit`, for tokens
+    ///         that check EIP-1271). Expires at `deadline`, at most `MAX_REGISTERED_TTL` from now. Hot batch only.
+    function registerPermit(address token, address spender, uint256 value, uint256 deadline) external {
+        if (msg.sender != address(this)) revert OnlySelf();
+        if (_tload(T_HOT) == 0) revert NotInHotBatch();
+        LeakedAccountStorage.Layout storage $ = _s();
+        TokenCfg storage t = $.tokens[token];
+        if (token == address(0) || !t.allowed) revert TokenNotAllowed(token);
+        if (deadline <= block.timestamp) revert BadExpiry();
+        uint48 expiry = uint48(Math.min(deadline, block.timestamp + MAX_REGISTERED_TTL));
+        bytes32 digest = MessageHashUtils.toTypedDataHash(
+            IERC20Permit(token).DOMAIN_SEPARATOR(),
+            keccak256(
+                abi.encode(
+                    PERMIT_TYPEHASH, address(this), spender, value, IERC20Permit(token).nonces(address(this)), deadline
+                )
+            )
+        );
+        uint256 usd = _quote(t, value);
+        $.registeredHashes[digest] = expiry;
+        $.registeredFor[digest] = token;
+        _tstore(T_HOT_DEBIT, _tload(T_HOT_DEBIT) + usd);
+        emit HashRegistered(digest, token, value, expiry);
     }
 
     /// @notice Clears an expired freeze. Permissionless; also the one SENDER call VERIFY admits while frozen.
@@ -187,32 +223,35 @@ contract LeakedAccountImpl is LeakedVerify, LeakedAccountBase, Initializable, UU
 
     // --------------------------------------------------------------------------------------------- 1271 ------
 
-    /// @notice Scoped ERC-1271.
-    ///         1. A hash registered by a hot batch (`registerHash`), unexpired: valid with an empty signature or the
-    ///            36-byte marker `REGISTERED_MARKER ‖ hash`.
-    ///         2. ERC-7739 nested typed data / personal sign by the hot key, for any app domain (zero-value
-    ///            sign-ins and messages). Never when the asking contract is an allowlisted token or a denied value
-    ///            verifier (Permit2 by default): value-bearing typed data must be registered (1.).
-    ///         3. The 7739 support sentinel. Vault or recovery material is never accepted here.
-    ///         Nothing is accepted while the hot tier is frozen or bunkered. A view: nothing is logged.
+    /// @notice Scoped ERC-1271. The account cannot tell zero-value typed data from a permit or an order, so what the
+    ///         hot key may sign is bounded by who asks (`msg.sender`), the "hot verifier rule":
+    ///         a code-less caller (eth_call verification: SIWE and other off-chain checks) or a vault-trusted
+    ///         on-chain verifier (`vaultSetTrustedVerifier`), and never an allowlisted token or a denied value
+    ///         verifier (Permit2 by default). Under that rule:
+    ///         1. a hash registered by a hot batch (`registerHash`), unexpired: valid with an empty signature or the
+    ///            36-byte marker `REGISTERED_MARKER ‖ hash`; a `registerPermit` hash is instead valid for its token
+    ///            alone (the one caller whose value the account did bind and debit);
+    ///         2. ERC-7739 nested typed data / personal sign by the hot key, for any app domain.
+    ///         3. The 7739 support sentinel, for anyone. Vault or recovery material is never accepted here.
+    ///         Nothing else is accepted while the hot tier is frozen or bunkered. A view: nothing is logged.
     function isValidSignature(bytes32 hash, bytes calldata signature) public view override returns (bytes4) {
+        if (hash == SENTINEL_7739 && signature.length == 0) return super.isValidSignature(hash, signature);
         LeakedAccountStorage.Layout storage $ = _s();
-        bool hotOff = $.bunker || $.hotFrozen || $.hotKey == address(0);
-        if (!hotOff) {
-            uint48 exp = $.registeredHashes[hash];
-            if (exp != 0 && block.timestamp <= exp && _isRegisteredMarker(hash, signature)) return MAGIC_1271;
-            if ($.valueVerifiers[msg.sender] || (msg.sender != address(0) && $.tokens[msg.sender].allowed)) {
-                return bytes4(0xffffffff);
-            }
-        } else if (
-            !(
-                hash == bytes32(0x7739773977397739773977397739773977397739773977397739773977397739)
-                    && signature.length == 0
-            )
-        ) {
-            return bytes4(0xffffffff);
+        if ($.bunker || $.hotFrozen || $.hotKey == address(0)) return bytes4(0xffffffff);
+        bool callerOk = _hotVerifierAllowed($, msg.sender);
+        uint48 exp = $.registeredHashes[hash];
+        if (exp != 0 && block.timestamp <= exp && _isRegisteredMarker(hash, signature)) {
+            address only = $.registeredFor[hash];
+            if (only == address(0) ? callerOk : msg.sender == only) return MAGIC_1271;
         }
+        if (!callerOk) return bytes4(0xffffffff);
         return super.isValidSignature(hash, signature);
+    }
+
+    /// The hot verifier rule (see `isValidSignature`).
+    function _hotVerifierAllowed(LeakedAccountStorage.Layout storage $, address caller) private view returns (bool) {
+        if ($.valueVerifiers[caller] || (caller != address(0) && $.tokens[caller].allowed)) return false;
+        return caller.code.length == 0 || $.trustedVerifiers[caller];
     }
 
     /// The hot key's raw ECDSA check for the ERC-7739 envelope (65-byte or 64-byte compact signatures).
@@ -278,6 +317,12 @@ contract LeakedAccountImpl is LeakedVerify, LeakedAccountBase, Initializable, UU
         return _s().registeredHashes[hash];
     }
 
+    /// @notice The one contract that may consume a registered hash (`registerPermit`: the token); address(0) for a
+    ///         hash registered with `registerHash` (the hot verifier rule applies).
+    function registeredHashConsumer(bytes32 hash) external view returns (address) {
+        return _s().registeredFor[hash];
+    }
+
     function sessionId(address target, bytes4 selector) public pure returns (bytes32) {
         return keccak256(abi.encodePacked(target, selector));
     }
@@ -289,8 +334,14 @@ contract LeakedAccountImpl is LeakedVerify, LeakedAccountBase, Initializable, UU
         address t = c.target;
         bytes4 sel = _selector(c.data);
         if (t == address(this)) {
-            // Only the two self-calls a hot batch may make (registerHash debits through T_HOT_DEBIT).
-            if (c.value != 0 || (sel != this.registerHash.selector && sel != this.clearExpiredFreeze.selector)) {
+            // Only the self-calls a hot batch may make (the register* calls debit through T_HOT_DEBIT).
+            if (
+                c.value != 0
+                    || (
+                        sel != this.registerHash.selector && sel != this.registerPermit.selector
+                            && sel != this.clearExpiredFreeze.selector
+                    )
+            ) {
                 revert NotAllowed(t, sel);
             }
             _call(i, t, 0, c.data);

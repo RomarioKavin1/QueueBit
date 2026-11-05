@@ -54,6 +54,12 @@ library LeakedAccountStorage {
         bytes32 pendingUpgradeOp;
         address pendingImpl;
         bytes32 pendingMigrateOp;
+        // ---- appended (audit 2026-11-06) ----
+        /// On-chain verifiers the vault vouches for as unable to move the account's assets on a signature alone:
+        /// the only contracts that may consume a hot-key ERC-7739 signature or an opaque registered hash.
+        mapping(address verifier => bool) trustedVerifiers;
+        /// A registered hash bound to one consumer (`registerPermit`: the token); address(0) = the verifier rule.
+        mapping(bytes32 hash => address consumer) registeredFor;
     }
 
     bytes32 internal constant SLOT = 0x9eadb468a7841dcf4c48ba06e49dbfab6d1eb75065d9b194aac64cacb775e800;

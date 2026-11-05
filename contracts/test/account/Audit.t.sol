@@ -83,7 +83,159 @@ contract AuditTest is AccountTestBase {
 
     // ------------------------------------------------------------------ C1: registerHash with a lying amount ------
 
+    /// A leaked hot key registers a token's permit digest for 90,000 tokens while declaring an amount of 1 wei: the
+    /// token must not honour that hash (the debit is self-declared; the contract cannot read the hash's value).
+    function test_C1_opaqueRegisteredHash_notHonouredByTokenOrPermit2() public {
+        uint256 deadline = vm.getBlockTimestamp() + 1 hours;
+        bytes32 digest = pusd.permitDigest(address(account), attacker, 90_000 ether, deadline);
+        ILeakedAccount.Call memory reg =
+            _selfCall(abi.encodeCall(LeakedAccountImpl.registerHash, (digest, address(pusd), 1, uint48(deadline))));
+        _hot(1, _one(reg)); // debit: 1 wei of pUSD = $0.000001
+        assertEq(account.registeredHashExpiry(digest), uint48(deadline));
+
+        vm.prank(address(pusd));
+        assertEq(account.isValidSignature(digest, ""), BAD, "token asks: opaque registration refused");
+        vm.prank(PERMIT2);
+        assertEq(account.isValidSignature(digest, ""), BAD, "Permit2 asks: refused");
+        vm.expectRevert("bad sig");
+        pusd.permit(address(account), attacker, 90_000 ether, deadline, "");
+        vm.prank(attacker);
+        vm.expectRevert();
+        pusd.transferFrom(address(account), attacker, 90_000 ether);
+        assertEq(pusd.balanceOf(attacker), 0);
+        // the same hash stays usable where it is harmless: an off-chain (eth_call) verifier
+        vm.prank(address(0));
+        assertEq(account.isValidSignature(digest, ""), MAGIC);
+    }
+
+    /// The sound replacement: `registerPermit` computes the ERC-2612 digest on chain, so the debit is the permit's
+    /// own value, and only that token may consume it.
+    function test_C1_registerPermit_bindsValueAndToken() public {
+        uint256 deadline = vm.getBlockTimestamp() + 1 hours;
+        bytes32 digest = pusd.permitDigest(address(account), alice, 50 ether, deadline);
+        ILeakedAccount.Call memory reg =
+            _selfCall(abi.encodeCall(LeakedAccountImpl.registerPermit, (address(pusd), alice, 50 ether, deadline)));
+        vm.expectEmit(address(account));
+        emit ILeakedAccount.HashRegistered(digest, address(pusd), 50 ether, uint48(deadline));
+        _hot(50 * USD, _one(reg));
+        assertEq(_bucketAvailable(), CAP - 50 * USD, "debited at the permit's value");
+        assertEq(account.registeredHashConsumer(digest), address(pusd));
+
+        bytes memory marker = abi.encodePacked(account.REGISTERED_MARKER(), digest);
+        vm.prank(address(pusd));
+        assertEq(account.isValidSignature(digest, ""), MAGIC);
+        vm.prank(address(pusd));
+        assertEq(account.isValidSignature(digest, marker), MAGIC);
+        vm.prank(address(0));
+        assertEq(account.isValidSignature(digest, ""), BAD, "bound to the token only");
+        vm.prank(PERMIT2);
+        assertEq(account.isValidSignature(digest, ""), BAD);
+
+        pusd.permit(address(account), alice, 50 ether, deadline, "");
+        vm.prank(alice);
+        pusd.transferFrom(address(account), alice, 50 ether);
+        assertEq(pusd.balanceOf(alice), 50 ether);
+        // a second permit for the same (spender, value) is a new nonce: not registered
+        assertEq(account.registeredHashExpiry(pusd.permitDigest(address(account), alice, 50 ether, deadline)), 0);
+    }
+
+    function test_C1_registerPermit_reverts() public {
+        uint256 deadline = vm.getBlockTimestamp() + 1 hours;
+        vm.expectRevert(ILeakedAccount.OnlySelf.selector);
+        account.registerPermit(address(pusd), alice, 1, deadline);
+        vm.prank(address(account));
+        vm.expectRevert(ILeakedAccount.NotInHotBatch.selector);
+        account.registerPermit(address(pusd), alice, 1, deadline);
+        // unpriced token (not allowlisted): no debit is possible, so no registration
+        ILeakedAccount.Call memory c =
+            _selfCall(abi.encodeCall(LeakedAccountImpl.registerPermit, (address(dai), alice, 1, deadline)));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                ILeakedAccount.CallFailed.selector,
+                0,
+                abi.encodeWithSelector(ILeakedAccount.TokenNotAllowed.selector, address(dai))
+            )
+        );
+        _hot(1 * USD, _one(c));
+        // past deadline
+        c = _selfCall(
+            abi.encodeCall(LeakedAccountImpl.registerPermit, (address(pusd), alice, 1, vm.getBlockTimestamp()))
+        );
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                ILeakedAccount.CallFailed.selector, 0, abi.encodeWithSelector(ILeakedAccount.BadExpiry.selector)
+            )
+        );
+        _hot(1 * USD, _one(c));
+        // over the per-tx bound / bucket: an "infinite" permit cannot be registered
+        c = _selfCall(
+            abi.encodeCall(LeakedAccountImpl.registerPermit, (address(pusd), alice, type(uint256).max, deadline))
+        );
+        vm.expectRevert();
+        _hot(type(uint256).max, _one(c));
+        // a long deadline is clamped to MAX_REGISTERED_TTL
+        c = _selfCall(abi.encodeCall(LeakedAccountImpl.registerPermit, (address(pusd), alice, 1, deadline + 365 days)));
+        _hot(1 * USD, _one(c));
+        bytes32 d = pusd.permitDigest(address(account), alice, 1, deadline + 365 days);
+        assertEq(account.registeredHashExpiry(d), uint48(vm.getBlockTimestamp() + 30 days));
+    }
+
     // ------------------------------------------------- H1: 7739 "any domain" vs value-moving verifiers ------
+
+    /// A token the account holds but the vault never allowlisted (so never priced, never denied) accepts 1271
+    /// permits: with "any domain" the leaked hot key signs its permit through the 7739 envelope and drains it.
+    function test_H1_nonAllowlistedPermitToken_notSignableByHotKey() public {
+        uint256 deadline = vm.getBlockTimestamp() + 1 hours;
+        bytes memory sig = _permitSig7739(dai, attacker, 90_000 ether, deadline);
+        bytes32 digest = dai.permitDigest(address(account), attacker, 90_000 ether, deadline);
+        vm.prank(address(dai));
+        assertEq(account.isValidSignature(digest, sig), BAD, "a contract verifier the vault never trusted");
+        vm.expectRevert("bad sig");
+        dai.permit(address(account), attacker, 90_000 ether, deadline, sig);
+        assertEq(dai.allowance(address(account), attacker), 0);
+    }
+
+    /// What stays open without the vault: verification by eth_call (SIWE and other off-chain checks run with a
+    /// code-less `from`), and the 7739 support sentinel for anyone. On-chain contract verifiers need the vault.
+    function test_H1_hotKey7739_offChainOnly_unlessTrusted() public {
+        bytes32 h = keccak256("Sign in to example.org");
+        bytes memory sig = _personal(hotPk, h);
+        vm.prank(address(0));
+        assertEq(account.isValidSignature(h, sig), MAGIC, "eth_call from 0x0");
+        vm.prank(stranger);
+        assertEq(account.isValidSignature(h, sig), MAGIC, "eth_call from an EOA");
+        assertEq(dapp.check(address(account), h, sig), BAD, "contract verifier: not trusted");
+        assertEq(
+            dapp.check(
+                address(account), bytes32(0x7739773977397739773977397739773977397739773977397739773977397739), ""
+            ),
+            bytes4(0x77390001)
+        );
+
+        vm.prank(vault);
+        vm.expectRevert(ILeakedAccount.MustQueue.selector);
+        roles.vaultSetTrustedVerifier(address(dapp), true);
+        ILeakedAccount.Call[] memory q =
+            _one(_selfCall(abi.encodeCall(LeakedAccountRoles.vaultSetTrustedVerifier, (address(dapp), true))));
+        vm.prank(vault);
+        bytes32 op = roles.vaultQueue(q, 1);
+        vm.warp(vm.getBlockTimestamp() + DELAY);
+        vm.expectEmit(address(account));
+        emit ILeakedAccount.TrustedVerifierSet(address(dapp), true);
+        roles.executeQueued(op, q);
+        assertTrue(roles.isTrustedVerifier(address(dapp)));
+        assertEq(dapp.check(address(account), h, sig), MAGIC, "trusted verifier");
+        // the deny list still wins over trust (a trusted verifier that turns out to move value)
+        vm.prank(vault);
+        roles.vaultSetValueVerifier(address(dapp), true);
+        assertEq(dapp.check(address(account), h, sig), BAD);
+        vm.prank(vault);
+        roles.vaultSetTrustedVerifier(address(dapp), false); // untrusting is instant
+        assertFalse(roles.isTrustedVerifier(address(dapp)));
+        vm.prank(vault);
+        vm.expectRevert(abi.encodeWithSelector(ILeakedAccount.BadAddress.selector, address(account)));
+        roles.vaultSetTrustedVerifier(address(account), false);
+    }
 
     // ------------------------------------------------------ M2: approvals via sessions on unmonitored assets ------
 

@@ -9,8 +9,13 @@ pragma solidity 0.8.28;
 ///         - `initialize(InitConfig)` (adds tank, ETH price, priority-fee bound, timelock fields); the tank is
 ///           allowlisted as a hot recipient at initialize (UX decision);
 ///         - no `vaultSetDomain`/`allowedDomains`: hot-key ERC-7739 is accepted for any app domain (UX decision),
-///           but never when the asking contract is an allowlisted token or a vault-denied "value verifier"
-///           (Permit2 by default; `vaultSetValueVerifier`), so a leaked hot key cannot sign token permits;
+///           but the account cannot tell zero-value typed data from a permit or an order, so (audit 2026-11-06) it is
+///           honoured only where it cannot move assets: for a code-less caller (eth_call verification, i.e. SIWE and
+///           other off-chain checks) or a vault-trusted on-chain verifier (`vaultSetTrustedVerifier`, queued), and
+///           never for an allowlisted token or a vault-denied "value verifier" (Permit2 by default);
+///         - `registerHash` registers an opaque hash under the same verifier rule (its debit is self-declared, so a
+///           token or Permit2 never consumes it); `registerPermit` computes an ERC-2612 permit digest on chain,
+///           debits the permit's own value and binds the hash to that token;
 ///         - `vaultSetToken` price semantics: `usdPerToken` (USD-6 per whole token); a lower price is loosening;
 ///         - `vaultSetFeePolicy(maxPriorityFeePerGas, selfPay, tank)` added; `vaultExecute` draws on a rolling daily
 ///           allowance (cap = timelock threshold) and measures outflow instead of trusting `usdValue`;
@@ -119,6 +124,7 @@ interface ILeakedAccount {
     event TargetConfigured(address indexed target, bool allowed);
     event SessionConfigured(address indexed target, bytes4 indexed selector, uint256 allowanceUsd, uint48 expiry);
     event ValueVerifierSet(address indexed verifier, bool denied);
+    event TrustedVerifierSet(address indexed verifier, bool trusted);
     event TimelockUpdated(uint48 delay, uint256 thresholdUsd);
 
     event Frozen(address indexed by, uint48 until);

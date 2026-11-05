@@ -212,6 +212,17 @@ contract LeakedAccountRoles is LeakedAccountBase {
         emit ValueVerifierSet(verifier, denied);
     }
 
+    /// @notice On-chain contracts that may consume a hot-key ERC-7739 signature or an opaque registered hash (the
+    ///         vault vouches that they move nothing on a signature alone). Trusting is queued; untrusting instant.
+    ///         The deny list (`vaultSetValueVerifier`) and the token allowlist always win over trust.
+    function vaultSetTrustedVerifier(address verifier, bool trusted) external delegated {
+        bool loosening = trusted && !_s().trustedVerifiers[verifier];
+        LeakedAccountStorage.Layout storage $ = _authVault(loosening);
+        if (verifier == address(0) || verifier == address(this)) revert BadAddress(verifier);
+        $.trustedVerifiers[verifier] = trusted;
+        emit TrustedVerifierSet(verifier, trusted);
+    }
+
     /// @notice Timelock delay and daily instant-spend allowance. Longer delay / lower threshold is instant.
     function vaultSetTimelock(uint48 delay, uint256 thresholdUsd) external delegated {
         LeakedAccountStorage.Layout storage $0 = _s();
@@ -469,6 +480,10 @@ contract LeakedAccountRoles is LeakedAccountBase {
         return _s().valueVerifiers[verifier];
     }
 
+    function isTrustedVerifier(address verifier) external view returns (bool) {
+        return _s().trustedVerifiers[verifier];
+    }
+
     function getTokenList() external view returns (address[] memory) {
         return _s().tokenList;
     }
@@ -498,10 +513,11 @@ contract LeakedAccountRoles is LeakedAccountBase {
         return sel == this.vaultSetHotKey.selector || sel == this.vaultSetCap.selector
             || sel == this.vaultSetFeePolicy.selector || sel == this.vaultSetToken.selector
             || sel == this.vaultSetTarget.selector || sel == this.vaultSetSession.selector
-            || sel == this.vaultSetValueVerifier.selector || sel == this.vaultSetTimelock.selector
-            || sel == this.vaultSetRecoverySigner.selector || sel == this.vaultSetGuardian.selector
-            || sel == this.vaultFreeze.selector || sel == this.vaultUnfreeze.selector
-            || sel == this.vaultExtendFreeze.selector || sel == this.vaultEnableBunker.selector;
+            || sel == this.vaultSetValueVerifier.selector || sel == this.vaultSetTrustedVerifier.selector
+            || sel == this.vaultSetTimelock.selector || sel == this.vaultSetRecoverySigner.selector
+            || sel == this.vaultSetGuardian.selector || sel == this.vaultFreeze.selector
+            || sel == this.vaultUnfreeze.selector || sel == this.vaultExtendFreeze.selector
+            || sel == this.vaultEnableBunker.selector;
     }
 
     function _enqueue(LeakedAccountStorage.Layout storage $, uint8 kind, bytes32 payloadHash)

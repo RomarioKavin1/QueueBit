@@ -10,7 +10,7 @@ import {AccountTestBase} from "./AccountTestBase.sol";
 import {Verifier1271} from "./mocks/AccountMocks.sol";
 
 /// Scoped ERC-1271 (§10.3.2, M5): registered hashes (empty or 36-byte marker), ERC-7739 by the hot key for any app
-/// domain (zero-value), refusal for token / Permit2 callers, the 7739 sentinel, and freeze/bunker.
+/// domain when verified off chain, refusal for token / Permit2 callers, the 7739 sentinel, and freeze/bunker.
 contract Signature1271Test is AccountTestBase {
     bytes4 internal constant MAGIC = 0x1626ba7e;
     bytes4 internal constant BAD = 0xffffffff;
@@ -68,6 +68,13 @@ contract Signature1271Test is AccountTestBase {
         hash = MessageHashUtils.toTypedDataHash(appSeparator, contentsHash);
     }
 
+    /// Off-chain verification (eth_call with no `from`): the caller has no code. On-chain contract verifiers need
+    /// the vault's trust (Audit.t.sol H1).
+    function _check(bytes32 h, bytes memory sig) internal returns (bytes4) {
+        vm.prank(address(0));
+        return account.isValidSignature(h, sig);
+    }
+
     function _register(bytes32 h) internal {
         uint48 exp = uint48(vm.getBlockTimestamp() + 1 hours);
         _hot(1 * USD, _one(_selfCall(abi.encodeCall(LeakedAccountImpl.registerHash, (h, address(usdc), 1 * USD, exp)))));
@@ -77,24 +84,25 @@ contract Signature1271Test is AccountTestBase {
 
     function test_registeredHash_emptyAndMarker() public {
         bytes32 h = keccak256("order");
-        assertEq(dapp.check(address(account), h, ""), BAD);
+        assertEq(_check(h, ""), BAD);
         _register(h);
-        assertEq(dapp.check(address(account), h, ""), MAGIC);
-        assertEq(dapp.check(address(account), h, abi.encodePacked(account.REGISTERED_MARKER(), h)), MAGIC);
+        assertEq(_check(h, ""), MAGIC);
+        assertEq(_check(h, abi.encodePacked(account.REGISTERED_MARKER(), h)), MAGIC);
         // wrong marker, marker for another hash, arbitrary bytes
-        assertEq(dapp.check(address(account), h, abi.encodePacked(bytes4(0xdeadbeef), h)), BAD);
-        assertEq(dapp.check(address(account), h, abi.encodePacked(account.REGISTERED_MARKER(), bytes32(0))), BAD);
-        assertEq(dapp.check(address(account), h, hex"01"), BAD);
-        // a registered hash is valid even when a token asks (that is the point: it was paid for)
+        assertEq(_check(h, abi.encodePacked(bytes4(0xdeadbeef), h)), BAD);
+        assertEq(_check(h, abi.encodePacked(account.REGISTERED_MARKER(), bytes32(0))), BAD);
+        assertEq(_check(h, hex"01"), BAD);
+        // an opaque registered hash is never honoured for a token (its debit was self-declared); `registerPermit` is
+        // the way to pay for a token permit (Audit.t.sol C1)
         vm.prank(address(usdc));
-        assertEq(account.isValidSignature(h, ""), MAGIC);
+        assertEq(account.isValidSignature(h, ""), BAD);
     }
 
     function test_registeredHash_expires() public {
         bytes32 h = keccak256("order");
         _register(h);
         vm.warp(vm.getBlockTimestamp() + 1 hours + 1);
-        assertEq(dapp.check(address(account), h, ""), BAD);
+        assertEq(_check(h, ""), BAD);
     }
 
     function test_registeredHash_refusedWhileFrozenOrBunker() public {
@@ -102,35 +110,35 @@ contract Signature1271Test is AccountTestBase {
         _register(h);
         vm.prank(guardian);
         roles.guardianFreeze();
-        assertEq(dapp.check(address(account), h, ""), BAD);
+        assertEq(_check(h, ""), BAD);
         vm.prank(vault);
         roles.vaultUnfreeze();
-        assertEq(dapp.check(address(account), h, ""), MAGIC);
+        assertEq(_check(h, ""), MAGIC);
         vm.prank(vault);
         roles.vaultEnableBunker();
-        assertEq(dapp.check(address(account), h, ""), BAD);
+        assertEq(_check(h, ""), BAD);
     }
 
     // ------------------------------------------------------------------------------------ ERC-7739 ------
 
-    function test_personalSign_anyDomain() public view {
+    function test_personalSign_anyDomain() public {
         bytes32 h = keccak256("Sign in to example.org");
-        assertEq(dapp.check(address(account), h, _personal(hotPk, h)), MAGIC);
-        assertEq(dapp.check(address(account), h, _personal(0xBAD, h)), BAD);
-        assertEq(dapp.check(address(account), keccak256("other"), _personal(hotPk, h)), BAD);
+        assertEq(_check(h, _personal(hotPk, h)), MAGIC);
+        assertEq(_check(h, _personal(0xBAD, h)), BAD);
+        assertEq(_check(keccak256("other"), _personal(hotPk, h)), BAD);
     }
 
-    function test_rawEcdsaOverHashIsNotAccepted() public view {
+    function test_rawEcdsaOverHashIsNotAccepted() public {
         // Without the 7739 envelope a hot-key signature over `hash` is never valid (no replay across accounts).
         bytes32 h = keccak256("x");
-        assertEq(dapp.check(address(account), h, _sign(hotPk, h)), BAD);
+        assertEq(_check(h, _sign(hotPk, h)), BAD);
     }
 
-    function testFuzz_typedData_anyAppDomain(bytes32 appSeparator, bytes32 contentsHash) public view {
+    function testFuzz_typedData_anyAppDomain(bytes32 appSeparator, bytes32 contentsHash) public {
         (bytes32 h, bytes memory sig) = _typed(hotPk, appSeparator, contentsHash);
-        assertEq(dapp.check(address(account), h, sig), MAGIC);
+        assertEq(_check(h, sig), MAGIC);
         (, bytes memory badSig) = _typed(0xBAD, appSeparator, contentsHash);
-        assertEq(dapp.check(address(account), h, badSig), BAD);
+        assertEq(_check(h, badSig), BAD);
     }
 
     function test_7739_refusedForTokenCallers() public {
@@ -152,20 +160,20 @@ contract Signature1271Test is AccountTestBase {
         bytes memory sig = _personal(hotPk, h);
         vm.prank(vault);
         roles.vaultFreeze();
-        assertEq(dapp.check(address(account), h, sig), BAD);
+        assertEq(_check(h, sig), BAD);
         vm.prank(vault);
         roles.vaultUnfreeze();
         vm.prank(vault);
         roles.vaultEnableBunker();
-        assertEq(dapp.check(address(account), h, sig), BAD);
+        assertEq(_check(h, sig), BAD);
     }
 
     function test_vaultMaterialNeverAccepted() public {
         // A signature by any non-hot key (e.g. a vault payer key) is not accepted on any path.
         uint256 vaultPayerPk = 0xFA017;
         bytes32 h = keccak256("vault op");
-        assertEq(dapp.check(address(account), h, _personal(vaultPayerPk, h)), BAD);
-        assertEq(dapp.check(address(account), h, _sign(vaultPayerPk, h)), BAD);
+        assertEq(_check(h, _personal(vaultPayerPk, h)), BAD);
+        assertEq(_check(h, _sign(vaultPayerPk, h)), BAD);
         vm.prank(vault);
         assertEq(account.isValidSignature(h, ""), BAD);
     }
