@@ -90,7 +90,7 @@ async function withdraw(label: string, payer: Address, noteIdx: number, opts: { 
 }
 
 // --- PoolPayer A: estimator zero (lower bound), withdrawal 1 ---------------------------------------------------
-const zero: Estimator = { intrinsicGas: 0n, perFrameGas: 0n, gasPerDataByte: 0n, refundFrameGas: 0n };
+const zero: Estimator = { intrinsicGas: 0n, perFrameGas: 0n, gasPerDataByte: 0n, refundFrameGas: 0n, valueFrameGas: 0n };
 const A = await deployPayer(d.entrypoint, d.pool, zero, 1_000_000_000_000_000_000n);
 results.payerA = A;
 results.w1 = await withdraw("1", A.address, 0, { tryStock: true, via: "privileged" });
@@ -105,6 +105,7 @@ const cal: Estimator = {
   // 4 gas per data byte (EIP-7976 zero-byte cost), the refund frame's measured gas minus a 2k safety margin.
   gasPerDataByte: 4n, perFrameGas: 0n,
   intrinsicGas: 0n, refundFrameGas: 0n,
+  valueFrameGas: 0n, // whether ethrex charges TX_VALUE_COST is unmeasured (no value frames in this shape): lower bound
 };
 // Σ frame data bytes from the tx itself
 const frameDataBytes = (await prepareFrameBytes());

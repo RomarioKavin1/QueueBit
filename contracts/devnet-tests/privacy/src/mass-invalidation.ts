@@ -18,7 +18,7 @@ const ver = await sidecar(PATCHED_SIDECAR, "web3_clientVersion").catch(() => nul
 if (!ver) throw new Error(`patched sidecar not reachable at ${PATCHED_SIDECAR} (scripts/patched-sidecar.sh up manual)`);
 
 const d = await deployPool(N, tag);
-const P = await deployPayer(d.entrypoint, d.pool, { intrinsicGas: 0n, perFrameGas: 0n, gasPerDataByte: 4n, refundFrameGas: 0n }, 1_000_000_000_000_000_000n);
+const P = await deployPayer(d.entrypoint, d.pool, { intrinsicGas: 0n, perFrameGas: 0n, gasPerDataByte: 4n, refundFrameGas: 0n, valueFrameGas: 0n }, 1_000_000_000_000_000_000n);
 const payer = P.address;
 
 async function reputation() {

@@ -410,12 +410,13 @@ contract PoolPayer is HegotaSupport {
     function costEstimate(uint256 self) public view returns (uint256 gas) {
         uint256 n = txparam(TxParam.FRAME_COUNT);
         uint256 dataBytes;
-        address sender = address(uint160(txparam(TxParam.SENDER)));
+        // Value-carrying frames (only SENDER frames can carry value) are priced only when the chain charges them.
+        uint256 sender = VALUE_FRAME_GAS != 0 ? txparam(TxParam.SENDER) : 0;
         for (uint256 f; f < n; f++) {
             dataBytes += frameparam(f, FrameParam.DATA_LENGTH);
             if (
                 VALUE_FRAME_GAS != 0 && frameparam(f, FrameParam.VALUE) != 0
-                    && address(uint160(frameparam(f, FrameParam.RESOLVED_TARGET))) != sender
+                    && frameparam(f, FrameParam.RESOLVED_TARGET) != sender
             ) gas += VALUE_FRAME_GAS;
             if (f < self) {
                 gas += frameparam(f, FrameParam.EXECUTION_GAS_USED) + frameparam(f, FrameParam.STATE_GAS_USED);

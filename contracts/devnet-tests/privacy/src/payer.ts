@@ -17,12 +17,12 @@ export const LIMITS = {
   onlyVerify: 30_000n,
   pay: 500_000n, payState: 250_000n,
   settle: 1_200_000n, settleState: 1_500_000n,
-  refund: 150_000n, refundState: 250_000n,
+  refund: 180_000n, refundState: 250_000n,
 };
 export const MAX_FEE_PER_GAS = 2_000_000_000n;
 export const PRIO_FEE_PER_GAS = 1_000_000_000n;
 
-export type Estimator = { intrinsicGas: bigint; perFrameGas: bigint; gasPerDataByte: bigint; refundFrameGas: bigint };
+export type Estimator = { intrinsicGas: bigint; perFrameGas: bigint; gasPerDataByte: bigint; refundFrameGas: bigint; valueFrameGas: bigint };
 
 export async function deployPayer(entrypoint: Address, pool: Address, est: Estimator, float: bigint) {
   const me = addr(FUNDER);
@@ -31,7 +31,8 @@ export async function deployPayer(entrypoint: Address, pool: Address, est: Estim
     ...est,
     minPayStateGas: 183_600n, // STATE_BYTES_PER_NEW_ACCOUNT (120) * CPSB (1530): APPROVE creates the fresh sender
     minSettleGas: 1_000_000n, minSettleStateGas: 1_000_000n,
-    minRefundGas: 100_000n, minRefundStateGas: 183_600n,
+    // refund(): ~25k own work + PAYOUT_GAS + CREDIT_GAS_RESERVE (114k) so the refund is pushed, not credited.
+    minRefundGas: 150_000n, minRefundStateGas: 183_600n,
   };
   const d = await deploy(FUNDER, "PoolPayer.sol", [cfg], {}, undefined, 0n);
   const fund = await send(FUNDER, d.address, "0x", float, 100_000n);

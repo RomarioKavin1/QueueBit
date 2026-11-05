@@ -77,9 +77,12 @@ export function link(a: { bytecode: Hex; links: any }, libs: Record<string, Addr
 export async function deploy(key: Hex, file: string, args: unknown[] = [], libs: Record<string, Address> = {}, name?: string, value = 0n) {
   const a = artifact(file, name);
   const data = encodeDeployData({ abi: a.abi, bytecode: link(a, libs), args } as any);
-  // Amsterdam+ state gas makes big deploys expensive (PoseidonT3, 29 KB: ~47M); estimate, +25 %, under the block limit.
+  // Amsterdam+ state gas makes big deploys expensive (PoseidonT3, 29 KB: ~47M; T4 ~53M); estimate, +25 %, capped
+  // below the current block gas limit (the CL lowers it over time, ~60k per block towards 60M: a tx above the limit
+  // of the block it lands in is never mined and blocks the sender's nonce).
   const est = BigInt(await ethrex("eth_estimateGas", [{ from: addr(key), data, value: hex(value) }]));
-  const gas = (est * 5n) / 4n > 100_000_000n ? 100_000_000n : (est * 5n) / 4n;
+  const blockLimit = BigInt((await ethrex("eth_getBlockByNumber", ["latest", false])).gasLimit) - 2_000_000n;
+  const gas = (est * 5n) / 4n > blockLimit ? blockLimit : (est * 5n) / 4n;
   const r = await send(key, null, data, value, gas);
   return { address: r.contractAddress as Address, hash: r.transactionHash as Hex, gasUsed: BigInt(r.gasUsed), abi: a.abi };
 }
