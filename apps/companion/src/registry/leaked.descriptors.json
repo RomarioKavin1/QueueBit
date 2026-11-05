@@ -1,0 +1,793 @@
+{
+  "$comment": "LEAKED clear-signing registry (ERC-7730-style, bundled, never fetched). The ONLY place the companion learns ABIs, intents and token metadata. The `abis` and `selectors` sections are GENERATED from the forge artifacts by `pnpm --filter @leaked/companion abi:sync` (scripts/abi-sync.mjs); test/registry.test.ts fails on drift. Edit `formats` by hand. Sources: contracts/src/account/{ILeakedAccount,LeakedAccountRoles}.sol, contracts/src/roles/PQRoleSigner.sol; Privacy Pools core IEntrypoint.relay; ERC-20. Intent strings interpolate decoded fields only (ERC-7730 'interpolated intent': constants + decoded values, no request-supplied labels).",
+  "version": "leaked-descriptors/2026-11-06.2",
+  "units": {
+    "usd": "USD amounts are uint256 with 6 decimals (10-contracts.md §10.3 conventions)",
+    "usdPerToken": "USD (6 decimals) per one whole token (10**decimals base units): usd6 = amount * usdPerToken / 10**decimals (ILeakedAccount.TokenCfg)"
+  },
+  "chains": {
+    "1": "Ethereum",
+    "1337": "LEAKED devnet",
+    "3151908": "Hegotá devnet",
+    "11155111": "Sepolia"
+  },
+  "nativeCurrency": {
+    "symbol": "ETH",
+    "decimals": 18
+  },
+  "tokens": {
+    "1": {
+      "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48": {
+        "symbol": "USDC",
+        "decimals": 6
+      },
+      "0xdac17f958d2ee523a2206206994597c13d831ec7": {
+        "symbol": "USDT",
+        "decimals": 6
+      },
+      "0x6b175474e89094c44da98b954eedeac495271d0f": {
+        "symbol": "DAI",
+        "decimals": 18
+      },
+      "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2": {
+        "symbol": "WETH",
+        "decimals": 18
+      }
+    },
+    "1337": {
+      "$comment": "devnet/README.md: the public devnet replays the mainnet contract library at the mainnet addresses",
+      "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48": {
+        "symbol": "USDC",
+        "decimals": 6
+      },
+      "0xdac17f958d2ee523a2206206994597c13d831ec7": {
+        "symbol": "USDT",
+        "decimals": 6
+      }
+    },
+    "11155111": {
+      "0x1c7d4b196cb0c7b01d743fbc6116a902379c7238": {
+        "symbol": "USDC",
+        "decimals": 6
+      }
+    }
+  },
+  "privacyPools": {
+    "$comment": "0xbow entrypoints, kohaku privacy-pools config.ts:33-45 (40-privacy-infra.md §1.3)",
+    "entrypoints": {
+      "1": "0x6818809eefce719e480a7526d76bd3e561526b46",
+      "11155111": "0x34a2068192b1297f2a7f85d7d8cde66f8f0921cb"
+    }
+  },
+  "abis": {
+    "roleSigner": [
+      "function executePQ(uint256 sigIndex, address target, bytes data)",
+      "function relay(address target, bytes data)",
+      "function setMaxFee(uint256 newMaxFee)",
+      "function setPathA(bool enabled)",
+      "function setPayerKey(address newPayerKey)",
+      "function stake(uint32 unstakeDelaySec, uint256 amount)",
+      "function unlockStake()",
+      "function verifyFrame(uint256 sigIndex) payable",
+      "function withdrawStake(address to)"
+    ],
+    "account": [
+      "function clearExpiredFreeze()",
+      "function executeMigrate(address newAccount, address[] tokens)",
+      "function executeQueued(bytes32 opId, (address target, uint256 value, bytes data)[] calls)",
+      "function executeUpgrade(address newImpl)",
+      "function recoveryCancel(bytes32 opId)",
+      "function recoveryCancelVaultRotation()",
+      "function recoveryFinalizeVaultRotation()",
+      "function recoveryStartVaultRotation(address newVaultSigner)",
+      "function registerPermit(address token, address spender, uint256 value, uint256 deadline)",
+      "function vaultCancel(bytes32 opId)",
+      "function vaultEnableBunker()",
+      "function vaultExecute((address target, uint256 value, bytes data)[] calls, uint256 usdValue)",
+      "function vaultExtendFreeze(uint48 until)",
+      "function vaultFreeze()",
+      "function vaultQueue((address target, uint256 value, bytes data)[] calls, uint8 kind) returns (bytes32 opId)",
+      "function vaultQueueMigrate(address newAccount, address[] tokens) returns (bytes32 opId)",
+      "function vaultQueueUpgrade(address newImpl) returns (bytes32 opId)",
+      "function vaultSetCap(uint256 capUsdPerDay, uint256 perTxMaxUsd, uint256 maxFeeWeiPerTx, uint8 maxHotFrames)",
+      "function vaultSetFeePolicy(uint256 maxPriorityFeePerGas, bool selfPay, address tank)",
+      "function vaultSetGuardian(address guardian, bool enabled)",
+      "function vaultSetHotKey(address newHotKey)",
+      "function vaultSetRecoverySigner(address newRecoverySigner)",
+      "function vaultSetSession(address target, bytes4 selector, uint256 allowanceUsd, uint48 expiry)",
+      "function vaultSetTarget(address target, bool allowed)",
+      "function vaultSetTimelock(uint48 delay, uint256 thresholdUsd)",
+      "function vaultSetToken(address token, bool allowed, uint8 decimals, uint256 usdPerToken)",
+      "function vaultSetTrustedVerifier(address verifier, bool trusted)",
+      "function vaultSetValueVerifier(address verifier, bool denied)",
+      "function vaultUnfreeze()"
+    ],
+    "erc20": ["function transfer(address to, uint256 amount)", "function approve(address spender, uint256 amount)"],
+    "privacyPoolsEntrypoint": [
+      "struct Withdrawal { address processooor; bytes data; }",
+      "struct WithdrawProof { uint256[2] pA; uint256[2][2] pB; uint256[2] pC; uint256[8] pubSignals; }",
+      "function relay(Withdrawal withdrawal, WithdrawProof proof, uint256 scope)"
+    ]
+  },
+  "formats": {
+    "account.clearExpiredFreeze": {
+      "role": "any",
+      "intent": "Clear an expired pause",
+      "timing": "now"
+    },
+    "account.executeMigrate": {
+      "role": "any",
+      "admin": true,
+      "intent": "Carry out the scheduled move to {newAccount} ({tokens})",
+      "timing": "now",
+      "fields": {
+        "newAccount": {
+          "format": "addressName"
+        },
+        "tokens": {
+          "format": "count",
+          "noun": "token"
+        }
+      }
+    },
+    "account.executeQueued": {
+      "kind": "container",
+      "role": "any",
+      "callsField": "calls",
+      "timing": "now",
+      "intent": "Carry out a scheduled change ({opId})",
+      "fields": {
+        "opId": {
+          "format": "shortHex"
+        }
+      }
+    },
+    "account.executeUpgrade": {
+      "role": "any",
+      "admin": true,
+      "intent": "Carry out the scheduled account update to {newImpl}",
+      "timing": "now",
+      "fields": {
+        "newImpl": {
+          "format": "addressName"
+        }
+      }
+    },
+    "account.recoveryCancel": {
+      "role": "recovery",
+      "admin": true,
+      "intent": "Cancel scheduled change {opId}",
+      "consequence": "The Recovery key stops a change the Vault scheduled.",
+      "timing": "now",
+      "fields": {
+        "opId": {
+          "format": "shortHex"
+        }
+      }
+    },
+    "account.recoveryCancelVaultRotation": {
+      "role": "recovery",
+      "admin": true,
+      "intent": "Stop replacing the Vault",
+      "consequence": "The current Vault stays in charge.",
+      "timing": "now"
+    },
+    "account.recoveryFinalizeVaultRotation": {
+      "role": "any",
+      "admin": true,
+      "intent": "Finish replacing the Vault",
+      "consequence": "The new Vault takes over; changes the old Vault scheduled are voided.",
+      "timing": "now"
+    },
+    "account.recoveryStartVaultRotation": {
+      "role": "recovery",
+      "admin": true,
+      "intent": "Replace the Vault with {newVaultSigner}",
+      "consequence": "Replaces the Vault with a new one in 7 days. Everyday spending is paused until then. The old Vault cannot cancel this.",
+      "timing": "sevenDays",
+      "fields": {
+        "newVaultSigner": {
+          "format": "addressName"
+        }
+      }
+    },
+    "account.registerPermit": {
+      "role": "any",
+      "action": "approve",
+      "intent": "Pre-approve {spender} to take up to {value} until {deadline}",
+      "consequence": "An everyday-key action: it counts against your daily limit.",
+      "timing": "now",
+      "fields": {
+        "value": {
+          "format": "tokenAmount",
+          "tokenPath": "token"
+        },
+        "spender": {
+          "format": "addressName",
+          "recipient": true
+        },
+        "token": {
+          "format": "tokenName"
+        },
+        "deadline": {
+          "format": "date"
+        }
+      },
+      "compare": {
+        "recipient": "spender",
+        "amount": "value",
+        "token": "token"
+      }
+    },
+    "account.vaultCancel": {
+      "role": "vault",
+      "admin": true,
+      "intent": "Cancel scheduled change {opId}",
+      "consequence": "The scheduled change will not happen.",
+      "timing": "now",
+      "fields": {
+        "opId": {
+          "format": "shortHex"
+        }
+      }
+    },
+    "account.vaultEnableBunker": {
+      "role": "vault",
+      "admin": true,
+      "intent": "Turn on Lockdown",
+      "consequence": "Everyday spending is switched off until the Vault issues a new everyday key.",
+      "timing": "now"
+    },
+    "account.vaultExecute": {
+      "kind": "container",
+      "role": "vault",
+      "callsField": "calls",
+      "timing": "now"
+    },
+    "account.vaultExtendFreeze": {
+      "role": "vault",
+      "admin": true,
+      "intent": "Keep everyday spending paused until {until}",
+      "timing": "now",
+      "fields": {
+        "until": {
+          "format": "date"
+        }
+      }
+    },
+    "account.vaultFreeze": {
+      "role": "vault",
+      "admin": true,
+      "intent": "Pause everyday spending",
+      "consequence": "Everyday payments stop until the Vault resumes them.",
+      "timing": "now"
+    },
+    "account.vaultQueue": {
+      "kind": "container",
+      "role": "vault",
+      "callsField": "calls",
+      "timing": "waitingPeriod",
+      "fields": {
+        "kind": {
+          "format": "enum",
+          "enum": "queueKind"
+        }
+      }
+    },
+    "account.vaultQueueMigrate": {
+      "role": "vault",
+      "admin": true,
+      "intent": "Schedule a move to a new account {newAccount} ({tokens})",
+      "consequence": "ETH and the listed tokens move to the new account; this account is then locked down.",
+      "timing": "waitingPeriod",
+      "fields": {
+        "newAccount": {
+          "format": "addressName"
+        },
+        "tokens": {
+          "format": "count",
+          "noun": "token"
+        }
+      }
+    },
+    "account.vaultQueueUpgrade": {
+      "role": "vault",
+      "admin": true,
+      "intent": "Schedule an account update to {newImpl}",
+      "consequence": "The account's code changes. Only approve updates you started in the browser.",
+      "timing": "waitingPeriod",
+      "fields": {
+        "newImpl": {
+          "format": "addressName"
+        }
+      }
+    },
+    "account.vaultSetCap": {
+      "role": "vault",
+      "admin": true,
+      "intent": "Change your limits",
+      "timing": "tightenNowLoosenWaits",
+      "changes": [
+        {
+          "field": "capUsdPerDay",
+          "label": "daily limit",
+          "format": "usd6",
+          "current": "capUsdPerDay",
+          "looser": "higher"
+        },
+        {
+          "field": "perTxMaxUsd",
+          "label": "per-payment limit",
+          "format": "usd6",
+          "current": "perTxMaxUsd",
+          "looser": "higher"
+        },
+        {
+          "field": "maxFeeWeiPerTx",
+          "label": "network-fee limit per everyday payment",
+          "format": "eth",
+          "current": "maxFeeWeiPerTx",
+          "looser": "higher"
+        },
+        {
+          "field": "maxHotFrames",
+          "label": "steps per everyday payment",
+          "format": "integer",
+          "current": "maxHotFrames",
+          "looser": "higher"
+        }
+      ]
+    },
+    "account.vaultSetFeePolicy": {
+      "role": "vault",
+      "admin": true,
+      "intent": "Set fee rules: priority fee up to {maxPriorityFeePerGas}, {selfPay}, fee tank {tank}",
+      "consequence": "Raising the priority fee or letting the account pay its own fees has to wait; the rest is instant.",
+      "timing": "tightenNowLoosenWaits",
+      "looserWhen": {
+        "field": "selfPay",
+        "equals": true
+      },
+      "fields": {
+        "maxPriorityFeePerGas": {
+          "format": "gwei"
+        },
+        "selfPay": {
+          "format": "enum",
+          "labels": {
+            "true": "the account may pay its own fees",
+            "false": "only the fee tank pays fees"
+          }
+        },
+        "tank": {
+          "format": "addressName"
+        }
+      }
+    },
+    "account.vaultSetGuardian": {
+      "role": "vault",
+      "admin": true,
+      "intent": "{enabled} Guardian {guardian}",
+      "consequence": "A Guardian can only pause your everyday spending.",
+      "timing": "now",
+      "fields": {
+        "enabled": {
+          "format": "enum",
+          "labels": {
+            "true": "Add",
+            "false": "Remove"
+          }
+        },
+        "guardian": {
+          "format": "addressName"
+        }
+      }
+    },
+    "account.vaultSetHotKey": {
+      "role": "vault",
+      "admin": true,
+      "intent": "Replace everyday key with {newHotKey}",
+      "consequence": "The old everyday key stops working.",
+      "timing": "now",
+      "fields": {
+        "newHotKey": {
+          "format": "addressName"
+        }
+      }
+    },
+    "account.vaultSetRecoverySigner": {
+      "role": "vault",
+      "admin": true,
+      "intent": "Link Recovery key {newRecoverySigner}",
+      "consequence": "This Recovery key can replace the Vault and cancel scheduled changes.",
+      "timing": "firstInstallNowElseWaits",
+      "fields": {
+        "newRecoverySigner": {
+          "format": "addressName"
+        }
+      }
+    },
+    "account.vaultSetSession": {
+      "role": "vault",
+      "admin": true,
+      "intent": "Let {target} spend up to {allowanceUsd} without asking, until {expiry}",
+      "timing": "tightenNowLoosenWaits",
+      "looserWhen": {
+        "field": "allowanceUsd",
+        "greaterThan": 0
+      },
+      "fields": {
+        "target": {
+          "format": "addressName"
+        },
+        "selector": {
+          "format": "selector"
+        },
+        "allowanceUsd": {
+          "format": "usd6"
+        },
+        "expiry": {
+          "format": "date"
+        }
+      }
+    },
+    "account.vaultSetTarget": {
+      "role": "vault",
+      "admin": true,
+      "intent": "{allowed} {target} on your allowed list",
+      "timing": "tightenNowLoosenWaits",
+      "looserWhen": {
+        "field": "allowed",
+        "equals": true
+      },
+      "fields": {
+        "allowed": {
+          "format": "enum",
+          "labels": {
+            "true": "Put",
+            "false": "Remove"
+          }
+        },
+        "target": {
+          "format": "addressName"
+        }
+      }
+    },
+    "account.vaultSetTimelock": {
+      "role": "vault",
+      "admin": true,
+      "intent": "Change the waiting period",
+      "timing": "tightenNowLoosenWaits",
+      "changes": [
+        {
+          "field": "delay",
+          "label": "waiting period",
+          "format": "duration",
+          "current": "timelockDelay",
+          "looser": "lower"
+        },
+        {
+          "field": "thresholdUsd",
+          "label": "instant Vault spending per day",
+          "format": "usd6",
+          "current": "timelockThresholdUsd",
+          "looser": "higher"
+        }
+      ]
+    },
+    "account.vaultSetToken": {
+      "role": "vault",
+      "admin": true,
+      "intent": "{allowed} token {token}{priceClause}",
+      "timing": "tightenNowLoosenWaits",
+      "looserWhen": {
+        "field": "allowed",
+        "equals": true
+      },
+      "fields": {
+        "allowed": {
+          "format": "enum",
+          "labels": {
+            "true": "Allow",
+            "false": "Remove"
+          }
+        },
+        "token": {
+          "format": "tokenName"
+        },
+        "decimals": {
+          "format": "integer"
+        },
+        "usdPerToken": {
+          "format": "pinnedPrice"
+        }
+      },
+      "derived": {
+        "priceClause": {
+          "when": {
+            "field": "allowed",
+            "equals": true
+          },
+          "template": " at a pinned price of {usdPerToken}"
+        }
+      }
+    },
+    "account.vaultSetTrustedVerifier": {
+      "role": "vault",
+      "admin": true,
+      "intent": "{allowClause}{stopClause}",
+      "consequence": "A trusted contract can accept a signature (or a pre-approval) from your everyday key without asking this phone. Permit-style token contracts stay blocked regardless.",
+      "timing": "tightenNowLoosenWaits",
+      "looserWhen": {
+        "field": "trusted",
+        "equals": true
+      },
+      "fields": {
+        "verifier": {
+          "format": "addressName"
+        },
+        "trusted": {
+          "format": "enum",
+          "labels": {
+            "true": "Trust",
+            "false": "Stop trusting"
+          }
+        }
+      },
+      "derived": {
+        "allowClause": {
+          "when": {
+            "field": "trusted",
+            "equals": true
+          },
+          "template": "Allow {verifier} to accept signatures from your everyday key"
+        },
+        "stopClause": {
+          "when": {
+            "field": "trusted",
+            "equals": false
+          },
+          "template": "Stop {verifier} accepting signatures from your everyday key"
+        }
+      }
+    },
+    "account.vaultSetValueVerifier": {
+      "role": "vault",
+      "admin": true,
+      "intent": "{denied} {verifier} for everyday-key signatures",
+      "consequence": "A blocked contract (Permit2 is blocked by default) never accepts a signature from your everyday key, so a stolen browser can't sign token permits for it.",
+      "timing": "tightenNowLoosenWaits",
+      "looserWhen": {
+        "field": "denied",
+        "equals": false
+      },
+      "fields": {
+        "denied": {
+          "format": "enum",
+          "labels": {
+            "true": "Block",
+            "false": "Unblock"
+          }
+        },
+        "verifier": {
+          "format": "addressName"
+        }
+      }
+    },
+    "account.vaultUnfreeze": {
+      "role": "vault",
+      "admin": true,
+      "intent": "Resume everyday spending",
+      "consequence": "Everyday payments work again.",
+      "timing": "now"
+    },
+    "erc20.approve": {
+      "role": "any",
+      "action": "approve",
+      "intent": "Let {spender} spend up to {amount}",
+      "fields": {
+        "amount": {
+          "format": "tokenAmount",
+          "tokenPath": "@.target",
+          "unlimitedAbove": "0x8000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "spender": {
+          "format": "addressName",
+          "recipient": true
+        }
+      },
+      "compare": {
+        "recipient": "spender",
+        "amount": "amount",
+        "token": "@.target"
+      }
+    },
+    "erc20.transfer": {
+      "role": "any",
+      "action": "send",
+      "intent": "Send {amount} to {to}",
+      "fields": {
+        "amount": {
+          "format": "tokenAmount",
+          "tokenPath": "@.target"
+        },
+        "to": {
+          "format": "addressName",
+          "recipient": true
+        }
+      },
+      "compare": {
+        "recipient": "to",
+        "amount": "amount",
+        "token": "@.target"
+      }
+    },
+    "privacyPoolsEntrypoint.relay": {
+      "role": "any",
+      "action": "privacyWithdraw",
+      "bindTo": "privacyPools.entrypoints",
+      "intent": "Move {withdrawnValue} from your private balance to {recipient} (relayer fee {relayFeeBPS})",
+      "fields": {
+        "withdrawnValue": {
+          "format": "raw",
+          "path": "proof.pubSignals[2]",
+          "unit": "units of the pool's asset"
+        },
+        "recipient": {
+          "format": "addressName",
+          "path": "withdrawal.data#(address,address,uint256)[0]",
+          "recipient": true
+        },
+        "relayFeeBPS": {
+          "format": "bps",
+          "path": "withdrawal.data#(address,address,uint256)[2]"
+        }
+      },
+      "compare": {
+        "recipient": "recipient"
+      }
+    },
+    "roleSigner.setMaxFee": {
+      "role": "vault",
+      "admin": true,
+      "intent": "Set the Vault's network-fee limit per approval to {newMaxFee}",
+      "timing": "now",
+      "fields": {
+        "newMaxFee": {
+          "format": "eth"
+        }
+      }
+    },
+    "roleSigner.setPathA": {
+      "role": "vault",
+      "admin": true,
+      "intent": "Turn the staked lane {enabled}",
+      "timing": "now",
+      "fields": {
+        "enabled": {
+          "format": "enum",
+          "labels": {
+            "true": "on",
+            "false": "off"
+          }
+        }
+      }
+    },
+    "roleSigner.setPayerKey": {
+      "role": "vault",
+      "admin": true,
+      "intent": "Change this Vault's fee-payment key to {newPayerKey}",
+      "consequence": "Approvals from this Vault will need the new fee-payment key.",
+      "timing": "now",
+      "fields": {
+        "newPayerKey": {
+          "format": "addressName"
+        }
+      }
+    },
+    "roleSigner.stake": {
+      "role": "vault",
+      "admin": true,
+      "intent": "Lock {amount} as stake for the staked lane",
+      "consequence": "It can be withdrawn {unstakeDelaySec} after you start unlocking it.",
+      "timing": "now",
+      "fields": {
+        "amount": {
+          "format": "eth"
+        },
+        "unstakeDelaySec": {
+          "format": "duration"
+        }
+      }
+    },
+    "roleSigner.unlockStake": {
+      "role": "vault",
+      "admin": true,
+      "intent": "Start unlocking the Vault's stake",
+      "timing": "now"
+    },
+    "roleSigner.withdrawStake": {
+      "role": "vault",
+      "admin": true,
+      "intent": "Withdraw the Vault's stake to {to}",
+      "timing": "now",
+      "fields": {
+        "to": {
+          "format": "addressName"
+        }
+      }
+    }
+  },
+  "typedData": {
+    "PrivacyPoolNote": {
+      "$comment": "kohaku privacy-pools src/account/signature-keys.ts: buildNoteEnvelope (40-privacy-infra.md §1.4)",
+      "domain": {
+        "name": "PrivacyPools Keychain",
+        "version": "1",
+        "saltPreimage": "privacypools"
+      },
+      "types": {
+        "PrivacyPoolNote": [
+          {
+            "name": "depositIndex",
+            "type": "uint64"
+          },
+          {
+            "name": "secretIndex",
+            "type": "uint64"
+          }
+        ]
+      },
+      "intent": "Create the keys for private note #{depositIndex}.{secretIndex}",
+      "consequence": "Your browser can then use this private note. The note's secrets come from this phone's fee-payment key (classical, not quantum-safe)."
+    }
+  },
+  "enums": {
+    "queueKind": {
+      "0": "large payment",
+      "1": "settings change",
+      "2": "account update",
+      "3": "move to a new account"
+    }
+  },
+  "selectors": {
+    "account.clearExpiredFreeze": "0x1127bd60",
+    "account.executeMigrate": "0xe09fb5e9",
+    "account.executeQueued": "0xb456fa21",
+    "account.executeUpgrade": "0x394d4bf3",
+    "account.recoveryCancel": "0xf4e561bb",
+    "account.recoveryCancelVaultRotation": "0x08a0536a",
+    "account.recoveryFinalizeVaultRotation": "0x8180feb4",
+    "account.recoveryStartVaultRotation": "0x15d06497",
+    "account.registerPermit": "0xfde0b559",
+    "account.vaultCancel": "0xc149d5d0",
+    "account.vaultEnableBunker": "0xf4c28ef6",
+    "account.vaultExecute": "0xb2ac5883",
+    "account.vaultExtendFreeze": "0xbee5f130",
+    "account.vaultFreeze": "0x5f5596f2",
+    "account.vaultQueue": "0x612cc035",
+    "account.vaultQueueMigrate": "0x11f8f483",
+    "account.vaultQueueUpgrade": "0x294d5d1a",
+    "account.vaultSetCap": "0x568046a5",
+    "account.vaultSetFeePolicy": "0xe2909d4e",
+    "account.vaultSetGuardian": "0x0a98eed4",
+    "account.vaultSetHotKey": "0xbf147947",
+    "account.vaultSetRecoverySigner": "0xc23fa856",
+    "account.vaultSetSession": "0x07271ff4",
+    "account.vaultSetTarget": "0x25b1b3cd",
+    "account.vaultSetTimelock": "0x4d1bbc64",
+    "account.vaultSetToken": "0x084ace44",
+    "account.vaultSetTrustedVerifier": "0x49785d5e",
+    "account.vaultSetValueVerifier": "0x2d5625af",
+    "account.vaultUnfreeze": "0x535d5acb",
+    "roleSigner.executePQ": "0xbcf36f79",
+    "roleSigner.relay": "0xc28e83fd",
+    "roleSigner.setMaxFee": "0x710e5d2f",
+    "roleSigner.setPathA": "0x225b965c",
+    "roleSigner.setPayerKey": "0x7769425a",
+    "roleSigner.stake": "0x7ec6840f",
+    "roleSigner.unlockStake": "0xbb9fe6bf",
+    "roleSigner.verifyFrame": "0xfdac8fe1",
+    "roleSigner.withdrawStake": "0xc23a5cea"
+  }
+}

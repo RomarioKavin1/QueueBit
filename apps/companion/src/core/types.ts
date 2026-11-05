@@ -1,0 +1,52 @@
+import type { Address, Hex } from "viem";
+
+export interface AddressBookEntry {
+  id: string;
+  name: string;
+  address: Address;
+  /** Chain ids this entry applies to; empty = every chain. */
+  chains: number[];
+  addedAt: number;
+}
+
+export interface TokenSetting {
+  allowed: boolean;
+  decimals: number;
+  usdPerToken: bigint;
+  /** ms since epoch, when this phone signed it. */
+  signedAt: number;
+}
+
+/**
+ * What this phone itself last signed for an account (plan §20 §4.3 item 3): the trusted side of the "from → to" of a
+ * limit change and of the "settings changed since this phone last signed" check (ux-spec E-74). Only changes that
+ * take effect immediately are recorded as settings; queued ones are not (they may still be cancelled).
+ */
+export interface AccountSnapshot {
+  account: Address;
+  chainId: number;
+  /** The role signers seen sending for this account. */
+  signers: Address[];
+  settings: Partial<
+    Record<"capUsdPerDay" | "perTxMaxUsd" | "maxFeeWeiPerTx" | "timelockDelay" | "timelockThresholdUsd", bigint>
+  > & {
+    maxHotFrames?: number;
+  };
+  tokens: Record<string, TokenSetting>;
+  updatedAt: number;
+}
+
+export type Mode = "vault" | "recovery";
+
+export interface DeviceContext {
+  mode: Mode;
+  /** The key this phone signs with in this mode. */
+  publicKey: Hex;
+  schemeId: Hex;
+  /** Vault mode: the Path-B fee-payment (payer) address. */
+  payerAddress?: Address;
+  addressBook: AddressBookEntry[];
+  snapshots: AccountSnapshot[];
+  /** For tests. */
+  now?: number;
+}

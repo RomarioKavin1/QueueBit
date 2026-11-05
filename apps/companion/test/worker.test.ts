@@ -1,0 +1,203 @@
+import { getProfile, recoverSecp256k1Signer, setSignature } from "@leaked/frames";
+import { SCHEME_ID, verify } from "@leaked/pq-signer";
+import { decodeRecoveryTest, decodeSignature, fromHex, recoveryTestChallenge } from "@leaked/ur";
+import { describe, expect, it } from "vitest";
+import { hashTypedData, recoverAddress, type Hex } from "viem";
+import { reviewRequestBytes } from "../src/core/clearsign.js";
+import { wordsToEntropy } from "../src/core/keys.js";
+import { handle } from "../src/worker/handler.js";
+import type { WorkerResult } from "../src/worker/protocol.js";
+import {
+  PASSPHRASE,
+  PROFILE_ID,
+  RECOVERY_WORDS,
+  VAULT_WORDS,
+  limitRaise,
+  noteKeys,
+  recovery,
+  rotation,
+  unknownCall,
+  usdcWithdrawal,
+  vault,
+} from "./fixtures/requests.js";
+
+const FAST = { N: 2 ** 10, r: 8, p: 1 };
+const noop = () => {};
+
+async function createVault() {
+  const r = await handle(
+    {
+      op: "create",
+      entropy: wordsToEntropy(VAULT_WORDS),
+      bip39Passphrase: "",
+      passphrase: PASSPHRASE,
+      kdf: FAST,
+      restored: true,
+    },
+    noop,
+  );
+  return r as Extract<WorkerResult, { op: "create" }>;
+}
+
+const ctx = {
+  mode: "vault" as const,
+  publicKey: vault.pk,
+  schemeId: SCHEME_ID,
+  payerAddress: vault.payer,
+  addressBook: [],
+  snapshots: [],
+};
+
+describe("signing worker", () => {
+  it("creates a Vault whose key and payer address match the derivation (pairing data)", async () => {
+    const c = await createVault();
+    expect(c.vaultPk).toBe(vault.pk);
+    expect(c.payerAddress).toBe(vault.payer);
+  });
+
+  it("signs a Path-B request: a valid C13 witness and the payer signature over the same recomputed digest", async () => {
+    const c = await createVault();
+    const b = usdcWithdrawal();
+    const phases: string[] = [];
+    const r = (await handle(
+      {
+        op: "sign",
+        mode: "vault",
+        sealed: c.sealed,
+        vaultPk: c.vaultPk,
+        passphrase: PASSPHRASE,
+        requestCbor: b.cbor,
+        expectDigest: b.digest,
+        allowUnknown: false,
+      },
+      (p) => phases.push(p),
+    )) as Extract<WorkerResult, { op: "sign" }>;
+    expect(r.digest).toBe(b.digest);
+    expect([...new Set(phases)]).toEqual(["unlock", "derive", "sign", "verify"]);
+    const s = decodeSignature(r.signatureCbor);
+    expect(s.requestId).toBe(b.request.requestId);
+    expect(s.schemeId).toBe(SCHEME_ID);
+    expect(verify(fromHex(vault.pk), fromHex(b.digest), fromHex(s.witness!))).toBe(true);
+    // The payer signature drops into entry 1 of the transaction and recovers to the payer key.
+    const p = getProfile(PROFILE_ID);
+    const signed = setSignature(p, setSignature(p, b.tx, 0, s.witness!), 1, s.payerSig!);
+    expect(await recoverSecp256k1Signer(p, signed, 1)).toBe(vault.payer);
+  }, 60_000);
+
+  it("refuses when the UI showed a different digest", async () => {
+    const c = await createVault();
+    const b = usdcWithdrawal();
+    await expect(
+      handle(
+        {
+          op: "sign",
+          mode: "vault",
+          sealed: c.sealed,
+          vaultPk: c.vaultPk,
+          passphrase: PASSPHRASE,
+          requestCbor: b.cbor,
+          expectDigest: limitRaise().digest,
+          allowUnknown: false,
+        },
+        noop,
+      ),
+    ).rejects.toThrow(/differs from what was shown/);
+  });
+
+  it("refuses an unknown call unless the user confirmed it", async () => {
+    const c = await createVault();
+    const b = unknownCall();
+    const base = {
+      op: "sign" as const,
+      mode: "vault" as const,
+      sealed: c.sealed,
+      vaultPk: c.vaultPk,
+      passphrase: PASSPHRASE,
+      requestCbor: b.cbor,
+      expectDigest: b.digest,
+    };
+    await expect(handle({ ...base, allowUnknown: false }, noop)).rejects.toThrow(/not confirmed/);
+  });
+
+  it("refuses a wrong passphrase", async () => {
+    const c = await createVault();
+    const b = usdcWithdrawal();
+    await expect(
+      handle(
+        {
+          op: "sign",
+          mode: "vault",
+          sealed: c.sealed,
+          vaultPk: c.vaultPk,
+          passphrase: "wrong passphrase",
+          requestCbor: b.cbor,
+          expectDigest: b.digest,
+          allowUnknown: false,
+        },
+        noop,
+      ),
+    ).rejects.toThrow(/doesn't unlock/);
+  });
+
+  it("signs the Privacy Pools note envelope with the payer key (EIP-712, r‖s‖v)", async () => {
+    const c = await createVault();
+    const n = noteKeys();
+    const review = reviewRequestBytes(n.cbor, ctx);
+    const r = (await handle(
+      {
+        op: "sign",
+        mode: "vault",
+        sealed: c.sealed,
+        vaultPk: c.vaultPk,
+        passphrase: PASSPHRASE,
+        requestCbor: n.cbor,
+        expectDigest: review.digest,
+        allowUnknown: false,
+      },
+      noop,
+    )) as Extract<WorkerResult, { op: "sign" }>;
+    const s = decodeSignature(r.signatureCbor);
+    expect(s.witness).toBeUndefined();
+    const typed = JSON.parse(new TextDecoder().decode(fromHex(n.request.payload)));
+    const digest = hashTypedData({ ...typed, message: { depositIndex: 3n, secretIndex: 0n } });
+    expect(digest).toBe(review.digest);
+    expect(await recoverAddress({ hash: digest, signature: s.typedSig as Hex })).toBe(vault.payer);
+  });
+
+  it("reveals the backup words only with the passphrase", async () => {
+    const c = await createVault();
+    const r = (await handle(
+      { op: "reveal", sealed: c.sealed, vaultPk: c.vaultPk, passphrase: PASSPHRASE },
+      noop,
+    )) as Extract<WorkerResult, { op: "reveal" }>;
+    expect(r.words).toEqual(VAULT_WORDS);
+  });
+
+  it("recovery: loads the key, signs a recovery test, signs one rotation, then forgets the key", async () => {
+    const loaded = await handle(
+      { op: "recoveryLoad", entropy: wordsToEntropy(RECOVERY_WORDS), bip39Passphrase: "" },
+      noop,
+    );
+    expect(loaded).toEqual({ op: "recoveryLoad", pk: recovery.pk });
+    const id = "7a1e2b3c-4d5e-4f60-8a1b-2c3d4e5f6a7b";
+    const t = (await handle({ op: "recoveryTest", requestId: id }, noop)) as Extract<
+      WorkerResult,
+      { op: "recoveryTest" }
+    >;
+    const test = decodeRecoveryTest(t.cbor);
+    expect(test.recoveryPk).toBe(recovery.pk);
+    expect(
+      verify(fromHex(recovery.pk), fromHex(recoveryTestChallenge(SCHEME_ID, recovery.pk, id)), fromHex(test.witness)),
+    ).toBe(true);
+
+    const b = rotation();
+    const r = (await handle(
+      { op: "sign", mode: "recovery", requestCbor: b.cbor, expectDigest: b.digest, allowUnknown: false },
+      noop,
+    )) as Extract<WorkerResult, { op: "sign" }>;
+    const s = decodeSignature(r.signatureCbor);
+    expect(s.payerSig).toBeUndefined();
+    expect(verify(fromHex(recovery.pk), fromHex(b.digest), fromHex(s.witness!))).toBe(true);
+    await expect(handle({ op: "recoveryTest", requestId: id }, noop)).rejects.toThrow(/No Recovery key/);
+  }, 60_000);
+});

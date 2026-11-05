@@ -1,0 +1,47 @@
+{
+  "name": "@leaked/companion",
+  "version": "0.0.0",
+  "private": true,
+  "description": "LEAKED Vault: offline-first PWA that decodes, clear-signs and signs vault approvals with a quantum-safe key",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --port 4317 --strictPort",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "e2e": "vite build && playwright test",
+    "e2e:only": "playwright test",
+    "icons": "node scripts/render-icons.mjs",
+    "abi:sync": "node scripts/abi-sync.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1",
+    "@tailwindcss/vite": "4.3.3",
+    "@types/node": "26.6.6",
+    "@types/qrcode": "1.5.6",
+    "@types/react": "18.3.31",
+    "@types/react-dom": "18.3.7",
+    "@vitejs/plugin-react": "6.2.1",
+    "fake-indexeddb": "6.2.7",
+    "tailwindcss": "4.3.3",
+    "typescript": "6.0.3",
+    "vite": "8.3.6",
+    "vitest": "5.1.0"
+  },
+  "dependencies": {
+    "@leaked/frames": "workspace:*",
+    "@leaked/pq-signer": "workspace:*",
+    "@leaked/ur": "workspace:*",
+    "@noble/curves": "2.4.0",
+    "@noble/hashes": "2.4.0",
+    "@scure/bip32": "2.4.0",
+    "@scure/bip39": "2.4.0",
+    "jsqr": "1.4.0",
+    "qrcode": "1.5.4",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "viem": "2.57.16"
+  }
+}
