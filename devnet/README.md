@@ -178,3 +178,22 @@ contracts' devnet suite is in CI.
 - No mainnet contract library (LINK/USDT/USDC/Permit2/Uniswap v4/Railgun/Tornado); replay it with the sidecar
   repo's `bun run predeploy run --all` against `PREDEPLOY_RPC_URL=http://localhost:8545` if a test needs it.
 - The explorer web UI (`explorer.altmempool.wtf`) is not run; the `skandha_explorer_*` RPC methods are.
+
+## Funding-key allocation for parallel agents and CI
+
+Each workstream funds itself from **its own** key, so concurrent scripts never collide on nonces:
+
+| Key | Owner |
+|---|---|
+| anvil #0 | contracts / account devnet tests (`contracts/devnet-tests/account`) |
+| anvil #2 | contracts / PQ role-signer devnet tests (`contracts/devnet-tests/pq`) |
+| anvil #5 | privacy / PoolPayer devnet tests |
+| anvil #6 | PQ benchmark harness (`bench/`) |
+| anvil #7 | extension e2e (Playwright) |
+| anvil #9 | watcher / misc |
+| #1 | registry deployer only (never reuse) |
+| #3, #4 | `devnet/tools` smoke and probe |
+| #8 | sidecar faucet |
+| genesis key | top-ups of the above only |
+
+Derive any per-test sub-accounts from your own key (send them funds). Never use another workstream's key.
