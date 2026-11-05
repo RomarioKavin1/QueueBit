@@ -1,5 +1,5 @@
 {
-  "date": "2026-11-05T22:59:34.035Z",
+  "date": "2026-11-05T23:25:02.269Z",
   "rpc": "http://127.0.0.1:8547",
   "chainId": 31337,
   "entryPoint": {
@@ -14,13 +14,13 @@
     "msaImpl": "0x5fc8d32690cc91d4c39d9d3abcbd16989f875707",
     "account": "0x1330De3cb3a013A86fD394aE15F38f5DA01A87Bb"
   },
-  "accountCreationGas": "648062",
+  "accountCreationGas": "649136",
   "hotWithinCap": {
     "submitted": true,
-    "txHash": "0xf7e332b5bab27fb501f5c70856fa034342bad20c8746cf643d67f9dd5a82bc3a",
-    "txGasUsed": "220844",
+    "txHash": "0x26ec0d78885ce8acd69b818cb0889a08c34d1c77fe64158152a7e3514c62670a",
+    "txGasUsed": "223532",
     "success": true,
-    "actualGasUsed": "331016",
+    "actualGasUsed": "333897",
     "recipientBalance": "100000000000000000",
     "bucketAvailable": "700000000"
   },
@@ -30,20 +30,20 @@
   },
   "overCapRejected": {
     "submitted": true,
-    "txHash": "0xc0e5c65e6e2f7522c9e1f2bdd93ae5d433c6f27cca5566bbf90c0906c5b8c2f1",
-    "txGasUsed": "159894",
+    "txHash": "0x04864b42433ed1c6b0794ab937e5de6a28e047e9f1932d77c3caf82ad3123bec",
+    "txGasUsed": "162582",
     "success": false,
-    "actualGasUsed": "272743",
+    "actualGasUsed": "275625",
     "revertReason": "OverCap(300000000,250000000)",
     "recipientUnchanged": true
   },
   "vaultExecRelayed": {
     "submitted": true,
-    "txHash": "0xd1da6371c63264b544c92f44ca2aa0acaa9f98c0673e12c7843b23a636e1c566",
-    "txGasUsed": "408404",
+    "txHash": "0x210bcc4a556a4943106d8f33fa041c002f021cb57e4e63772d583712390c487a",
+    "txGasUsed": "408636",
     "success": true,
-    "actualGasUsed": "460444",
-    "pqSignMs": 3766,
+    "actualGasUsed": "460642",
+    "pqSignMs": 4538,
     "sigBytes": 3688,
     "callDataBytes": 4260,
     "destBalance": "1000000000000000000"
