@@ -198,6 +198,100 @@ contract PQRoleSignerTest is FrameSim {
         assertEq(bytes4(r.frames[0].returnData), PQRoleSigner.BadWitnessEntry.selector);
     }
 
+    /// `sigIndex` names the witness entry; the payer is the other one. The reverse layout [SECP256K1 payer,
+    /// ARBITRARY witness] with `verifyFrame(1)` / `executePQ(1, ...)` is a valid Path B tx.
+    function test_pathB_witnessAtIndex1_payerAtIndex0_valid() public {
+        simBegin(address(signer));
+        simSetFees(1 gwei, 2 gwei, COST);
+        simSetSigHash(kat.digest);
+        simVerify(SELF_VERIFY, address(0), VERIFY_GAS, abi.encodeCall(PQRoleSigner.verifyFrame, (1)));
+        simSender(
+            address(0), SENDER_GAS, 0, abi.encodeCall(PQRoleSigner.executePQ, (1, address(account), _move(0.1 ether)))
+        );
+        simAddSecp256k1(payer);
+        simAddArbitrary(kat.sig);
+        simSignSecp256k1(0, payerPk);
+        SimResult memory r = simRunValid();
+        _assertVerifyClean(r);
+        assertEq(r.frames[1].status, STATUS_SUCCESS);
+        assertEq(recipient.balance, 0.1 ether);
+    }
+
+    /// `verifyFrame(1)` against the standard layout names the SECP256K1 entry as the witness: rejected on SCHEME,
+    /// before SIGNATURE_LENGTH / SIGDATACOPY could be asked of a SECP256K1 entry.
+    function test_pathB_sigIndexNamesPayerEntry_rejectedWithoutHalting() public {
+        simBegin(address(signer));
+        simSetFees(1 gwei, 2 gwei, COST);
+        simSetSigHash(kat.digest);
+        simVerify(SELF_VERIFY, address(0), VERIFY_GAS, abi.encodeCall(PQRoleSigner.verifyFrame, (1)));
+        simSender(address(0), SENDER_GAS, 0, abi.encodeCall(PQRoleSigner.executePQ, (1, address(account), _move(1))));
+        simAddArbitrary(kat.sig);
+        simAddSecp256k1(payer);
+        simSignSecp256k1(1, payerPk);
+        SimResult memory r = simRun();
+        assertFalse(r.valid);
+        assertEq(bytes4(r.frames[0].returnData), PQRoleSigner.BadWitnessEntry.selector);
+    }
+
+    /// The witness is bound to this transaction's sig hash: the same (valid) witness over another sig hash is
+    /// admitted by the payer key but rejected in `executePQ`, so nothing moves.
+    function test_pathB_witnessOverOtherSigHash_rejectedInExecute() public {
+        _pathB(_execPQ(address(account), _move(0.1 ether)));
+        simSetSigHash(keccak256("another transaction"));
+        simSignSecp256k1(1, payerPk);
+        SimResult memory r = simRun();
+        assertTrue(r.valid);
+        assertEq(r.frames[1].status, STATUS_FAILED);
+        assertEq(bytes4(r.frames[1].returnData), PQRoleSigner.InvalidPQSignature.selector);
+        assertEq(recipient.balance, 0);
+    }
+
+    /// Path A with `verifyFrame(1)`: out of range for a single entry (and never a RESOLVED_SIGNER read).
+    function test_pathA_sigIndexOutOfRange_rejected() public {
+        simBegin(address(signer));
+        simSetFees(1 gwei, 2 gwei, COST);
+        simSetSigHash(kat.digest);
+        simVerify(SELF_VERIFY, address(0), 300_000, abi.encodeCall(PQRoleSigner.verifyFrame, (1)));
+        simSender(address(0), SENDER_GAS, 0, _relay(address(account), _move(1)));
+        simAddArbitrary(kat.sig);
+        SimResult memory r = simRun();
+        assertFalse(r.valid);
+        assertEq(bytes4(r.frames[0].returnData), PQRoleSigner.BadWitnessEntry.selector);
+    }
+
+    /// `feeParam = MAX_FEE` (the EIP master profile, where 0x04 is the total budget): the bound applies to 0x04.
+    function test_feeBound_maxFeeProfile() public {
+        PQRoleSigner s = new PQRoleSigner(
+            Devnet.ERC8421_WORKSHOP,
+            address(account),
+            1,
+            IPQVerifier(address(verifier)),
+            kat.pk,
+            payer,
+            MAX_FEE,
+            TxParam.MAX_FEE,
+            IStakingRegistry(address(registry))
+        );
+        simAttach(address(s));
+        vm.deal(address(s), 1 ether);
+        simBegin(address(s));
+        simSetFees(1 gwei, MAX_FEE + 1, COST);
+        simSetSigHash(kat.digest);
+        simVerify(SELF_VERIFY, address(0), VERIFY_GAS, abi.encodeCall(PQRoleSigner.verifyFrame, (0)));
+        simSender(address(0), SENDER_GAS, 0, _execPQ(address(account), _move(1)));
+        simAddArbitrary(kat.sig);
+        simAddSecp256k1(payer);
+        simSignSecp256k1(1, payerPk);
+        SimResult memory r = simRun();
+        assertFalse(r.valid);
+        assertEq(bytes4(r.frames[0].returnData), PQRoleSigner.FeeTooHigh.selector);
+        // and MAX_COST above the bound is not what this profile checks
+        simSetFees(1 gwei, MAX_FEE, MAX_FEE + 1);
+        simSignSecp256k1(1, payerPk);
+        r = simRun();
+        assertTrue(r.valid);
+    }
+
     function test_pathB_witnessExplicitMsg_rejected() public {
         simBegin(address(signer));
         simSetFees(1 gwei, 2 gwei, COST);
@@ -345,6 +439,32 @@ contract PQRoleSignerTest is FrameSim {
         assertEq(r.frames[1].status, STATUS_FAILED);
         assertEq(bytes4(r.frames[1].returnData), PQRoleSigner.TargetNotAllowed.selector);
         assertEq(recipient.balance, 0);
+    }
+
+    function test_target_selfShortData_rejected() public {
+        // a self call with no selector (receive) is not one of the six admin functions
+        _pathB(_execPQ(address(signer), ""));
+        SimResult memory r = simRunValid();
+        assertEq(r.frames[1].status, STATUS_FAILED);
+        assertEq(bytes4(r.frames[1].returnData), PQRoleSigner.TargetNotAllowed.selector);
+        _pathB(_execPQ(address(signer), hex"aabb"));
+        r = simRunValid();
+        assertEq(r.frames[1].status, STATUS_FAILED);
+        assertEq(bytes4(r.frames[1].returnData), PQRoleSigner.TargetNotAllowed.selector);
+    }
+
+    function test_target_accountAnyCalldata_forwarded() public {
+        // the account authorises by msg.sender; the signer does not decode its calldata (empty data = receive)
+        uint256 bal0 = address(account).balance;
+        _pathB(_execPQ(address(account), ""));
+        SimResult memory r = simRunValid();
+        assertEq(r.frames[1].status, STATUS_SUCCESS);
+        assertEq(address(account).balance, bal0);
+        // the account's revert bubbles up unchanged
+        _pathB(_execPQ(address(account), abi.encodeCall(ILeakedAccountRoles.recoveryCancel, (bytes32(0)))));
+        r = simRunValid();
+        assertEq(r.frames[1].status, STATUS_FAILED);
+        assertEq(bytes4(r.frames[1].returnData), MockLeakedAccount.NotRecovery.selector);
     }
 
     function testFuzz_target_onlyAccountOrSelf(address target, bytes memory data) public {

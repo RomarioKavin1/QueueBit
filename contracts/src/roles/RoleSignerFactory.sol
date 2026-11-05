@@ -24,7 +24,12 @@ contract RoleSignerFactory {
 
     event RoleSignerCreated(address indexed signer, uint8 role, address indexed account);
 
+    error InvalidConfig();
+
     constructor(Devnet devnet_, TxParam feeParam_, IStakingRegistry stakingRegistry_, uint256 defaultMaxFee_) {
+        // `PQRoleSigner`'s constructor rejects any other fee parameter: a factory built with one would deploy at
+        // ~16M gas and then fail every `createRoleSigner` with "create2 failed".
+        if (feeParam_ != TxParam.MAX_FEE && feeParam_ != TxParam.MAX_COST) revert InvalidConfig();
         devnet = devnet_;
         feeParam = feeParam_;
         stakingRegistry = stakingRegistry_;

@@ -91,4 +91,49 @@ contract GuardianSignerTest is FrameSim {
         assertFalse(r.valid);
         assertEq(bytes4(r.frames[0].returnData), GuardianSigner.BadSignature.selector);
     }
+
+    function test_twoSignatures_rejected() public {
+        _tx(address(account), abi.encodeCall(ILeakedAccountRoles.guardianFreeze, ()), keyPk, key);
+        simAddSecp256k1(key);
+        simSignSecp256k1(0, keyPk);
+        simSignSecp256k1(1, keyPk);
+        SimResult memory r = simRun();
+        assertFalse(r.valid);
+        assertEq(uint8(r.reason), uint8(InvalidReason.VERIFY_FAILED));
+        assertEq(bytes4(r.frames[0].returnData), GuardianSigner.BadSignature.selector);
+    }
+
+    function test_extraSenderFrame_rejected() public {
+        _tx(address(account), abi.encodeCall(ILeakedAccountRoles.guardianFreeze, ()), keyPk, key);
+        simSender(address(account), 100_000, 0, abi.encodeCall(ILeakedAccountRoles.guardianFreeze, ()));
+        simSignSecp256k1(0, keyPk);
+        SimResult memory r = simRun();
+        assertFalse(r.valid);
+        assertEq(bytes4(r.frames[0].returnData), GuardianSigner.BadFrameShape.selector);
+        assertFalse(account.hotFrozen());
+    }
+
+    function test_onlyVerifyScope_rejected() public {
+        simBegin(address(g));
+        simSetFees(1 gwei, 2 gwei, 0.001 ether);
+        simVerify(ONLY_VERIFY, address(0), 60_000, abi.encodeCall(GuardianSigner.verifyFrame, ()));
+        simSender(address(account), 100_000, 0, abi.encodeCall(ILeakedAccountRoles.guardianFreeze, ()));
+        simAddSecp256k1(key);
+        simSignSecp256k1(0, keyPk);
+        SimResult memory r = simRun();
+        assertFalse(r.valid);
+        assertEq(bytes4(r.frames[0].returnData), GuardianSigner.ScopeNotSelfVerify.selector);
+    }
+
+    function test_senderWithValue_rejected() public {
+        simBegin(address(g));
+        simSetFees(1 gwei, 2 gwei, 0.001 ether);
+        simVerify(SELF_VERIFY, address(0), 60_000, abi.encodeCall(GuardianSigner.verifyFrame, ()));
+        simSender(address(account), 100_000, 1, abi.encodeCall(ILeakedAccountRoles.guardianFreeze, ()));
+        simAddSecp256k1(key);
+        simSignSecp256k1(0, keyPk);
+        SimResult memory r = simRun();
+        assertFalse(r.valid);
+        assertEq(bytes4(r.frames[0].returnData), GuardianSigner.BadFrameShape.selector);
+    }
 }

@@ -54,5 +54,49 @@ contract RoleSignerFactoryTest is Test {
         address a = f.predictRoleSigner(bytes32(0), 1, account, PK, address(verifier), payer);
         address b = f.predictRoleSigner(bytes32(0), 1, account, PK, address(verifier), makeAddr("otherPayer"));
         assertTrue(a != b);
+        assertTrue(a != f.predictRoleSigner(bytes32(0), 1, makeAddr("otherAccount"), PK, address(verifier), payer));
+        assertTrue(a != f.predictRoleSigner(bytes32(0), 1, account, ~PK, address(verifier), payer));
+        assertTrue(a != f.predictRoleSigner(bytes32(0), 1, account, PK, makeAddr("otherVerifier"), payer));
+        assertTrue(a != f.predictRoleSigner(bytes32(uint256(1)), 1, account, PK, address(verifier), payer));
+    }
+
+    /// Front-running `createRoleSigner` is harmless: every parameter is in the CREATE2 address, so the only thing a
+    /// front-runner can deploy at the predicted address is the identical signer (and its ETH goes to it).
+    function test_frontRun_sameParameters_sameSigner() public {
+        address predicted = f.predictRoleSigner(bytes32(0), 1, account, PK, address(verifier), payer);
+        vm.prank(makeAddr("frontRunner"));
+        address first = f.createRoleSigner(bytes32(0), 1, account, PK, address(verifier), payer);
+        address second = f.createRoleSigner{value: 1 ether}(bytes32(0), 1, account, PK, address(verifier), payer);
+        assertEq(first, predicted);
+        assertEq(second, predicted);
+        assertEq(predicted.balance, 1 ether);
+        assertEq(PQRoleSigner(payable(predicted)).payerKey(), payer);
+    }
+
+    /// The chain-profile settings are the factory's immutables, so two factories never share an address space.
+    function test_differentFactorySettings_differentAddress() public {
+        RoleSignerFactory g = new RoleSignerFactory(Devnet.ERC8421_WORKSHOP, TxParam.MAX_FEE, registry, 0.05 ether);
+        assertTrue(
+            f.predictRoleSigner(bytes32(0), 1, account, PK, address(verifier), payer)
+                != g.predictRoleSigner(bytes32(0), 1, account, PK, address(verifier), payer)
+        );
+    }
+
+    function test_create_badSignerConfig_reverts() public {
+        vm.expectRevert(bytes("create2 failed"));
+        f.createRoleSigner(bytes32(0), 1, account, bytes32(0), address(verifier), payer);
+        vm.expectRevert(bytes("create2 failed"));
+        f.createRoleSigner(bytes32(0), 3, account, PK, address(verifier), payer);
+        vm.expectRevert(bytes("create2 failed"));
+        f.createRoleSigner(bytes32(0), 1, account, PK, makeAddr("noCode"), payer);
+    }
+
+    function test_constructor_rejectsBadFeeParam() public {
+        vm.expectRevert(RoleSignerFactory.InvalidConfig.selector);
+        new RoleSignerFactory(Devnet.ERC8421_WORKSHOP, TxParam.MAX_PRIORITY_FEE_PER_GAS, registry, 0.05 ether);
+        vm.expectRevert(RoleSignerFactory.InvalidConfig.selector);
+        new RoleSignerFactory(Devnet.ERC8421_WORKSHOP, TxParam.SIG_HASH, registry, 0.05 ether);
+        // both profiles' fee parameters are accepted
+        new RoleSignerFactory(Devnet.ERC8421_WORKSHOP, TxParam.MAX_FEE, registry, 0.05 ether);
     }
 }

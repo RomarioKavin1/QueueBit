@@ -2,12 +2,15 @@
 pragma solidity ^0.8.28;
 
 /// @title ILeakedAccountRoles
-/// @notice The role entry points of `LeakedAccountImpl` that the role signers call (plan `10-contracts.md` §10.3.2,
-///         "Role entry points"). Names and argument lists are copied from the plan; the account authorises the
-///         caller by `msg.sender` (vault / recovery signer, guardian). This file exists so that the role signers'
-///         tests and scripts can encode calldata without depending on the account implementation.
+/// @notice The role entry points of the LEAKED account (`src/account/LeakedAccountRoles.sol`, DELEGATECALLed from
+///         `LeakedAccountImpl`'s fallback) that the role signers call (plan `10-contracts.md` §10.3.2, "Role entry
+///         points", as amended by `ILeakedAccount`'s header: no `vaultSetDomain`; `vaultSetFeePolicy`,
+///         `vaultSetValueVerifier` and `recoveryFinalizeVaultRotation` added). The account authorises the caller
+///         by `msg.sender` (vault / recovery signer, guardian). This file exists so that the role signers' tests
+///         and scripts can encode calldata without depending on the account implementation; `test/roles` asserts
+///         selector parity with `LeakedAccountRoles`.
 interface ILeakedAccountRoles {
-    /// `struct Call { address target; uint256 value; bytes data; }` (§10.3 conventions).
+    /// Same layout as `ILeakedAccount.Call`.
     struct Call {
         address target;
         uint256 value;
@@ -21,23 +24,25 @@ interface ILeakedAccountRoles {
     function vaultSetHotKey(address newHotKey) external;
     function vaultSetCap(uint256 capUsdPerDay, uint256 perTxMaxUsd, uint256 maxFeeWeiPerTx, uint8 maxHotFrames)
         external;
-    function vaultSetToken(address token, bool allowed, uint8 decimals, uint256 usdPer1e18) external;
+    function vaultSetFeePolicy(uint256 maxPriorityFeePerGas, bool selfPay, address tank) external;
+    function vaultSetToken(address token, bool allowed, uint8 decimals, uint256 usdPerToken) external;
     function vaultSetTarget(address target, bool allowed) external;
     function vaultSetSession(address target, bytes4 selector, uint256 allowanceUsd, uint48 expiry) external;
-    function vaultSetDomain(bytes32 domainSeparator, bool allowed) external;
+    function vaultSetValueVerifier(address verifier, bool denied) external;
+    function vaultSetTimelock(uint48 delay, uint256 thresholdUsd) external;
+    function vaultSetRecoverySigner(address newRecoverySigner) external;
+    function vaultSetGuardian(address guardian, bool enabled) external;
     function vaultFreeze() external;
     function vaultUnfreeze() external;
     function vaultExtendFreeze(uint48 until) external;
-    function vaultSetGuardian(address guardian, bool enabled) external;
-    function vaultSetRecoverySigner(address recoverySigner) external;
     function vaultEnableBunker() external;
-    function vaultSetTimelock(uint48 delay, uint256 thresholdUsd) external;
-    function vaultQueueUpgrade(address newImpl) external;
-    function vaultQueueMigrate(address newAccount, address[] calldata tokens) external;
+    function vaultQueueUpgrade(address newImpl) external returns (bytes32 opId);
+    function vaultQueueMigrate(address newAccount, address[] calldata tokens) external returns (bytes32 opId);
 
     // ---- recovery (msg.sender == recoverySigner) ----
     function recoveryCancel(bytes32 opId) external;
     function recoveryStartVaultRotation(address newVaultSigner) external;
+    function recoveryFinalizeVaultRotation() external;
     function recoveryCancelVaultRotation() external;
 
     // ---- guardian (msg.sender is an enabled guardian: EOA or GuardianSigner) ----
