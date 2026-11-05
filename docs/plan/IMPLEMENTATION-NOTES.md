@@ -238,3 +238,139 @@ semantics.
   nonce N was followed by a privileged submission of a different tx at the same nonce, and it mined in both runs.
 - PoolPayer, from the privacy run's preliminary simulate (`contracts/devnet-tests/privacy/results/e2e-run.log`): the
   `pay` frame used 303,334 gas, the sender 100 + 2,800. Exactly the shape BUDGET-010 admits once the payer is staked.
+
+## PQ benchmark harness (`bench/`, section 20 §6, M3)
+
+- **Standalone.** `bench/contracts` is its own Foundry project (solc 0.8.34, Osaka for PORST's CLZ; SPHINCS-
+  verifiers via-IR/200 as upstream, PORST and ETHFALCON under their own upstream optimizer settings through
+  `compilation_restrictions`). `BenchAccount.yul` is a minimal 8141 sender written for the bench: it calls each
+  unmodified upstream verifier directly (no adapter hop except ETHFALCON's flat-witness wrapper), so its VERIFY gas is
+  verifier + the minimum glue. `pnpm --filter bench run all` reproduces everything; `run ci` is Forge-only.
+- **The devnet does not charge the EIP-8141 text's floor exactly.** Every receipt (16 txs) is
+  `EIP formula + 64 × len(rlp(nonce_keys) ‖ rlp(nonce_seq))`: ethrex `9aa3645d`
+  (`crates/common/types/transaction.rs` `calldata_tokens`/`data_cost`) also prices EIP-8250's nonce calldata (3 bytes =
+  192 gas for a fresh account), and its standard intrinsic weights witness bytes 4/16 instead of pricing elided bytes
+  uniformly. `bench/src/floor.ts` has both (`pricing: "eip8141" | "ethrex-1337"`); the devnet variant matches all
+  receipts to the gas, including the non-floor-bound ETHFALCON and SLH-DSA-128s ones.
+- **`ethrex_simulateFrameTransaction` executes over-budget prefixes.** It reports `canonicalMempoolValid: false`
+  (`prefix gas budget exceeded: 137100 > 100000 (MAX_VERIFY_GAS)`) but still returns per-frame `gasUsed`, so it is a
+  usable gas oracle for Path A shapes the public mempool would reject.
+- **`ethrex_submitPrivilegedFrameTransaction` is one-shot.** It tries a tx in exactly one payload build and silently
+  drops it otherwise (source comment: "never retried"); a plain call returned success and the tx never landed. Pass
+  the optional `targetBlock` (head + 2) and retry; the bench does, and uses it only for txs no sidecar admits
+  (ETHFALCON at 1.55M; SLH-DSA, see next).
+- **BUDGET-010 sidecar (14340) blocks every SHA-2 SLH-DSA verifier, independent of budget.** With the account staked,
+  a 931k SLH-DSA-SHA2-128s VERIFY prefix is rejected with `payer accesses un-deployed contract address 0x…02`: the
+  ERC-7562 code-less-address rule treats the SHA-256 precompile as an undeployed contract. Keccak-based schemes are
+  unaffected (C13 at 137k and PORST r=16 at 158k were admitted staked). Precompiles need an allow-list in that rule
+  (input for the sidecar PR, §40 P6).
+- **C7 VERIFY = 100,271 gas**, C13 111,140, leanSphincs-s ~43.6k: only leanSphincs-s passes the stock 100k sidecar in a
+  VERIFY frame. Total tx gas is floor-bound for every hash-based scheme (C13 250,682, C7 251,706, leanSphincs-s
+  281,146), so signature bytes decide fees and VERIFY gas decides admission, as §1.2 predicted.
+- **SLH-DSA-SHA2-128s port (time-boxed, done):** `bench/contracts/src/SlhDsaSha2_128s.sol` accepts every noble 0.7.1
+  signature and rejects one-bit changes; ~830–890k gas isolated, 831,679 in a VERIFY frame: fits only the staked 1M
+  budget by gas, and is admission-blocked by the precompile rule above. Not audited; benchmark only.
+- **Signing times are laptop numbers under load** (the amd64-emulated devnet running): the upstream C SLH-DSA-128-24
+  signer took 7.5–8.6 min per call (it regenerates the 2²² tree; upstream quotes 1–3 min), C7's Python reference
+  ~17 s. Treat both as reference-implementation figures, not product signers.
+- **NiceTry FORS+C is listed with published numbers only** (no licence in the repo; nothing copied or run).
+- **Lockfile not committed by the bench**: `pnpm-lock.yaml` also carries other workstreams' uncommitted importers
+  (companion), so the `bench` importer and `@noble/post-quantum@0.7.1` entries should land with the next lockfile
+  commit (`pnpm install`).
+
+## PoolPayer (privacy milestone P4, plan 40 §2, §8.1)
+
+Code: `contracts/src/privacy/PoolPayer.sol` (+ `IPrivacyPools.sol`), FrameSim tests `contracts/test/privacy/`
+(36 tests, real withdraw-circuit proofs in `fixtures/PoolPayerFixtures.sol`), devnet scripts
+`contracts/devnet-tests/privacy/` (`node src/e2e.ts`, `node src/mass-invalidation.ts`; node, not bun: bun 1.3.9 crashes
+in snarkjs' worker threads). Funding: anvil #5 only.
+
+### Design decisions settled in code
+
+- **Verify-then-front exactly as §2.2–2.4**, with these additions found while building it:
+  - `verify` also requires **minimum execution *and state* gas on the settle and refund frames** and `FLAGS == 0`
+    (no atomic batch) on both. Without them a user can starve `settle` (out of gas / state gas → PoolPayer pays the
+    prefix and the note stays unspent: the same free, repeatable griefing as a reverting payout) or starve `refund`
+    (PoolPayer keeps the overcharge: breaks at-cost). Settle's state budget must also cover a `claimable` slot and
+    a fresh-recipient account creation, or the pull fallback itself would halt.
+  - **The pool, its scope and its verifier are immutables** (v1 = one native-ETH pool; `PrivacyPool.WITHDRAWAL_VERIFIER`
+    is immutable, so caching is exact). Checked in the constructor (`ASSET == native`, `pool.ENTRYPOINT`,
+    `scopeToPool(SCOPE) == pool`). This took the VERIFY frame from 303,334 to **298,460 gas** (target ≤ 300k).
+  - `settle(i)` reads its arguments from frame i with FRAMEDATACOPY and binds to it (target, MODE VERIFY, STATUS 1,
+    selector). One settle per tx (`lastSettled = sigHash`); the refund is keyed on `pendingSig`.
+  - **No slot is ever zeroed or restored** (`pendingSig := ~sigHash` when refunded): an SSTORE refund would lower the
+    protocol's charge below the estimate and let PoolPayer profit.
+  - **At cost, enforced**: no fee/BPS/margin field; the refund estimator's parameters are immutables capped at the
+    EIP values (`MAX_INTRINSIC_GAS 21000`, `MAX_PER_FRAME_GAS 475`, `MAX_GAS_PER_DATA_BYTE 4` = the zero-byte cost,
+    `MAX_REFUND_FRAME_GAS 60000`); `withdrawFloat` can never touch `totalClaimable`. The estimate is a lower bound, so
+    PoolPayer can only lose the slack, never gain.
+  - Fee quoting uses `TXPARAM(MAX_COST 0x06)` on this devnet (MAX_FEE is per gas here, F5), configurable like
+    `GuardianSigner`. The client sets `fee` = the max cost of the **worst-case (all-nonzero) encoding** + 1 %: a
+    placeholder proof with zero bytes under-quotes (first devnet attempt failed `FeeBelowQuote`: 7.806e15 < 7.816e15).
+  - FeeData layout = Kohaku's `encodeFeeData` (`recipient, feeRecipient, fee, refundRecipient`); `refundRecipient 0`
+    means the recipient (never "no refund").
+- **Test deployment**: the real 0xbow contracts are vendored under `contracts/test/privacy/vendor/` (THIRD_PARTY.md).
+  0xbow's `WithdrawalVerifier.sol` is GPL-3.0 (snarkjs template), so a from-scratch MIT `WithdrawalGroth16Verifier`
+  with the same published key is used; it accepts the real proofs (and rejects tampered ones). Proofs come from
+  snarkjs 0.7.5 + `@fatsolutions/privacy-pools-core-circuits@1.0.5` (zkey sha256 = 0xbow's `final-keys/withdraw.zkey`);
+  **~2.0–3.3 s per proof** on an M3 (node 26).
+
+### Devnet facts found
+
+- **Deploying PoseidonT3 (29 KB runtime) needs ~47M gas** (state gas for code); a legacy tx is capped at the block
+  limit (~112M then 60M as the CL lowered it), and >block-limit is `Transaction gas limit exceeded`. The scripts
+  estimate and add 25 %.
+- **`ethrex_submitPrivilegedFrameTransaction` only targets the next payload build**; a missed build drops the tx
+  silently (no receipt, nothing in `txpool_content`). The first PoolPayer submission was lost this way; the e2e now
+  resubmits each block (w2 needed 2 attempts), as the sidecar's BundlingService does.
+- **The sidecar rejects any VERIFY-frame call to a precompile** unless `config.precompiles` lists it, and the default
+  list is **empty**: `payer accesses un-deployed contract address 0x…06 with opcode STATICCALL` (`frameTx.js`
+  CODE_ACCESS). ERC-8421 CALLING-040 allows 0x01–0x11. PoolPayer's Groth16 check (0x06/0x07/0x08) is rejected by the
+  stock sidecar *and* by the BUDGET-010 sidecar on 14340 (its BUDGET-010 check passed; this rule fires after it).
+  Fix = config only: `"precompiles": ["0x…01" … "0x…11"]` in `devnet/patched-sidecar/config.json` (owned by the
+  sidecar workstream; also belongs in the BUDGET-010 PR's defaults).
+- APPROVE's fresh-sender creation charged **0 state gas** on this build (frame 1 `stateGasUsed 0`), unlike the EIP
+  text; the pay frame still carries 250k state as the rule requires.
+
+### E2E on the local devnet (2026-11-06, `results/` is git-ignored; hashes below)
+
+Pool deployment (run `e2e-1793917985943`): Entrypoint proxy `0x2e0ccfd6…0e94` (tx `0xd9810ba2…9e23`), pool
+`0x384286d2…b37c` (`0xc52df9bb…ffff`), verifier `0xe2c632c2…0c03`, deposit `0xf879822b…c992`, ASP root
+`0x0a730dad…511b`. PoolPayer A (estimator 0) `0xbc45ca09…be03`, deploy `0x9e30e064…21ce` (17.2M gas), stake
+0.012 ETH / 86400 s `0xb2c89af3…b3b0`; PoolPayer B (calibrated) `0x14004fbc…3f93`, stake `0x4330a580…5451`.
+
+Shape `[VERIFY only_verify(fresh EOA) 30k, VERIFY pay(PoolPayer.verify) 500k/250k state, DEFAULT settle(1)
+1.2M/1.5M, DEFAULT refund() 150k/250k]`, 1,139 tx bytes, 876 frame-data bytes, maxFeePerGas 2 gwei.
+
+| | w1 (A, privileged) | w2 (B, privileged) | w3 (B, patched sidecar) |
+|---|---|---|---|
+| tx | `0x6341e8e6…7d14` blk 803 | `0x194121be…398b` blk 810 | `0xcb8eac86…b84e` blk 813, sidecar `OnChain` |
+| total gasUsed | 1,266,904 | 1,338,221 | 1,181,253 |
+| frames exec (state) | 100 · **298,460** · 523,254 (391,680) · 25,378 | 100 · 298,460 · 496,663 (489,600) · 25,378 | 100 · 298,460 · 535,523 (293,760) · 25,378 |
+| intrinsic (gasUsed − Σ frames) | 28,032 | 28,020 | 28,032 |
+| fee pre-paid / refunded | 7.896e15 / 6.683e15 | 7.896e15 / 6.564e15 | 7.896e15 / 6.721e15 |
+| PoolPayer net | −53,410 gas (−5.34e13 wei) | **−5,516 gas** | −5,528 gas |
+| recipient got | = withdrawn − fee + refund (exact) | exact | exact |
+
+PoolPayer's net equals `costEstimate − charge` to the wei in all three: the estimator is a lower bound and nothing
+else moves its balance. Calibration from w1: intrinsic 28,032 = 876 × 4 + 24,528 (→ capped 21,000), refund frame
+25,378 (→ 23,378 with a 2k margin). Residual per withdrawal ≈ 5.5k gas (≈ 1.1e13 wei at 2 gwei), PoolPayer-funded.
+
+Admission: `ethrex_simulateFrameTransaction` → `canonicalMempoolValid: false`, `prefix gas budget exceeded: 532800 >
+100000 (MAX_VERIFY_GAS)`, `executionStatus: success`; stock sidecar: `validation prefix execution gas sum 530000 +
+signature-verification cost 2800 = 532800 exceeds MAX_VERIFY_GAS 100000`; ethrex `eth_sendRawTransaction`: `Frame
+transaction prefix gas budget (frames + sig cost) exceeds MAX_VERIFY_GAS`. Admitted and mined via the privileged
+submit (w1, w2) and via a private sidecar (w3: same image, `MAX_VERIFY_GAS` 1M + `precompiles` 0x01–0x11,
+`scripts/patched-sidecar.sh`, port 14338). Re-run against the canonical **BUDGET-010 sidecar (14340)**
+(`e2e-1793918166811`: w1 `0xc89a23c8…68d5`, w2 `0x80f5372b…8c82`, same gas): w3 **rejected** with the precompile
+rule above. The private sidecar is a stopgap and has been stopped; retire the script once 14340 lists precompiles.
+
+### Mass invalidation (§8.1; `mass-1793918385874`, private sidecar in `bundlingMode manual`)
+
+10 deposits, PoolPayer `0xc15af1ca…5b39` (stake `0xec9038ca…0955`), 10 PoolPayer withdrawals from 10 fresh EOAs all
+admitted (`New`). Reputation of PoolPayer: before `seen 0 / included 0`; with 10 pending `seen 10 / included 0`,
+`status ok`. One `Entrypoint.updateRoot` (`0x85cb5500…d13b`, block 880) → at block 881 **all 10 `Cancelled`**,
+`revalidation failed as of block 881: validation frame 1: reverted with data 0x8f2b1368` (= `StaleASPRoot()`).
+Reputation after: `seen 10 / included 0`, `status ok` — the predicted delta (+10 seen, +0 included; 10 // 10 = 1 ≤
+0 + 10, so not throttled; throttling needs ≥ 110 such txs from a clean slate, §2.8). No cancellation-specific penalty
+beyond the unreturned `seen`.
