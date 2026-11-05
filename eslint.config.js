@@ -19,6 +19,9 @@ export default tseslint.config(
       "**/wasm/**",
       "contracts/**",
       "devnet/**",
+      // Upstream checkouts / patch series and tool caches are not our source.
+      "upstream/**",
+      "**/.cache/**",
       "docs/**",
     ],
   },
