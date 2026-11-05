@@ -826,3 +826,75 @@ Code: `packages/privacy` (no UI). It has 70 unit tests (`pnpm --filter @leaked/p
 - snarkjs stays a test-only dev dependency, used as the cross-check oracle: the same zkey and inputs must give a proof that verifies on-chain.
 - Before adopting a witness-generation component, check its license (circom's generated witness code and any wasm runtime).
 Kohaku packages are not dependencies: `@kohaku-eth/plugins` has no license, and `@saga-sync/client` is GPL-3.0-only. Revisit when Kohaku publishes a LICENSE.
+
+## Account: Open recipient mode and bound role signers (2026-11-06)
+
+Code: `contracts/src/account/{ILeakedAccount,LeakedAccountImpl,LeakedAccountRoles,LeakedAccountStorage}.sol`,
+`contracts/src/interfaces/{IRoleSignerFactory,ILeakedAccountRoles}.sol`; tests `contracts/test/account` (new
+`BoundRoleSigners.t.sol`), `script/lint-verify.sh` step 4; devnet `devnet-tests/{account,g1}`, `devnet/deploy`. Spec:
+§10.3.2 of `10-contracts.md` (as-built bullets, I-1/I-2/I-8, access matrix). Supersedes, in the extension M1 section,
+**"The Vault signer is a stand-in until M4"** and **"Hot recipients are only what the Vault allowed"**, and in the G1
+section the unbound-VaultSigner workaround of **"Account ↔ vault-signer CREATE2 cycle"**.
+
+- **Recipient mode.** `RecipientMode { Open, Strict }`; Open is the initialize default (`InitConfig.recipientMode`).
+  Open: a plain ETH send (empty data, value > 0) or an allowlisted, priced token's `transfer` may go to anyone but
+  `address(0)`, within the bucket, `perTxMaxUsd` and `declaredUsd`. Unchanged in both modes: the token must be
+  allowlisted (every outflow priced and debited); approve / permit / transferFrom / increaseAllowance, any other
+  selector, ETH with calldata, and a zero-value empty call (it would run an arbitrary fallback) need a session (or the
+  allowlist); I-6. Strict = the old recipient allowlist. `vaultSetRecipientMode`: Open → Strict instant, Strict → Open
+  queued; vault only, not the guardian (its power stays a bounded, self-expiring pause; Strict is an open-ended change
+  only a queued vault op can undo, so a guardian could impose a timelocked outage of everyday payments and gain
+  nothing against a leaked key that freeze does not give).
+- **The mode is not in a VERIFY slot.** The walker never decodes the batch, so it needs neither the recipient nor the
+  mode. `bool recipientsOpen` is appended after `registeredFor` (inverted so a zero slot after an upgrade fails closed
+  to Strict). I-2 proof: `Audit.t.sol` `test_I2_*` in Open and Strict (`AuditStrictTest` re-runs every C1/H1/M1/M2/L1
+  PoC in Strict, `AuditTest` runs them in Open); `lint-verify.sh` adds a source rule (no `recipientsOpen` /
+  `RecipientMode` / `targets` / role signers in `LeakedVerify.sol`), a layout rule and that test. Invariants: I-1 now
+  records the measured outflow of each batch (any recipient); new `invariant_recipientPolicy` (Open-mode abuse, Strict
+  violations, an arbitrary contract's fallback never runs) and mode loosening by a non-queued path counts as a
+  violation.
+- **Bound signers derived at initialize.** `InitConfig` gains `roleSignerFactory`, `vault` and `recovery`
+  (`RoleSignerParams {salt, pk, verifier, payerKey}`) and `recipientMode`; `vaultSigner`/`recoverySigner` stay for
+  explicit mode and must be 0 when the matching `pk` is given. `initialize` derives
+  `predictRoleSigner(salt, role, address(this), pk, verifier, payerKey)` (refusing a codeless factory or a verifier
+  without a fixed `sigLength`) and emits `RoleSignerDerived(role, signer, factory, salt, pk, verifier, payerKey)`, so
+  anyone can deploy the clone later from the log alone. No cycle: the proxy address commits to the pk (init data), the
+  clone to the proxy. A fresh account now needs the Vault pk before its address exists; no stand-in key.
+  `BoundRoleSigners.t.sol` drives a real C13 Path B through a derived, lazily deployed clone (FrameSim); a clone with
+  the same pk bound elsewhere gets `TargetNotAllowed`.
+- **Cost.** `initialize` with two derived signers: account creation 2,504,524 gas on the devnet (G1; 2,258,493 before:
+  +246k for two `predictRoleSigner` calls, the `sigLength` probes, events and the mode slot). Implementation 19.5 KB
+  (was 18.2), roles module 18.0 KB. VERIFY unchanged: hot 45,750, Path B 36,213, Path A 151,701.
+- **Devnet** (`devnet/deploy`, idempotent re-run checked): new `LeakedAccountRoles` `0x4B24758f…6b89`,
+  `LeakedAccountImpl` `0xa23d5438…C520`; AccountFactory, C13Verifier, RoleSignerFactory unchanged. `testVault` stays in
+  `addresses.local.json` (marked legacy; the generator reads it). Account devnet test: Open payment to a fresh address
+  `0x8fdf8a78…6cff6` mined; after an instant Strict switch the same tx simulates VERIFY-valid with a failing SENDER
+  (not sent); Strict → Open directly `MustQueue`; a bound account's stored vault equals `predictRoleSigner`.
+- **G1 re-run (local devnet, anvil #0, sidecar :14340): all of (a)–(g) PASS.** Account `0x0E66eD21…728F`; VaultSigner
+  `0x5D0B5660…8152` and RecoverySigner `0xf6008A58…ef9F` derived by initialize (no code before), deployed lazily by the
+  G1 deployer key (575,946 / 575,984 gas) at those addresses; (a) Open-mode $3 to never-allowlisted
+  `0xF91a2918…66e4`: `0x3eba3a36ec68d8687926f43ebf8b1aac85eb6d52d694d66b944c1a6144f4338f`; (b1) Path B tightening
+  `0x0e240d30…04e`; the RecoverySigner cancel in (e) and the Path A tightening in (g) now run through bound clones
+  derived at initialize. `last-run.json` has every hash.
+- **What the extension must change** (only `src/generated/contracts.ts` was regenerated; `test/unit/account.test.ts`
+  now fails in `encodeInitialize` until this lands): (1) the `InitConfig` shape above: bound mode with
+  `roleSignerFactory = localDeployment.roleSignerFactory`, `vault = {salt, pk: vaultPk, verifier: c13Verifier,
+  payerKey}` from pairing, so onboarding pairs the Vault before computing the account address (the plan's salt
+  `keccak(hotKey, vault, recovery, version, chainId)` should hash the vault pk, not a signer address); the stand-in is
+  explicit mode only; (2) deploy the VaultSigner clone (`createRoleSigner` with the same args, from the tank or the
+  companion) before the first vault action, e.g. in the activation tx batch; (3) routing: in Open mode (read
+  `recipientMode()`) an ETH send or an allowlisted-token `transfer` to any non-zero address within the cap and
+  per-payment max is an everyday (hot) payment, not TARGET-NOT-ALLOWED; Strict keeps today's routing; everything else
+  (approvals, other selectors, unallowlisted tokens) routes exactly as before; (4) "New recipient" stays a UI badge
+  (ux-spec §3), not a policy result.
+- **What the 7579 modules must mirror** (`contracts/src/modules`, not touched here): `LeakedPolicyHook` needs the
+  same `RecipientMode` (Open default; ETH send / allowlisted-token `transfer` to any non-zero recipient; zero-value
+  empty calls, ETH with calldata and every non-transfer selector still need a session; Open → Strict instant, Strict →
+  Open queued; vault only), its storage zero value failing closed, and the same I-8 tests; the role executor's vault
+  identity should be derivable from the pk the same way if its install data commits to a signer address.
+- **Watcher** (`services/watcher`, `packages/watcher-core`): no existing event signature changed. New:
+  `RecipientModeSet(uint8 mode)` (at initialize and on every change; Strict → Open only via `QueueExecuted`, so the
+  queued-loosening alert already fires first) and `RoleSignerDerived(uint8 indexed role, address indexed signer,
+  address indexed factory, bytes32 salt, bytes32 pk, address verifier, address payerKey)` (initialize only).
+  `services/watcher/test/devnet.live.test.ts` encodes the old `InitConfig` and must add `roleSignerFactory: 0`,
+  zeroed `vault`/`recovery` params and `recipientMode` (explicit mode keeps its EOA vault).
