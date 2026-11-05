@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: MIT
+// Adapted from nconsigny/SPHINCS- @ 4c76aaf (signers/signer-wasm, src/keccak/SPHINCs-C13Asm.sol),
+// MIT, Copyright (c) 2026 Nicolas Consigny <nicolas@ethereum.org>. See THIRD_PARTY.md.
+
 //! C13 signing: R grind (FORS+C forced zero) -> FORS+C -> 2-layer WOTS+C hypertree -> pack.
 //! Mirrors upstream `signers/signer-wasm/src/sphincs.rs:11-111` and the verifier's read order
 //! (`SPHINCs-C13Asm.sol:75-265`).

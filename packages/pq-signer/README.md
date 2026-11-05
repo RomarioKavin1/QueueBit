@@ -134,8 +134,8 @@ pnpm build        # scripts/build-wasm.sh, then tsc -> dist/
 
 Algorithm and byte formats from `nconsigny/SPHINCS-` (MIT, Nicolas Consigny):
 `signers/signer-wasm/src/*` (signer) and `src/keccak/SPHINCs-C13Asm.sol` (verifier). The Rust
-code here is a re-implementation (streaming treehash, single-block keccak fast path, hedging,
-zeroization), not a copy; see `THIRD_PARTY.md`.
+code is adapted from them (rewritten with streaming treehash, a single-block keccak fast path,
+hedging and zeroization; adapted files carry an MIT attribution header); see `THIRD_PARTY.md`.
 
 Possible speed-up not taken: the forced-zero FORS tree's revealed value is its full root (2¹⁹
 leaves, ~1/7 of signing time), as upstream does. The verifier would accept any value there, but

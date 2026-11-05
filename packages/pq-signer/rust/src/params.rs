@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: MIT
+// Adapted from nconsigny/SPHINCS- @ 4c76aaf (signers/signer-wasm, src/keccak/SPHINCs-C13Asm.sol),
+// MIT, Copyright (c) 2026 Nicolas Consigny <nicolas@ethereum.org>. See THIRD_PARTY.md.
+
 //! SPHINCS- C13 parameters. Nothing here is chosen by LEAKED: every value is read from
 //! upstream `nconsigny/SPHINCS-` at commit `4c76aaf113d326df9adede63d015f3b394ab84f4`
 //! (paths relative to that repo root):

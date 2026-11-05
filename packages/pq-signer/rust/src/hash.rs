@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: MIT
+// Adapted from nconsigny/SPHINCS- @ 4c76aaf (signers/signer-wasm, src/keccak/SPHINCs-C13Asm.sol),
+// MIT, Copyright (c) 2026 Nicolas Consigny <nicolas@ethereum.org>. See THIRD_PARTY.md.
+
 //! Keccak-256 and the C13 tweakable hashes, byte-for-byte as `SPHINCs-C13Asm.sol` computes them.
 //!
 //! Every node is the top 16 bytes of a keccak256 output (`N_MASK`, `SPHINCs-C13Asm.sol:47`). On

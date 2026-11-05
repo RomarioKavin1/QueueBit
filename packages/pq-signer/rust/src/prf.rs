@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: MIT
+// Adapted from nconsigny/SPHINCS- @ 4c76aaf (signers/signer-wasm, src/keccak/SPHINCs-C13Asm.sol),
+// MIT, Copyright (c) 2026 Nicolas Consigny <nicolas@ethereum.org>. See THIRD_PARTY.md.
+
 //! Secret-keyed PRFs. These never reach the verifier (it only sees their outputs), but they must
 //! match upstream byte-for-byte for the upstream KATs (set A) to reproduce:
 //! `signers/signer-wasm/src/wots.rs:7-18`, `fors.rs:12-20`, `fors.rs:74-94`, and the Python

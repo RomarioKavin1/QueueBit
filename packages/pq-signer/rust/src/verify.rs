@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: MIT
+// Adapted from nconsigny/SPHINCS- @ 4c76aaf (signers/signer-wasm, src/keccak/SPHINCs-C13Asm.sol),
+// MIT, Copyright (c) 2026 Nicolas Consigny <nicolas@ethereum.org>. See THIRD_PARTY.md.
+
 //! Byte-equivalent re-implementation of `SphincsC13Asm.verify` (`src/keccak/SPHINCs-C13Asm.sol`
 //! at 4c76aaf). Differences are only in the error surface, matching the `IPQVerifier` adapter
 //! contract (plan §2.6): where the Solidity verifier *reverts* (wrong length `:49-55`), this
