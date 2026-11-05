@@ -8,7 +8,8 @@ export const hexToBytes = (h: string): Uint8Array => {
   return out;
 };
 
-export const bytesToHex = (b: Uint8Array): string => "0x" + Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+export const bytesToHex = (b: Uint8Array): string =>
+  "0x" + Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
 
 export const readJson = <T>(rel: string): T =>
   JSON.parse(readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8")) as T;

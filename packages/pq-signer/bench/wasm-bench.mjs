@@ -10,7 +10,9 @@ const stats = (xs) => {
   return `median=${p(0.5).toFixed(1)}ms p95=${p(0.95).toFixed(1)}ms min=${s[0].toFixed(1)}ms n=${s.length}`;
 };
 const t = () => performance.now();
-const kg = [], sg = [], vf = [];
+const kg = [],
+  sg = [],
+  vf = [];
 for (let i = 0; i < runs; i++) {
   const master = crypto.getRandomValues(new Uint8Array(64));
   let t0 = t();
