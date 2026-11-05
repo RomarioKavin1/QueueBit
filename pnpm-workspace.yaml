@@ -3,3 +3,7 @@ packages:
   - "packages/*"
   - "services/*"
   - "bench"
+
+overrides:
+  # @ngraveio/bc-ur imports it only from its React Native entry; its react-native peer would pull in ~190 packages.
+  "@bacons/text-decoder": "-"

@@ -1,0 +1,29 @@
+{
+  "name": "@leaked/ur",
+  "version": "0.0.0",
+  "private": true,
+  "description": "LEAKED BC-UR vocabulary: CBOR schemas for vault sign requests, signatures, pairing keys and recovery tests, with fountain-coded animated-QR parts",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@ngraveio/bc-ur": "2.0.0-beta.9",
+    "@noble/hashes": "2.4.0",
+    "cbor2": "1.12.0"
+  }
+}
