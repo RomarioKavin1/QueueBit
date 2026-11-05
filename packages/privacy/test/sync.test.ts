@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { encodeAbiParameters, type Hex } from "viem";
+import { encodeAbiParameters, encodeEventTopics, type Hex } from "viem";
 import {
   AspIntegrityError,
+  POOL_ABI,
+  PrivacyPoolsV1Client,
   SyncIntegrityError,
   commitmentOf,
   createSignatureSecretManager,
@@ -13,7 +15,9 @@ import {
   syncPool,
   verifiedAspLabels,
   POOL_EVENTS,
+  type Prover,
   type RawLog,
+  type SecretManager,
 } from "../src/index.js";
 import { CHAIN, ENTRYPOINT, POOL, SimPool, fakeProvider, secretsFor, softwareSigner } from "./helpers.js";
 
@@ -90,9 +94,10 @@ describe("sync (eth_getLogs paging, fail-closed root check)", () => {
     it("a substituted leaf with a self-consistent forged root", async () => {
       await expect(
         tamper((l, pool) => {
-          // The attacker replaces leaf 3 and recomputes every later LeafInserted._root so the log set is consistent.
+          // The attacker replaces leaf 5 (a withdrawal's change commitment, whose preimage no log reveals) and
+          // recomputes every later LeafInserted._root so the log set is consistent.
           const leaves = [...pool.leaves];
-          leaves[3] = 123456789n;
+          leaves[5] = 123456789n;
           let i = 0;
           for (const log of l) {
             if (!isLeaf(log)) continue;
@@ -103,10 +108,9 @@ describe("sync (eth_getLogs paging, fail-closed root check)", () => {
             );
             i++;
           }
-          // Keep leaf 3's Deposited event consistent too: only the on-chain root can catch this.
-          const deps = l.filter((x) => x.topics[0] === POOL_EVENTS.Deposited);
-          const dep = deps[3]!;
-          dep.data = ("0x" + 123456789n.toString(16).padStart(64, "0") + dep.data.slice(66)) as Hex;
+          // Keep its Withdrawn event consistent too: only the on-chain root can catch this.
+          const w = l.filter((x) => x.topics[0] === POOL_EVENTS.Withdrawn)[0]!;
+          w.data = (w.data.slice(0, 2 + 128) + 123456789n.toString(16).padStart(64, "0")) as Hex;
           return l;
         }),
       ).rejects.toThrow(/computed root != pool's currentRoot/);
@@ -130,6 +134,49 @@ describe("sync (eth_getLogs paging, fail-closed root check)", () => {
       ).rejects.toThrow(/not the pool/);
     });
 
+    it("a Deposited event whose value (or label, precommitment) does not hash to its leaf", async () => {
+      // The commitment stays a real leaf (the root check passes); only the event's claim about it is altered.
+      const word = (data: Hex, i: number, v: bigint) =>
+        (data.slice(0, 2 + 64 * i) + v.toString(16).padStart(64, "0") + data.slice(2 + 64 * (i + 1))) as Hex;
+      await expect(
+        tamper((l) => {
+          const dep = l.filter((x) => x.topics[0] === POOL_EVENTS.Deposited)[1]!;
+          dep.data = word(dep.data, 2, 1n); // _value := 1 wei
+          return l;
+        }),
+      ).rejects.toThrow(/do not hash to its commitment/);
+      await expect(
+        tamper((l) => {
+          const dep = l.filter((x) => x.topics[0] === POOL_EVENTS.Deposited)[1]!;
+          dep.data = word(dep.data, 3, 777n); // _precommitmentHash := a stranger's
+          return l;
+        }),
+      ).rejects.toThrow(/do not hash to its commitment/);
+    });
+
+    it("a Ragequit event naming a commitment that is not a leaf", async () => {
+      const ev = POOL_ABI.find((x) => x.type === "event" && x.name === "Ragequit")!;
+      await expect(
+        tamper((l, pool) => [
+          ...l,
+          {
+            address: POOL,
+            topics: encodeEventTopics({
+              abi: [ev],
+              eventName: "Ragequit",
+              args: { _ragequitter: "0x3333333333333333333333333333333333333333" },
+            } as never) as Hex[],
+            data: encodeAbiParameters(
+              [{ type: "uint256" }, { type: "uint256" }, { type: "uint256" }],
+              [424242n, 1n, 1n],
+            ),
+            blockNumber: pool.block - 1n,
+            logIndex: 50,
+          },
+        ]),
+      ).rejects.toThrow(/ragequit .* not a leaf/);
+    });
+
     it("a deposit event whose commitment is not a leaf", async () => {
       await expect(
         tamper((l) => {
@@ -142,6 +189,41 @@ describe("sync (eth_getLogs paging, fail-closed root check)", () => {
         }),
       ).rejects.toThrow(/not a leaf/);
     });
+  });
+
+  it("a reorg past the prior's syncedTo: the incremental sync fails closed and the client re-syncs from scratch", async () => {
+    const { pool } = await history();
+    const client = new PrivacyPoolsV1Client({
+      provider: fakeProvider(pool),
+      chainId: CHAIN,
+      entrypoint: ENTRYPOINT,
+      pool: POOL,
+      deployBlock: 100n,
+      secrets: {} as SecretManager,
+      asp: staticAsp([]),
+      prover: {} as Prover,
+    });
+    const before = await client.sync();
+    expect(before.leaves).toEqual(pool.leaves);
+    // The chain drops the last deposit (its block is re-mined with another one): leaf count unchanged, root changed.
+    const dropped = pool.logs.splice(-2, 2);
+    expect(dropped.map((l) => l.topics[0])).toEqual([POOL_EVENTS.LeafInserted, POOL_EVENTS.Withdrawn]);
+    pool.leaves.pop();
+    pool.block -= 1n;
+    pool.deposit(7n * E, 31337n);
+    await expect(syncPool(fakeProvider(pool), { pool: POOL, fromBlock: 100n, prior: before })).rejects.toThrow(
+      SyncIntegrityError,
+    );
+    const after = await client.sync();
+    expect(after.leaves).toEqual(pool.leaves);
+    expect(after.root).toBe(pool.root);
+    expect(after.withdrawals).toHaveLength(1);
+    expect(after.deposits).toHaveLength(6);
+    // Nothing from a failed sync is usable.
+    const bad = new PrivacyPoolsV1Client({ ...client.c, provider: fakeProvider(pool, { logs: () => [] }) });
+    await bad.sync().catch(() => undefined);
+    expect(bad.state).toBeUndefined();
+    expect(() => bad.notes()).toThrow(/sync first/);
   });
 
   it("ASP labels must hash to Entrypoint.latestRoot() exactly", async () => {

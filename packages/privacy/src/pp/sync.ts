@@ -10,7 +10,7 @@ import {
 import type { LeanIMT } from "@zk-kit/lean-imt";
 import type { HostProvider, RawLog } from "../host/types.js";
 import { ENTRYPOINT_ABI, POOL_ABI, POOL_EVENTS } from "./abi.js";
-import { ROOT_HISTORY_SIZE, newTree, rootOf } from "./crypto.js";
+import { ROOT_HISTORY_SIZE, commitmentOf, newTree, rootOf } from "./crypto.js";
 
 /** The sync saw something inconsistent with the chain. Nothing derived from that sync may be used (fail closed). */
 export class SyncIntegrityError extends Error {
@@ -124,8 +124,11 @@ export async function fetchPoolLogs(p: HostProvider, o: FetchLogsOptions): Promi
 /**
  * Decodes the pool's logs onto `prior` (or an empty tree) and checks them for internal consistency: every log is
  * from the pool, no (block, logIndex) repeats, `LeafInserted` indices are contiguous, each event's `_root` equals the
- * root recomputed after that insert, and every deposit/withdrawal commitment is a leaf. The final root is checked
- * against the chain by `syncPool`.
+ * root recomputed after that insert, every deposit/withdrawal commitment is a leaf and a deposit's
+ * `(value, label, precommitment)` hash to its commitment (so a lying log source cannot change what a leaf is worth
+ * or who owns it), and a ragequit names an existing leaf. The final root is checked against the chain by `syncPool`.
+ * The leaf check does not cover a `Ragequit` event's other fields: a forged one can only hide a note (no root
+ * change), never spend it.
  */
 export function applyPoolLogs(
   pool: Address,
@@ -142,6 +145,7 @@ export function applyPoolLogs(
   let tree: LeanIMT<bigint> | undefined;
   const seen = new Set<string>();
   const newLeaves = new Set<bigint>();
+  const allLeaves = new Set<bigint>(leaves);
   for (const l of sorted) {
     if (!isAddressEqual(l.address, pool)) throw new SyncIntegrityError(`log from ${l.address}, not the pool`);
     const id = `${l.blockNumber}:${l.logIndex}`;
@@ -166,6 +170,7 @@ export function applyPoolLogs(
         tree.insert(_leaf);
         leaves.push(_leaf);
         newLeaves.add(_leaf);
+        allLeaves.add(_leaf);
         if (tree.root !== _root) throw new SyncIntegrityError(`root after leaf ${_index} does not match its log`);
         break;
       }
@@ -179,6 +184,9 @@ export function applyPoolLogs(
           blockNumber: l.blockNumber,
         });
         if (!newLeaves.has(ev.args._commitment)) throw new SyncIntegrityError(`deposit ${id} commitment is not a leaf`);
+        if (commitmentOf(ev.args._value, ev.args._label, ev.args._precommitmentHash) !== ev.args._commitment) {
+          throw new SyncIntegrityError(`deposit ${id} value/label/precommitment do not hash to its commitment`);
+        }
         break;
       case "Withdrawn":
         withdrawals.push({
@@ -200,6 +208,7 @@ export function applyPoolLogs(
           value: ev.args._value,
           blockNumber: l.blockNumber,
         });
+        if (!allLeaves.has(ev.args._commitment)) throw new SyncIntegrityError(`ragequit ${id} commitment is not a leaf`);
         break;
     }
   }

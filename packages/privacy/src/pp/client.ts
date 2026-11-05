@@ -7,6 +7,7 @@ import { NATIVE_ASSET, type Withdrawal } from "./crypto.js";
 import { discoverNotes, type DiscoveryResult, type Note } from "./notes.js";
 import type { Prover, ProveResult } from "./prover.js";
 import {
+  SyncIntegrityError,
   findRootIndex,
   syncPool,
   verifiedAspLabels,
@@ -87,14 +88,28 @@ export class PrivacyPoolsV1Client {
     return this.state;
   }
 
-  /** Incremental, root-checked sync (fails closed), then the ASP labels checked against `latestRoot()`. */
+  /**
+   * Incremental, root-checked sync (fails closed), then the ASP labels checked against `latestRoot()`. A prior state
+   * that no longer extends to the chain (a reorg past its `syncedTo`, a store from another chain) is dropped and the
+   * pool re-synced from its deployment block, with the same root check; the stale prior is never kept.
+   */
   async sync(o: { toBlock?: bigint; chunkSize?: bigint; onProgress?: FetchLogsOptions["onProgress"] } = {}) {
-    this.state = await syncPool(this.c.provider, {
-      pool: this.c.pool,
-      fromBlock: this.c.deployBlock,
-      ...(this.state ? { prior: this.state } : {}),
-      ...o,
-    });
+    const run = (prior: PoolState | undefined) =>
+      syncPool(this.c.provider, {
+        pool: this.c.pool,
+        fromBlock: this.c.deployBlock,
+        ...(prior ? { prior } : {}),
+        ...o,
+      });
+    const prior = this.state;
+    this.state = undefined;
+    this.aspLabels = undefined;
+    try {
+      this.state = await run(prior);
+    } catch (e) {
+      if (!prior || !(e instanceof SyncIntegrityError)) throw e;
+      this.state = await run(undefined);
+    }
     this.aspLabels = (
       await verifiedAspLabels(this.c.provider, this.c.entrypoint, this.c.asp, this.state.syncedTo)
     ).labels;
