@@ -1,0 +1,47 @@
+[package]
+name = "leaked-pq"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.80"
+license = "MIT"
+description = "LEAKED post-quantum signer: SPHINCS- C13 (keccak, FIPS 205 ADRS) keygen/sign/verify, byte-compatible with nconsigny/SPHINCS- SPHINCs-C13Asm.sol"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "leaked-pq"
+path = "src/bin/leaked_pq.rs"
+
+[features]
+default = []
+# wasm-bindgen exports + a zero-on-free allocator for wasm32 (see src/wasm.rs).
+wasm = ["dep:wasm-bindgen", "getrandom/js"]
+
+[dependencies]
+keccak = "=0.1.6"
+hmac = "=0.12.1"
+sha2 = "=0.10.9"
+zeroize = { version = "=1.8.2", features = ["derive"] }
+getrandom = "=0.2.17"
+wasm-bindgen = { version = "=0.2.117", optional = true }
+
+[dev-dependencies]
+hex = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+proptest = { version = "1", default-features = false, features = ["std"] }
+bip39 = { version = "2", default-features = false, features = ["std"] }
+
+# Signing is ~13 M keccak-f calls; unoptimised test builds would take minutes per signature.
+[profile.test]
+opt-level = 3
+
+[profile.dev]
+opt-level = 3
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
