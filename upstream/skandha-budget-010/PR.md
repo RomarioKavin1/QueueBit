@@ -172,3 +172,6 @@ End to end on a local fork of the public devnet (ethrex `v23.0.0-eip8141-tracer-
   entities do 10× the validation work.
 - The workshop documentation's "differences" table ("A single MAX_VERIFY_GAS of 100,000 …") should be updated with
   this PR. It is not in this repo.
+
+### Related config note (not part of this patch series)
+The sidecar's `precompiles` list defaults to empty, so any entity whose verification calls a precompile is rejected as "accesses un-deployed contract address 0x…06". Examples are a Groth16 verifier (BN254 0x06–0x08) and ecrecover. ERC-8421 permits precompile access. We run the patched devnet sidecar with `0x01`–`0x11` listed (`devnet/patched-sidecar/config.json`). Changing the default to the chain's precompile set is worth a separate small PR.

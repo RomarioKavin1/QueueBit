@@ -1,5 +1,5 @@
 {
-  "startedAt": "2026-11-05T22:44:12.151Z",
+  "startedAt": "2026-11-05T22:46:49.918Z",
   "endpoints": {
     "ETHREX": "http://localhost:8545",
     "PATCHED": "http://localhost:14340/rpc",
@@ -33,8 +33,8 @@
     "PASS patched sidecar rejects a 1.1M VERIFY even when staked"
   ],
   "deploy wallet (VerifyBisect, owner anvil #9)": {
-    "wallet": "0x8ce361602b935680e8dec218b820ff5056beb7af",
-    "hash": "0x50ed9ca092067f25be7bed7fadc5f62181496972d092b65e3c864a15e71553fb",
+    "wallet": "0xe1aa25618fa0c7a1cfdab5d6b456af611873b629",
+    "hash": "0x8cbf38d9dc8a691a066e2167c3b5beb163d864ee2c9293d8051a119ab48b1678",
     "gasUsed": "11021639"
   },
   "1. UNSTAKED wallet, VERIFY limit 150,000": {
@@ -48,12 +48,12 @@
       },
       "traced": true
     },
-    "patchedSidecar": "rejected: BUDGET-010: sender+payer 0x8ce361602B935680E8DeC218b820ff5056BeB7af verification gas 152800 (limits.execution 150000 + signature-verification cost 2800) exceeds MAX_VERIFY_GAS_PER_ENTITY 100000 for an unstaked entity (a staked entity may use up to MAX_VERIFY_GAS_STAKED_ENTITY 1000000)",
+    "patchedSidecar": "rejected: BUDGET-010: sender+payer 0xe1Aa25618fA0c7A1CFDab5d6B456af611873b629 verification gas 152800 (limits.execution 150000 + signature-verification cost 2800) exceeds MAX_VERIFY_GAS_PER_ENTITY 100000 for an unstaked entity (a staked entity may use up to MAX_VERIFY_GAS_STAKED_ENTITY 1000000)",
     "stockSidecar": "rejected: validation prefix execution gas sum 150000 + signature-verification cost 2800 = 152800 exceeds MAX_VERIFY_GAS 100000",
     "ethrexSendRawTransaction": "rejected: Invalid params: Frame transaction prefix gas budget (frames + sig cost) exceeds MAX_VERIFY_GAS"
   },
   "2. stake 0.012 ETH, unstakeDelay 86400 (via patched sidecar)": {
-    "hash": "0x90931f0f66c0782a8317a208d34e6fc9a7fe93cdff6be497e1c0cd6a740eb1b2",
+    "hash": "0x9efbabe68ff915a383c78c521579af9d56c5bba6912daf862dabeb2b0aa5fd33",
     "status": "OnChain",
     "receiptFrames": [
       "success",
@@ -67,13 +67,13 @@
   },
   "3. STAKED wallet, same 150,000 VERIFY shape (next nonce)": {
     "ethrexSendRawTransaction": "rejected: Invalid params: Frame transaction prefix gas budget (frames + sig cost) exceeds MAX_VERIFY_GAS",
-    "patchedSidecar": "accepted 0x7bbb0192adc36de36e582143b337a2c7d3c78a82123d812a158c12e3e540eba4",
-    "codecTxHash": "0x7bbb0192adc36de36e582143b337a2c7d3c78a82123d812a158c12e3e540eba4",
+    "patchedSidecar": "accepted 0x1efc62cfee0f55a2e74cf9178b7533192008b6dd906c0ca5acebef30cb949ee8",
+    "codecTxHash": "0x1efc62cfee0f55a2e74cf9178b7533192008b6dd906c0ca5acebef30cb949ee8",
     "status": "OnChain",
     "receipt": {
       "reportedStatus": "0x1",
-      "blockNumber": "904",
-      "gasUsed": "31617",
+      "blockNumber": "930",
+      "gasUsed": "31605",
       "frames": [
         {
           "status": "success",
@@ -93,7 +93,7 @@
     }
   },
   "4. STAKED wallet, VERIFY limit 1,100,000": {
-    "patchedSidecar": "rejected: BUDGET-010: sender+payer 0x8ce361602B935680E8DeC218b820ff5056BeB7af verification gas 1102800 (limits.execution 1100000 + signature-verification cost 2800) exceeds MAX_VERIFY_GAS_STAKED_ENTITY 1000000, the limit even for a staked entity"
+    "patchedSidecar": "rejected: BUDGET-010: sender+payer 0xe1Aa25618fA0c7A1CFDab5d6B456af611873b629 verification gas 1102800 (limits.execution 1100000 + signature-verification cost 2800) exceeds MAX_VERIFY_GAS_STAKED_ENTITY 1000000, the limit even for a staked entity"
   },
   "5. explorer admissions (BUDGET-010 checks)": [
     {
@@ -101,7 +101,7 @@
       "budget": {
         "rule": "BUDGET-010",
         "verdict": "fail",
-        "detail": "BUDGET-010: sender+payer 0x8ce361602B935680E8DeC218b820ff5056BeB7af verification gas 1102800 (limits.execution 1100000 + signature-verification cost 2800) exceeds MAX_VERIFY_GAS_STAKED_ENTITY 1000000, the limit even for a staked entity"
+        "detail": "BUDGET-010: sender+payer 0xe1Aa25618fA0c7A1CFDab5d6B456af611873b629 verification gas 1102800 (limits.execution 1100000 + signature-verification cost 2800) exceeds MAX_VERIFY_GAS_STAKED_ENTITY 1000000, the limit even for a staked entity"
       }
     },
     {
@@ -125,10 +125,10 @@
       "budget": {
         "rule": "BUDGET-010",
         "verdict": "fail",
-        "detail": "BUDGET-010: sender+payer 0x8ce361602B935680E8DeC218b820ff5056BeB7af verification gas 152800 (limits.execution 150000 + signature-verification cost 2800) exceeds MAX_VERIFY_GAS_PER_ENTITY 100000 for an unstaked entity (a staked entity may use up to MAX_VERIFY_GAS_STAKED_ENTITY 1000000)"
+        "detail": "BUDGET-010: sender+payer 0xe1Aa25618fA0c7A1CFDab5d6B456af611873b629 verification gas 152800 (limits.execution 150000 + signature-verification cost 2800) exceeds MAX_VERIFY_GAS_PER_ENTITY 100000 for an unstaked entity (a staked entity may use up to MAX_VERIFY_GAS_STAKED_ENTITY 1000000)"
       }
     }
   ],
-  "finishedAt": "2026-11-05T22:45:10.591Z",
+  "finishedAt": "2026-11-05T22:47:42.168Z",
   "failures": 0
 }
