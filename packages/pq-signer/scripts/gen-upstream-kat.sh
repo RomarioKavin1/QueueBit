@@ -56,7 +56,7 @@ for name, msg, f, srcs in [
 kg = json.load(open(os.path.join(w, "up_kg42.json")))
 for m in ["0x" + "00" * 31 + "ff", "0x" + "ff" * 32]:
     sig = open(os.path.join(w, f"up_kg42_{m}.hex")).read().strip()
-    vecs.append({"name": "kg42-" + m[-2:], "keyDerivation": "upstream-test(seedMaterial)", "seedMaterial": "0x" + "42" * 32,
+    vecs.append({"name": "kg42-" + m[-4:], "keyDerivation": "upstream-test(seedMaterial)", "seedMaterial": "0x" + "42" * 32,
                  "skSeed": kg["sk_seed"], "msg": m, "pkSeed": kg["seed"][:34], "pkRoot": kg["root"][:34], "sig": sig,
                  "producedBy": ["signer-c13 keygen + sign-with (Rust)"]})
 py = json.load(open(os.path.join(w, "py_ref.json")))

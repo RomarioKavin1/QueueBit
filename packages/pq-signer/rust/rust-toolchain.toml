@@ -1,0 +1,7 @@
+# Pinned so the WASM build (and therefore WASM_HASH in src/index.ts consumers) is reproducible:
+# the same rustc + wasm-bindgen-cli 0.2.117 (scripts/build-wasm.sh) reproduce leaked_pq_bg.wasm
+# byte for byte. Bump deliberately, together with BENCH.md and any pinned WASM_HASH.
+[toolchain]
+channel = "1.94.1"
+targets = ["wasm32-unknown-unknown"]
+profile = "minimal"

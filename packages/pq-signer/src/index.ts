@@ -75,6 +75,10 @@ function split(sk: Uint8Array): KeyPair {
   return { secretKey: sk, publicKey: sk.slice(32, 64) };
 }
 
+// Secret inputs are handed to the wasm-bindgen glue as-is: it copies them into WASM linear memory
+// itself (`passArray8ToWasm0`) and never mutates or retains the JS array, so no `.slice()` here.
+// An extra JS copy would be an unwipeable secret left to the garbage collector.
+
 /**
  * Derive the role key pair from a master seed (the 64-byte BIP-39 seed; 32..64 bytes accepted):
  * `HMAC-SHA512(key = "leaked/v1/" ‖ schemeId ‖ "/" ‖ role ‖ "/" ‖ chainScope, msg = seed)`.
@@ -87,14 +91,14 @@ export function keygen(seed: Uint8Array, opts: KeygenOptions = {}): KeyPair {
   }
   const role = opts.role ?? "vault";
   if (role !== "vault" && role !== "recovery") throw new TypeError("role must be 'vault' or 'recovery'");
-  return split(keygenFromMaster(seed.slice(), role === "vault" ? 1 : 2, opts.chainScope ?? "any"));
+  return split(keygenFromMaster(seed, role === "vault" ? 1 : 2, opts.chainScope ?? "any"));
 }
 
 /** Upstream-compatible keygen from explicit seeds (skSeed 32 B, pkSeed 16 B). For KATs. */
 export function keygenFromSeedParts(skSeed: Uint8Array, pkSeed: Uint8Array): KeyPair {
   bytes(skSeed, 32, "skSeed");
   bytes(pkSeed, 16, "pkSeed");
-  return split(keygenFromSeeds(skSeed.slice(), pkSeed));
+  return split(keygenFromSeeds(skSeed, pkSeed));
 }
 
 /** Public key of a 64-byte secret key. */
@@ -112,12 +116,12 @@ export function sign(secretKey: Uint8Array, digest32: Uint8Array, opts: SignOpti
   bytes(digest32, 32, "digest");
   let sig: Uint8Array;
   if (opts.deterministic) {
-    sig = signDigest(secretKey.slice(), digest32, 2, undefined);
+    sig = signDigest(secretKey, digest32, 2, undefined);
   } else if (opts.entropy !== undefined) {
     bytes(opts.entropy, 32, "entropy");
-    sig = signDigest(secretKey.slice(), digest32, 1, opts.entropy.slice());
+    sig = signDigest(secretKey, digest32, 1, opts.entropy);
   } else {
-    sig = signDigest(secretKey.slice(), digest32, 0, undefined);
+    sig = signDigest(secretKey, digest32, 0, undefined);
   }
   if (sig.length !== SIG_LENGTH) throw new Error("internal: bad signature length");
   return sig;
@@ -128,7 +132,14 @@ export function verify(pk: Uint8Array, digest32: Uint8Array, sig: Uint8Array): b
   if (!(pk instanceof Uint8Array) || !(digest32 instanceof Uint8Array) || !(sig instanceof Uint8Array)) {
     return false;
   }
-  return verifyDigest(pk, digest32, sig);
+  // Length-check before anything is copied into WASM memory: the verifier rejects these anyway,
+  // and an attacker-sized `sig` must not be able to turn a failed WASM allocation into a throw.
+  if (pk.length !== PK_LENGTH || digest32.length !== 32 || sig.length !== SIG_LENGTH) return false;
+  try {
+    return verifyDigest(pk, digest32, sig);
+  } catch {
+    return false;
+  }
 }
 
 /** Split a public key into the two top-aligned bytes32 words `SphincsC13Asm.verify` takes. */

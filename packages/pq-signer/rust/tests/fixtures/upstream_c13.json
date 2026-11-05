@@ -49,7 +49,7 @@
    ]
   },
   {
-   "name": "kg42-ff",
+   "name": "kg42-00ff",
    "keyDerivation": "upstream-test(seedMaterial)",
    "seedMaterial": "0x4242424242424242424242424242424242424242424242424242424242424242",
    "skSeed": "0x561c62f87ea9e7c8062bc1166d72410de1cfd2e8c9ae64ad120c21351fd6c431",
@@ -62,7 +62,7 @@
    ]
   },
   {
-   "name": "kg42-ff",
+   "name": "kg42-ffff",
    "keyDerivation": "upstream-test(seedMaterial)",
    "seedMaterial": "0x4242424242424242424242424242424242424242424242424242424242424242",
    "skSeed": "0x561c62f87ea9e7c8062bc1166d72410de1cfd2e8c9ae64ad120c21351fd6c431",

@@ -89,9 +89,10 @@ at 2²⁰.
 - **Zeroization.** `SecretKey` is `ZeroizeOnDrop`; PRF preimages and sponge states over secrets
   are wiped. In WASM, secrets cross the boundary as owned buffers that are wiped, a zero-on-free
   global allocator wipes every freed block (including the copies the wasm-bindgen glue makes),
-  and the shadow stack is cleared after keygen/sign. The TS wrapper passes copies, so the
-  **caller must wipe its own `secretKey` / seed arrays**. JS strings and the JS heap cannot be
-  wiped reliably: never hex-encode or log secrets.
+  and the shadow stack is cleared after keygen/sign. The TS wrapper hands the caller's arrays
+  straight to the glue (which copies them into WASM memory and never mutates or retains them) and
+  makes no JS-side copies of its own, so the **caller must wipe its own `secretKey` / seed
+  arrays**. JS strings and the JS heap cannot be wiped reliably: never hex-encode or log secrets.
 - **Timing.** No secret-dependent branches or memory indices: chain lengths, tree indices and
   both grinding loops depend only on public values (digest, R, counters published in the
   signature). Keccak is constant-time.
@@ -128,7 +129,16 @@ cargo install wasm-bindgen-cli --version 0.2.117 --locked
 pnpm build        # scripts/build-wasm.sh, then tsc -> dist/
 ```
 
-`wasm/` and `dist/` are build outputs and are not committed.
+`wasm/` and `dist/` are build outputs and are not committed. `rust/rust-toolchain.toml` pins the
+rustc that, with wasm-bindgen-cli 0.2.117, reproduces `leaked_pq_bg.wasm` byte for byte
+(`WASM_HASH`); bump both together.
+
+Runtime notes: the module initialises synchronously at import (`initSync`, 86 KB; well under
+Chrome's 8 MB main-thread synchronous-compile limit), so there is no top-level `await` and it
+loads in an MV3 service worker. An extension manifest must allow WASM:
+`"content_security_policy": { "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'" }`.
+Hedged signing draws from `crypto.getRandomValues` (`getrandom/js`), available in browsers,
+workers and Node >= 19.
 
 ## Provenance
 

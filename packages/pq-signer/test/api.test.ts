@@ -53,6 +53,11 @@ describe("negative (WASM)", () => {
     expect(verify(new Uint8Array(32), new Uint8Array(32), new Uint8Array(SIG_LENGTH))).toBe(false);
     // @ts-expect-error runtime type confusion
     expect(verify("0x00", d0, sig0)).toBe(false);
+    // oversized inputs are rejected before anything is copied into WASM memory
+    const t0 = performance.now();
+    expect(verify(pk0, d0, new Uint8Array(64 * 1024 * 1024))).toBe(false);
+    expect(verify(new Uint8Array(64 * 1024 * 1024), d0, sig0)).toBe(false);
+    expect(performance.now() - t0).toBeLessThan(1000);
   });
 });
 
