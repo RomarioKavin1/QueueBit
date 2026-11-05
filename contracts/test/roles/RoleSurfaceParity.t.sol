@@ -20,6 +20,7 @@ contract RoleSurfaceParityTest is Test {
         assertEq(R.vaultSetTarget.selector, A.vaultSetTarget.selector);
         assertEq(R.vaultSetSession.selector, A.vaultSetSession.selector);
         assertEq(R.vaultSetValueVerifier.selector, A.vaultSetValueVerifier.selector);
+        assertEq(R.vaultSetTrustedVerifier.selector, A.vaultSetTrustedVerifier.selector);
         assertEq(R.vaultSetTimelock.selector, A.vaultSetTimelock.selector);
         assertEq(R.vaultSetRecoverySigner.selector, A.vaultSetRecoverySigner.selector);
         assertEq(R.vaultSetGuardian.selector, A.vaultSetGuardian.selector);
@@ -34,5 +35,13 @@ contract RoleSurfaceParityTest is Test {
         assertEq(R.recoveryFinalizeVaultRotation.selector, A.recoveryFinalizeVaultRotation.selector);
         assertEq(R.recoveryCancelVaultRotation.selector, A.recoveryCancelVaultRotation.selector);
         assertEq(R.guardianFreeze.selector, A.guardianFreeze.selector);
+        assertEq(R.executeQueued.selector, A.executeQueued.selector);
+        assertEq(R.executeUpgrade.selector, A.executeUpgrade.selector);
+        assertEq(R.executeMigrate.selector, A.executeMigrate.selector);
+        assertEq(R.getRoles.selector, A.getRoles.selector);
+        assertEq(R.getVaultBucket.selector, A.getVaultBucket.selector);
+        assertEq(R.isQueued.selector, A.isQueued.selector);
+        assertEq(R.isValueVerifier.selector, A.isValueVerifier.selector);
+        assertEq(R.isTrustedVerifier.selector, A.isTrustedVerifier.selector);
     }
 }
