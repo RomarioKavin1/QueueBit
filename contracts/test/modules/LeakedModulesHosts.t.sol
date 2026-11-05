@@ -328,20 +328,26 @@ abstract contract LeakedModulesHostsTest is LeakedModulesBase {
     }
 
     function test_registerHash_and1271() public {
+        _queueAndRun(
+            _hookCall(abi.encodeCall(LeakedPolicyHook.setTrustedVerifier, (account, address(router), true))), 1
+        );
         bytes32 h = keccak256("order");
         bytes memory call =
             abi.encodeCall(LeakedPolicyHook.registerHash, (h, address(usdc), 100e6, uint48(block.timestamp + 1 days)));
         _submitOk(_op(_single(address(hook), 0, call)));
         assertEq(_available(), CAP - 100e6, "registered value debited");
-        bool expectOk = _host() != Host.KERNEL; // Kernel rewraps the hash (documented)
-        assertEq(_isValid(stranger, h, ""), expectOk, "code-less caller, empty sig");
-        assertEq(_isValid(stranger, h, abi.encodePacked(bytes4(0xdc6b87c9), h)), expectOk, "marker");
-        // Audit C1: an opaque registered hash never validates for a token, Permit2 or an untrusted contract.
+        bool expectOk = _host() != Host.KERNEL; // Kernel rewraps the hash: hot 1271 is off there (audit A3)
+        assertEq(_isValid(address(0), h, ""), expectOk, "eth_call (sender 0), empty sig");
+        assertEq(_isValid(address(0), h, abi.encodePacked(bytes4(0xdc6b87c9), h)), expectOk, "marker");
+        // Audit C1: an opaque registered hash never validates for a token, Permit2 or an untrusted contract;
+        // audit A6: nor for a non-zero code-less sender (an EOA transaction looks the same as an eth_call).
+        assertFalse(_isValid(stranger, h, ""), "EOA sender");
         assertFalse(_isValid(address(usdc), h, ""), "token caller");
         assertFalse(_isValid(hook.PERMIT2(), h, ""), "permit2");
-        assertFalse(_isValid(address(router), h, ""), "untrusted contract");
+        assertFalse(_isValid(address(validator), h, ""), "untrusted contract");
+        assertEq(_isValid(address(router), h, ""), expectOk, "trusted verifier");
         vm.warp(block.timestamp + 2 days);
-        assertFalse(_isValid(stranger, h, ""), "expired");
+        assertFalse(_isValid(address(0), h, ""), "expired");
     }
 
     function test_C1_poc_selfDeclaredPermitDoesNotDrain() public {
@@ -670,6 +676,18 @@ abstract contract LeakedModulesHostsTest is LeakedModulesBase {
         assertGt(hookReads.length, 0);
         for (uint256 i; i < hookReads.length; ++i) {
             assertTrue(_associated(address(hook), hookReads[i]), "hook slot not associated with the account");
+        }
+        if (_host() == Host.SAFE7579) {
+            // The validator's hook-bound check (`isModuleInstalled(4)`) reaches the Safe7579 adapter, a non-entity
+            // contract: its reads (`$globalHook[safe]`, the module list) must be account-associated too.
+            address adapter = address(
+                uint160(uint256(vm.load(account, 0x6c9a6c4a39284e37ed1cf53d337577d14212a4870fb976a4366c693b939918d5)))
+            );
+            (bytes32[] memory adapterReads,) = vm.accesses(adapter);
+            assertGt(adapterReads.length, 0);
+            for (uint256 i; i < adapterReads.length; ++i) {
+                assertTrue(_associated(adapter, adapterReads[i]), "Safe7579 slot not associated with the account");
+            }
         }
         vm.stopMappingRecording();
     }

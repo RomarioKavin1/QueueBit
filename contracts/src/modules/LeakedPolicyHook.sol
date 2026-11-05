@@ -7,8 +7,16 @@ import {IERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/IERC2
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {RollingCap} from "../lib/RollingCap.sol";
 import {IERC7579Hook, Execution, MODULE_TYPE_HOOK} from "./interfaces/IERC7579Modules.sol";
-import {ILeakedModules} from "./interfaces/ILeakedModules.sol";
+import {ILeakedModules, HOST_GENERIC, HOST_KERNEL, HOST_SAFE} from "./interfaces/ILeakedModules.sol";
 import {LeakedExecDecoder} from "./lib/LeakedExecDecoder.sol";
+
+/// Host introspection used once, at install (`LeakedPolicyHook.onInstall`).
+interface IHostProbe {
+    /// Safe: the owners whose `execTransaction` path bypasses every ERC-7579 hook.
+    function getOwners() external view returns (address[] memory);
+    /// ERC-7579 `accountId()`: "vendorname.accountname.semver".
+    function accountId() external view returns (string memory);
+}
 
 /// What the hook asks the role executor (its only writer) about the current role context.
 interface ILeakedRoleContext {
@@ -47,6 +55,10 @@ contract LeakedPolicyHook is IERC7579Hook, ILeakedModules {
     uint48 public constant MAX_REGISTERED_TTL = 30 days;
     /// Permit2 (same address on every chain): denied as a hot-key ERC-7739 verifier from install on.
     address public constant PERMIT2 = 0x000000000022D473030F116dDEE9F6B43aC78BA3;
+    /// The one Safe owner this hook accepts: an address nobody holds a key for. A Safe's owner path
+    /// (`execTransaction`, `approveHash`, `signMessage`) never sees the ERC-7579 hook, so a keyed owner would be an
+    /// unbounded second hot tier (IMPLEMENTATION-NOTES, "Contracts M7").
+    address public constant KEYLESS_OWNER = 0x000000000000000000000000000000000000dEaD;
 
     bytes4 private constant ERC20_TRANSFER = 0xa9059cbb;
     bytes4 private constant ERC20_APPROVE = 0x095ea7b3;
@@ -76,6 +88,8 @@ contract LeakedPolicyHook is IERC7579Hook, ILeakedModules {
         bool bunker;
         /// Set by `onUninstall`; a retired account cannot reinstall this hook (its old allowlist would revive).
         bool retired;
+        /// `HOST_*` (ILeakedModules), detected at install; read by the validator in validation and 1271.
+        uint8 host;
         // slot 1 (read in validation)
         uint96 perTxMaxUsd;
         uint128 maxFeeWei;
@@ -126,6 +140,7 @@ contract LeakedPolicyHook is IERC7579Hook, ILeakedModules {
         _checkBounds(c.perTxMaxUsd, c.maxFeeWei, c.maxPriorityFeePerGas);
 
         p.initialized = true;
+        p.host = _detectHost(account);
         p.hotKey = c.hotKey;
         p.perTxMaxUsd = uint96(c.perTxMaxUsd);
         p.maxFeeWei = uint128(c.maxFeeWei);
@@ -440,7 +455,8 @@ contract LeakedPolicyHook is IERC7579Hook, ILeakedModules {
             p.perTxMaxUsd,
             p.maxFeeWei,
             p.maxPriorityFeePerGas,
-            p.bucket.cap
+            p.bucket.cap,
+            p.host
         );
     }
 
@@ -508,8 +524,26 @@ contract LeakedPolicyHook is IERC7579Hook, ILeakedModules {
         return caller.code.length == 0 || _trustedVerifiers[caller][account];
     }
 
+    /// @notice Who may consume an opaque registered hash (`registerHash`): stricter than `hotVerifierAllowed`. The
+    ///         debit of such a hash is self-declared, so it must never reach an on-chain consumer the vault has not
+    ///         trusted; and a code-less `caller` is not proof of an off-chain check: hosts route state-changing
+    ///         1271 checks with the original caller as sender (Safe7579 `emergencyUninstallHook` passes
+    ///         `_msgSender()`), which an EOA transaction or a contract under construction satisfies. Only
+    ///         `address(0)` (eth_call's default `from`; unreachable in a transaction) or a vault-trusted verifier.
+    function registeredHashAllowed(address account, address caller) external view returns (bool) {
+        if (_valueVerifiers[caller][account] || (caller != address(0) && _tokens[caller][account].allowed)) {
+            return false;
+        }
+        return caller == address(0) || _trustedVerifiers[caller][account];
+    }
+
     function isTrustedVerifier(address account, address verifier) external view returns (bool) {
         return _trustedVerifiers[verifier][account];
+    }
+
+    /// `HOST_*` of `account` (0 before install).
+    function hostOf(address account) external view returns (uint8) {
+        return _policies[account].host;
     }
 
     /// The one contract that may consume a registered hash (the token, for `registerPermit`), else address(0).
@@ -718,6 +752,35 @@ contract LeakedPolicyHook is IERC7579Hook, ILeakedModules {
         if (target == address(0) || target == account || target == address(this) || target == EXECUTOR) {
             revert BadAddress(target);
         }
+    }
+
+    /// Host kind, from what the account answers at install. A Safe (it has `getOwners()`) must have the keyless
+    /// owner only: its owner path bypasses hooks (owner changes are `authorized` self-calls, i.e. queued vault ops
+    /// afterwards). Kernel (`accountId()` "kernel.*") binds hooks per validator and rewraps 1271 hashes: the
+    /// validator refuses hot 1271 there and checks the hook through the root validator's config.
+    function _detectHost(address account) internal view returns (uint8) {
+        (bool ok, bytes memory ret) = account.staticcall(abi.encodeCall(IHostProbe.getOwners, ()));
+        if (ok && ret.length >= 64) {
+            address[] memory owners = abi.decode(ret, (address[]));
+            for (uint256 i; i < owners.length; ++i) {
+                if (owners[i] != KEYLESS_OWNER) revert HostOwnerNotKeyless(owners[i]);
+            }
+            return HOST_SAFE;
+        }
+        (ok, ret) = account.staticcall(abi.encodeCall(IHostProbe.accountId, ()));
+        if (ok && ret.length >= 64) {
+            bytes memory id = bytes(abi.decode(ret, (string)));
+            if (_hasPrefix(id, "kernel.")) return HOST_KERNEL;
+        }
+        return HOST_GENERIC;
+    }
+
+    function _hasPrefix(bytes memory s, bytes memory prefix) internal pure returns (bool) {
+        if (s.length < prefix.length) return false;
+        for (uint256 i; i < prefix.length; ++i) {
+            if (s[i] != prefix[i]) return false;
+        }
+        return true;
     }
 
     function _checkBounds(uint256 perTxMaxUsd, uint256 maxFeeWei, uint256 maxPrio) internal pure {

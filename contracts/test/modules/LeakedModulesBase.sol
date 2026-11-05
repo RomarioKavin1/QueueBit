@@ -154,8 +154,17 @@ abstract contract LeakedModulesBase is Test, ILeakedModules {
     }
 
     function _createSafe(bytes memory hookData, bytes memory execData) internal returns (address) {
-        address singleton = deployCode("out/Safe.sol/Safe.json");
-        address proxyFactory = deployCode("out/SafeProxyFactory.sol/SafeProxyFactory.json");
+        (address proxyFactory, address singleton, bytes memory setup) = _safeSetup(hookData, execData);
+        return ISafeProxyFactory(proxyFactory).createProxyWithNonce(singleton, setup, 7579);
+    }
+
+    /// Deploys the Safe stack and builds the `setup` call that installs the three modules through the launchpad.
+    function _safeSetup(bytes memory hookData, bytes memory execData)
+        internal
+        returns (address proxyFactory, address singleton, bytes memory setup)
+    {
+        singleton = deployCode("out/Safe.sol/Safe.json");
+        proxyFactory = deployCode("out/SafeProxyFactory.sol/SafeProxyFactory.json");
         address safe7579 = deployCode("out/HostArtifacts.sol/Safe7579EP08.json");
         address launchpad =
             deployCode("out/Safe7579Launchpad.sol/Safe7579Launchpad.json", abi.encode(EP_ADDR, address(0)));
@@ -163,10 +172,11 @@ abstract contract LeakedModulesBase is Test, ILeakedModules {
         mods[0] = Safe7579ModuleInit(address(validator), "", 1);
         mods[1] = Safe7579ModuleInit(address(executor), execData, 2);
         mods[2] = Safe7579ModuleInit(address(hook), hookData, 4);
-        // The Safe's own owner path must be unusable: one owner nobody holds a key for (see IMPLEMENTATION-NOTES).
+        // The Safe's own owner path must be unusable: one owner nobody holds a key for (see IMPLEMENTATION-NOTES);
+        // the hook refuses any other owner at install (`KEYLESS_OWNER`, audit A5).
         address[] memory owners = new address[](1);
-        owners[0] = address(0xdead);
-        bytes memory setup = abi.encodeCall(
+        owners[0] = _safeOwner();
+        setup = abi.encodeCall(
             ISafeSetup.setup,
             (
                 owners,
@@ -179,7 +189,10 @@ abstract contract LeakedModulesBase is Test, ILeakedModules {
                 payable(address(0))
             )
         );
-        return ISafeProxyFactory(proxyFactory).createProxyWithNonce(singleton, setup, 7579);
+    }
+
+    function _safeOwner() internal view virtual returns (address) {
+        return 0x000000000000000000000000000000000000dEaD;
     }
 
     function _createKernel(bytes memory hookData, bytes memory execData) internal returns (address) {

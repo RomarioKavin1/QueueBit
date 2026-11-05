@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
+// Host account kinds the policy hook recognises at install (`HotView.host`). The validator adapts two things to
+// them: how it checks that the hook is still bound to the account, and whether hot-key ERC-1271 is on at all.
+uint8 constant HOST_GENERIC = 0; // any ERC-7579 account with a global hook (reference MSA, Nexus-like)
+uint8 constant HOST_KERNEL = 1; // Kernel v3: hook bound per validator; 1271 hashes rewrapped (hot 1271 is off)
+uint8 constant HOST_SAFE = 2; // Safe7579: a Safe whose owner path bypasses hooks (owners must be keyless)
+
 /// @title ILeakedModules
 /// @notice Types, events and errors of the LEAKED ERC-7579 backend (plan `10-contracts.md` §10.4): the hot-key
 ///         validator (type 1), the policy hook (type 4) and the role executor (type 2). Policy semantics follow the
@@ -59,6 +65,8 @@ interface ILeakedModules {
         uint256 maxFeeWei;
         uint256 maxPriorityFeePerGas;
         uint256 capUsdPerDay;
+        /// `HOST_*`, fixed at install.
+        uint8 host;
     }
 
     /// `LeakedRoleExecutor.onInstall` data (abi-encoded).
@@ -160,6 +168,8 @@ interface ILeakedModules {
     error FreezeNotExpired(uint48 until);
     error NotFrozen();
     error TooManyTokens();
+    error HookNotInstalled();
+    error HostOwnerNotKeyless(address owner);
 
     // roles and timelock
     error MustQueue();
