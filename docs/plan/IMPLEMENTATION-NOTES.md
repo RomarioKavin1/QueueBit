@@ -634,3 +634,51 @@ Deployed: account `0x553d9CB1…7721` (AccountFactory, tx `0x4994bd22…21d5`), 
 - Current devnet numbers (e2e-1793920665037, sidecar :14340): **VERIFY frame 306,006 gas** (was 298,460 before the extra introspection reads), refund frame 25,796, payer net −5,540 gas (the configured estimator slack).
 - **Decision (v1): no user tail frames.** A PoolPayer withdrawal is exactly `[pay(PoolPayer), DEFAULT(settle), DEFAULT(refund)]`. User calls after the withdrawal (and their EIP-3529 refund effects, which PoolPayer can't observe) are out of scope for v1. The wallet sends a separate tx from the recipient if needed. Follow-up: enforce it in `verify`, and update `@leaked/privacy`'s broadcaster.
 - Operator calibration before mainnet: `MIN_SETTLE_GAS` for a depth-32 LeanIMT insert; `MAX_INTRINSIC_GAS` vs the EIP-text intrinsic; make `setOperator` two-step.
+
+## Extension M1: native account, FrameEngine, routing, Send and dapp payments (2026-11-06)
+
+Code: `apps/extension/src/background/{account,engine,routing,policy,payments,activity,signing}.ts`, pages under
+`src/pages/{popup,approve,app}`; deployment tooling `devnet/deploy/`. Local devnet, funding key anvil #7.
+
+- **Deployment is CREATE2 through the Arachnid deployer** (`devnet/deploy/deploy.ts`, fixed salt): every address is a
+  function of the init code, so the script is idempotent and a rebuilt artifact (e.g. an audit fix) simply lands at a
+  new address. `addresses.local.json` records each contract's init-code hash; the extension's drift test fails when the
+  recorded deployment or `src/generated/contracts.ts` (ABI from `contracts/out`, never hand-copied) is stale. It fired
+  once during this work (RoleSignerFactory rebuilt by the contracts workstream) and was fixed by re-running both.
+- **The Vault signer is a stand-in until M4.** `initialize` requires a non-zero `vaultSigner` and the account address
+  is a CREATE2 function of the whole `InitConfig`, while a `PQRoleSigner` binds to its account (circular), and there
+  is no pairing yet. M1 therefore uses a public, deterministic devnet key (`keccak("leaked/devnet/test-vault-stand-in/v1")`,
+  `testVault` in addresses.local.json) as `vaultSigner`, only in the local-devnet build, and the UI says so ("a shared
+  test key stands in for the Vault"). Accounts created this way can never get a real Vault (no setter; recovery is
+  unset): M4 must compute the address after pairing, i.e. change the onboarding order or the factory.
+- **The account address is frozen at first use.** The plan (salt `keccak(hotKey, vault, recovery, version, chainId)`,
+  init data, impl, factory) is stored per chain; limits changed later do not move the address. The extension computes
+  the address locally and the devnet test checks it against `AccountFactory.predictAccount`.
+- **Activation is a legacy tx from the fee-tank key** to the permissionless factory (2.37M gas measured, 3.5M limit).
+  A deploy frame in the first hot tx is not possible here: the walker admits DEFAULT frames before VERIFY, but the
+  tank must pay and it is empty on a fresh install, and self-pay is off by design. UX: "add ETH to your fee tank →
+  Activate"; the tank also pays every later everyday fee.
+- **Hot recipients are only what the Vault allowed.** `InitConfig` has no target list; at activation only the fee tank
+  is allowed, so in M1 the everyday path is "top up the fee tank" (and batches of that), and any other recipient is
+  routed "needs your phone" (TARGET-NOT-ALLOWED). Adding a target is a loosening (queued ≥ 1 h), so the e2e cannot
+  allowlist one within a run.
+- **Gas**: VERIFY limit 80k (measured 45,750), tank 10k (3,000), body = simulated use × 1.25 + 20k (53,213 → 86,516)
+  with 200k state gas; a hot top-up costs ~125k gas ≈ 0.000125 ETH at the devnet's 1 gwei tip. Fees: tip 1 gwei
+  (≤ the account's `maxPriorityFeePerGas` 2 gwei), `maxFeePerGas = 2 × base + tip`; the H3 bound is checked on the
+  simulated `maxCost` (TXPARAM(MAX_COST)) against `maxFeeWeiPerTx` before anything is sent.
+- **Simulate-first is enforced in the engine**: it measures with a signed probe, rebuilds and re-signs, simulates the
+  exact bytes, and refuses to submit unless `canonicalMempoolValid`, frame-0 gas < 80k and MAX_COST within bound.
+  The routing engine adds a failing body frame in the simulation as `SIM-REJECTED`. The devnet test asserts that
+  over-limit and not-allowed payments never reach `eth_sendRawTransaction`.
+- **Simulation `frames[i]` reports `{gasUsed, succeeded}`** on this ethrex build; the parser also accepts
+  `executionGasUsed` / `status`.
+- **Per-origin chain**: a connected site keeps the chain it connected on; `wallet_switchEthereumChain` moves only that
+  site (events to that origin only); the popup's network pill no longer moves connected sites.
+- **Signatures (account audit)**: `personal_sign`/SIWE and zero-value typed data → sign-in (7739, M3); ERC-2612
+  `Permit` → `registerPermit(token, spender, value, deadline)` in a hot batch (M3; counts against the limit); Permit2 and
+  other value-bearing or unknown typed data → `4100` with `leakedRule` (`SIG-PERMIT2`, `SIG-VALUE-BEARING`,
+  `SIG-UNKNOWN-SCHEMA`) now.
+- **Results** (local devnet): unit 89 pass; devnet contract-in-the-loop test pass (activate → hot top-up mined, all three
+  frames `success` → per-payment and not-allowed classified, nothing sent); Playwright e2e 8/8 including the whole M1
+  flow (onboarding → activate → fund → hot send mined and in Activity → over-limit "needs your phone" before submission
+  → dapp `eth_sendTransaction` via the approval window → `wallet_sendCalls` batch, `wallet_getCallsStatus` 200) in ~40 s.
