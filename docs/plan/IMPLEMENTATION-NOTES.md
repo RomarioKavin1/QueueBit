@@ -545,3 +545,11 @@ quote (`mulDiv` ceil), monitored-asset snapshot and outflow, I-6 approval check 
 duplicated between `LeakedAccountBase`/`LeakedAccountRoles` and `LeakedPolicyHook`/`LeakedRoleExecutor`. Proposal: a
 `src/lib/LeakedPolicyLib.sol` (pure/view helpers over a `TokenCfg` + balances interface) used by both, and the types in
 one `ILeakedPolicyTypes`.
+
+## Decision (2026-11-06): Path A scheme options after the M3 benchmark
+`bench/results/RESULTS.md` measured on the local devnet: **leanSphincs-s has a 43,529-gas VERIFY frame and fits the stock 100k budget**. That makes PQ-in-VERIFY (Path A, no payer ECDSA, no griefing) possible on today's public mempool, with no BUDGET-010. The cost is a 4,164 B sig, ~281k tx, and no formal proof (C13 is Lean-proof-pinned).
+**Decision:**
+- C13 stays the default vault scheme, on Path B now and Path A on staked BUDGET-010 sidecars.
+- leanSphincs-s becomes a **second registered `IPQVerifier`** that users can choose as "Path A on any mempool", pending an independent review of its security argument.
+- The extension's router picks Path A whenever the vault signer's scheme VERIFY gas plus overhead fits the target mempool's budget.
+Follow-up: a leanSphincs-s adapter + signer in `@leaked/pq-signer`, behind a feature flag until reviewed.

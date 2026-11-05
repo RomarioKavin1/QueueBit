@@ -28,6 +28,8 @@ jobs:
       - run: pnpm lint
       - run: pnpm test
       - run: pnpm build
+      - name: PQ benchmark smoke (forge-only, no devnet)
+        run: pnpm --filter bench run ci
 
   pq-signer-wasm:
     # wasm/ is committed so JS consumers and the typescript job need no Rust toolchain.

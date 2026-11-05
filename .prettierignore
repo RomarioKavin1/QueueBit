@@ -13,3 +13,6 @@ coverage/
 **/vectors/*.json
 **/rust/
 **/target/
+
+# tool caches
+**/.cache/
