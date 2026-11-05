@@ -323,7 +323,9 @@ contract PoolPayerTest is PoolPayerBase {
         uint256 n = m.frameCount();
         uint256 gas = 15_000 + n * 475 + 30_000;
         for (uint256 f; f < n; f++) {
-            gas += m.frameAt(f).data.length * 4;
+            FrameTxModel.Frame memory fr = m.frameAt(f);
+            gas += fr.data.length * 4;
+            if (fr.value > 0 && m.resolvedTarget(f) != sender) gas += 6_000; // TX_VALUE_COST
             if (f < n - 1) gas += r.frames[f].gasUsed; // state gas is not metered by the simulator (reports 0)
         }
         uint256 cost = gas * GAS_PRICE;
@@ -476,6 +478,10 @@ contract PoolPayerTest is PoolPayerBase {
         vm.expectRevert(PoolPayer.InvalidConfig.selector);
         new PoolPayer(c);
         c = _config();
+        c.valueFrameGas = uint64(payer.MAX_VALUE_FRAME_GAS() + 1);
+        vm.expectRevert(PoolPayer.InvalidConfig.selector);
+        new PoolPayer(c);
+        c = _config();
         c.feeParam = TxParam.SENDER;
         vm.expectRevert(PoolPayer.InvalidConfig.selector);
         new PoolPayer(c);
@@ -502,5 +508,174 @@ contract PoolPayerTest is PoolPayerBase {
         emit log_named_uint("settle frame, FrameSim", r.frames[2].gasUsed);
         emit log_named_uint("refund frame, FrameSim", r.frames[3].gasUsed);
         assertLt(proofGas, 300_000, "proof check fits the 300k verify target");
+    }
+
+    // ------------------------------------------------------------------------------------- audit PoCs ------
+
+    /// A failed atomic batch whose terminator is refund() skips refund(): the user's refund is stranded in
+    /// `pendingFee` and, since it is not in `totalClaimable`, the operator can sweep it with `withdrawFloat`.
+    function test_audit_atomicBatchBeforeRefund_strandsRefund() public {
+        (PrivacyPoolsTypes.Withdrawal memory w, PrivacyPoolsTypes.WithdrawProof memory p) = _good();
+        Shape memory s = _shape();
+        s.withRefund = false;
+        _buildTx(w, p, s);
+        // [.., settle(1), SENDER tail (ATOMIC_BATCH, reverts), refund()] -- refund() is the batch terminator.
+        sim().pushFrame(FrameTxModel.Frame(MODE_SENDER, ATOMIC_BATCH, address(griefer), 50_000, 0, 0, hex"01"));
+        sim().pushFrame(
+            FrameTxModel.Frame(
+                MODE_DEFAULT, 0, address(payer), REFUND_GAS, REFUND_STATE, 0, abi.encodeCall(PoolPayer.refund, ())
+            )
+        );
+        simSignSecp256k1(0, senderPk);
+        SimResult memory r = simRun();
+        if (r.valid) {
+            // PRE-FIX behaviour (documented by this branch): the tx is valid, refund() was skipped, money stranded.
+            assertEq(r.frames[4].status, STATUS_SKIPPED, "refund skipped by the failed batch");
+            assertEq(payer.pendingSig(), sim().sigHash(), "refund never consumed");
+            assertEq(sender.balance, Fx.WITHDRAWN - FEE, "no refund");
+            uint256 float = address(payer).balance - payer.totalClaimable();
+            vm.prank(operator);
+            payer.withdrawFloat(payable(operator), float); // includes the user's unrefunded fee
+            fail("pre-fix: a failed atomic batch strands the refund in the operator's float");
+        }
+        assertEq(uint256(r.reason), uint256(InvalidReason.VERIFY_FAILED));
+        assertEq(r.frames[1].returnData, abi.encodeWithSelector(PoolPayer.BadFrameShape.selector, uint256(3)));
+    }
+
+    /// Blob gas is charged to the payer but priced in neither GASPRICE nor costEstimate: v1 refuses blob txs.
+    function test_audit_blobTx_rejected() public {
+        (PrivacyPoolsTypes.Withdrawal memory w, PrivacyPoolsTypes.WithdrawProof memory p) = _good();
+        _buildTx(w, p, _shape());
+        sim().setBlobCount(1);
+        _expectVerifyRevert(abi.encodeWithSelector(PoolPayer.BlobsNotAllowed.selector));
+    }
+
+    /// Calldata is charged 16 gas per non-zero byte (and 64 per byte when the EIP-7976 floor binds) but estimated at 4:
+    /// every byte the user can add beyond the fixed shape is PoolPayer's loss. The pay frame is pinned to the exact
+    /// encoding; trailing bytes (ignored by the ABI decoder) are rejected.
+    function test_audit_payFrameTrailingBytes_rejected() public {
+        (PrivacyPoolsTypes.Withdrawal memory w, PrivacyPoolsTypes.WithdrawProof memory p) = _good();
+        bytes memory data = _verifyData(w, p, Fx.STATE_ROOT_INDEX);
+        assertEq(data.length, payer.VERIFY_DATA_LENGTH(), "canonical pay-frame length");
+        simBegin(sender);
+        simSetFees(1 gwei, 2 gwei, MAX_COST);
+        simAddFrame(MODE_VERIFY, ONLY_VERIFY, address(0), 10_000, 0, 0, "");
+        simAddFrame(MODE_VERIFY, PAY, address(payer), PAY_GAS, PAY_STATE, 0, bytes.concat(data, new bytes(4000)));
+        simAddFrame(MODE_DEFAULT, 0, address(payer), SETTLE_GAS, SETTLE_STATE, 0, abi.encodeCall(PoolPayer.settle, (1)));
+        simAddFrame(MODE_DEFAULT, 0, address(payer), REFUND_GAS, REFUND_STATE, 0, abi.encodeCall(PoolPayer.refund, ()));
+        simAddSecp256k1(address(0));
+        simSignSecp256k1(0, senderPk);
+        _expectVerifyRevert(abi.encodeWithSelector(PoolPayer.BadFrameShape.selector, uint256(1)));
+    }
+
+    function test_audit_tailFrameData_capped() public {
+        (PrivacyPoolsTypes.Withdrawal memory w, PrivacyPoolsTypes.WithdrawProof memory p) = _good();
+        uint256 cap = payer.MAX_UNPRICED_DATA_BYTES();
+        Shape memory s = _shape();
+        s.withRefund = false;
+        _buildTx(w, p, s);
+        sim().pushFrame(FrameTxModel.Frame(MODE_SENDER, 0, makeAddr("dapp"), 50_000, 0, 0, new bytes(cap + 1)));
+        sim().pushFrame(
+            FrameTxModel.Frame(
+                MODE_DEFAULT, 0, address(payer), REFUND_GAS, REFUND_STATE, 0, abi.encodeCall(PoolPayer.refund, ())
+            )
+        );
+        simSignSecp256k1(0, senderPk);
+        _expectVerifyRevert(abi.encodeWithSelector(PoolPayer.TooMuchUnpricedData.selector, cap + 1));
+
+        // At the cap: accepted.
+        _buildTx(w, p, s);
+        sim().pushFrame(FrameTxModel.Frame(MODE_SENDER, 0, makeAddr("dapp"), 50_000, 0, 0, new bytes(cap)));
+        sim().pushFrame(
+            FrameTxModel.Frame(
+                MODE_DEFAULT, 0, address(payer), REFUND_GAS, REFUND_STATE, 0, abi.encodeCall(PoolPayer.refund, ())
+            )
+        );
+        simSignSecp256k1(0, senderPk);
+        SimResult memory r = simRunValid();
+        assertEq(r.frames[4].status, STATUS_SUCCESS);
+    }
+
+    /// Frames before the pay frame (expiry / deploy / pre_verify) count against the same cap.
+    function test_audit_prefixFrameData_capped() public {
+        (PrivacyPoolsTypes.Withdrawal memory w, PrivacyPoolsTypes.WithdrawProof memory p) = _good();
+        uint256 cap = payer.MAX_UNPRICED_DATA_BYTES();
+        simBegin(sender);
+        simSetFees(1 gwei, 2 gwei, MAX_COST);
+        simAddFrame(MODE_VERIFY, ONLY_VERIFY, address(0), 10_000, 0, 0, new bytes(cap + 1)); // default code ignores data
+        simAddFrame(MODE_VERIFY, PAY, address(payer), PAY_GAS, PAY_STATE, 0, _verifyData(w, p, Fx.STATE_ROOT_INDEX));
+        simAddFrame(MODE_DEFAULT, 0, address(payer), SETTLE_GAS, SETTLE_STATE, 0, abi.encodeCall(PoolPayer.settle, (1)));
+        simAddFrame(MODE_DEFAULT, 0, address(payer), REFUND_GAS, REFUND_STATE, 0, abi.encodeCall(PoolPayer.refund, ()));
+        simAddSecp256k1(address(0));
+        simSignSecp256k1(0, senderPk);
+        _expectVerifyRevert(abi.encodeWithSelector(PoolPayer.TooMuchUnpricedData.selector, cap + 1));
+    }
+
+    /// ARBITRARY signature witnesses are charged 16 gas/byte and never estimated; signature entries cost
+    /// verification gas (2,800 / 6,700) the estimator does not see either.
+    function test_audit_signatures_capped() public {
+        (PrivacyPoolsTypes.Withdrawal memory w, PrivacyPoolsTypes.WithdrawProof memory p) = _good();
+        uint256 cap = payer.MAX_UNPRICED_DATA_BYTES();
+        _buildTx(w, p, _shape());
+        simAddArbitrary(new bytes(cap + 1));
+        simSignSecp256k1(0, senderPk);
+        _expectVerifyRevert(abi.encodeWithSelector(PoolPayer.TooMuchUnpricedData.selector, cap + 1));
+
+        _buildTx(w, p, _shape());
+        for (uint256 k; k < payer.MAX_SIGNATURES(); k++) {
+            simAddArbitrary(hex"01");
+        }
+        simSignSecp256k1(0, senderPk);
+        _expectVerifyRevert(abi.encodeWithSelector(PoolPayer.TooManySignatures.selector));
+    }
+
+    /// A value-carrying tail frame costs TX_VALUE_COST of intrinsic gas: priced by the estimator.
+    function test_audit_valueTailFrame_priced() public {
+        (PrivacyPoolsTypes.Withdrawal memory w, PrivacyPoolsTypes.WithdrawProof memory p) = _good();
+        Shape memory s = _shape();
+        s.withRefund = false;
+        _buildTx(w, p, s);
+        sim().pushFrame(FrameTxModel.Frame(MODE_SENDER, 0, makeAddr("dapp"), 50_000, 0, 1 wei, hex""));
+        sim().pushFrame(
+            FrameTxModel.Frame(
+                MODE_DEFAULT, 0, address(payer), REFUND_GAS, REFUND_STATE, 0, abi.encodeCall(PoolPayer.refund, ())
+            )
+        );
+        simSignSecp256k1(0, senderPk);
+        SimResult memory r = simRunValid();
+        uint256 refund = _referenceRefund(r, FEE);
+        assertEq(sender.balance, Fx.WITHDRAWN - FEE + refund - 1 wei);
+        assertEq(makeAddr("dapp").balance, 1 wei);
+    }
+
+    /// Paying the withdrawal or the refund to PoolPayer itself would turn user money into operator float.
+    function test_audit_recipientIsPoolPayer_rejected() public {
+        (PrivacyPoolsTypes.Withdrawal memory w, PrivacyPoolsTypes.WithdrawProof memory p) = _good();
+        PoolPayer.FeeData memory f = abi.decode(w.data, (PoolPayer.FeeData));
+        f.recipient = address(payer);
+        w.data = abi.encode(f);
+        _buildTx(w, p, _shape());
+        _expectVerifyRevert(abi.encodeWithSelector(PoolPayer.InvalidFeeData.selector));
+    }
+
+    /// A receiver that burns all forwarded gas (not just reverts) gets its payout and its refund as credits; the
+    /// frames still succeed and the note is spent.
+    function test_audit_gasHungryReceiver_credited() public {
+        vm.etch(Fx.GRIEFER, address(new GasBurner()).code);
+        (PrivacyPoolsTypes.Withdrawal memory w, PrivacyPoolsTypes.WithdrawProof memory p) = Fx.griefer();
+        _buildTx(w, p, _shape());
+        SimResult memory r = simRunValid();
+        assertEq(r.frames[2].status, STATUS_SUCCESS);
+        assertEq(r.frames[3].status, STATUS_SUCCESS);
+        uint256 refund = _referenceRefund(r, FEE);
+        assertEq(payer.claimable(Fx.GRIEFER), Fx.WITHDRAWN - FEE + refund);
+        assertEq(payer.pendingSig(), ~sim().sigHash(), "refund consumed");
+    }
+}
+
+/// A receiver whose receive() burns every unit of gas it is given.
+contract GasBurner {
+    receive() external payable {
+        while (true) {}
     }
 }

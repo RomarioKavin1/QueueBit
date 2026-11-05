@@ -2,7 +2,7 @@
 pragma solidity 0.8.28;
 
 import {HegotaSupport, Devnet} from "@forshtat/hegota-support/contracts/HegotaSupport.sol";
-import {Scope, TxParam, FrameParam, FrameMode} from "@forshtat/hegota-support/contracts/Params.sol";
+import {Scope, TxParam, FrameParam, FrameMode, SigParam} from "@forshtat/hegota-support/contracts/Params.sol";
 import {
     PrivacyPoolsTypes,
     IPrivacyPoolsPool,
@@ -40,8 +40,14 @@ import {
 ///         2. `verify` requires `refund()` to be the last frame (and the settle frame right after the pay frame), each
 ///            with enough gas that they cannot be starved;
 ///         3. the pay frame must carry state gas (APPROVE creates the fresh sender account).
+///         And, so that the estimator's under-charge stays bounded (audit, 2026-11-06): no blobs; the pay frame's data
+///         is exactly the canonical encoding; the other frames' data and ARBITRARY witnesses are capped
+///         (`MAX_UNPRICED_DATA_BYTES`); at most `MAX_SIGNATURES` signature entries; value-carrying frames are priced
+///         (`VALUE_FRAME_GAS`); the frame before `refund()` must not open an atomic batch (a failed batch would skip
+///         `refund()` and strand the user's refund in the float); the recipients are never PoolPayer itself.
 /// @dev    VERIFY-reachable code (`verify`, `quote`, the frame-shape helpers) reads no `block.*`, `tx.gasprice`,
-///         balances, `gasleft()` or transient storage and emits no events (IMPLEMENTATION-NOTES, FrameSim blind spots);
+///         balances, `gasleft()` or transient storage and emits no events (IMPLEMENTATION-NOTES, FrameSim blind spots;
+///         `_payoutOrCredit` reads `gasleft()` but runs in the DEFAULT frames only);
 ///         it reads only immutables, the pool, the Entrypoint (latest ASP root) and the verifier (STORAGE-032, staked payer). `GAS` is
 ///         used only as a `*CALL` operand. The halting reads of 50-devnet-review F6 (STATUS / *_GAS_USED of the running
 ///         frame) are never made: `settle` reads the STATUS of frame i (< its own), `refund` the gas of frames < itself.
@@ -63,8 +69,25 @@ contract PoolPayer is HegotaSupport {
     uint256 public constant MAX_GAS_PER_DATA_BYTE = 4;
     uint256 public constant MAX_REFUND_FRAME_GAS = 60_000;
 
+    /// EIP-8141 `TX_VALUE_COST` (EIP-2780): the intrinsic charge of a value-carrying frame.
+    uint256 public constant MAX_VALUE_FRAME_GAS = 6_000;
+
     /// Execution gas forwarded to a payout recipient; a failure (revert or out of gas) becomes a `claimable` credit.
     uint256 public constant PAYOUT_GAS = 50_000;
+    /// Gas kept back for the credit fallback (two SSTOREs, an event and the value transfer of a failed push) so that
+    /// a gas-hungry receiver cannot run `settle` or `refund` out of gas: a push is attempted only above this margin.
+    uint256 public constant CREDIT_GAS_RESERVE = 64_000;
+
+    /// The pay frame's data is exactly `abi.encodeCall(verify, ...)` with a 128-byte `withdrawal.data`:
+    /// 4 + 32 (scope) + 32 (withdrawal offset) + 512 (proof) + 32 (hint) + 224 (withdrawal: processooor, data offset
+    /// and length, 128 data bytes). Trailing bytes would be charged but ignored.
+    uint256 public constant VERIFY_DATA_LENGTH = 836;
+    /// Bytes the estimator prices at the zero-byte rate but the protocol charges at up to the non-zero rate (16, or
+    /// 64 when the EIP-7976 floor binds): the data of every frame but the three PoolPayer frames, plus ARBITRARY
+    /// signature witnesses. Bounded, so the under-estimate is bounded (<= 12 gas per byte) and the floor never binds.
+    uint256 public constant MAX_UNPRICED_DATA_BYTES = 2_048;
+    /// Signature entries each cost verification gas the estimator cannot see (2,800 SECP256K1, 6,700 P256).
+    uint256 public constant MAX_SIGNATURES = 4;
 
     // ------------------------------------------------------------------------------------------------ types ------
 
@@ -91,6 +114,8 @@ contract PoolPayer is HegotaSupport {
         uint64 perFrameGas;
         uint64 gasPerDataByte;
         uint64 refundFrameGas;
+        /// `TX_VALUE_COST` of a value-carrying frame (EIP text: 6,000; 0 where the devnet does not charge it).
+        uint64 valueFrameGas;
         // Frame budgets `verify` requires (anti-griefing / anti-starvation).
         uint64 minPayStateGas;
         uint64 minSettleGas;
@@ -111,6 +136,7 @@ contract PoolPayer is HegotaSupport {
     uint256 public immutable PER_FRAME_GAS;
     uint256 public immutable GAS_PER_DATA_BYTE;
     uint256 public immutable REFUND_FRAME_GAS;
+    uint256 public immutable VALUE_FRAME_GAS;
     uint256 public immutable MIN_PAY_STATE_GAS;
     uint256 public immutable MIN_SETTLE_GAS;
     uint256 public immutable MIN_SETTLE_STATE_GAS;
@@ -150,6 +176,9 @@ contract PoolPayer is HegotaSupport {
     error InvalidConfig();
     error NotOperator();
     error BadFrameShape(uint256 frameIndex);
+    error BlobsNotAllowed();
+    error TooManySignatures();
+    error TooMuchUnpricedData(uint256 bytesLength);
     error NotPoolPayerTx();
     error InvalidProcessooor();
     error InvalidFeeData();
@@ -182,6 +211,7 @@ contract PoolPayer is HegotaSupport {
         if (
             c.intrinsicGas > MAX_INTRINSIC_GAS || c.perFrameGas > MAX_PER_FRAME_GAS
                 || c.gasPerDataByte > MAX_GAS_PER_DATA_BYTE || c.refundFrameGas > MAX_REFUND_FRAME_GAS
+                || c.valueFrameGas > MAX_VALUE_FRAME_GAS
         ) revert InvalidConfig();
         ENTRYPOINT = IPrivacyPoolsEntrypoint(c.entrypoint);
         IPrivacyPoolsPool pool = IPrivacyPoolsPool(c.pool);
@@ -198,6 +228,7 @@ contract PoolPayer is HegotaSupport {
         PER_FRAME_GAS = c.perFrameGas;
         GAS_PER_DATA_BYTE = c.gasPerDataByte;
         REFUND_FRAME_GAS = c.refundFrameGas;
+        VALUE_FRAME_GAS = c.valueFrameGas;
         MIN_PAY_STATE_GAS = c.minPayStateGas;
         MIN_SETTLE_GAS = c.minSettleGas;
         MIN_SETTLE_STATE_GAS = c.minSettleStateGas;
@@ -241,22 +272,43 @@ contract PoolPayer is HegotaSupport {
         _requireOwnFrame(i + 1, 36, this.settle.selector, MIN_SETTLE_GAS, MIN_SETTLE_STATE_GAS);
         if (uint256(framedataload(4, i + 1)) != i) revert BadFrameShape(i + 1);
         _requireOwnFrame(n - 1, 4, this.refund.selector, MIN_REFUND_GAS, MIN_REFUND_STATE_GAS);
+        // Charges `costEstimate` cannot see must be absent or bounded, or they are PoolPayer's loss: blob gas is
+        // outside GASPRICE; calldata and ARBITRARY witnesses are charged 16/byte (64 under the EIP-7976 floor) but
+        // estimated at 4; every signature entry costs verification gas.
+        if (txparam(TxParam.BLOB_COUNT) != 0) revert BlobsNotAllowed();
+        if (frameparam(i, FrameParam.DATA_LENGTH) != VERIFY_DATA_LENGTH) revert BadFrameShape(i);
+        uint256 unpriced;
+        for (uint256 f; f < i; f++) {
+            unpriced += frameparam(f, FrameParam.DATA_LENGTH);
+        }
+        uint256 sigs = txparam(TxParam.SIGNATURE_COUNT);
+        if (sigs > MAX_SIGNATURES) revert TooManySignatures();
+        for (uint256 k; k < sigs; k++) {
+            // SIGNATURE_LENGTH is defined for ARBITRARY entries only (scheme 0); the others have fixed sizes.
+            if (sigparam(k, SigParam.SCHEME) == 0) unpriced += sigparam(k, SigParam.SIGNATURE_LENGTH);
+        }
 
         // 1. processooor and fee binding (both inside `context`, so the proof binds them).
         if (withdrawal.processooor != address(this)) revert InvalidProcessooor();
-        FeeData memory fee = abi.decode(withdrawal.data, (FeeData));
         if (withdrawal.data.length != 128) revert InvalidFeeData();
-        if (fee.feeRecipient != address(this) || fee.recipient == address(0) || fee.fee > type(uint96).max) {
-            revert InvalidFeeData();
-        }
+        FeeData memory fee = abi.decode(withdrawal.data, (FeeData));
+        if (
+            fee.feeRecipient != address(this) || fee.recipient == address(0) || fee.recipient == address(this)
+                || fee.refundRecipient == address(this) || fee.fee > type(uint96).max
+        ) revert InvalidFeeData();
         // Tail calls (frames between settle and refund) must be SENDER frames, and only when the recipient is the
-        // sender (the same anti-griefing rule as 0xbow's fee adapter).
+        // sender (the same anti-griefing rule as 0xbow's fee adapter). Their data counts as unpriced bytes, and the
+        // last of them must not open an atomic batch, or `refund()` would be the batch's terminator and skipped if
+        // the batch fails (status 2) with the refund stranded in `pendingFee`.
         if (n > i + 3) {
             if (fee.recipient != address(uint160(txparam(TxParam.SENDER)))) revert TailCallsNeedRecipientSender();
             for (uint256 f = i + 2; f < n - 1; f++) {
                 if (frameparam(f, FrameParam.MODE) != uint256(FrameMode.SENDER)) revert BadFrameShape(f);
+                unpriced += frameparam(f, FrameParam.DATA_LENGTH);
             }
+            if (frameparam(n - 2, FrameParam.ATOMIC_BATCH) != 0) revert BadFrameShape(n - 2);
         }
+        if (unpriced > MAX_UNPRICED_DATA_BYTES) revert TooMuchUnpricedData(unpriced);
 
         // 2. Pool and context.
         if (scope != SCOPE) revert PoolNotFound();
@@ -347,16 +399,24 @@ contract PoolPayer is HegotaSupport {
 
     /// Gas the protocol charges this transaction, as a lower bound, when called from frame `self` (the last one):
     ///   INTRINSIC_GAS + n·PER_FRAME_GAS + Σ_f DATA_LENGTH(f)·GAS_PER_DATA_BYTE        (intrinsic, lower bound)
+    /// + Σ_f [VALUE(f) > 0 and target ≠ sender]·VALUE_FRAME_GAS                        (TX_VALUE_COST, lower bound)
     /// + Σ_{f < self} (EXECUTION_GAS_USED(f) + STATE_GAS_USED(f))                     (exact, from the receipts)
     /// + REFUND_FRAME_GAS                                                              (this frame, lower bound)
     /// Priced at GASPRICE, which EIP-8141 defines as a lower bound of the per-gas price paid (§Fee budget, L1495).
     /// It is a lower bound as long as nothing earns an SSTORE refund larger than the intrinsic slack: PoolPayer never
-    /// zeroes or restores a slot, and neither does `PrivacyPool.withdraw`.
+    /// zeroes or restores a slot, and neither does `PrivacyPool.withdraw`. (A user's own tail call or receive hook
+    /// can earn EIP-3529 refunds or state-gas refills that lower the protocol's charge below this estimate; that
+    /// difference stays with PoolPayer, by the user's choice, and is bounded by MAX_REFUND_QUOTIENT.)
     function costEstimate(uint256 self) public view returns (uint256 gas) {
         uint256 n = txparam(TxParam.FRAME_COUNT);
         uint256 dataBytes;
+        address sender = address(uint160(txparam(TxParam.SENDER)));
         for (uint256 f; f < n; f++) {
             dataBytes += frameparam(f, FrameParam.DATA_LENGTH);
+            if (
+                VALUE_FRAME_GAS != 0 && frameparam(f, FrameParam.VALUE) != 0
+                    && address(uint160(frameparam(f, FrameParam.RESOLVED_TARGET))) != sender
+            ) gas += VALUE_FRAME_GAS;
             if (f < self) {
                 gas += frameparam(f, FrameParam.EXECUTION_GAS_USED) + frameparam(f, FrameParam.STATE_GAS_USED);
             }
@@ -422,10 +482,15 @@ contract PoolPayer is HegotaSupport {
         ) revert BadFrameShape(f);
     }
 
-    /// Never reverts: a bounded-gas push, else a credit the recipient pulls with `claim` (rule 1).
+    /// Never reverts: a bounded-gas push, else a credit the recipient pulls with `claim` (rule 1). The push is only
+    /// attempted while the credit fallback stays affordable, so a receiver that burns its `PAYOUT_GAS` cannot run the
+    /// frame out of gas (a failed `refund()` would strand the refund in the float). DEFAULT frames only (`gasleft()`).
     function _payoutOrCredit(address to, uint256 amount) internal {
         if (amount == 0) return;
-        (bool ok,) = to.call{value: amount, gas: PAYOUT_GAS}("");
+        bool ok;
+        if (gasleft() > PAYOUT_GAS + CREDIT_GAS_RESERVE) {
+            (ok,) = to.call{value: amount, gas: PAYOUT_GAS}("");
+        }
         if (!ok) {
             claimable[to] += amount;
             totalClaimable += amount;

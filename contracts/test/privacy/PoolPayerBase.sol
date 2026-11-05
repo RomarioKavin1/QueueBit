@@ -96,6 +96,7 @@ abstract contract PoolPayerBase is FrameSim {
             perFrameGas: 475,
             gasPerDataByte: 4,
             refundFrameGas: 30_000,
+            valueFrameGas: 6_000,
             minPayStateGas: PAY_STATE,
             minSettleGas: SETTLE_GAS,
             minSettleStateGas: SETTLE_STATE,
