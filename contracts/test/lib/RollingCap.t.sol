@@ -142,6 +142,24 @@ contract RollingCapTest is Test {
         assertEq(c.available(), CAP);
     }
 
+    /// Above MAX_CAP, `elapsed * cap` would overflow and every spend would revert for good; the guard keeps the
+    /// library total. At MAX_CAP exactly, a day of refill still fits.
+    function test_capAboveMaxIsRejectedAndMaxCapDoesNotOverflow() public {
+        uint256 max = type(uint256).max / 1 days;
+        vm.expectRevert(abi.encodeWithSelector(RollingCap.CapTooLarge.selector, max + 1));
+        new RollingCapHarness(max + 1);
+        vm.expectRevert(abi.encodeWithSelector(RollingCap.CapTooLarge.selector, max + 1));
+        c.setCap(max + 1);
+
+        RollingCapHarness h = new RollingCapHarness(max);
+        h.spend(max);
+        vm.warp(_now() + 1 days - 1);
+        assertEq(h.availableNow(), ((1 days - 1) * max) / 1 days);
+        h.spend(1);
+        vm.warp(_now() + 1 days);
+        assertEq(h.availableNow(), max);
+    }
+
     function test_setCapZeroBlocksSpending() public {
         c.setCap(0);
         vm.warp(_now() + 7 days);

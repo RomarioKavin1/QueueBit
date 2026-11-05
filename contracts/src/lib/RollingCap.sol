@@ -20,9 +20,16 @@ library RollingCap {
 
     /// @notice `requested` exceeds what the bucket holds after refilling.
     error OverCap(uint256 requested, uint256 available);
+    /// @notice `cap` is above `MAX_CAP`, so `elapsed * cap` could overflow and brick the bucket.
+    error CapTooLarge(uint256 cap);
+
+    /// @notice The largest cap: keeps `elapsed * cap` (elapsed < 1 day) and `available + refill` (< 2 * cap)
+    ///         inside a uint256, so that every function below is total except for `OverCap`.
+    uint256 internal constant MAX_CAP = type(uint256).max / 1 days;
 
     /// @notice Starts a full bucket of `cap` now. For a bucket that is already in use, call `setCap`.
     function init(Bucket storage b, uint256 cap) internal {
+        if (cap > MAX_CAP) revert CapTooLarge(cap);
         b.cap = cap;
         b.available = cap;
         b.lastUpdate = uint48(block.timestamp);
@@ -52,6 +59,7 @@ library RollingCap {
     /// @notice Refills at the old rate, then sets the cap. Tightening takes effect immediately: `available` is
     ///         clamped to the new cap.
     function setCap(Bucket storage b, uint256 newCap) internal {
+        if (newCap > MAX_CAP) revert CapTooLarge(newCap);
         refill(b);
         b.cap = newCap;
         if (b.available > newCap) b.available = newCap;
