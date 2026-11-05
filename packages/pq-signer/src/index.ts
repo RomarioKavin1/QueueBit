@@ -161,6 +161,81 @@ export function verifierArgs(pk: Uint8Array): { pkSeed: `0x${string}`; pkRoot: `
   };
 }
 
+// ------------------------------------------------------------------------------------ signature budget -------
+
+/**
+ * Nothing in either scheme enforces the per-key lifetime (not the signature, the verifier or the signer), so the
+ * companion must count signatures per key and act on the count. Rules for the count:
+ *  - count every `sign` call that returned (hedged signing uses a fresh leaf each time: re-signing the same digest,
+ *    e.g. a fee bump or a retry, counts again; a signature never broadcast counts too);
+ *  - the count is per (scheme, role, chainScope) key and is the sum over every device and restore of the seed:
+ *    a restored seed whose count is unknown must be treated as `"exceeded"` (rotate) rather than as fresh.
+ */
+export type BudgetLevel = "ok" | "warn" | "rotate" | "exceeded";
+
+export interface BudgetStatus {
+  readonly used: number;
+  readonly budget: number;
+  /** `max(budget - used, 0)`. */
+  readonly remaining: number;
+  /** `used / budget`, not clamped. */
+  readonly fraction: number;
+  /** `ok` < `BUDGET_WARN_FRACTION` <= `warn` < `BUDGET_ROTATE_FRACTION` <= `rotate` < 1 <= `exceeded`. */
+  readonly level: BudgetLevel;
+  /**
+   * leanSphincs-s only: upstream's cover estimate of the security level after `used` signatures (spec §14
+   * "Lifetime"; an estimate, not proved: ~136 bits at 20,000, 127 at 43,715, ~116 at 100,000). Undefined for C13.
+   */
+  readonly estimatedSecurityBits?: number;
+}
+
+/** Show a "rotate soon" notice from here on. */
+export const BUDGET_WARN_FRACTION = 0.5;
+/** Refuse new keys-worth of work without rotation from here on (still well inside the rated lifetime). */
+export const BUDGET_ROTATE_FRACTION = 0.9;
+
+function budgetStatusOf(budget: number, used: number, bits?: (used: number) => number): BudgetStatus {
+  if (!Number.isInteger(used) || used < 0) throw new TypeError("used must be a non-negative integer");
+  const fraction = used / budget;
+  const level: BudgetLevel =
+    fraction >= 1
+      ? "exceeded"
+      : fraction >= BUDGET_ROTATE_FRACTION
+        ? "rotate"
+        : fraction >= BUDGET_WARN_FRACTION
+          ? "warn"
+          : "ok";
+  const out: BudgetStatus = { used, budget, remaining: Math.max(budget - used, 0), fraction, level };
+  return bits === undefined ? out : { ...out, estimatedSecurityBits: bits(used) };
+}
+
+/**
+ * The cover estimate of upstream spec §14 ("Lifetime") for LEAKED's Light-tier keys (h = 26, b = 13, a = 12,
+ * k = 13): the security bits after `used` signatures are `-log2(2^(b-26) · E_{r ~ Poisson(used / 2^b)}
+ * [(1 - (1 - 2^-12)^r)^13])`; upstream's rating is the largest `used` with 127 bits (43,715), scaled down to 20,000.
+ * The estimate is not proved (for the original leanSphincs parameters the Lean-proved lifetimes are 4–17% below it),
+ * so the number is a guide for the UI, not a guarantee. Degradation is gradual: ~10 bits per doubling past ~40,000
+ * (no abrupt one-time-key failure as in stateful XMSS/LMS), which is why a counter plus rotation is an adequate guard.
+ */
+export function leanSphincsSEstimatedSecurityBits(used: number): number {
+  if (!Number.isFinite(used) || used < 0) throw new TypeError("used must be a non-negative number");
+  const h = 26;
+  const b = 13;
+  const a = 12;
+  const k = 13;
+  const lambda = used / 2 ** b;
+  const q = 1 - 2 ** -a;
+  let e = 0;
+  let p = Math.exp(-lambda); // Poisson(lambda) mass at r
+  for (let r = 0; r < 4096; r++) {
+    e += p * (1 - q ** r) ** k;
+    p *= lambda / (r + 1);
+    if (r > lambda && p < 1e-300) break;
+  }
+  if (e === 0) return Infinity; // used == 0: no FORS instance has been opened
+  return -Math.log2(2 ** (b - h) * e);
+}
+
 // ---------------------------------------------------------------------------- scheme-parametrised API -------
 
 /** One post-quantum scheme behind an `IPQVerifier` adapter. Every scheme has 32-byte public keys and 64-byte secret
@@ -176,6 +251,8 @@ export interface PQScheme {
   readonly SK_LENGTH: 64;
   /** Signatures per key at the claimed level (summed over every device holding the seed). */
   readonly SIGNATURE_BUDGET: number;
+  /** Where `used` signatures (the companion's per-key counter, see `BudgetStatus`) stand against the budget. */
+  budgetStatus(used: number): BudgetStatus;
   /** `true` = not reviewed / no formal proof: the UI must show `warning` before a user picks it. */
   readonly experimental: boolean;
   /** UI warning text for an experimental scheme (undefined for a reviewed default). */
@@ -252,6 +329,7 @@ const c13: PQScheme = Object.freeze({
   PK_LENGTH: 32 as const,
   SK_LENGTH: 64 as const,
   SIGNATURE_BUDGET,
+  budgetStatus: (used: number) => budgetStatusOf(SIGNATURE_BUDGET, used),
   experimental: false,
   keygen,
   sign,
@@ -274,6 +352,7 @@ const leanSphincsSImpl = Object.freeze({
   SK_LENGTH: 64 as const,
   /** Upstream's rating of the Light tier (an estimate, not proved; README security note). */
   SIGNATURE_BUDGET: 20_000,
+  budgetStatus: (used: number) => budgetStatusOf(20_000, used, leanSphincsSEstimatedSecurityBits),
   experimental: true as const,
   warning: LEAN_SPHINCS_S_WARNING,
   /** Kept-subtree height of the key (upstream "Light" tier). */

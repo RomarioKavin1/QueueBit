@@ -7,6 +7,9 @@ import {
   schemes,
   sign,
   verify,
+  leanSphincsSEstimatedSecurityBits,
+  BUDGET_ROTATE_FRACTION,
+  BUDGET_WARN_FRACTION,
   LEAN_SPHINCS_S_WARNING,
   SCHEME_ID,
   SIG_LENGTH,
@@ -51,6 +54,42 @@ describe("registry and feature flag", () => {
     expect(schemeById(SCHEME_ID)).toBe(schemes.c13);
     expect(schemeById(L.SCHEME_ID.toUpperCase().replace("0X", "0x"))).toBe(L);
     expect(schemeById("0x" + "00".repeat(32))).toBeUndefined();
+  });
+});
+
+describe("signature budget", () => {
+  it("levels against the budget (both schemes)", () => {
+    for (const S of [schemes.c13, L]) {
+      const B = S.SIGNATURE_BUDGET;
+      expect(S.budgetStatus(0)).toMatchObject({ used: 0, budget: B, remaining: B, fraction: 0, level: "ok" });
+      expect(S.budgetStatus(Math.ceil(B * BUDGET_WARN_FRACTION) - 1).level).toBe("ok");
+      expect(S.budgetStatus(Math.ceil(B * BUDGET_WARN_FRACTION)).level).toBe("warn");
+      expect(S.budgetStatus(Math.ceil(B * BUDGET_ROTATE_FRACTION)).level).toBe("rotate");
+      expect(S.budgetStatus(B - 1).level).toBe("rotate");
+      expect(S.budgetStatus(B)).toMatchObject({ remaining: 0, fraction: 1, level: "exceeded" });
+      expect(S.budgetStatus(3 * B)).toMatchObject({ remaining: 0, fraction: 3, level: "exceeded" });
+      expect(() => S.budgetStatus(-1)).toThrow(TypeError);
+      expect(() => S.budgetStatus(1.5)).toThrow(TypeError);
+    }
+    expect(schemes.c13.budgetStatus(10).estimatedSecurityBits).toBeUndefined();
+  });
+
+  it("leanSphincs-s: upstream's cover estimate (spec §14), gradual degradation past the budget", () => {
+    // Upstream: the cover estimate at 127 bits is 43,715 signatures for b = 13.
+    expect(leanSphincsSEstimatedSecurityBits(43_715)).toBeCloseTo(127.0, 1);
+    expect(leanSphincsSEstimatedSecurityBits(43_716)).toBeLessThan(127.0);
+    expect(L.budgetStatus(20_000).estimatedSecurityBits).toBeCloseTo(135.9, 1);
+    expect(L.budgetStatus(100_000).estimatedSecurityBits).toBeCloseTo(116.0, 1);
+    expect(L.budgetStatus(0).estimatedSecurityBits).toBe(Infinity);
+    let prev = Infinity;
+    for (const n of [1, 100, 1_000, 10_000, 20_000, 40_000, 80_000, 160_000, 1_000_000]) {
+      const bits = L.budgetStatus(n).estimatedSecurityBits!;
+      expect(bits).toBeLessThan(prev);
+      prev = bits;
+    }
+    // one doubling past the rating costs ~10 bits, not the key
+    expect(leanSphincsSEstimatedSecurityBits(40_000) - leanSphincsSEstimatedSecurityBits(80_000)).toBeLessThan(12);
+    expect(leanSphincsSEstimatedSecurityBits(1_000_000)).toBeGreaterThan(70);
   });
 });
 

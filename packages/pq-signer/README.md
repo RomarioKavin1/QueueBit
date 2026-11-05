@@ -83,6 +83,7 @@ schemeById(await verifier.read.schemeId());    // the scheme behind an on-chain 
 | `SCHEME_ID` | `0xb2062c48…9aa054` = keccak256(`"SPHINCS-C13/keccak/fips-adrs/v1"`) | `0x5f6989ca…29daed` = keccak256(`"leanSphincs-s/keccak/v1"`) |
 | `SIG_LENGTH` / `PK_LENGTH` / `SK_LENGTH` | 3688 / 32 / 64 | 4164 / 32 / 64 |
 | `SIGNATURE_BUDGET` | 2²² | 20,000 (upstream's Light-tier rating; an estimate) |
+| `budgetStatus(used)` | `{ used, budget, remaining, fraction, level }` | the same plus `estimatedSecurityBits` (upstream's cover estimate; see [Usage counter](#usage-counter-and-key-rotation)) |
 | `experimental` / `warning` | `false` / – | **`true`** / `LEAN_SPHINCS_S_WARNING` |
 | extras | `keygenFromSeedParts` (top level) | `keygenFromSeed(seed32)` (= `lssk keygen --tier light`), `KEPT_SUBTREE_HEIGHT = 13` |
 | keygen / sign (WASM, M3) | 128 ms / 2.6 s | 435 ms / 474 ms |
@@ -187,7 +188,7 @@ misuse of spec §14 and must get a new scheme id / derivation label.
 
 | | SPHINCS- C13 | leanSphincs-s |
 |---|---|---|
-| Verifier correctness | **Proved**: Lean 4 / Verity model of `SPHINCs-C13Asm.sol` refines a functional spec (`c13_refines_spec`), resting on three named residual assembly axioms (upstream `verity/README.md` "Scope", `SphincsMinusVerifiers/AXIOMS.md`). The model is hand-transcribed, so the bytecode-to-model step is reviewed, not proved | **Not proved**: upstream's Verity scope lists only C13 and SLH-DSA-SHA2-128-24; every other verifier "should be treated as unverified code" (`verity/README.md:8-18`). Evidence here is testing only: KATs from upstream's Rust and its independent spec-literal Python verifier, our independent Rust verifier, fuzzing |
+| Verifier correctness | **Proved**: Lean 4 / Verity model of `SPHINCs-C13Asm.sol` refines a functional spec (`c13_refines_spec`), resting on three named residual assembly axioms (upstream `verity/README.md` "Scope", `SphincsMinusVerifiers/AXIOMS.md`). The model is hand-transcribed, so the bytecode-to-model step is reviewed, not proved | **Not proved**: upstream's Verity scope lists only C13 and SLH-DSA-SHA2-128-24 (`verity/README.md:8-18`); it names C7 and C9 as code that "should be treated as unverified" and does not mention leanSphincs-s at all, which has no model either. Evidence here is testing only: KATs from upstream's Rust and its independent spec-literal Python verifier, our independent Rust verifier, fuzzing |
 | Per-key lifetime at ~128 bit | 2²² signatures from upstream's parameter table (`docs/variants.md:50-51`); the few-time bound in the grindable-R model is open (review C13-X-f2/f3) | **Estimate, not proved**: Light tier rated 20,000 signatures; the cover estimate (43,715 at 127 bits) "is an estimate and is not proved" (spec §14 "Lifetime"); for the original leanSphincs parameters the Lean-proved lifetimes are 4–17% below that estimate, widest at small b (same section). Upstream README: "-S and -f are rated … (sphincs-art estimates …, not proved)" (`README.md:52-53`) |
 | Nothing enforces the lifetime | counter in the companion | same: "Nothing enforces it: not the signature, not the verifier, and not the signer" (spec §14). Budget 20,000 summed over all devices holding the seed; warn well before it |
 | Audit | none ("not audited", upstream `README.md:4`); two AI-agent-assisted upstream reviews | none; no upstream security review of leanSphincs-s (`docs/SECURITY-REVIEW-*` cover the C-series and SLH-DSA) |
@@ -199,6 +200,32 @@ Also: hedged signing means re-signing the same digest uses a fresh leaf and coun
 `LeanSphincsSVerifier` does the same (`try`/`catch` self-call, as C13). **No real funds** on either scheme until
 plan §7.3 items 1–3 are done; for leanSphincs-s additionally an independent review of the lifetime argument at
 b = 13 (decision entry above).
+
+### Usage counter and key rotation
+
+Why the Light tier: b = 13 is the only tier whose keygen and (cache-less) signing fit a WASM signer without key
+state (~0.5 s each; Standard b = 20 is ~128× that). Its price is the small budget. The budget is **soft**: past it,
+security degrades gradually by upstream's cover estimate (spec §14; not proved): ~136 bits at 20,000 signatures,
+127 at 43,715, ~116 at 100,000, ~105 at 200,000, roughly 10 bits per doubling. There is no one-time-key cliff as
+in stateful XMSS/LMS (WOTS leaves are reused from the first few thousand signatures by design; the FORS few-time
+layer absorbs that), so a counter that drives a warning and a rotation is an adequate guard, and a missed count
+by a few signatures is not a compromise. The same holds for C13 at its 2²² budget.
+
+The guard the companion must implement (`budgetStatus(used)` is the API part):
+
+1. Keep a counter per key, i.e. per (scheme, role, chainScope) public key, in companion storage. Increment it for
+   **every `sign` call that returns** (hedged signing: a fee bump, a retry or a never-broadcast signature each
+   open a fresh leaf), before the signature is used.
+2. Sum over devices: the counter travels with the key (export it with the key metadata). A seed restored from
+   the mnemonic has an **unknown** count: treat it as `"exceeded"` and rotate, do not start from 0.
+3. Act on `budgetStatus(count).level`: `"warn"` (≥ 50%) shows a "rotate soon" notice; `"rotate"` (≥ 90%) asks
+   for a rotation before further approvals; `"exceeded"` refuses new approvals with this key except the rotation
+   itself. `estimatedSecurityBits` (leanSphincs-s) can be shown, labelled as an estimate.
+4. Rotation = a new key, never the same seed at another tier: derive with a fresh `chainScope` label (e.g.
+   `any-2`; v1 derivation has no key index and `chainScope` is its only free label, part of the HMAC key, so
+   the new key is independent of the old one), create a new VaultSigner clone
+   bound to the new `pk` and point the account's role at it, then retire the old clone. Signing with the old key
+   remains valid on chain; only the companion stops using it.
 
 ### Tests (leanSphincs-s)
 
