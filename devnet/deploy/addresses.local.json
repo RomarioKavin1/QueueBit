@@ -9,20 +9,22 @@
   "stakingRegistry": "0x8464135c8F25Da09e49BC8782676a84730C318bC",
   "contracts": {
     "LeakedAccountRoles": {
-      "address": "0x0b031120BA7B620896602f2c5A0992a6A30Fa6eE",
+      "address": "0x4B24758fe942aE4da205f8a506e004CAE6A66b89",
       "artifact": "LeakedAccountRoles.sol/LeakedAccountRoles",
       "args": [],
-      "initCodeHash": "0xb75c46cbe36ac500bfbd285f648cabd29710f3edd21c2c1baab6c3e55c168bd3"
+      "initCodeHash": "0xc2c51a54c1f351666002e8e18ec4bf0150d0253d23c432637ae4285c082aec72",
+      "deployTx": "0x2b8c49ee7095d958d77bd1c585a3c233f4e5bb0bd448f74cc87b7071e447e33e"
     },
     "LeakedAccountImpl": {
-      "address": "0x6770518a08E18eB6dAf13fFf2C7B675375F6A8da",
+      "address": "0xa23d5438Ef67E35829C2E0B03aD13eC3B108C520",
       "artifact": "LeakedAccountImpl.sol/LeakedAccountImpl",
       "args": [
         0,
         true,
-        "0x0b031120BA7B620896602f2c5A0992a6A30Fa6eE"
+        "0x4B24758fe942aE4da205f8a506e004CAE6A66b89"
       ],
-      "initCodeHash": "0x1c00084037372738babedf8960f56f98b9f8b3b4e4dee8f5dd4ff94f40a46376"
+      "initCodeHash": "0xc95260bb308955523f2bf42f7929f0349f90ac008099488d436a7dff8f21ad9f",
+      "deployTx": "0x3f815872f6cd8619df61abe095bdd51e75ba66d558a08e6b848b618cc7f4471f"
     },
     "AccountFactory": {
       "address": "0x12e7A64982e85868C345165bD149d6bE55fcA345",
@@ -53,6 +55,6 @@
   "testVault": {
     "address": "0xd2A752cbA5c92DfEEa06957819F229a6fdC1107a",
     "privateKey": "0x719beaf8d3bd6187f4467212fde50b9937efcaf53109c6d125157e13f7debd37",
-    "note": "Public devnet-only key standing in for the Vault signer until Vault pairing (M4). Never use elsewhere."
+    "note": "Legacy: public devnet-only key for explicit-mode (unbound) accounts; the bound InitConfig needs no stand-in. Never use elsewhere."
   }
 }

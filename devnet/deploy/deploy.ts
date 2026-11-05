@@ -14,8 +14,11 @@
 //   AccountFactory()                                      CREATE2 ERC1967 proxies (the extension's counterfactual)
 //   C13Verifier()                                         IPQVerifier for SPHINCS- C13 (the Vault's scheme, M4)
 //   RoleSignerFactory(ERC8421_WORKSHOP, MAX_COST, NaiveStakingRegistry, 0.01 ETH)
-// Plus the "test Vault stand-in": a public, deterministic devnet key that the extension uses as the account's vault
-// signer until Vault pairing exists (M4). It is funded so devnet tests can act as the Vault with plain transactions.
+// Accounts bind their VaultSigner at initialize (`InitConfig.roleSignerFactory` + the vault's PQ params: the account
+// derives `predictRoleSigner(salt, 1, account, pk, C13Verifier, payerKey)` from this RoleSignerFactory), so a fresh
+// account needs the Vault's pk and no stand-in. The "test Vault stand-in" below (a public, deterministic devnet key)
+// is kept only for explicit-mode (unbound) accounts created before that change and for the extension until it moves
+// to the bound InitConfig (IMPLEMENTATION-NOTES); it stays funded so devnet tests can act as such a Vault.
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
@@ -172,7 +175,7 @@ const out: Deployment = {
   testVault: {
     address: vault.address,
     privateKey: TEST_VAULT_KEY,
-    note: "Public devnet-only key standing in for the Vault signer until Vault pairing (M4). Never use elsewhere.",
+    note: "Legacy: public devnet-only key for explicit-mode (unbound) accounts; the bound InitConfig needs no stand-in. Never use elsewhere.",
   },
 };
 writeFileSync(FILE, `${JSON.stringify(out, null, 2)}\n`);

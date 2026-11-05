@@ -886,12 +886,74 @@ export const accountAbi = [
   },
   {
     type: "event",
+    name: "RecipientModeSet",
+    inputs: [
+      {
+        name: "mode",
+        type: "uint8",
+        indexed: false,
+        internalType: "enum ILeakedAccount.RecipientMode",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
     name: "RecoverySignerSet",
     inputs: [
       {
         name: "signer",
         type: "address",
         indexed: true,
+        internalType: "address",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "RoleSignerDerived",
+    inputs: [
+      {
+        name: "role",
+        type: "uint8",
+        indexed: true,
+        internalType: "uint8",
+      },
+      {
+        name: "signer",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "factory",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "salt",
+        type: "bytes32",
+        indexed: false,
+        internalType: "bytes32",
+      },
+      {
+        name: "pk",
+        type: "bytes32",
+        indexed: false,
+        internalType: "bytes32",
+      },
+      {
+        name: "verifier",
+        type: "address",
+        indexed: false,
+        internalType: "address",
+      },
+      {
+        name: "payerKey",
+        type: "address",
+        indexed: false,
         internalType: "address",
       },
     ],
@@ -1760,6 +1822,65 @@ export const accountAbi = [
             internalType: "address",
           },
           {
+            name: "roleSignerFactory",
+            type: "address",
+            internalType: "address",
+          },
+          {
+            name: "vault",
+            type: "tuple",
+            internalType: "struct ILeakedAccount.RoleSignerParams",
+            components: [
+              {
+                name: "salt",
+                type: "bytes32",
+                internalType: "bytes32",
+              },
+              {
+                name: "pk",
+                type: "bytes32",
+                internalType: "bytes32",
+              },
+              {
+                name: "verifier",
+                type: "address",
+                internalType: "address",
+              },
+              {
+                name: "payerKey",
+                type: "address",
+                internalType: "address",
+              },
+            ],
+          },
+          {
+            name: "recovery",
+            type: "tuple",
+            internalType: "struct ILeakedAccount.RoleSignerParams",
+            components: [
+              {
+                name: "salt",
+                type: "bytes32",
+                internalType: "bytes32",
+              },
+              {
+                name: "pk",
+                type: "bytes32",
+                internalType: "bytes32",
+              },
+              {
+                name: "verifier",
+                type: "address",
+                internalType: "address",
+              },
+              {
+                name: "payerKey",
+                type: "address",
+                internalType: "address",
+              },
+            ],
+          },
+          {
             name: "vaultSigner",
             type: "address",
             internalType: "address",
@@ -1818,6 +1939,11 @@ export const accountAbi = [
             name: "ethUsdPrice",
             type: "uint256",
             internalType: "uint256",
+          },
+          {
+            name: "recipientMode",
+            type: "uint8",
+            internalType: "enum ILeakedAccount.RecipientMode",
           },
         ],
       },
@@ -2101,6 +2227,19 @@ export const accountAbi = [
         name: "",
         type: "uint256",
         internalType: "uint256",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "recipientMode",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "uint8",
+        internalType: "enum ILeakedAccount.RecipientMode",
       },
     ],
     stateMutability: "view",
@@ -2576,6 +2715,19 @@ export const accountAbi = [
   },
   {
     type: "function",
+    name: "vaultSetRecipientMode",
+    inputs: [
+      {
+        name: "mode",
+        type: "uint8",
+        internalType: "enum ILeakedAccount.RecipientMode",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
     name: "vaultSetRecoverySigner",
     inputs: [
       {
@@ -2839,9 +2991,9 @@ export const localDeployment: {
   testVault: `0x${string}`;
 } | null = {
   chainId: 1337,
-  accountImpl: "0x6770518a08E18eB6dAf13fFf2C7B675375F6A8da",
-  accountImplInitCodeHash: "0x1c00084037372738babedf8960f56f98b9f8b3b4e4dee8f5dd4ff94f40a46376",
-  rolesModule: "0x0b031120BA7B620896602f2c5A0992a6A30Fa6eE",
+  accountImpl: "0xa23d5438Ef67E35829C2E0B03aD13eC3B108C520",
+  accountImplInitCodeHash: "0xc95260bb308955523f2bf42f7929f0349f90ac008099488d436a7dff8f21ad9f",
+  rolesModule: "0x4B24758fe942aE4da205f8a506e004CAE6A66b89",
   factory: "0x12e7A64982e85868C345165bD149d6bE55fcA345",
   c13Verifier: "0xf67f51B70d6e751db52E9Ab8C20e5430dBB04715",
   roleSignerFactory: "0x6E721ac3171b611eE9E2FD3e989B7B2563B3A578",
