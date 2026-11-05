@@ -72,3 +72,6 @@ jobs:
       - name: forge fmt
         working-directory: contracts
         run: forge fmt --check
+      - name: lint VERIFY-reachable code (banned opcodes, halting reads)
+        working-directory: contracts
+        run: ./script/lint-verify.sh
