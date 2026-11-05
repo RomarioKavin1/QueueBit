@@ -10,7 +10,7 @@ import {PackedUserOperation, Execution} from "../../src/modules/interfaces/IERC7
 import {LeakedPolicyHook} from "../../src/modules/LeakedPolicyHook.sol";
 import {LeakedHotValidator} from "../../src/modules/LeakedHotValidator.sol";
 import {LeakedRoleExecutor} from "../../src/modules/LeakedRoleExecutor.sol";
-import {IERC7579AccountView} from "./hosts/HostInterfaces.sol";
+import {IERC7579AccountView, IAccount4337 as IAccountValidate} from "./hosts/HostInterfaces.sol";
 import {LeakedModulesBase} from "./LeakedModulesBase.sol";
 
 contract PermitToken is ERC20Permit {
@@ -635,6 +635,51 @@ abstract contract LeakedModulesHostsTest is LeakedModulesBase {
         vaultPk = newVault;
         _vaultExec(s, 0);
         _submitOk(_op(_single(recipient, 0.01 ether, "")));
+    }
+
+    // -------------------------------------------------------------------------------------- ERC-7562 ------
+
+    /// [STO-021]: during validation the modules read only storage associated with the account
+    /// (`keccak256(account ‖ x) + n`, n <= 128); the validator itself reads none, the executor is not touched.
+    function test_erc7562_validationReadsOnlyAssociatedStorage() public {
+        _openSessions();
+        Execution[] memory e = new Execution[](4);
+        e[0] = Execution(recipient, 0.01 ether, "");
+        e[1] = Execution(address(usdc), 0, abi.encodeCall(IERC20.transfer, (recipient, 1e6)));
+        e[2] = Execution(
+            address(hook),
+            0,
+            abi.encodeCall(
+                LeakedPolicyHook.registerHash, (keccak256("x"), address(usdc), 1e6, uint48(block.timestamp + 1 days))
+            )
+        );
+        e[3] = Execution(address(router), 0, abi.encodeCall(router.pull, (IERC20(address(usdc)), 0, stranger)));
+        PackedUserOperation memory op = _op(_batch(e));
+        bytes32 h = ep.getUserOpHash(op);
+
+        vm.startMappingRecording();
+        vm.record();
+        vm.prank(EP_ADDR);
+        uint256 res = IAccountValidate(account).validateUserOp(op, h, 0);
+        assertEq(uint160(res), 0, "validation passes (Kernel packs a validUntil into the upper bits)");
+        (bytes32[] memory hookReads,) = vm.accesses(address(hook));
+        (bytes32[] memory valReads,) = vm.accesses(address(validator));
+        (bytes32[] memory exReads,) = vm.accesses(address(executor));
+        assertEq(valReads.length, 0, "validator is stateless");
+        assertEq(exReads.length, 0, "executor not read in validation");
+        assertGt(hookReads.length, 0);
+        for (uint256 i; i < hookReads.length; ++i) {
+            assertTrue(_associated(address(hook), hookReads[i]), "hook slot not associated with the account");
+        }
+        vm.stopMappingRecording();
+    }
+
+    function _associated(address target, bytes32 slot) internal returns (bool) {
+        for (uint256 n; n <= 128; ++n) {
+            (bool found, bytes32 key,) = vm.getMappingKeyAndParentOf(target, bytes32(uint256(slot) - n));
+            if (found && key == bytes32(uint256(uint160(account)))) return true;
+        }
+        return false;
     }
 
     // --------------------------------------------------------------------------------------- helpers ------
