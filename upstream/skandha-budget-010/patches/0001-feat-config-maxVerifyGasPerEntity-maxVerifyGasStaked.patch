@@ -1,7 +1,7 @@
-From 5b7dbdbbea1d3bf38fd28011c9d5d9856ce11c33 Mon Sep 17 00:00:00 2001
+From e3436c8a37e304dba4f2866dbd2bc12106b11559 Mon Sep 17 00:00:00 2001
 From: Romario Kavin <98270892+RomarioKavin1@users.noreply.github.com>
 Date: Fri, 6 Nov 2026 03:46:11 +0530
-Subject: [PATCH 1/5] feat(config): maxVerifyGasPerEntity /
+Subject: [PATCH 1/4] feat(config): maxVerifyGasPerEntity /
  maxVerifyGasStakedEntity (ERC-8421 BUDGET-010 defaults)
 
 Config keys and SKANDHA_MAX_VERIFY_GAS_PER_ENTITY / SKANDHA_MAX_VERIFY_GAS_STAKED_ENTITY env vars,
@@ -145,6 +145,3 @@ index 910dba4..57b54a3 100644
 +    });
 +  });
 +});
--- 
-2.50.1 (Apple Git-155)
-

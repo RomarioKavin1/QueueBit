@@ -1,7 +1,7 @@
-From 9a20b61a3c0a10f3599e4e0911e3d878a2d86ac2 Mon Sep 17 00:00:00 2001
+From 50d3f443699b41e553812f2d473b3e2f391f3d72 Mon Sep 17 00:00:00 2001
 From: Romario Kavin <98270892+RomarioKavin1@users.noreply.github.com>
 Date: Fri, 6 Nov 2026 03:46:11 +0530
-Subject: [PATCH 3/5] feat(api): advertise BUDGET-010 budgets in skandha_config
+Subject: [PATCH 3/4] feat(api): advertise BUDGET-010 budgets in skandha_config
 
 skandha_config.budgets = {rule, maxVerifyGasPerEntity, maxVerifyGasStakedEntity,
 signatureCostAttributedTo, maxVerifyStateGas}, so wallets can pick a validation path
@@ -90,6 +90,3 @@ index fe0c703..2501d73 100644
    multicall: string;
    estimationStaticBuffer: number;
    validationGasLimit: number;
--- 
-2.50.1 (Apple Git-155)
-

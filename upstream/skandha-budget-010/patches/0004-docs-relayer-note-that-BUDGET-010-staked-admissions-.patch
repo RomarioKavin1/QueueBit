@@ -1,7 +1,7 @@
-From 50df48de09e30a10dd1865e9d2dd6d568b79c9a5 Mon Sep 17 00:00:00 2001
+From 2ac085bc5ef07a6018360ecab57d0ab6638fc3a7 Mon Sep 17 00:00:00 2001
 From: Romario Kavin <98270892+RomarioKavin1@users.noreply.github.com>
 Date: Fri, 6 Nov 2026 03:46:11 +0530
-Subject: [PATCH 4/5] docs(relayer): note that BUDGET-010 staked admissions
+Subject: [PATCH 4/4] docs(relayer): note that BUDGET-010 staked admissions
  rely on the privileged route
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
@@ -29,6 +29,3 @@ index 9220b85..703f442 100644
   * `eth_sendRawTransactionConditional` (with `{knownAccounts: storageMap}`) is
   * also dropped. Its preconditions came from a bundle's merged validation
   * storage map, and its purpose was to stop the bundler paying for a batch
--- 
-2.50.1 (Apple Git-155)
-
