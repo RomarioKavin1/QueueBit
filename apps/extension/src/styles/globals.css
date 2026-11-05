@@ -1,0 +1,168 @@
+@import "tailwindcss";
+@import "./tokens.css";
+
+/* Only the design tokens exist as colours; the default palette is removed so hex values can't creep in. */
+@theme {
+  --color-*: initial;
+  --font-*: initial;
+  --radius-*: initial;
+  --shadow-*: initial;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--border);
+  --color-fg: var(--text);
+  --color-muted: var(--text-muted);
+  --color-inverse: var(--text-inverse);
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-on-brand: var(--on-brand);
+  --color-safe: var(--safe);
+  --color-safe-bg: var(--safe-bg);
+  --color-on-safe: var(--on-safe);
+  --color-limit: var(--limit);
+  --color-limit-fill: var(--limit-fill);
+  --color-limit-bg: var(--limit-bg);
+  --color-vault: var(--vault);
+  --color-vault-bg: var(--vault-bg);
+  --color-on-vault: var(--on-vault);
+  --color-danger: var(--danger);
+  --color-danger-bg: var(--danger-bg);
+  --color-on-danger: var(--on-danger);
+  --color-meter-track: var(--meter-track);
+  --color-transparent: transparent;
+  --font-sans: var(--font-ui);
+  --font-mono: var(--font-code);
+  --radius-sm: var(--r-sm);
+  --radius-md: var(--r-md);
+  --radius-lg: var(--r-lg);
+  --radius-full: 9999px;
+  --shadow-sheet: var(--shadow-sheet);
+  --ease-out: var(--ease);
+}
+
+@layer base {
+  html,
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-ui);
+    font-size: 14px;
+    line-height: 20px;
+    -webkit-font-smoothing: antialiased;
+  }
+  input,
+  select,
+  textarea,
+  button {
+    font: inherit;
+    color: inherit;
+  }
+  /* Headings focused programmatically on step change (for screen readers) don't need a ring. */
+  [tabindex="-1"]:focus {
+    box-shadow: none;
+    outline: none;
+  }
+  /* One visible focus style for every interactive element (WCAG 2.4.7 / 2.4.11). */
+  :focus-visible {
+    outline: 2px solid transparent;
+    box-shadow: var(--focus-ring);
+    border-radius: var(--r-sm);
+  }
+  button,
+  a,
+  input,
+  select,
+  textarea,
+  summary {
+    -webkit-tap-highlight-color: transparent;
+  }
+  ::selection {
+    background: var(--vault-bg);
+  }
+}
+
+@layer components {
+  /* Type scale (ux-spec §6.2). */
+  .t-display {
+    font-size: 28px;
+    line-height: 34px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+  }
+  .t-title {
+    font-size: 18px;
+    line-height: 24px;
+    font-weight: 600;
+  }
+  .t-body {
+    font-size: 14px;
+    line-height: 20px;
+    font-weight: 400;
+  }
+  .t-strong {
+    font-size: 14px;
+    line-height: 20px;
+    font-weight: 600;
+  }
+  .t-small {
+    font-size: 12px;
+    line-height: 16px;
+    font-weight: 400;
+  }
+  .t-mono {
+    font-family: var(--font-code);
+    font-size: 13px;
+    line-height: 18px;
+    font-weight: 500;
+  }
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+  .skeleton {
+    background: linear-gradient(90deg, var(--surface-2), var(--surface), var(--surface-2));
+    background-size: 200% 100%;
+    animation: skeleton 1.4s ease-in-out infinite;
+    border-radius: var(--r-sm);
+  }
+}
+
+@keyframes skeleton {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes sheet-in {
+  from {
+    transform: translateY(16px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+/* ux-spec §6.6: honour reduced motion by disabling all transitions and non-essential animation. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+}

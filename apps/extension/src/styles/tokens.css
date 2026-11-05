@@ -1,0 +1,136 @@
+/*
+ * Design tokens, verbatim from docs/design/ux-spec.md §6.1–6.3. Components never hard-code colours: Tailwind's
+ * palette is reset (globals.css) and only these variables are exposed as utilities.
+ */
+:root {
+  color-scheme: light;
+  /* neutrals */
+  --bg: #ffffff;
+  --surface: #f6f7f9;
+  --surface-2: #eceff3;
+  --border: #d9dee5;
+  --text: #111418;
+  --text-muted: #5b6470; /* 5.9:1 on --bg */
+  --text-inverse: #ffffff;
+  /* brand */
+  --brand: #2f5bea;
+  --on-brand: #ffffff; /* 5.6:1 */
+  --brand-hover: #244bc4;
+  /* status: safe (everyday) */
+  --safe: #1b7f4b;
+  --safe-bg: #e6f4ec;
+  --on-safe: #ffffff;
+  /* status: limit (amber) */
+  --limit: #9a5b00;
+  --limit-fill: #ffb020;
+  --limit-bg: #fff4de;
+  /* status: vault (purple) */
+  --vault: #6b3fd6;
+  --vault-bg: #efe9fb;
+  --on-vault: #ffffff;
+  /* status: danger */
+  --danger: #c8102e;
+  --danger-bg: #fde8ec;
+  --on-danger: #ffffff;
+  /* meter */
+  --meter-track: #e3e6ea;
+  --meter-safe: #1b7f4b;
+  --meter-limit: #ffb020;
+  --meter-empty: #c8102e;
+  /* focus */
+  --focus: #2f5bea;
+  --focus-ring: 0 0 0 3px rgba(47, 91, 234, 0.45);
+  /* elevation (sheets only; cards use a border) */
+  --shadow-sheet: 0 8px 24px rgba(0, 0, 0, 0.18);
+  --scrim: rgba(17, 20, 24, 0.45);
+
+  /* spacing (4-pt), radius, motion */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 20px;
+  --s-6: 24px;
+  --s-8: 32px;
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 16px;
+  --dur-fast: 120ms;
+  --dur-med: 200ms;
+  --dur-slow: 320ms;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  /* type */
+  --font-ui: -apple-system, "Segoe UI", Inter, Roboto, system-ui, sans-serif;
+  --font-code: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+/* Dark: duplicated under the system-preference guard so the system theme works without JS; [data-theme] overrides. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0f1115;
+    --surface: #171a20;
+    --surface-2: #1f242c;
+    --border: #2a2f38;
+    --text: #f2f4f7;
+    --text-muted: #a3acb9;
+    --text-inverse: #0f1115;
+    --brand: #7a9bff;
+    --on-brand: #0f1115;
+    --brand-hover: #92adff;
+    --safe: #4cc38a;
+    --safe-bg: #12291d;
+    --on-safe: #0f1115;
+    --limit: #ffb020;
+    --limit-fill: #ffb020;
+    --limit-bg: #2e2410;
+    --vault: #b39dff;
+    --vault-bg: #221b38;
+    --on-vault: #0f1115;
+    --danger: #ff6b6b;
+    --danger-bg: #351517;
+    --on-danger: #0f1115;
+    --meter-track: #2a2f38;
+    --meter-safe: #4cc38a;
+    --meter-limit: #ffb020;
+    --meter-empty: #ff6b6b;
+    --focus: #7a9bff;
+    --focus-ring: 0 0 0 3px rgba(122, 155, 255, 0.55);
+    --shadow-sheet: 0 8px 24px rgba(0, 0, 0, 0.5);
+    --scrim: rgba(0, 0, 0, 0.6);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0f1115;
+  --surface: #171a20;
+  --surface-2: #1f242c;
+  --border: #2a2f38;
+  --text: #f2f4f7;
+  --text-muted: #a3acb9;
+  --text-inverse: #0f1115;
+  --brand: #7a9bff;
+  --on-brand: #0f1115;
+  --brand-hover: #92adff;
+  --safe: #4cc38a;
+  --safe-bg: #12291d;
+  --on-safe: #0f1115;
+  --limit: #ffb020;
+  --limit-fill: #ffb020;
+  --limit-bg: #2e2410;
+  --vault: #b39dff;
+  --vault-bg: #221b38;
+  --on-vault: #0f1115;
+  --danger: #ff6b6b;
+  --danger-bg: #351517;
+  --on-danger: #0f1115;
+  --meter-track: #2a2f38;
+  --meter-safe: #4cc38a;
+  --meter-limit: #ffb020;
+  --meter-empty: #ff6b6b;
+  --focus: #7a9bff;
+  --focus-ring: 0 0 0 3px rgba(122, 155, 255, 0.55);
+  --shadow-sheet: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --scrim: rgba(0, 0, 0, 0.6);
+}
