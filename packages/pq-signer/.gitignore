@@ -1,4 +1,3 @@
-# build outputs (regenerate with `pnpm build`; see README "Building")
-wasm/
+# wasm/ is committed (deterministic; CI rebuilds and diffs it). Regenerate with `pnpm build:wasm`.
 dist/
 rust/target/

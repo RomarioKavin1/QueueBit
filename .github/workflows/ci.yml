@@ -28,6 +28,29 @@ jobs:
       - run: pnpm test
       - run: pnpm build
 
+  pq-signer-wasm:
+    # wasm/ is committed so JS consumers and the typescript job need no Rust toolchain.
+    # This job proves the committed artifact is reproducible from rust/ (byte-for-byte).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+      - name: rust toolchain (pinned by packages/pq-signer/rust/rust-toolchain.toml)
+        working-directory: packages/pq-signer/rust
+        run: rustup show
+      - name: wasm-bindgen-cli 0.2.117
+        run: cargo install wasm-bindgen-cli --version 0.2.117 --locked
+      - name: rust tests
+        working-directory: packages/pq-signer/rust
+        run: cargo test --release
+      - name: rebuild wasm and diff
+        working-directory: packages/pq-signer
+        run: |
+          bash scripts/build-wasm.sh
+          git diff --exit-code -- wasm/
+
   contracts:
     runs-on: ubuntu-latest
     steps:
