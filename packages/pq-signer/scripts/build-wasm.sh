@@ -13,6 +13,10 @@ if [ "$have" != "$want" ]; then
   exit 1
 fi
 cd "$here/rust"
+# Panic locations embed source paths (e.g. keccak's lib.rs, wasm-bindgen's externref.rs); remap them so the binary
+# does not depend on the build machine's home, cargo registry or checkout path (CI rebuilds on Linux and diffs).
+cargo_home="${CARGO_HOME:-$HOME/.cargo}"
+export RUSTFLAGS="--remap-path-prefix=$cargo_home=/cargo --remap-path-prefix=$here=/pq-signer"
 cargo build --release --lib --target wasm32-unknown-unknown --features wasm
 rm -rf "$here/wasm"
 wasm-bindgen --target web --out-dir "$here/wasm" --out-name leaked_pq \
