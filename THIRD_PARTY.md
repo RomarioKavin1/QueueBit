@@ -97,3 +97,80 @@ of npm `@fatsolutions/privacy-pools-core-circuits@1.0.5` (Apache-2.0; `withdraw.
 The MIT license text of `poseidon-solidity` and `@openzeppelin/contracts-upgradeable` is the standard MIT text quoted
 above for hegota-support, with their own copyright lines ("Copyright (c) Chance Hudson" per the package metadata;
 "Copyright (c) 2016-2023 Zeppelin Group Ltd").
+
+## PQ benchmark harness (`bench/`, crypto milestone M3)
+
+The bench is a standalone Foundry project plus a TypeScript harness. Vendored files carry a provenance header above
+the unmodified upstream text; the licence texts are in `bench/contracts/src/vendor/LICENSE-*`.
+
+| Where in this repo | Origin | License | What was taken |
+|---|---|---|---|
+| `bench/contracts/src/vendor/sphincs-minus/{SPHINCs-C13Asm,SPHINCs-C7Asm,LeanSphincs-SAsm,SLH-DSA-SHA2-128-24verifier}.sol` | [`nconsigny/SPHINCS-`](https://github.com/nconsigny/SPHINCS-) @ `4c76aaf`, `src/keccak/`, `src/sha/` | MIT, Copyright (c) 2026 Nicolas Consigny | The C13, C7, leanSphincs-s and SLH-DSA-SHA2-128-24 verifiers, byte-identical below the header |
+| `bench/contracts/src/vendor/porst/{PORST.sol,interfaces/IERC1271.sol}` | [`duncancmt/porst`](https://github.com/duncancmt/porst) @ `82a5e8c` | MIT, Copyright (c) 2026 Duncan Clarke McIntire Townsend | The PORST verifier, byte-identical below the header |
+| `bench/contracts/src/vendor/porst/PORST256.sol` | same, `src/PORST.sol` | MIT, as above | Modified: `TREE_HEIGHT` 24, `SUBSET_SIZE` 23 (the r=256 row of the upstream table), contract renamed |
+| `bench/contracts/src/vendor/ethfalcon/ZKNOX_{falcon_core,falcon_utils,NTT_falcon,HashToPoint,shake}.sol` | [`ZKNoxHQ/ETHFALCON`](https://github.com/ZKNoxHQ/ETHFALCON) @ `43ac863` | MIT, Copyright (c) 2025 ZKNOX | ETHFALCON verification core, byte-identical below the header |
+| `bench/contracts/src/EthFalconAdapter.sol` | same, `src/ZKNOX_ethfalcon.sol` `verify(bytes,bytes,uint256[],uint256[])` | MIT, as above | The body of upstream `verify` (length checks, `hashToPointEVM`, `falcon_core`) re-wrapped for a flat witness |
+| `bench/contracts/src/SlhDsaSha2_128s.sol` | written here; memory layout and ADRSc packing follow SPHINCS- `src/sha/SLH-DSA-SHA2-128-24verifier.sol` @ `4c76aaf` | MIT, as SPHINCS- above | Structure of the 128-24 verifier generalised to the FIPS 205 SLH-DSA-SHA2-128s parameters |
+| `bench/vectors/*.json` | signatures produced by the upstream signers listed in `bench/src/signers.ts` | data | Test vectors (generated data, not code) |
+
+Run from upstream checkouts at the pinned commits, never copied into this repo (`bench/scripts/setup.sh` clones or
+reuses them): SPHINCS- `script/signer.py` (C7), `signers/leansphincs-s-keccak` (`lssk`, MIT OR Apache-2.0 upstream
+crate by Tom Wambsgans, port by Nicolas Consigny), `signers/sphincsplus-128-24` (C fork of the SPHINCS+ reference,
+`LICENSE.upstream`; built in `bench/.cache`); ETHFALCON `pythonref/` (MIT) and its `polyntt` dependency
+(`ZKNoxHQ/NTT` @ `3ac5f5d`). `bench/signers/*.py` only import those modules. npm: `@noble/post-quantum@0.7.1` and
+`@noble/hashes@2.4.0` (MIT, Paul Miller).
+
+Not used: `RivaLabs-Core/NiceTry` has no licence file, so none of its code was copied or run; the bench lists its
+published figures only.
+
+The full license text of porst (`duncancmt/porst`, `LICENSE.txt`):
+
+```
+MIT License
+
+Copyright (c) 2026 Duncan Clarke McIntire Townsend
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
+
+The above copyright notice and this permission notice (including the next
+paragraph) shall be included in all copies or substantial portions of the
+Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+```
+
+The full license text of ETHFALCON (`ZKNoxHQ/ETHFALCON`, `LICENSE.txt`):
+
+```
+MIT License
+
+Copyright (c) 2025 ZKNOX.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
