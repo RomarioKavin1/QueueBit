@@ -1,0 +1,986 @@
+{
+  "startedAt": "2026-11-05T23:01:07.908Z",
+  "gate": "G1 (plan §5.2)",
+  "node": {
+    "chainId": "1337",
+    "client": "ethrex/v23.0.0-eip8141-tracer-9aa3645d795945c64400f41a70aace0edfa7f383/x86_64-unknown-linux-gnu/rustc-v1.93.1",
+    "block": "1064"
+  },
+  "fundDeployer": {
+    "deployer": "0x677540C8c722DBcFFDC7D2162804C353D6D0Af46",
+    "anvil0Tx": null
+  },
+  "keys": {
+    "hot": "0x53d6a445c7A693c4C9bFd3988efF356c12e84A3b",
+    "tank": "0x4467CBC90ebC81FFeEdd06ac09734857D3126e97",
+    "vaultPayer": "0xf569A9b58f0782829c846AA32D7D88AE0DfE64D7",
+    "recoveryPayer": "0xfbEDa1c9a995aC08BBBA0D048225a162d20a83A6",
+    "guardianKey": "0xb56AD88b25912E461b6050078bf15D0646723800",
+    "recipient": "0x9Aa8D29D9F8CF4a499AA96Fae07a0758C034505d",
+    "vaultPk": "0x5a2c1a567673522118916ce1b435a484d60ea9a452a9d1e9e990ab80e3664e7d",
+    "recoveryPk": "0xfdd6f9eadf37144819d3a3dd4b5bcb7bf7c375c55834d590b56dca1d0890c866"
+  },
+  "deployments": {
+    "C13Verifier": {
+      "hash": "0xaf7adffa34963df52c64118aed4a944fd88142201c9ac341802f9c5c748af247",
+      "address": "0x4e2bb7f894675b4e9346b11e56abfa56444e7f85",
+      "gasUsed": "2932364"
+    },
+    "LeakedAccountRoles": {
+      "hash": "0x8c03db03c0d264f177ddd07106b7c1d31b1edea56777d0d6d4e0148168535e12",
+      "address": "0x96241e5922a9d811eeb364fb28fe11b9b9b405f4",
+      "gasUsed": "27665605"
+    },
+    "LeakedAccountImpl": {
+      "hash": "0x91065908d59bfecbbfa080402c4eab57cc8dea4bdd7946344832eac5de60520d",
+      "address": "0x718db366e278b5a547ce31204d06bff8c7bae359",
+      "gasUsed": "30086545"
+    },
+    "AccountFactory": {
+      "hash": "0xdf54cfd4884c8a0020a337cb3a61fbc659d88cd4c03acd56ba0434e8bea264ad",
+      "address": "0xb50b316d8d4b13b23f659f90e911cbbf001e24b0",
+      "gasUsed": "2315543"
+    },
+    "RoleSignerFactory": {
+      "hash": "0x02d9f6ef630c633d66c3f84354dcb79e190fb3676a2c6c942eb60ba7bc7d0fcd",
+      "address": "0x80dc9e3f75eff7ce2de7a8c74ce30855897966f3",
+      "gasUsed": "15243341",
+      "implementation": "0x74E0dEE5b0dbc049aDdCaE0e546ED6AE4FAd680a"
+    }
+  },
+  "wiring": {
+    "account": {
+      "address": "0x553d9CB1B4E00A01708bE8368f2fb0DD779f7721",
+      "createTx": "0x4994bd22f48a22ab580ea7d753055fe58f3a058668a811b302687167c97521d5",
+      "createGas": "2258493"
+    },
+    "vaultSigner": {
+      "address": "0x7fcBC2B820B559039605c50B636e7dd7B8eE734f",
+      "mode": "unbound (account arg = 0)",
+      "tx": "0xa952a37069a516849679ea7fce401d9af940fa7ffdf4667a5599ec9f7eadb80a",
+      "gasUsed": "575718"
+    },
+    "recoverySigner": {
+      "address": "0x6C09aD556d64fBfdD261362e6c6AD17F8e0494a9",
+      "mode": "bound to the account",
+      "tx": "0xeac8ba4098331794a8ea01420d2559eb7d7565eb62e0019bb89e342dd6e74224",
+      "gasUsed": "575984"
+    },
+    "guardianSigner": {
+      "address": "0xd05e3236adcd722d304cf7a88497c8856e29eff9",
+      "tx": "0x1e6f81d86eeca1cf99750fe6c4f54e3745067cea6db53c7d749727808c5602d6",
+      "gasUsed": "5353231"
+    }
+  },
+  "clones": {
+    "vaultCodeIsProxyToImpl": true,
+    "recoveryCodeIsProxyToImpl": true,
+    "vault": {
+      "account": "0x0000000000000000000000000000000000000000",
+      "role": 1,
+      "pk": "0x5a2c1a567673522118916ce1b435a484d60ea9a452a9d1e9e990ab80e3664e7d",
+      "verifier": "0x4E2bB7F894675B4e9346b11e56Abfa56444E7f85",
+      "sigLength": "3688",
+      "payerKey": "0xf569A9b58f0782829c846AA32D7D88AE0DfE64D7",
+      "maxFee": "50000000000000000",
+      "feeParam": 6
+    },
+    "recovery": {
+      "account": "0x553d9CB1B4E00A01708bE8368f2fb0DD779f7721",
+      "role": 2,
+      "pk": "0xfdd6f9eadf37144819d3a3dd4b5bcb7bf7c375c55834d590b56dca1d0890c866",
+      "verifier": "0x4E2bB7F894675B4e9346b11e56Abfa56444E7f85",
+      "sigLength": "3688",
+      "payerKey": "0xfbEDa1c9a995aC08BBBA0D048225a162d20a83A6",
+      "maxFee": "50000000000000000",
+      "feeParam": 6
+    },
+    "implementationOpcodeLint": {
+      "SSTORE": 4,
+      "INVALID": 1
+    },
+    "instanceGas": {
+      "vault": "575718",
+      "recovery": "575984",
+      "target": "300000",
+      "bareCreateFloor": {
+        "codeBytes": 150,
+        "create": "452187",
+        "emptyCreate": "211189"
+      }
+    }
+  },
+  "setup": {
+    "vaultSetRecoverySigner": {
+      "via": "ethrex eth_sendRawTransaction (canonical public mempool)",
+      "hash": "0x7871ec8021b8f198e501203eca73fb09f82db99997f9b36529aa588ef8646d8c",
+      "block": "1078",
+      "payer": "0x7fcbc2b820b559039605c50b636e7dd7b8ee734f",
+      "gasUsed": "372431",
+      "frames": [
+        {
+          "status": "success",
+          "execution": "36213",
+          "state": "0",
+          "logs": 0
+        },
+        {
+          "status": "success",
+          "execution": "160708",
+          "state": "97920",
+          "logs": 2
+        }
+      ],
+      "verifyGas": "36213",
+      "simulate": {
+        "canonicalMempoolValid": true,
+        "violation": null,
+        "verifyFrameGas": "36213",
+        "executionStatus": "success",
+        "executionError": null,
+        "gate": {
+          "bannedOpcodes": {},
+          "foreignStorageReads": [],
+          "writes": 0,
+          "transient": 0,
+          "outOfGas": false,
+          "delegateCallees": [
+            "0x74e0dee5b0dbc049addcae0e546ed6ae4fad680a",
+            "0x65dc642881495211554af9d32f3728132391f0f0"
+          ]
+        }
+      }
+    },
+    "vaultSetGuardian": {
+      "via": "ethrex eth_sendRawTransaction (canonical public mempool)",
+      "hash": "0xec668e44eaa2bd10a68cf4bb620703a23a3abf843f51d2dd383c36a361a2e3c5",
+      "block": "1079",
+      "payer": "0x7fcbc2b820b559039605c50b636e7dd7b8ee734f",
+      "gasUsed": "373936",
+      "frames": [
+        {
+          "status": "success",
+          "execution": "36213",
+          "state": "0",
+          "logs": 0
+        },
+        {
+          "status": "success",
+          "execution": "161941",
+          "state": "97920",
+          "logs": 2
+        }
+      ],
+      "verifyGas": "36213",
+      "simulate": {
+        "canonicalMempoolValid": true,
+        "violation": null,
+        "verifyFrameGas": "36213",
+        "executionStatus": "success",
+        "executionError": null,
+        "gate": {
+          "bannedOpcodes": {},
+          "foreignStorageReads": [],
+          "writes": 0,
+          "transient": 0,
+          "outOfGas": false,
+          "delegateCallees": [
+            "0x74e0dee5b0dbc049addcae0e546ed6ae4fad680a",
+            "0x65dc642881495211554af9d32f3728132391f0f0"
+          ]
+        }
+      }
+    },
+    "getRoles": [
+      "0x7fcBC2B820B559039605c50B636e7dd7B8eE734f",
+      "0x6C09aD556d64fBfdD261362e6c6AD17F8e0494a9",
+      "0x0000000000000000000000000000000000000000",
+      0,
+      0
+    ]
+  },
+  "a_hotPayment": {
+    "via": "ethrex eth_sendRawTransaction (canonical public mempool)",
+    "hash": "0xfd695417d82b2b1ac34e8591005309ad0a771f5def373d230452df5abdda0892",
+    "block": "1080",
+    "payer": "0x4467cbc90ebc81ffeedd06ac09734857d3126e97",
+    "gasUsed": "125292",
+    "frames": [
+      {
+        "status": "success",
+        "execution": "45750",
+        "state": "0",
+        "logs": 0
+      },
+      {
+        "status": "success",
+        "execution": "3000",
+        "state": "0",
+        "logs": 0
+      },
+      {
+        "status": "success",
+        "execution": "53213",
+        "state": "0",
+        "logs": 2
+      }
+    ],
+    "verifyGas": "45750",
+    "simulate": {
+      "canonicalMempoolValid": true,
+      "violation": null,
+      "verifyFrameGas": "45750",
+      "executionStatus": "success",
+      "executionError": null,
+      "gate": {
+        "bannedOpcodes": {},
+        "foreignStorageReads": [],
+        "writes": 0,
+        "transient": 0,
+        "outOfGas": false,
+        "delegateCallees": [
+          "0x718db366e278b5a547ce31204d06bff8c7bae359",
+          "0x546abd14fdac5b6ddf05eedda7078d05ed0300d1"
+        ]
+      }
+    },
+    "before": {
+      "tank": "300000000000000000",
+      "account": "200000000000000000",
+      "bucket": {
+        "available": "10000000",
+        "cap": "10000000"
+      }
+    },
+    "after": {
+      "tank": "300874707999122956",
+      "account": "199000000000000000",
+      "bucket": {
+        "available": "7000000",
+        "cap": "10000000"
+      }
+    }
+  },
+  "b_pathB": {
+    "tighten": {
+      "via": "ethrex eth_sendRawTransaction (canonical public mempool)",
+      "hash": "0x207875c04334fa94cb329e7514454baae188846c429fd34a9f59ee39ec3a0260",
+      "block": "1081",
+      "payer": "0x7fcbc2b820b559039605c50b636e7dd7b8ee734f",
+      "gasUsed": "309388",
+      "frames": [
+        {
+          "status": "success",
+          "execution": "36213",
+          "state": "0",
+          "logs": 0
+        },
+        {
+          "status": "success",
+          "execution": "195297",
+          "state": "0",
+          "logs": 2
+        }
+      ],
+      "verifyGas": "36213",
+      "simulate": {
+        "canonicalMempoolValid": true,
+        "violation": null,
+        "verifyFrameGas": "36213",
+        "executionStatus": "success",
+        "executionError": null,
+        "gate": {
+          "bannedOpcodes": {},
+          "foreignStorageReads": [],
+          "writes": 0,
+          "transient": 0,
+          "outOfGas": false,
+          "delegateCallees": [
+            "0x74e0dee5b0dbc049addcae0e546ed6ae4fad680a",
+            "0x65dc642881495211554af9d32f3728132391f0f0"
+          ]
+        }
+      },
+      "capAfter": "6000000"
+    },
+    "spend": {
+      "via": "ethrex eth_sendRawTransaction (canonical public mempool)",
+      "hash": "0xaf1290c6a9a3fdddedddbbe1222ba1487c8dd8cd77d22d8b27556488ca3bc290",
+      "block": "1082",
+      "payer": "0x7fcbc2b820b559039605c50b636e7dd7b8ee734f",
+      "gasUsed": "498972",
+      "frames": [
+        {
+          "status": "success",
+          "execution": "36213",
+          "state": "0",
+          "logs": 0
+        },
+        {
+          "status": "success",
+          "execution": "200469",
+          "state": "183600",
+          "logs": 3
+        }
+      ],
+      "verifyGas": "36213",
+      "simulate": {
+        "canonicalMempoolValid": true,
+        "violation": null,
+        "verifyFrameGas": "36213",
+        "executionStatus": "success",
+        "executionError": null,
+        "gate": {
+          "bannedOpcodes": {},
+          "foreignStorageReads": [],
+          "writes": 0,
+          "transient": 0,
+          "outOfGas": false,
+          "delegateCallees": [
+            "0x74e0dee5b0dbc049addcae0e546ed6ae4fad680a",
+            "0x65dc642881495211554af9d32f3728132391f0f0"
+          ]
+        }
+      },
+      "before": {
+        "recipient": "0",
+        "account": "199000000000000000",
+        "vaultBucket": [
+          "100000000",
+          "100000000",
+          3600
+        ]
+      },
+      "after": {
+        "recipient": "10000000000000000",
+        "account": "189000000000000000",
+        "vaultBucket": [
+          "70000000",
+          "100000000",
+          3600
+        ]
+      }
+    }
+  },
+  "c_forged": {
+    "pathB": {
+      "via": "ethrex eth_sendRawTransaction (canonical public mempool)",
+      "hash": "0xc94bb3bad7bfaf287880b7a69755f2affbdac24914fb7a7f7f1b35d8698b18ad",
+      "block": "1083",
+      "payer": "0x7fcbc2b820b559039605c50b636e7dd7b8ee734f",
+      "gasUsed": "286698",
+      "frames": [
+        {
+          "status": "success",
+          "execution": "36213",
+          "state": "0",
+          "logs": 0
+        },
+        {
+          "status": "reverted",
+          "execution": "56857",
+          "state": "0",
+          "logs": 0
+        }
+      ],
+      "verifyGas": "36213",
+      "simulate": {
+        "canonicalMempoolValid": true,
+        "violation": null,
+        "verifyFrameGas": "36213",
+        "executionStatus": "reverted",
+        "executionError": null,
+        "gate": {
+          "bannedOpcodes": {},
+          "foreignStorageReads": [],
+          "writes": 0,
+          "transient": 0,
+          "outOfGas": false,
+          "delegateCallees": [
+            "0x74e0dee5b0dbc049addcae0e546ed6ae4fad680a",
+            "0x65dc642881495211554af9d32f3728132391f0f0"
+          ]
+        }
+      },
+      "before": {
+        "recipient": "10000000000000000",
+        "account": "189000000000000000",
+        "vaultBucket": [
+          "70000000",
+          "100000000",
+          3600
+        ],
+        "cap": "6000000",
+        "signer": "998445272989116911",
+        "nonce": "5"
+      },
+      "after": {
+        "recipient": "10000000000000000",
+        "account": "189000000000000000",
+        "vaultBucket": [
+          "70006944",
+          "100000000",
+          3600
+        ],
+        "cap": "6000000",
+        "signer": "998158574987110025",
+        "nonce": "6"
+      },
+      "signerPaid": "286698002006886"
+    },
+    "pathA": {
+      "submitted": false,
+      "simulate": {
+        "canonicalMempoolValid": false,
+        "violation": "prefix gas budget exceeded: 300100 > 100000 (MAX_VERIFY_GAS)",
+        "verifyFrameGas": null,
+        "executionStatus": null,
+        "executionError": "Invalid Transaction: Invalid frame transaction: VERIFY frame 0 (target 0x7fcbc2b820b559039605c50b636e7dd7b8ee734f, 150 bytes of code) failed: RevertOpcode",
+        "gate": {
+          "error": "no trace"
+        }
+      }
+    }
+  },
+  "d_overCap": {
+    "via": "ethrex eth_sendRawTransaction (canonical public mempool)",
+    "hash": "0xa5fe6c0f846d05eb568d017c9ab67cf388a787363c7dcde38b747add76c7d45f",
+    "block": "1085",
+    "payer": "0x4467cbc90ebc81ffeedd06ac09734857d3126e97",
+    "gasUsed": "112867",
+    "frames": [
+      {
+        "status": "success",
+        "execution": "45750",
+        "state": "0",
+        "logs": 0
+      },
+      {
+        "status": "success",
+        "execution": "3000",
+        "state": "0",
+        "logs": 0
+      },
+      {
+        "status": "reverted",
+        "execution": "40788",
+        "state": "0",
+        "logs": 0
+      }
+    ],
+    "verifyGas": "45750",
+    "simulate": {
+      "canonicalMempoolValid": true,
+      "violation": null,
+      "verifyFrameGas": "45750",
+      "executionStatus": "reverted",
+      "executionError": null,
+      "gate": {
+        "bannedOpcodes": {},
+        "foreignStorageReads": [],
+        "writes": 0,
+        "transient": 0,
+        "outOfGas": false,
+        "delegateCallees": [
+          "0x718db366e278b5a547ce31204d06bff8c7bae359",
+          "0x546abd14fdac5b6ddf05eedda7078d05ed0300d1"
+        ]
+      }
+    },
+    "before": {
+      "tank": "300874707999122956",
+      "account": "189000000000000000",
+      "bucket": {
+        "available": "6000000",
+        "cap": "6000000"
+      }
+    },
+    "after": {
+      "tank": "300761840998332887",
+      "account": "189000000000000000",
+      "bucket": {
+        "available": "6000000",
+        "cap": "6000000"
+      }
+    },
+    "tankPaid": "112867000790069"
+  },
+  "e_recoveryPriority": {
+    "queue": {
+      "via": "ethrex eth_sendRawTransaction (canonical public mempool)",
+      "hash": "0x052a4d8c40263095135efab0226246bbadf4843cf76bf5dcc56ca0bd512d237a",
+      "block": "1086",
+      "payer": "0x7fcbc2b820b559039605c50b636e7dd7b8ee734f",
+      "gasUsed": "602798",
+      "frames": [
+        {
+          "status": "success",
+          "execution": "36213",
+          "state": "0",
+          "logs": 0
+        },
+        {
+          "status": "success",
+          "execution": "193411",
+          "state": "293760",
+          "logs": 2
+        }
+      ],
+      "verifyGas": "36213",
+      "simulate": {
+        "canonicalMempoolValid": true,
+        "violation": null,
+        "verifyFrameGas": "36213",
+        "executionStatus": "success",
+        "executionError": null,
+        "gate": {
+          "bannedOpcodes": {},
+          "foreignStorageReads": [],
+          "writes": 0,
+          "transient": 0,
+          "outOfGas": false,
+          "delegateCallees": [
+            "0x74e0dee5b0dbc049addcae0e546ed6ae4fad680a",
+            "0x65dc642881495211554af9d32f3728132391f0f0"
+          ]
+        }
+      },
+      "opId": "0xfb415188ca7d9e9af6b8932dd022cd097a78c6ea4629c990491c6600f5129e71",
+      "pending": {
+        "eta": 1793923394,
+        "kind": 1,
+        "state": 1,
+        "vaultEpoch": 0,
+        "payloadHash": "0x3e5bd42682f085799035845183a19867fc61d39f8c37277589d53cb12f5347b7"
+      }
+    },
+    "cancel": {
+      "via": "ethrex eth_sendRawTransaction (canonical public mempool)",
+      "hash": "0xcde0c8ea619966e11b530b3c708a87518b46029216ddd4aa951e5481746939ef",
+      "block": "1087",
+      "payer": "0x6c09ad556d64fbfdd261362e6c6ad17f8e0494a9",
+      "gasUsed": "273372",
+      "frames": [
+        {
+          "status": "success",
+          "execution": "36213",
+          "state": "0",
+          "logs": 0
+        },
+        {
+          "status": "success",
+          "execution": "159353",
+          "state": "0",
+          "logs": 2
+        }
+      ],
+      "verifyGas": "36213",
+      "simulate": {
+        "canonicalMempoolValid": true,
+        "violation": null,
+        "verifyFrameGas": "36213",
+        "executionStatus": "success",
+        "executionError": null,
+        "gate": {
+          "bannedOpcodes": {},
+          "foreignStorageReads": [],
+          "writes": 0,
+          "transient": 0,
+          "outOfGas": false,
+          "delegateCallees": [
+            "0x74e0dee5b0dbc049addcae0e546ed6ae4fad680a",
+            "0x65dc642881495211554af9d32f3728132391f0f0"
+          ]
+        }
+      },
+      "op": {
+        "eta": 1793923394,
+        "kind": 1,
+        "state": 3,
+        "vaultEpoch": 0,
+        "payloadHash": "0x3e5bd42682f085799035845183a19867fc61d39f8c37277589d53cb12f5347b7"
+      }
+    }
+  },
+  "f_freeze": {
+    "guardianFreeze": {
+      "via": "ethrex eth_sendRawTransaction (canonical public mempool)",
+      "hash": "0xd24af2081106a3074f68fcb7f04c5f5c1d2318e5b225def09533111c9127e7b8",
+      "block": "1088",
+      "payer": "0xd05e3236adcd722d304cf7a88497c8856e29eff9",
+      "gasUsed": "192964",
+      "frames": [
+        {
+          "status": "success",
+          "execution": "25942",
+          "state": "0",
+          "logs": 0
+        },
+        {
+          "status": "success",
+          "execution": "51840",
+          "state": "97920",
+          "logs": 1
+        }
+      ],
+      "verifyGas": "25942",
+      "simulate": {
+        "canonicalMempoolValid": true,
+        "violation": null,
+        "verifyFrameGas": "25942",
+        "executionStatus": "success",
+        "executionError": null,
+        "gate": {
+          "bannedOpcodes": {},
+          "foreignStorageReads": [],
+          "writes": 0,
+          "transient": 0,
+          "outOfGas": false,
+          "delegateCallees": [
+            "0xc1ab8ecabb4306c7cb6cf90b1e76b2a3d80be54a"
+          ]
+        }
+      },
+      "frozenUntil": 1794179006
+    },
+    "blockedWhileGuardianFrozen": {
+      "submitted": false,
+      "simulate": {
+        "canonicalMempoolValid": false,
+        "violation": "validation prefix frame reverted",
+        "verifyFrameGas": null,
+        "executionStatus": null,
+        "executionError": "Invalid Transaction: Invalid frame transaction: VERIFY frame 0 (target 0x553d9cb1b4e00a01708be8368f2fb0dd779f7721, 89 bytes of code) failed: RevertOpcode",
+        "gate": {
+          "error": "no trace"
+        }
+      }
+    },
+    "vaultUnfreeze": {
+      "via": "ethrex eth_sendRawTransaction (canonical public mempool)",
+      "hash": "0xa098bbb3c255278754166afd6b070679187bd0d8cc50622ee06fb007cceca908",
+      "block": "1090",
+      "payer": "0x7fcbc2b820b559039605c50b636e7dd7b8ee734f",
+      "gasUsed": "275988",
+      "frames": [
+        {
+          "status": "success",
+          "execution": "36213",
+          "state": "0",
+          "logs": 0
+        },
+        {
+          "status": "success",
+          "execution": "174073",
+          "state": "0",
+          "logs": 2
+        }
+      ],
+      "verifyGas": "36213",
+      "simulate": {
+        "canonicalMempoolValid": true,
+        "violation": null,
+        "verifyFrameGas": "36213",
+        "executionStatus": "success",
+        "executionError": null,
+        "gate": {
+          "bannedOpcodes": {},
+          "foreignStorageReads": [],
+          "writes": 0,
+          "transient": 0,
+          "outOfGas": false,
+          "delegateCallees": [
+            "0x74e0dee5b0dbc049addcae0e546ed6ae4fad680a",
+            "0x65dc642881495211554af9d32f3728132391f0f0"
+          ]
+        }
+      }
+    },
+    "shortFreeze": {
+      "via": "ethrex eth_sendRawTransaction (canonical public mempool)",
+      "hash": "0xd32ed7081ea3d7d18280e1ad1c713012a449b2622fa3685c1804e57825393a8b",
+      "block": "1091",
+      "payer": "0x7fcbc2b820b559039605c50b636e7dd7b8ee734f",
+      "gasUsed": "386575",
+      "frames": [
+        {
+          "status": "success",
+          "execution": "36213",
+          "state": "0",
+          "logs": 0
+        },
+        {
+          "status": "success",
+          "execution": "175008",
+          "state": "97920",
+          "logs": 2
+        }
+      ],
+      "verifyGas": "36213",
+      "simulate": {
+        "canonicalMempoolValid": true,
+        "violation": null,
+        "verifyFrameGas": "36213",
+        "executionStatus": "success",
+        "executionError": null,
+        "gate": {
+          "bannedOpcodes": {},
+          "foreignStorageReads": [],
+          "writes": 0,
+          "transient": 0,
+          "outOfGas": false,
+          "delegateCallees": [
+            "0x74e0dee5b0dbc049addcae0e546ed6ae4fad680a",
+            "0x65dc642881495211554af9d32f3728132391f0f0"
+          ]
+        }
+      },
+      "frozenUntil": 1793919858
+    },
+    "blockedWhileShortFrozen": {
+      "submitted": false,
+      "simulate": {
+        "canonicalMempoolValid": false,
+        "violation": "validation prefix frame reverted",
+        "verifyFrameGas": null,
+        "executionStatus": null,
+        "executionError": "Invalid Transaction: Invalid frame transaction: VERIFY frame 0 (target 0x553d9cb1b4e00a01708be8368f2fb0dd779f7721, 89 bytes of code) failed: RevertOpcode",
+        "gate": {
+          "error": "no trace"
+        }
+      }
+    },
+    "clearExpiredFreeze": {
+      "via": "ethrex eth_sendRawTransaction (canonical public mempool)",
+      "hash": "0xb3d2adc3a5917fbcdcf97c5fafa34a65dce2a73e34da0f2ee671a14135483e7c",
+      "block": "1098",
+      "payer": "0x4467cbc90ebc81ffeedd06ac09734857d3126e97",
+      "gasUsed": "84611",
+      "frames": [
+        {
+          "status": "success",
+          "execution": "44852",
+          "state": "0",
+          "logs": 0
+        },
+        {
+          "status": "success",
+          "execution": "3000",
+          "state": "0",
+          "logs": 0
+        },
+        {
+          "status": "success",
+          "execution": "26478",
+          "state": "0",
+          "logs": 1
+        }
+      ],
+      "verifyGas": "44852",
+      "simulate": {
+        "canonicalMempoolValid": true,
+        "violation": null,
+        "verifyFrameGas": "44852",
+        "executionStatus": "success",
+        "executionError": null,
+        "gate": {
+          "bannedOpcodes": {},
+          "foreignStorageReads": [],
+          "writes": 0,
+          "transient": 0,
+          "outOfGas": false,
+          "delegateCallees": [
+            "0x718db366e278b5a547ce31204d06bff8c7bae359",
+            "0x546abd14fdac5b6ddf05eedda7078d05ed0300d1"
+          ]
+        }
+      }
+    },
+    "hotPaymentAfterClear": {
+      "via": "ethrex eth_sendRawTransaction (canonical public mempool)",
+      "hash": "0x81d6b95c778d80cc7707fce7423c67377e31a48c23cd27b3aa77a476874250c3",
+      "block": "1099",
+      "payer": "0x4467cbc90ebc81ffeedd06ac09734857d3126e97",
+      "gasUsed": "125280",
+      "frames": [
+        {
+          "status": "success",
+          "execution": "45750",
+          "state": "0",
+          "logs": 0
+        },
+        {
+          "status": "success",
+          "execution": "3000",
+          "state": "0",
+          "logs": 0
+        },
+        {
+          "status": "success",
+          "execution": "53213",
+          "state": "0",
+          "logs": 2
+        }
+      ],
+      "verifyGas": "45750",
+      "simulate": {
+        "canonicalMempoolValid": true,
+        "violation": null,
+        "verifyFrameGas": "45750",
+        "executionStatus": "success",
+        "executionError": null,
+        "gate": {
+          "bannedOpcodes": {},
+          "foreignStorageReads": [],
+          "writes": 0,
+          "transient": 0,
+          "outOfGas": false,
+          "delegateCallees": [
+            "0x718db366e278b5a547ce31204d06bff8c7bae359",
+            "0x546abd14fdac5b6ddf05eedda7078d05ed0300d1"
+          ]
+        }
+      }
+    }
+  },
+  "g_pathA": {
+    "stake": {
+      "via": "ethrex eth_sendRawTransaction (canonical public mempool)",
+      "hash": "0x2abdeaef7bcf5b1e0753d4495b5f3196ceb7caba912a51137f38be56e2ea978c",
+      "block": "1100",
+      "payer": "0x7fcbc2b820b559039605c50b636e7dd7b8ee734f",
+      "gasUsed": "474705",
+      "frames": [
+        {
+          "status": "success",
+          "execution": "36213",
+          "state": "0",
+          "logs": 0
+        },
+        {
+          "status": "success",
+          "execution": "165030",
+          "state": "195840",
+          "logs": 3
+        }
+      ],
+      "verifyGas": "36213",
+      "simulate": {
+        "canonicalMempoolValid": true,
+        "violation": null,
+        "verifyFrameGas": "36213",
+        "executionStatus": "success",
+        "executionError": null,
+        "gate": {
+          "bannedOpcodes": {},
+          "foreignStorageReads": [],
+          "writes": 0,
+          "transient": 0,
+          "outOfGas": false,
+          "delegateCallees": [
+            "0x74e0dee5b0dbc049addcae0e546ed6ae4fad680a",
+            "0x65dc642881495211554af9d32f3728132391f0f0"
+          ]
+        }
+      },
+      "depositInfo": [
+        "12000000000000000",
+        86400,
+        "0"
+      ]
+    },
+    "budgetSidecarConfig": {
+      "rule": "BUDGET-010",
+      "maxVerifyGasPerEntity": 100000,
+      "maxVerifyGasStakedEntity": 1000000,
+      "signatureCostAttributedTo": "sender",
+      "maxVerifyStateGas": 500000
+    },
+    "stockSidecar": {
+      "rejected": "eth_sendFrameTransaction on http://localhost:14337/rpc: validation prefix execution gas sum 300000 + signature-verification cost 100 = 300100 exceeds MAX_VERIFY_GAS 100000"
+    },
+    "ethrexVerdict": {
+      "canonicalMempoolValid": false,
+      "violation": "prefix gas budget exceeded: 300100 > 100000 (MAX_VERIFY_GAS)"
+    },
+    "pathA": {
+      "via": "BUDGET-010 sidecar eth_sendFrameTransaction (http://localhost:14340/rpc)",
+      "hash": "0x7af8a2955794bf0c5fcabd883b969cd88a2f8d3cc3b973161ce60cca30f1356b",
+      "status": "Submitted",
+      "block": "1103",
+      "gasUsed": "299402",
+      "frames": [
+        {
+          "status": "success",
+          "execution": "151701",
+          "state": "0",
+          "logs": 0
+        },
+        {
+          "status": "success",
+          "execution": "74087",
+          "state": "0",
+          "logs": 2
+        }
+      ],
+      "verifyGas": "151701",
+      "simulate": {
+        "canonicalMempoolValid": false,
+        "violation": "prefix gas budget exceeded: 300100 > 100000 (MAX_VERIFY_GAS)",
+        "verifyFrameGas": "151701",
+        "executionStatus": "success",
+        "executionError": null,
+        "gate": {
+          "bannedOpcodes": {},
+          "foreignStorageReads": [],
+          "writes": 0,
+          "transient": 0,
+          "outOfGas": false,
+          "delegateCallees": [
+            "0x74e0dee5b0dbc049addcae0e546ed6ae4fad680a",
+            "0x65dc642881495211554af9d32f3728132391f0f0"
+          ]
+        }
+      },
+      "capAfter": "5000000"
+    }
+  },
+  "feeProfileScript": {
+    "exit": 0,
+    "ok": true,
+    "log": [
+      "  chain id 1337",
+      "  expected fee TXPARAM 6",
+      "    ok 0x80Dc9e3F75Eff7CE2de7a8C74ce30855897966f3",
+      "    ok 0x74E0dEE5b0dbc049aDdCaE0e546ED6AE4FAd680a",
+      "    ok 0x7fcBC2B820B559039605c50B636e7dd7B8eE734f",
+      "    ok 0x6C09aD556d64fBfdD261362e6c6AD17F8e0494a9",
+      "    ok 0xD05e3236adcD722d304cf7a88497C8856e29eFf9",
+      "  fee profile OK"
+    ]
+  },
+  "pqSignMs": [
+    4207,
+    3694,
+    3882,
+    4271,
+    4382,
+    4581,
+    4030,
+    4373,
+    5221,
+    3768,
+    3693,
+    3967
+  ],
+  "checklist": {
+    "a": "PASS: hot payment mined via public mempool (0xfd695417d82b2b1ac34e8591005309ad0a771f5def373d230452df5abdda0892); VERIFY 45750 gas",
+    "b": "PASS: Path B C13 vault txs mined via public mempool: tightening 0x207875c04334fa94cb329e7514454baae188846c429fd34a9f59ee39ec3a0260, spend 0xaf1290c6a9a3fdddedddbbe1222ba1487c8dd8cd77d22d8b27556488ca3bc290; VERIFY 36213 gas",
+    "c": "PASS: forged vault sig moves nothing: Path B 0xc94bb3bad7bfaf287880b7a69755f2affbdac24914fb7a7f7f1b35d8698b18ad mined with SENDER reverted (balances, cap, allowance unchanged; signer paid 286698002006886 wei, nonce 5->6); Path A rejected in VERIFY (Invalid Transaction: Invalid frame transaction: VERIFY frame 0 (target 0x7fcbc2b820b559039605c50b636e7dd7b8ee734f, 150 bytes of code) failed: RevertOpcode)",
+    "d": "PASS: over-cap hot tx 0xa5fe6c0f846d05eb568d017c9ab67cf388a787363c7dcde38b747add76c7d45f: SENDER reverted, account unchanged, tank paid 112867000790069 wei",
+    "e": "PASS: loosening queued by the vault (0x052a4d8c40263095135efab0226246bbadf4843cf76bf5dcc56ca0bd512d237a, op 0xfb415188ca7d9e9af6b8932dd022cd097a78c6ea4629c990491c6600f5129e71), cancelled by the RecoverySigner (0xcde0c8ea619966e11b530b3c708a87518b46029216ddd4aa951e5481746939ef), state CANCELLED",
+    "f": "PASS: GuardianSigner freeze 0xd24af2081106a3074f68fcb7f04c5f5c1d2318e5b225def09533111c9127e7b8 blocks the hot path (VERIFY: Invalid Transaction: Invalid frame transaction: VERIFY frame 0 (target 0x553d9cb1b4e00a01708be8368f2fb0dd779f7721, 89 bytes of code) failed: RevertOpcode); vault unfreeze 0xa098bbb3c255278754166afd6b070679187bd0d8cc50622ee06fb007cceca908; short freeze 0xd32ed7081ea3d7d18280e1ad1c713012a449b2622fa3685c1804e57825393a8b expired and cleared by clearExpiredFreeze 0xb3d2adc3a5917fbcdcf97c5fafa34a65dce2a73e34da0f2ee671a14135483e7c; hot payment 0x81d6b95c778d80cc7707fce7423c67377e31a48c23cd27b3aa77a476874250c3",
+    "g": "PASS: VaultSigner staked (0x2abdeaef7bcf5b1e0753d4495b5f3196ceb7caba912a51137f38be56e2ea978c); Path A tightening 0x7af8a2955794bf0c5fcabd883b969cd88a2f8d3cc3b973161ce60cca30f1356b admitted by the BUDGET-010 sidecar (stock sidecar and ethrex reject: MAX_VERIFY_GAS), mined; VERIFY 151701 gas"
+  },
+  "finishedAt": "2026-11-05T23:04:56.827Z"
+}
