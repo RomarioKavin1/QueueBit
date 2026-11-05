@@ -1,7 +1,7 @@
 {
   "name": "@leaked/pq-signer",
   "version": "0.1.0",
-  "description": "SPHINCS- C13 post-quantum signer (Rust/WASM) for the LEAKED vault and recovery keys",
+  "description": "Post-quantum signers (Rust/WASM) for the LEAKED vault and recovery keys: SPHINCS- C13 (default) and leanSphincs-s (experimental)",
   "license": "MIT",
   "type": "module",
   "sideEffects": true,
@@ -11,7 +11,9 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
-    "./vectors/c13.json": "./vectors/c13.json"
+    "./vectors/c13.json": "./vectors/c13.json",
+    "./vectors/leansphincs-s.json": "./vectors/leansphincs-s.json",
+    "./vectors/leansphincs-s-upstream.json": "./vectors/leansphincs-s-upstream.json"
   },
   "files": [
     "dist",
@@ -28,7 +30,9 @@
     "test:rust": "cd rust && cargo test --release",
     "bench": "node bench/wasm-bench.mjs",
     "bench:native": "cd rust && cargo run --release --bin leaked-pq -- bench",
+    "bench:native:lean": "cd rust && cargo run --release --bin leaked-pq -- bench-lean",
     "vectors": "cd rust && cargo run --release --example gen_vectors -- ../vectors/c13.json",
+    "vectors:lean": "cd rust && cargo run --release --example gen_lean_vectors -- ../vectors/leansphincs-s.json",
     "crosscheck:onchain": "bash scripts/onchain-crosscheck.sh",
     "build:all": "bash scripts/build-wasm.sh && tsc -p tsconfig.build.json"
   },

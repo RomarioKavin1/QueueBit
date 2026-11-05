@@ -136,3 +136,77 @@ pub fn sign_digest(mut secret: Box<[u8]>, digest: &[u8], mode: u8, entropy: Opti
 pub fn verify_digest(pk: &[u8], digest: &[u8], sig: &[u8]) -> bool {
     crate::verify(pk, digest, sig)
 }
+
+// ------------------------------------------------------------------- leanSphincs-s (experimental) -----------
+
+#[wasm_bindgen(js_name = leanSigLength)]
+pub fn lean_sig_length() -> usize {
+    crate::lean_s::SIG_LEN
+}
+
+#[wasm_bindgen(js_name = leanSchemeId)]
+pub fn lean_scheme_id() -> Vec<u8> {
+    crate::lean_s::SCHEME_ID.to_vec()
+}
+
+/// role: 1 = vault, 2 = recovery. Returns the 64-byte secret key `S || P || root` (last 32 bytes = public key).
+#[wasm_bindgen(js_name = leanKeygenFromMaster)]
+pub fn lean_keygen_from_master(mut master: Box<[u8]>, role: u8, chain_scope: &str) -> Result<Vec<u8>, JsError> {
+    let r = Role::from_u8(role).ok_or_else(|| err("role must be 1 (vault) or 2 (recovery)"));
+    let out = r.and_then(|r| {
+        crate::lean_s::derive_secret_key(&master, r, chain_scope)
+            .map(|sk| sk.to_bytes().to_vec())
+            .map_err(|e| err(&format!("{e:?}")))
+    });
+    master.zeroize();
+    wipe_stack();
+    out
+}
+
+/// Keygen from an explicit 32-byte seed `S` at the LEAKED tier (b = 13): upstream `lssk keygen --tier light`.
+#[wasm_bindgen(js_name = leanKeygenFromSeed)]
+pub fn lean_keygen_from_seed(mut seed: Box<[u8]>) -> Result<Vec<u8>, JsError> {
+    let out = match <[u8; 32]>::try_from(&seed[..]) {
+        Ok(mut s) => {
+            let sk = crate::lean_s::SecretKey::from_seed(&s);
+            s.zeroize();
+            Ok(sk.to_bytes().to_vec())
+        }
+        Err(_) => Err(err("seed must be 32 bytes")),
+    };
+    seed.zeroize();
+    wipe_stack();
+    out
+}
+
+/// mode 0 = hedged with crypto.getRandomValues, 1 = hedged with the given 32-byte `entropy`,
+/// 2 = deterministic (upstream-identical; KATs only).
+#[wasm_bindgen(js_name = leanSignDigest)]
+pub fn lean_sign_digest(
+    mut secret: Box<[u8]>,
+    digest: &[u8],
+    mode: u8,
+    entropy: Option<Box<[u8]>>,
+) -> Result<Vec<u8>, JsError> {
+    let sk = crate::lean_s::SecretKey::from_bytes(&secret);
+    secret.zeroize();
+    let out = (|| {
+        let sk = sk.ok_or_else(|| err("not a leanSphincs-s secret key (64 bytes, S || P || root)"))?;
+        let d = <[u8; 32]>::try_from(digest).map_err(|_| err("digest must be 32 bytes"))?;
+        let r = match (mode, entropy.as_deref()) {
+            (0, _) => crate::lean_s::sign(&sk, &d),
+            (1, Some(e)) if e.len() == 32 => crate::lean_s::sign_with_entropy(&sk, &d, e.try_into().unwrap()),
+            (2, _) => crate::lean_s::sign_deterministic(&sk, &d),
+            _ => return Err(err("bad signing mode / entropy")),
+        };
+        r.map(|s| s.to_vec()).map_err(|e| err(&e.to_string()))
+    })();
+    wipe_stack();
+    out
+}
+
+/// Never throws: false for any malformed input or invalid signature.
+#[wasm_bindgen(js_name = leanVerifyDigest)]
+pub fn lean_verify_digest(pk: &[u8], digest: &[u8], sig: &[u8]) -> bool {
+    crate::lean_s::verify(pk, digest, sig)
+}

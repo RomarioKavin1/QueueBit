@@ -41,3 +41,45 @@ export interface CVector {
 /** Upstream test-key derivation (`signer_c13.rs:23-29`), needs keccak: done via the vectors' skSeed when present. */
 export const upstream = readJson<{ vectors: UpstreamVector[] }>("../rust/tests/fixtures/upstream_c13.json");
 export const katC = readJson<{ schemeId: string; sigLength: number; vectors: CVector[] }>("../vectors/c13.json");
+
+export interface LeanUpstreamVector {
+  label: string;
+  seed: string;
+  b: number;
+  message: string;
+  pkSeed: string;
+  pkRoot: string;
+  sig: string;
+}
+
+export interface LeanCVector {
+  id: number;
+  role: "vault" | "recovery";
+  master: string;
+  chainScope: string;
+  seed: string;
+  pk: string;
+  pkSeed: string;
+  pkRoot: string;
+  digest: string;
+  entropy: string;
+  sig: string;
+}
+
+/** leanSphincs-s KAT set A: upstream `test/fixtures/leansphincs-s-keccak-kat.json` @ 4c76aaf (verbatim). */
+export const leanUpstream = readJson<{ sig_len: number; vectors: LeanUpstreamVector[] }>(
+  "../vectors/leansphincs-s-upstream.json",
+);
+/** leanSphincs-s KAT set C. */
+export const leanKatC = readJson<{
+  schemeId: string;
+  sigLength: number;
+  experimental: boolean;
+  vectors: LeanCVector[];
+}>("../vectors/leansphincs-s.json");
+/** The bench's vectors, signed by upstream `lssk sign-key` from a Light-tier key file (bench/src/signers.ts). */
+export const benchLean = readJson<{ publicKey: string; digests: string[]; sigs: string[] }>(
+  "../../../bench/vectors/leansphincs-s.json",
+);
+/** keccak256("leaked-bench/v1/leansphincs-s/seed"): the bench's lssk seed (bench/src/signers.ts). */
+export const BENCH_LEAN_SEED = "0x8530e25021c78261824410eb99d6e860bff14e918fcb4fcd44ef4da4583e1450";

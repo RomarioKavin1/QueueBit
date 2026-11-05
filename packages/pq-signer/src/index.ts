@@ -1,5 +1,9 @@
 /**
- * @leaked/pq-signer: SPHINCS- C13 (keccak, FIPS 205 ADRS; 3,688-byte signatures) for LEAKED.
+ * @leaked/pq-signer: SPHINCS- C13 (keccak, FIPS 205 ADRS; 3,688-byte signatures) for LEAKED, plus the EXPERIMENTAL
+ * second scheme leanSphincs-s (4,164-byte signatures; fits Path A under the stock 100 K VERIFY budget).
+ *
+ * The top-level exports (`keygen`, `sign`, `verify`, `SIG_LENGTH`, `SCHEME_ID`, ...) are C13 and unchanged. The
+ * scheme-parametrised API is `schemes.c13` / `schemes.leanSphincsS` (same shape, `PQScheme`) and `schemeById`.
  *
  * Synchronous API over a WASM core (Rust crate `leaked-pq`, `rust/`). The WASM is inlined, so the
  * module works unchanged in browsers, extension service workers and Node. Signing takes seconds
@@ -14,6 +18,11 @@ import {
   signDigest,
   verifyDigest,
   schemeId as wasmSchemeId,
+  leanKeygenFromMaster,
+  leanKeygenFromSeed,
+  leanSignDigest,
+  leanVerifyDigest,
+  leanSchemeId as wasmLeanSchemeId,
 } from "../wasm/leaked_pq.js";
 import { WASM_BASE64, WASM_SHA256 } from "../wasm/leaked_pq_inline.js";
 
@@ -152,10 +161,154 @@ export function verifierArgs(pk: Uint8Array): { pkSeed: `0x${string}`; pkRoot: `
   };
 }
 
+// ---------------------------------------------------------------------------- scheme-parametrised API -------
+
+/** One post-quantum scheme behind an `IPQVerifier` adapter. Every scheme has 32-byte public keys and 64-byte secret
+ *  keys; signature length, scheme id, budget and maturity differ. */
+export interface PQScheme {
+  /** Display name. */
+  readonly name: string;
+  /** `IPQVerifier.schemeId()` of the scheme's adapter (also the derivation domain, see README). */
+  readonly SCHEME_ID: `0x${string}`;
+  /** Fixed witness length (`IPQVerifier.sigLength()`). */
+  readonly SIG_LENGTH: number;
+  readonly PK_LENGTH: 32;
+  readonly SK_LENGTH: 64;
+  /** Signatures per key at the claimed level (summed over every device holding the seed). */
+  readonly SIGNATURE_BUDGET: number;
+  /** `true` = not reviewed / no formal proof: the UI must show `warning` before a user picks it. */
+  readonly experimental: boolean;
+  /** UI warning text for an experimental scheme (undefined for a reviewed default). */
+  readonly warning?: string;
+  keygen(seed: Uint8Array, opts?: KeygenOptions): KeyPair;
+  sign(secretKey: Uint8Array, digest32: Uint8Array, opts?: SignOptions): Uint8Array;
+  /** Never throws. */
+  verify(pk: Uint8Array, digest32: Uint8Array, sig: Uint8Array): boolean;
+  publicKeyOf(secretKey: Uint8Array): Uint8Array;
+  /** The two high-aligned bytes32 words the raw upstream verifier takes, `verify(pkSeed, pkRoot, message, sig)`. */
+  verifierArgs(pk: Uint8Array): { pkSeed: `0x${string}`; pkRoot: `0x${string}` };
+}
+
+/** `schemes.leanSphincsS`: a `PQScheme` that is always experimental, plus upstream-compatible keygen. */
+export interface LeanSphincsSScheme extends PQScheme {
+  readonly experimental: true;
+  readonly warning: typeof LEAN_SPHINCS_S_WARNING;
+  readonly KEPT_SUBTREE_HEIGHT: 13;
+  keygenFromSeed(seed32: Uint8Array): KeyPair;
+}
+
+/** UI text for leanSphincs-s (plan decision "Path A scheme options after the M3 benchmark"). */
+export const LEAN_SPHINCS_S_WARNING =
+  "Experimental: no formal proof yet; enables quantum-safe approvals on any mempool" as const;
+
+const LEAN_SIG_LENGTH = 4164;
+/** keccak256("leanSphincs-s/keccak/v1"): `LeanSphincsSVerifier.schemeId()`. */
+const LEAN_SCHEME_ID = "0x5f6989ca8f8b5be0ec5193400cd602392000e54a51f3290ed4be9c075229daed" as const;
+
+function roleCode(opts: KeygenOptions): number {
+  const role = opts.role ?? "vault";
+  if (role !== "vault" && role !== "recovery") throw new TypeError("role must be 'vault' or 'recovery'");
+  return role === "vault" ? 1 : 2;
+}
+
+function masterSeed(seed: Uint8Array): void {
+  if (!(seed instanceof Uint8Array) || seed.length < 32 || seed.length > 64) {
+    throw new TypeError("seed must be a Uint8Array of 32..64 bytes (a BIP-39 seed is 64)");
+  }
+}
+
+/** leanSphincs-s secret keys are `S(32) ‖ P(16) ‖ root(16)`; the core refuses any other 64 bytes (e.g. a C13 key). */
+function leanSign(secretKey: Uint8Array, digest32: Uint8Array, opts: SignOptions = {}): Uint8Array {
+  bytes(secretKey, SK_LENGTH, "secretKey");
+  bytes(digest32, 32, "digest");
+  let sig: Uint8Array;
+  if (opts.deterministic) {
+    sig = leanSignDigest(secretKey, digest32, 2, undefined);
+  } else if (opts.entropy !== undefined) {
+    bytes(opts.entropy, 32, "entropy");
+    sig = leanSignDigest(secretKey, digest32, 1, opts.entropy);
+  } else {
+    sig = leanSignDigest(secretKey, digest32, 0, undefined);
+  }
+  if (sig.length !== LEAN_SIG_LENGTH) throw new Error("internal: bad signature length");
+  return sig;
+}
+
+function leanVerify(pk: Uint8Array, digest32: Uint8Array, sig: Uint8Array): boolean {
+  if (!(pk instanceof Uint8Array) || !(digest32 instanceof Uint8Array) || !(sig instanceof Uint8Array)) return false;
+  if (pk.length !== PK_LENGTH || digest32.length !== 32 || sig.length !== LEAN_SIG_LENGTH) return false;
+  try {
+    return leanVerifyDigest(pk, digest32, sig);
+  } catch {
+    return false;
+  }
+}
+
+/** SPHINCS- C13: the default, Lean-proof-pinned verifier. Same functions as the top-level exports. */
+const c13: PQScheme = Object.freeze({
+  name: "SPHINCS- C13",
+  SCHEME_ID,
+  SIG_LENGTH,
+  PK_LENGTH: 32 as const,
+  SK_LENGTH: 64 as const,
+  SIGNATURE_BUDGET,
+  experimental: false,
+  keygen,
+  sign,
+  verify,
+  publicKeyOf,
+  verifierArgs,
+} satisfies PQScheme);
+
+/**
+ * leanSphincs-s (EXPERIMENTAL, feature-flagged): Light-tier keys (kept subtree 2¹³), 4,164-byte signatures, ~44 K-gas
+ * VERIFY frame. Keygen and signing each rebuild the 2¹³-leaf subtree (~0.4 s native, see BENCH.md). Signing is
+ * hedged by default like C13. Keys are derived with this scheme's own id, so they never collide with C13 keys from
+ * the same seed.
+ */
+const leanSphincsSImpl = Object.freeze({
+  name: "leanSphincs-s",
+  SCHEME_ID: LEAN_SCHEME_ID,
+  SIG_LENGTH: LEAN_SIG_LENGTH,
+  PK_LENGTH: 32 as const,
+  SK_LENGTH: 64 as const,
+  /** Upstream's rating of the Light tier (an estimate, not proved; README security note). */
+  SIGNATURE_BUDGET: 20_000,
+  experimental: true as const,
+  warning: LEAN_SPHINCS_S_WARNING,
+  /** Kept-subtree height of the key (upstream "Light" tier). */
+  KEPT_SUBTREE_HEIGHT: 13 as const,
+  keygen(seed: Uint8Array, opts: KeygenOptions = {}): KeyPair {
+    masterSeed(seed);
+    return split(leanKeygenFromMaster(seed, roleCode(opts), opts.chainScope ?? "any"));
+  },
+  /** Upstream-compatible keygen from a 32-byte seed `S` (= `lssk keygen --tier light`). For KATs / interop. */
+  keygenFromSeed(seed32: Uint8Array): KeyPair {
+    bytes(seed32, 32, "seed");
+    return split(leanKeygenFromSeed(seed32));
+  },
+  sign: leanSign,
+  verify: leanVerify,
+  publicKeyOf,
+  verifierArgs,
+} satisfies LeanSphincsSScheme);
+
+/** The registered schemes. `leanSphincsS.experimental === true`: gate it behind a feature flag and show `warning`. */
+export const schemes = Object.freeze({ c13, leanSphincsS: leanSphincsSImpl });
+
+export type SchemeName = keyof typeof schemes;
+
+/** The scheme whose `IPQVerifier.schemeId()` is `id` (case-insensitive hex), if this package implements it. */
+export function schemeById(id: string): PQScheme | undefined {
+  const want = id.toLowerCase();
+  return Object.values(schemes).find((x) => x.SCHEME_ID === want);
+}
+
 /** Sanity check that the WASM core and the TS constants agree. */
 export function selfTest(): void {
-  const id = wasmSchemeId();
-  const hex = "0x" + Array.from(id, (x) => x.toString(16).padStart(2, "0")).join("");
-  if (hex !== SCHEME_ID) throw new Error("scheme id mismatch between WASM and TS");
+  const hex = (id: Uint8Array) => "0x" + Array.from(id, (x) => x.toString(16).padStart(2, "0")).join("");
+  if (hex(wasmSchemeId()) !== SCHEME_ID) throw new Error("scheme id mismatch between WASM and TS");
+  if (hex(wasmLeanSchemeId()) !== LEAN_SCHEME_ID)
+    throw new Error("leanSphincs-s scheme id mismatch between WASM and TS");
 }
 selfTest();

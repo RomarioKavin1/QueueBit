@@ -43,6 +43,105 @@ export function keygenFromSeeds(sk_seed, pk_seed) {
 }
 
 /**
+ * role: 1 = vault, 2 = recovery. Returns the 64-byte secret key `S || P || root` (last 32 bytes = public key).
+ * @param {Uint8Array} master
+ * @param {number} role
+ * @param {string} chain_scope
+ * @returns {Uint8Array}
+ */
+export function leanKeygenFromMaster(master, role, chain_scope) {
+    const ptr0 = passArray8ToWasm0(master, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(chain_scope, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ret = wasm.leanKeygenFromMaster(ptr0, len0, role, ptr1, len1);
+    if (ret[3]) {
+        throw takeFromExternrefTable0(ret[2]);
+    }
+    var v3 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    return v3;
+}
+
+/**
+ * Keygen from an explicit 32-byte seed `S` at the LEAKED tier (b = 13): upstream `lssk keygen --tier light`.
+ * @param {Uint8Array} seed
+ * @returns {Uint8Array}
+ */
+export function leanKeygenFromSeed(seed) {
+    const ptr0 = passArray8ToWasm0(seed, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.leanKeygenFromSeed(ptr0, len0);
+    if (ret[3]) {
+        throw takeFromExternrefTable0(ret[2]);
+    }
+    var v2 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    return v2;
+}
+
+/**
+ * @returns {Uint8Array}
+ */
+export function leanSchemeId() {
+    const ret = wasm.leanSchemeId();
+    var v1 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    return v1;
+}
+
+/**
+ * @returns {number}
+ */
+export function leanSigLength() {
+    const ret = wasm.leanSigLength();
+    return ret >>> 0;
+}
+
+/**
+ * mode 0 = hedged with crypto.getRandomValues, 1 = hedged with the given 32-byte `entropy`,
+ * 2 = deterministic (upstream-identical; KATs only).
+ * @param {Uint8Array} secret
+ * @param {Uint8Array} digest
+ * @param {number} mode
+ * @param {Uint8Array | null} [entropy]
+ * @returns {Uint8Array}
+ */
+export function leanSignDigest(secret, digest, mode, entropy) {
+    const ptr0 = passArray8ToWasm0(secret, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passArray8ToWasm0(digest, wasm.__wbindgen_malloc);
+    const len1 = WASM_VECTOR_LEN;
+    var ptr2 = isLikeNone(entropy) ? 0 : passArray8ToWasm0(entropy, wasm.__wbindgen_malloc);
+    var len2 = WASM_VECTOR_LEN;
+    const ret = wasm.leanSignDigest(ptr0, len0, ptr1, len1, mode, ptr2, len2);
+    if (ret[3]) {
+        throw takeFromExternrefTable0(ret[2]);
+    }
+    var v4 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    return v4;
+}
+
+/**
+ * Never throws: false for any malformed input or invalid signature.
+ * @param {Uint8Array} pk
+ * @param {Uint8Array} digest
+ * @param {Uint8Array} sig
+ * @returns {boolean}
+ */
+export function leanVerifyDigest(pk, digest, sig) {
+    const ptr0 = passArray8ToWasm0(pk, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passArray8ToWasm0(digest, wasm.__wbindgen_malloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ptr2 = passArray8ToWasm0(sig, wasm.__wbindgen_malloc);
+    const len2 = WASM_VECTOR_LEN;
+    const ret = wasm.leanVerifyDigest(ptr0, len0, ptr1, len1, ptr2, len2);
+    return ret !== 0;
+}
+
+/**
  * @returns {number}
  */
 export function pkLength() {

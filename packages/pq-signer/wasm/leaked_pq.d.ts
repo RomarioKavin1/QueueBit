@@ -12,6 +12,31 @@ export function keygenFromMaster(master: Uint8Array, role: number, chain_scope: 
  */
 export function keygenFromSeeds(sk_seed: Uint8Array, pk_seed: Uint8Array): Uint8Array;
 
+/**
+ * role: 1 = vault, 2 = recovery. Returns the 64-byte secret key `S || P || root` (last 32 bytes = public key).
+ */
+export function leanKeygenFromMaster(master: Uint8Array, role: number, chain_scope: string): Uint8Array;
+
+/**
+ * Keygen from an explicit 32-byte seed `S` at the LEAKED tier (b = 13): upstream `lssk keygen --tier light`.
+ */
+export function leanKeygenFromSeed(seed: Uint8Array): Uint8Array;
+
+export function leanSchemeId(): Uint8Array;
+
+export function leanSigLength(): number;
+
+/**
+ * mode 0 = hedged with crypto.getRandomValues, 1 = hedged with the given 32-byte `entropy`,
+ * 2 = deterministic (upstream-identical; KATs only).
+ */
+export function leanSignDigest(secret: Uint8Array, digest: Uint8Array, mode: number, entropy?: Uint8Array | null): Uint8Array;
+
+/**
+ * Never throws: false for any malformed input or invalid signature.
+ */
+export function leanVerifyDigest(pk: Uint8Array, digest: Uint8Array, sig: Uint8Array): boolean;
+
 export function pkLength(): number;
 
 export function schemeId(): Uint8Array;
@@ -37,6 +62,12 @@ export interface InitOutput {
     readonly memory: WebAssembly.Memory;
     readonly keygenFromMaster: (a: number, b: number, c: number, d: number, e: number) => [number, number, number, number];
     readonly keygenFromSeeds: (a: number, b: number, c: number, d: number) => [number, number, number, number];
+    readonly leanKeygenFromMaster: (a: number, b: number, c: number, d: number, e: number) => [number, number, number, number];
+    readonly leanKeygenFromSeed: (a: number, b: number) => [number, number, number, number];
+    readonly leanSchemeId: () => [number, number];
+    readonly leanSigLength: () => number;
+    readonly leanSignDigest: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number, number];
+    readonly leanVerifyDigest: (a: number, b: number, c: number, d: number, e: number, f: number) => number;
     readonly pkLength: () => number;
     readonly schemeId: () => [number, number];
     readonly sigLength: () => number;
