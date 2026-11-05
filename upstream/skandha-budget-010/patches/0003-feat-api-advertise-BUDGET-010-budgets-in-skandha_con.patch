@@ -1,0 +1,95 @@
+From 9a20b61a3c0a10f3599e4e0911e3d878a2d86ac2 Mon Sep 17 00:00:00 2001
+From: Romario Kavin <98270892+RomarioKavin1@users.noreply.github.com>
+Date: Fri, 6 Nov 2026 03:46:11 +0530
+Subject: [PATCH 3/5] feat(api): advertise BUDGET-010 budgets in skandha_config
+
+skandha_config.budgets = {rule, maxVerifyGasPerEntity, maxVerifyGasStakedEntity,
+signatureCostAttributedTo, maxVerifyStateGas}, so wallets can pick a validation path
+from the node's advertised budget.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ packages/executor/src/modules/skandha.ts       |  8 ++++++++
+ packages/executor/test/modules/skandha.test.ts | 16 ++++++++++++++++
+ packages/types/src/api/interfaces.ts           | 15 +++++++++++++++
+ 3 files changed, 39 insertions(+)
+
+diff --git a/packages/executor/src/modules/skandha.ts b/packages/executor/src/modules/skandha.ts
+index ef18bec..3351dab 100644
+--- a/packages/executor/src/modules/skandha.ts
++++ b/packages/executor/src/modules/skandha.ts
+@@ -13,6 +13,7 @@ import { GetNodeAPI, NetworkConfig } from "../interfaces.js";
+ import { Config } from "../config.js";
+ import { MempoolService } from "../services/index.js";
+ import { FrameTransactionStatus } from "./interfaces.js";
++import { MAX_VERIFY_STATE_GAS } from "../services/UserOpValidation/utils/validationPrefix.js";
+ 
+ /**
+  * EIP-8141 frame-transaction adaptation of sidecar's custom RPC surface.
+@@ -107,6 +108,13 @@ export class Skandha {
+       banSlack: this.networkConfig.banSlack,
+       minStake: this.networkConfig.minStake.toString(),
+       minUnstakeDelay: this.networkConfig.minUnstakeDelay,
++      budgets: {
++        rule: "BUDGET-010",
++        maxVerifyGasPerEntity: this.networkConfig.maxVerifyGasPerEntity,
++        maxVerifyGasStakedEntity: this.networkConfig.maxVerifyGasStakedEntity,
++        signatureCostAttributedTo: "sender",
++        maxVerifyStateGas: Number(MAX_VERIFY_STATE_GAS),
++      },
+       minSignerBalance: `${formatEther(
+         this.networkConfig.minSignerBalance
+       )} eth`,
+diff --git a/packages/executor/test/modules/skandha.test.ts b/packages/executor/test/modules/skandha.test.ts
+index ab46fbe..259e65b 100644
+--- a/packages/executor/test/modules/skandha.test.ts
++++ b/packages/executor/test/modules/skandha.test.ts
+@@ -160,3 +160,19 @@ describe("Skandha (getFeeHistory removed)", () => {
+     expect((skandha as any).getFeeHistory).toBeUndefined();
+   });
+ });
++
++describe("Skandha.getConfig budgets (skandha_config)", () => {
++  it("advertises the BUDGET-010 per-entity budgets the node enforces", async () => {
++    const skandha = buildSkandha({
++      networkConfig: { minStake: 10n ** 16n, minUnstakeDelay: 0, minSignerBalance: 0n, blockscoutApiKeys: [], maxVerifyGasPerEntity: 100_000, maxVerifyGasStakedEntity: 1_000_000 },
++    });
++    const cfg = await skandha.getConfig();
++    expect(cfg.budgets).toEqual({
++      rule: "BUDGET-010",
++      maxVerifyGasPerEntity: 100_000,
++      maxVerifyGasStakedEntity: 1_000_000,
++      signatureCostAttributedTo: "sender",
++      maxVerifyStateGas: 500_000,
++    });
++  });
++});
+diff --git a/packages/types/src/api/interfaces.ts b/packages/types/src/api/interfaces.ts
+index fe0c703..2501d73 100644
+--- a/packages/types/src/api/interfaces.ts
++++ b/packages/types/src/api/interfaces.ts
+@@ -62,6 +62,21 @@ export type GetConfigResponse = {
+   minSignerBalance: string;
+   minStake: string;
+   minUnstakeDelay: number;
++  /**
++   * ERC-8421 [BUDGET-010] verification gas budgets this node enforces, per
++   * entity: `maxVerifyGasPerEntity` for an unstaked (or default-code) entity,
++   * `maxVerifyGasStakedEntity` for a staked one (stake >= `minStake`, delay
++   * >= `minUnstakeDelay`, no withdrawal). The intrinsic signature cost counts
++   * toward `tx.sender`. `maxVerifyStateGas` is the separate prefix-wide
++   * state-gas cap (EIP-8141).
++   */
++  budgets: {
++    rule: "BUDGET-010";
++    maxVerifyGasPerEntity: number;
++    maxVerifyGasStakedEntity: number;
++    signatureCostAttributedTo: "sender";
++    maxVerifyStateGas: number;
++  };
+   multicall: string;
+   estimationStaticBuffer: number;
+   validationGasLimit: number;
+-- 
+2.50.1 (Apple Git-155)
+

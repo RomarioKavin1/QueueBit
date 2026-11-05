@@ -1,0 +1,150 @@
+From 5b7dbdbbea1d3bf38fd28011c9d5d9856ce11c33 Mon Sep 17 00:00:00 2001
+From: Romario Kavin <98270892+RomarioKavin1@users.noreply.github.com>
+Date: Fri, 6 Nov 2026 03:46:11 +0530
+Subject: [PATCH 1/5] feat(config): maxVerifyGasPerEntity /
+ maxVerifyGasStakedEntity (ERC-8421 BUDGET-010 defaults)
+
+Config keys and SKANDHA_MAX_VERIFY_GAS_PER_ENTITY / SKANDHA_MAX_VERIFY_GAS_STAKED_ENTITY env vars,
+defaulting to ERC-8421 MAX_VERIFY_GAS_PER_ENTITY 100000 / MAX_VERIFY_GAS_STAKED_ENTITY 1000000.
+Validated at startup (positive integers, staked >= unstaked).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ README.md                             |  2 ++
+ packages/executor/src/config.ts       | 31 ++++++++++++++++++++
+ packages/executor/src/interfaces.ts   |  7 +++++
+ packages/executor/test/config.test.ts | 41 +++++++++++++++++++++++++++
+ 4 files changed, 81 insertions(+)
+
+diff --git a/README.md b/README.md
+index a0a6dd7..c8e922a 100644
+--- a/README.md
++++ b/README.md
+@@ -128,6 +128,8 @@ file — `SKANDHA_RELAYERS`, `SKANDHA_BENEFICIARY`, `SKANDHA_RPC`, and similar.
+   "minStake": 10000000000, // optional, minimum entity stake in wei
+   "minUnstakeDelay": 0, // optional, minimum entity unstake delay
+   "stakingRegistryAddress": "0x...", // optional, EIP-8421 IStakingRegistry contract address; unset/zero means every entity reads as unstaked
++  "maxVerifyGasPerEntity": 100000, // optional, ERC-8421 BUDGET-010 budget for an unstaked entity's validation frames (env SKANDHA_MAX_VERIFY_GAS_PER_ENTITY)
++  "maxVerifyGasStakedEntity": 1000000, // optional, ERC-8421 BUDGET-010 budget for a staked entity (env SKANDHA_MAX_VERIFY_GAS_STAKED_ENTITY); both are reported by skandha_config.budgets
+   "minSignerBalance": 1, // optional, minimum relayer balance (in ETH) before it stops being used as a fee collector
+   "multicall": "0xcA11bde05977b3631167028862bE2a173976CA11", // optional, multicall3 contract address
+   "estimationStaticBuffer": 21000, // optional, gas added to callGasLimit on estimation
+diff --git a/packages/executor/src/config.ts b/packages/executor/src/config.ts
+index 9eb284f..2e0fc21 100644
+--- a/packages/executor/src/config.ts
++++ b/packages/executor/src/config.ts
+@@ -238,6 +238,34 @@ export class Config {
+       )
+     );
+ 
++    config.maxVerifyGasPerEntity = Number(
++      fromEnvVar(
++        "MAX_VERIFY_GAS_PER_ENTITY",
++        config.maxVerifyGasPerEntity ??
++          bundlerDefaultConfigs.maxVerifyGasPerEntity
++      )
++    );
++    config.maxVerifyGasStakedEntity = Number(
++      fromEnvVar(
++        "MAX_VERIFY_GAS_STAKED_ENTITY",
++        config.maxVerifyGasStakedEntity ??
++          bundlerDefaultConfigs.maxVerifyGasStakedEntity
++      )
++    );
++    for (const [key, value] of [
++      ["maxVerifyGasPerEntity", config.maxVerifyGasPerEntity],
++      ["maxVerifyGasStakedEntity", config.maxVerifyGasStakedEntity],
++    ] as const) {
++      if (!Number.isSafeInteger(value) || value <= 0) {
++        throw new Error(`Invalid config: ${key} must be a positive integer, got ${value}`);
++      }
++    }
++    if (config.maxVerifyGasStakedEntity < config.maxVerifyGasPerEntity) {
++      throw new Error(
++        "Invalid config: maxVerifyGasStakedEntity must be >= maxVerifyGasPerEntity"
++      );
++    }
++
+     config.stakingRegistryAddress = fromEnvVar(
+       "STAKING_REGISTRY_ADDRESS",
+       config.stakingRegistryAddress || bundlerDefaultConfigs.stakingRegistryAddress
+@@ -603,6 +631,9 @@ const bundlerDefaultConfigs: BundlerConfig = {
+   banSlack: 50,
+   minStake: parseEther("0.01"),
+   minUnstakeDelay: 0,
++  // ERC-8421 §Constants MAX_VERIFY_GAS_PER_ENTITY / MAX_VERIFY_GAS_STAKED_ENTITY
++  maxVerifyGasPerEntity: 100_000,
++  maxVerifyGasStakedEntity: 1_000_000,
+   stakingRegistryAddress: AddressZero,
+   minSignerBalance: parseEther("0.1"),
+   multicall: "0xcA11bde05977b3631167028862bE2a173976CA11", // default multicall address
+diff --git a/packages/executor/src/interfaces.ts b/packages/executor/src/interfaces.ts
+index a41846c..2a749b4 100644
+--- a/packages/executor/src/interfaces.ts
++++ b/packages/executor/src/interfaces.ts
+@@ -94,6 +94,13 @@ export interface NetworkConfig {
+   // zero stake for every entity without a chain call. See
+   // docs/superpowers/specs/2026-09-30-naive-staking-registry-design.md.
+   stakingRegistryAddress: Hex;
++  // ERC-8421 [BUDGET-010] per-entity verification gas budgets (execution
++  // gas summed over an entity's validation frames, plus the signature cost
++  // for tx.sender). Defaults: MAX_VERIFY_GAS_PER_ENTITY = 100000 for an
++  // unstaked entity, MAX_VERIFY_GAS_STAKED_ENTITY = 1000000 for a staked one.
++  // Env: SKANDHA_MAX_VERIFY_GAS_PER_ENTITY, SKANDHA_MAX_VERIFY_GAS_STAKED_ENTITY.
++  maxVerifyGasPerEntity: number;
++  maxVerifyGasStakedEntity: number;
+   multicall: string;
+   // adds certain amount of gas to callGasLimit
+   // 21000 by default
+diff --git a/packages/executor/test/config.test.ts b/packages/executor/test/config.test.ts
+index 910dba4..57b54a3 100644
+--- a/packages/executor/test/config.test.ts
++++ b/packages/executor/test/config.test.ts
+@@ -48,3 +48,44 @@ describe("Config.getNetworkConfig stakingRegistryAddress", () => {
+     }
+   });
+ });
++
++describe("Config.getNetworkConfig BUDGET-010 budgets", () => {
++  const withEnv = (env: Record<string, string>, fn: () => void) => {
++    const prev: Record<string, string | undefined> = {};
++    for (const k of Object.keys(env)) {
++      prev[k] = process.env[k];
++      process.env[k] = env[k];
++    }
++    try {
++      fn();
++    } finally {
++      for (const k of Object.keys(env)) {
++        if (prev[k] === undefined) delete process.env[k];
++        else process.env[k] = prev[k];
++      }
++    }
++  };
++
++  it("defaults to ERC-8421's MAX_VERIFY_GAS_PER_ENTITY 100000 / MAX_VERIFY_GAS_STAKED_ENTITY 1000000", () => {
++    const nc = new Config({ config: null, unsafeMode: false, redirectRpc: false }).getNetworkConfig();
++    expect(nc.maxVerifyGasPerEntity).toBe(100_000);
++    expect(nc.maxVerifyGasStakedEntity).toBe(1_000_000);
++  });
++
++  it("reads SKANDHA_MAX_VERIFY_GAS_PER_ENTITY / SKANDHA_MAX_VERIFY_GAS_STAKED_ENTITY", () => {
++    withEnv({ SKANDHA_MAX_VERIFY_GAS_PER_ENTITY: "250000", SKANDHA_MAX_VERIFY_GAS_STAKED_ENTITY: "2500000" }, () => {
++      const nc = new Config({ config: null, unsafeMode: false, redirectRpc: false }).getNetworkConfig();
++      expect(nc.maxVerifyGasPerEntity).toBe(250_000);
++      expect(nc.maxVerifyGasStakedEntity).toBe(2_500_000);
++    });
++  });
++
++  it("rejects a staked budget below the unstaked one, and non-positive values", () => {
++    withEnv({ SKANDHA_MAX_VERIFY_GAS_PER_ENTITY: "500000", SKANDHA_MAX_VERIFY_GAS_STAKED_ENTITY: "400000" }, () => {
++      expect(() => new Config({ config: null, unsafeMode: false, redirectRpc: false })).toThrow(/maxVerifyGasStakedEntity/);
++    });
++    withEnv({ SKANDHA_MAX_VERIFY_GAS_PER_ENTITY: "0" }, () => {
++      expect(() => new Config({ config: null, unsafeMode: false, redirectRpc: false })).toThrow(/maxVerifyGasPerEntity/);
++    });
++  });
++});
+-- 
+2.50.1 (Apple Git-155)
+

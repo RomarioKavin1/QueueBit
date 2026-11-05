@@ -1,0 +1,5 @@
+origin=https://github.com/forshtat/mempool-workshop-sidecar
+base=2e22ff0a2898e69ea4bf5275bce1be8581a8582a
+branch=budget-010-per-entity-budgets
+# base = master on 2026-10-25 = the commit ghcr.io/forshtat/mempool-workshop-sidecar:latest
+# (sha256:c4cdc5c7..., reports skandha/v4.1.1-) was built from; see devnet/README.md.
