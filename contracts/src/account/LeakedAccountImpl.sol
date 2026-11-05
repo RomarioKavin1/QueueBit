@@ -368,6 +368,11 @@ contract LeakedAccountImpl is LeakedVerify, LeakedAccountBase, Initializable, UU
         bytes32 sid = sessionId(t, sel);
         Session storage s = $.sessions[sid];
         if (s.expiry == 0 || block.timestamp > s.expiry) revert NotAllowed(t, sel);
+        // An approval is only accountable on an asset the balance-delta accounting watches: a session on an asset
+        // that is not (or no longer) an allowlisted token would let a router pull it with a zero debit.
+        if ((sel == ERC20_APPROVE || sel == ERC20_INCREASE_ALLOWANCE || sel == SET_APPROVAL_FOR_ALL) && !tc.allowed) {
+            revert NotAllowed(t, sel);
+        }
         uint256[] memory before = _snapshot($);
         _call(i, t, c.value, c.data);
         uint256 used = _outflowUsd($, before, true);

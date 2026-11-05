@@ -239,6 +239,31 @@ contract AuditTest is AccountTestBase {
 
     // ------------------------------------------------------ M2: approvals via sessions on unmonitored assets ------
 
+    /// Removing a token is "tightening", but a (token, approve) session outlives it and the balance-delta accounting
+    /// no longer watches that token: approve + router pull would move it with a zero debit.
+    function test_M2_sessionApprove_onlyOnMonitoredTokens() public {
+        uint48 exp = uint48(vm.getBlockTimestamp() + 30 days);
+        ILeakedAccount.Call[] memory c = new ILeakedAccount.Call[](2);
+        c[0] = _selfCall(abi.encodeCall(LeakedAccountRoles.vaultSetSession, (address(usdc), APPROVE, 1_000 * USD, exp)));
+        c[1] = _selfCall(
+            abi.encodeCall(
+                LeakedAccountRoles.vaultSetSession, (address(router), MockRouter.pull.selector, 1_000 * USD, exp)
+            )
+        );
+        _queueAndExecute(c, 1);
+        vm.prank(vault);
+        roles.vaultSetToken(address(usdc), false, 0, 0); // instant removal
+
+        ILeakedAccount.Call[] memory batch = new ILeakedAccount.Call[](2);
+        batch[0] =
+            ILeakedAccount.Call(address(usdc), 0, abi.encodeCall(IERC20.approve, (address(router), 50_000 * USD)));
+        batch[1] =
+            ILeakedAccount.Call(address(router), 0, abi.encodeCall(MockRouter.pull, (usdc, 50_000 * USD, attacker)));
+        vm.expectRevert(abi.encodeWithSelector(ILeakedAccount.NotAllowed.selector, address(usdc), APPROVE));
+        _hot(0, batch);
+        assertEq(usdc.balanceOf(attacker), 0);
+    }
+
     // ------------------------------------------------------------- M1: fee exposure is MAX_COST, not limits ------
 
     /// On the per-gas profile the payer is charged `maxFeePerGas x (intrinsic + sum of limits)`: the bound must be
