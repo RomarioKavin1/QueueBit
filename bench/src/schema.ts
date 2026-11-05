@@ -77,6 +77,8 @@ export type BudgetBasis = "simulate+sidecar" | "computed from measured VERIFY ga
 export interface BudgetFit {
   fits: boolean | null;
   basis: BudgetBasis;
+  /** A node with this budget rejected the tx for a non-budget reason (verbatim, truncated). */
+  nodeRejection?: string;
 }
 
 export interface SchemeResult {

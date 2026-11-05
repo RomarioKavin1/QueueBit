@@ -159,6 +159,32 @@ describe("budget verdicts", () => {
       notMeasured("x"),
     );
     expect(loose["100000"]).toEqual({ fits: true, basis: "computed from measured VERIFY gas" });
+    // a non-budget rejection (e.g. the ERC-7562 code-less-address rule hitting a precompile) is not a budget verdict
+    const other = budgetFits(
+      measured(
+        path({
+          verifyFrameGas: 831_679,
+          limits: [931_000, 60_000],
+          admission: [
+            {
+              endpoint: "sidecar eth_sendFrameTransaction (stock)",
+              accepted: false,
+              error: "... exceeds MAX_VERIFY_GAS 100000",
+            },
+            {
+              endpoint: "patched sidecar eth_sendFrameTransaction",
+              accepted: false,
+              error: "payer accesses un-deployed contract address 0x0000000000000000000000000000000000000002",
+            },
+          ],
+        }),
+        "d",
+      ),
+      notMeasured("x"),
+    );
+    expect(other["1000000"]!.fits).toBe(true);
+    expect(other["1000000"]!.nodeRejection).toMatch(/un-deployed/);
+    expect(other["100000"]).toEqual({ fits: false, basis: "simulate+sidecar" });
   });
 
   it("Forge alone can only say 'does not fit'", () => {

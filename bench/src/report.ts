@@ -45,6 +45,16 @@ export function budgetFits(pathA: Maybe<PathResult>, forge: Maybe<Stats>): Recor
         // The node judged the declared limit, so its answer is the verdict when that limit was itself a fitting one
         // (or when the scheme cannot fit anyway).
         const sentFits = sent + EIP8141.SIG_COST.ARBITRARY <= b;
+        const budgetRule = /MAX_VERIFY_GAS|BUDGET-010/.test(node.error ?? "");
+        if (!node.accepted && node.error && !budgetRule) {
+          // Rejected for a reason other than the budget: the budget verdict stays computed; keep the rejection.
+          out[b] = {
+            fits,
+            basis: "computed from measured VERIFY gas",
+            nodeRejection: (node.error ?? "").slice(0, 160),
+          };
+          continue;
+        }
         if (sentFits || !fits) {
           out[b] = { fits: node.accepted, basis: "simulate+sidecar" };
           continue;
@@ -173,7 +183,7 @@ export function buildResults(ci: boolean): Results {
 
 const cell = (m: Maybe<Stats>, pick: (s: Stats) => number = (s) => s.mean) =>
   m.status === "measured" ? fmt(pick(m.value)) : "n/m";
-const yn = (f: BudgetFit) =>
+const yn0 = (f: BudgetFit) =>
   f.fits === null
     ? "?"
     : f.fits
@@ -183,6 +193,8 @@ const yn = (f: BudgetFit) =>
       : f.basis === "simulate+sidecar"
         ? "✗ (node)"
         : "✗";
+
+const yn = (f: BudgetFit) => yn0(f) + (f.nodeRejection ? " †" : "");
 
 function pathCell(p: Maybe<PathResult>, f: (v: PathResult) => number | string): string {
   return p.status === "measured" ? String(f(p.value)) : "n/m";
@@ -207,7 +219,7 @@ export function renderMarkdown(r: Results): string {
     "- **VERIFY-frame gas**: Path A, `frameReceipts[0].gasUsed` of the mined frame tx (verifier + SIGPARAM/SIGDATACOPY/APPROVE glue).",
   );
   L.push(
-    "- **Total tx gas**: receipt `gasUsed` of the Path A tx (2 frames, send 1 wei); **floor** is EIP-8141 `calldata_floor_gas` at 64 gas/byte.",
+    "- **Total tx gas**: receipt `gasUsed` of the Path A tx (2 frames, send 1 wei); **floor** is EIP-8141 `calldata_floor_gas` at 64 gas/byte per the EIP text; the devnet's ethrex also charges the 3-byte EIP-8250 nonce calldata (+192), and every receipt matches that variant exactly (per-scheme detail).",
   );
   L.push(
     "- **Path B**: the PQ verify moved to the SENDER frame (VERIFY only checks a payer ECDSA signature): receipt gasUsed.",
@@ -229,8 +241,9 @@ export function renderMarkdown(r: Results): string {
       s.sigBytes === null
         ? "n/m"
         : fmt(s.sigBytes) +
-          (s.witnessBytes && s.witnessBytes !== s.sigBytes
-            ? ` (+${fmt(s.witnessBytes - s.sigBytes)} key in witness)`
+          (s.notes.some((n) => n.startsWith("Witness length varies")) ? " (mean; varies)" : "") +
+          (s.witnessBytes !== null && s.pkBytes !== null && s.witnessBytes - s.sigBytes === s.pkBytes
+            ? ` (+${fmt(s.pkBytes)} key in witness)`
             : "");
     const verifyCol =
       s.forgeVerify.status === "measured"
@@ -242,6 +255,10 @@ export function renderMarkdown(r: Results): string {
       `| ${s.name} | ${sig} | ${s.pkBytes === null ? "n/m" : fmt(s.pkBytes)} | ${verifyCol} | ${pathCell(A, (v) => fmt(v.verifyFrameGas))} | ${txA} | ${pathCell(A, (v) => fmt(v.calldataFloor8141))} | ${txB} | ${yn(s.budgets["100000"]!)} | ${yn(s.budgets["250000"]!)} | ${yn(s.budgets["1000000"]!)} | ${yn(s.budgets["2500000"]!)} | ${s.stateless ? "yes" : "no"} | ${cell(s.signing)} | ${s.auditStatus} | ${s.license} |`,
     );
   }
+  L.push("");
+  L.push(
+    "† = fits the budget by measured gas, but the BUDGET-010 sidecar rejected the transaction under another rule (see the scheme's notes).",
+  );
   L.push("");
   L.push("## Per-scheme detail");
   for (const s of r.schemes) {
