@@ -45,10 +45,12 @@ export function ReviewScreen({
   const footer =
     review.approval === "unknown" ? (
       <div className="flex flex-col gap-2">
-        <Button variant="secondary" onClick={onReject} data-testid="reject">
+        <Button variant="primary" onClick={onReject} data-testid="reject">
           Reject
         </Button>
-        <HoldButton onDone={() => setStage("confirmUnknown")}>Hold to review signing anyway</HoldButton>
+        <HoldButton variant="dangerOutline" onDone={() => setStage("confirmUnknown")}>
+          Hold to review signing anyway
+        </HoldButton>
       </div>
     ) : (
       <div className="grid grid-cols-2 gap-2">
@@ -156,7 +158,7 @@ export function ReviewScreen({
           Details
           <span className="ml-2 t-small font-normal text-muted">
             {review.kind === "frameTx"
-              ? `sender: Vault signer · ${review.structure.steps} steps · ${review.structure.chainName}`
+              ? `sender: ${mode === "recovery" ? "Recovery" : "Vault"} signer · ${review.structure.steps} steps · ${review.structure.chainName}`
               : review.structure.chainName}
           </span>
         </summary>
@@ -235,10 +237,14 @@ function ActionCard({ action: a, primary, titleShown }: { action: ActionView; pr
           <p className="t-small text-muted" data-testid="usd">
             {a.amount.usd
               ? `≈ ${a.amount.usd.text} at ${a.amount.usd.source === "phone" ? "your pinned price" : "the pinned price your browser reported"}`
-              : a.amount.unknownToken
-                ? "This app doesn't know this token: check the contract below."
-                : "No USD estimate"}
+              : "No USD estimate"}
           </p>
+          {a.amount.unknownToken && (
+            <p className="mt-1 flex items-start gap-1 t-small text-limit" data-testid="unknown-token">
+              <WarnIcon size={16} className="mt-0.5 shrink-0" />
+              This phone doesn't know this token, so the amount is in raw units. Check the token contract below.
+            </p>
+          )}
           {a.recipient && (
             <div className="mt-3">
               <p className="mb-1 t-small text-muted">to</p>
