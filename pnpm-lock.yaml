@@ -225,6 +225,28 @@ importers:
         specifier: 2.57.16
         version: 2.57.16(typescript@6.0.3)(zod@4.6.7)
 
+  packages/groth16:
+    dependencies:
+      '@leaked/privacy':
+        specifier: workspace:*
+        version: link:../privacy
+    devDependencies:
+      '@fatsolutions/privacy-pools-core-circuits':
+        specifier: 1.0.5
+        version: 1.0.5
+      '@types/node':
+        specifier: 26.6.6
+        version: 26.6.6
+      snarkjs:
+        specifier: 0.7.5
+        version: 0.7.5
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: 5.1.0
+        version: 5.1.0(@types/node@26.6.6)(@vitest/coverage-v8@5.1.0)(vite@8.3.6(@types/node@26.6.6)(jiti@2.7.0))
+
   packages/pq-signer:
     devDependencies:
       '@types/node':
