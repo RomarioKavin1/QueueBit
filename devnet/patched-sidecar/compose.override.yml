@@ -1,0 +1,34 @@
+# BUDGET-010 patched sidecar, side by side with the stock one (which stays on :14337). Host port 14340 and IP 172.28.0.40 avoid other workstreams (a privacy sidecar uses 14338 / .7).
+#   docker compose -f devnet/docker-compose.yml -f devnet/patched-sidecar/compose.override.yml --profile budget up -d --no-deps skandha-budget
+# or simply devnet/patched-sidecar/up-patched.sh. Relative paths resolve against devnet/ (the first file's directory).
+services:
+  skandha-budget:
+    image: ${SKANDHA_BUDGET_IMAGE:-leaked/sidecar:budget-010}
+    restart: unless-stopped
+    profiles: ["budget"]
+    depends_on:
+      ethrex:
+        condition: service_started
+    networks:
+      default:
+        ipv4_address: 172.28.0.40
+    volumes:
+      - ./patched-sidecar/config.json:/usr/app/config.json:ro
+      - ./data/skandha-budget:/usr/app/data
+    ports:
+      - "${SKANDHA_BUDGET_PORT:-14340}:14337/tcp"
+    environment:
+      # ERC-8421 defaults; override to try e.g. the landing page's 250000 / 2500000.
+      - SKANDHA_MAX_VERIFY_GAS_PER_ENTITY=${MAX_VERIFY_GAS_PER_ENTITY:-100000}
+      - SKANDHA_MAX_VERIFY_GAS_STAKED_ENTITY=${MAX_VERIFY_GAS_STAKED_ENTITY:-1000000}
+      # No faucet here: anvil #8 belongs to the stock sidecar's faucet.
+    command:
+      - standalone
+      - --configFile=/usr/app/config.json
+      - --dataDir=/usr/app/data
+      - --api.address=0.0.0.0
+      - --api.port=14337
+      - --api.wsPort=14337
+      - --executor.bundlingMode=auto
+      - --redirectRpc
+      - --explorer.enable
