@@ -1,0 +1,207 @@
+import { execFileSync } from "node:child_process";
+import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import * as snarkjs from "snarkjs";
+import {
+  loadPinnedArtifacts,
+  toSolProof,
+  type Groth16Proof,
+  type SolProof,
+  type WithdrawArtifacts,
+} from "@leaked/privacy";
+import {
+  ConstraintUnsatisfiedError,
+  Groth16EngineError,
+  WitnessError,
+  createArkworksGroth16,
+  type ArkworksGroth16,
+} from "../src/index.js";
+import { buildWithdrawal, fsLoader, toJson, type Withdrawal } from "./fixture.js";
+
+type Proved = { proof: Groth16Proof; publicSignals: string[] };
+
+let a: WithdrawArtifacts;
+let w: Withdrawal;
+let engine: ArkworksGroth16;
+let ours: Proved;
+let theirs: Proved;
+
+beforeAll(async () => {
+  a = await loadPinnedArtifacts(fsLoader);
+  w = await buildWithdrawal();
+  engine = createArkworksGroth16();
+  ours = await engine.fullProve(toJson(w.inputs), a.wasm, a.zkey);
+  theirs = await snarkjs.groth16.fullProve(toJson(w.inputs), a.wasm, a.zkey);
+});
+
+afterAll(async () => {
+  engine?.dispose();
+  // snarkjs keeps ffjavascript worker threads alive.
+  await (globalThis as { curve_bn128?: { terminate(): Promise<void> } }).curve_bn128?.terminate();
+});
+
+describe("cross-check against snarkjs (test-only oracle)", () => {
+  it("same public signals as snarkjs and as @leaked/privacy expects", () => {
+    expect(ours.publicSignals).toEqual(theirs.publicSignals);
+    expect(ours.publicSignals).toEqual(w.expected.map(String));
+    expect(ours.proof.protocol).toBe("groth16");
+    expect(ours.proof.curve).toBe("bn128");
+    expect(ours.proof.pi_a[2]).toBe("1");
+    expect(ours.proof.pi_b[2]).toEqual(["1", "0"]);
+  });
+
+  it("snarkjs' verifier accepts our proof; our verifier accepts snarkjs' proof", async () => {
+    expect(await snarkjs.groth16.verify(a.vkey, ours.publicSignals, ours.proof)).toBe(true);
+    expect(await engine.verify(a.vkey, theirs.publicSignals, theirs.proof)).toBe(true);
+    expect(await engine.verify(a.vkey, ours.publicSignals, ours.proof)).toBe(true);
+  });
+
+  it("proofs are randomized; fixed entropy reproduces the same proof", async () => {
+    const fixed = () => new Uint8Array(128).fill(7);
+    const e = createArkworksGroth16({ entropy: fixed });
+    const p1 = await e.fullProve(toJson(w.inputs), a.wasm, a.zkey);
+    const p2 = await e.proveWitness(await e.witness(toJson(w.inputs), a.wasm), a.zkey);
+    e.dispose();
+    expect(p2).toEqual(p1);
+    expect(p1.proof.pi_a).not.toEqual(ours.proof.pi_a);
+    expect(await snarkjs.groth16.verify(a.vkey, p1.publicSignals, p1.proof)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------
+// On-chain: the repo's MIT `WithdrawalGroth16Verifier` (same key as 0xbow's deployed verifier, the one PoolPayer's
+// Privacy Pools Entrypoint calls), compiled and run by forge on a temp copy.
+// ---------------------------------------------------------------------------------------------------------------
+
+const CONTRACTS = new URL("../../../contracts/test/privacy/", import.meta.url).pathname;
+const hasForge = (() => {
+  try {
+    execFileSync("forge", ["--version"], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+})();
+// The groth16-wasm CI job installs foundry and sets this, so the check cannot silently skip there.
+const requireForge = !!process.env.GROTH16_REQUIRE_FORGE;
+
+const sol = (p: SolProof) =>
+  `[uint256(${p.pA[0]}), ${p.pA[1]}], [[uint256(${p.pB[0][0]}), ${p.pB[0][1]}], [uint256(${p.pB[1][0]}), ${p.pB[1][1]}]], ` +
+  `[uint256(${p.pC[0]}), ${p.pC[1]}], [uint256(${p.pubSignals.join("), uint256(")})]`;
+
+describe.runIf(hasForge || requireForge)("on-chain verifier (forge, temp copy of WithdrawalGroth16Verifier)", () => {
+  it("accepts our proof and snarkjs' proof; rejects a tampered proof and a tampered signal", () => {
+    const o = toSolProof(ours.proof, ours.publicSignals);
+    const t = toSolProof(theirs.proof, theirs.publicSignals);
+    const badProof: SolProof = { ...o, pC: [o.pC[0], (o.pC[1] + 1n) % (1n << 254n)] };
+    const sig = [...o.pubSignals];
+    sig[2] = sig[2]! + 1n; // withdrawnValue + 1 wei
+    const badSignal: SolProof = { ...o, pubSignals: sig as unknown as SolProof["pubSignals"] };
+    const dir = mkdtempSync(join(tmpdir(), "leaked-groth16-onchain-"));
+    try {
+      execFileSync("mkdir", ["-p", join(dir, "src")]);
+      for (const f of ["WithdrawalGroth16Verifier.sol", "WithdrawVkey.sol"])
+        copyFileSync(CONTRACTS + f, join(dir, "src", f));
+      writeFileSync(
+        join(dir, "foundry.toml"),
+        `[profile.default]\nsrc = "src"\ntest = "src"\nout = "out"\nsolc_version = "0.8.28"\nevm_version = "cancun"\n`,
+      );
+      writeFileSync(
+        join(dir, "src", "CrossCheck.t.sol"),
+        `// SPDX-License-Identifier: MIT
+pragma solidity 0.8.28;
+import {WithdrawalGroth16Verifier} from "./WithdrawalGroth16Verifier.sol";
+contract CrossCheckTest {
+    WithdrawalGroth16Verifier v;
+    function setUp() public { v = new WithdrawalGroth16Verifier(); }
+    function test_arkworks_proof_verifies() public view { require(v.verifyProof(${sol(o)}), "ours"); }
+    function test_snarkjs_proof_verifies() public view { require(v.verifyProof(${sol(t)}), "theirs"); }
+    function test_tampered_proof_rejected() public view { require(!v.verifyProof(${sol(badProof)}), "bad proof"); }
+    function test_tampered_signal_rejected() public view { require(!v.verifyProof(${sol(badSignal)}), "bad signal"); }
+}
+`,
+      );
+      const out = execFileSync("forge", ["test", "--root", dir, "-vv"], { encoding: "utf8", stdio: "pipe" });
+      expect(out).toMatch(/4 passed; 0 failed/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------
+// Negative: wrong inputs are reported as the circuit's failure; a bogus proof never leaves the engine.
+// ---------------------------------------------------------------------------------------------------------------
+
+describe("negative", () => {
+  it("wrong inputs: the circuit's assertion failure is reported, no proof", async () => {
+    const err = await engine.fullProve({ ...toJson(w.inputs), stateRoot: "1" }, a.wasm, a.zkey).catch((e) => e);
+    expect(err).toBeInstanceOf(WitnessError);
+    expect(err.code).toBe(4);
+    const err2 = await engine.fullProve({ ...toJson(w.inputs), existingSecret: "42" }, a.wasm, a.zkey).catch((e) => e);
+    expect(err2).toBeInstanceOf(WitnessError);
+  });
+
+  it("a witness that does not satisfy the constraints is refused (ConstraintUnsatisfiedError), never proved", async () => {
+    const good = await engine.witness(toJson(w.inputs), a.wasm);
+    // A public signal (withdrawnValue) and a private wire: both break A·B = C somewhere.
+    for (const idx of [3, 1000]) {
+      const bad = good.slice();
+      bad[idx * 32] = bad[idx * 32]! ^ 1;
+      await expect(engine.proveWitness(bad, a.zkey)).rejects.toBeInstanceOf(ConstraintUnsatisfiedError);
+    }
+    const one = good.slice();
+    one[0] = 2; // witness[0] must be the constant 1
+    await expect(engine.proveWitness(one, a.zkey)).rejects.toBeInstanceOf(Groth16EngineError);
+    await expect(engine.proveWitness(good.subarray(32), a.zkey)).rejects.toThrow(/witness has 36900 elements/);
+    const big = good.slice();
+    big.fill(0xff, 64, 96); // ≥ r
+    await expect(engine.proveWitness(big, a.zkey)).rejects.toThrow(/out of range/);
+  });
+
+  it("a corrupt zkey is a Groth16EngineError", async () => {
+    const z = a.zkey.slice(0, 1000);
+    await expect(engine.proveWitness(new Uint8Array(32), z)).rejects.toBeInstanceOf(Groth16EngineError);
+    const notZkey = a.zkey.slice();
+    notZkey[0] = 0x41;
+    await expect(engine.proveWitness(new Uint8Array(32), notZkey)).rejects.toThrow(/not a zkey/);
+  });
+
+  it("verify: tampered proofs, signals and keys are false, never a throw", async () => {
+    const { proof, publicSignals } = ours;
+    const v = (p: Groth16Proof, s: string[] = publicSignals, k: unknown = a.vkey) => engine.verify(k, s, p);
+    expect(
+      await v(
+        proof,
+        publicSignals.map((s, i) => (i === 2 ? (BigInt(s) + 1n).toString() : s)),
+      ),
+    ).toBe(false);
+    expect(await v({ ...proof, pi_a: [proof.pi_a[0]!, (BigInt(proof.pi_a[1]!) + 1n).toString(), "1"] })).toBe(false);
+    expect(await v({ ...proof, pi_c: theirs.proof.pi_c })).toBe(false);
+    expect(await v({ ...proof, pi_b: [proof.pi_b[1]!, proof.pi_b[0]!, ["1", "0"]] })).toBe(false);
+    expect(await v(proof, publicSignals.slice(1))).toBe(false);
+    // signal + r: same value mod r, but not canonical (the on-chain verifier rejects it too).
+    const R = 21888242871839275222246405745257275088548364400416034343698204186575808495617n;
+    expect(
+      await v(
+        proof,
+        publicSignals.map((s, i) => (i === 0 ? (BigInt(s) + R).toString() : s)),
+      ),
+    ).toBe(false);
+    expect(await v(proof, publicSignals, { ...(a.vkey as object), curve: "bls12381" })).toBe(false);
+    expect(await v(proof, publicSignals, null)).toBe(false);
+    expect(await v({ pi_a: ["x"], pi_b: [], pi_c: [] } as unknown as Groth16Proof)).toBe(false);
+  });
+});
+
+describe("worker/CSP friendliness", () => {
+  it("no eval / new Function in the shipped JS; the core needs only WebAssembly.instantiate on bytes", () => {
+    for (const f of ["../wasm/leaked_groth16.js", "../src/engine.ts", "../src/witness.ts", "../src/index.ts"]) {
+      const src = readFileSync(new URL(f, import.meta.url), "utf8");
+      expect(src).not.toMatch(/\beval\s*\(|new Function\s*\(/);
+      expect(src).not.toMatch(/from "node:|require\(/);
+    }
+  });
+});
