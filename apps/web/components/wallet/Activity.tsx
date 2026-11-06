@@ -1,7 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import { Address, Notice, Screen, Secondary, Title } from "@/components/onboarding/ui";
-import { eth, explorerLink } from "@/lib/format";
+import { eth, explorerLink, short } from "@/lib/format";
 import { EntryRow, Row, entryOut, entryState, entryTitle } from "./bits";
 import { useWallet, type ActivityEntry } from "./state";
 import type { Nav } from "./Wallet";
@@ -63,7 +64,10 @@ export function EntryDetail({ nav, entryId }: { nav: Nav; entryId: string }) {
   const st = entryState(e);
   const out = entryOut(e);
   const to = e.kind === "payment" && e.calls.length === 1 ? e.calls[0]!.target : undefined;
-  const link = explorerLink(net?.explorerTxUrl, e.txHash ?? (e.via === "leanpool" ? undefined : e.hash));
+  // The devnet's explorer is the alt mempool's: it lists what went through the alt mempool (payments), not the
+  // ordinary transactions the setup key or an old wallet sent straight to the node (creating the account, moves).
+  const link = e.via === "legacy" ? undefined : explorerLink(net?.explorerTxUrl, e.txHash);
+  const txHash = e.txHash ?? (e.via === "leanpool" ? undefined : e.hash);
   const steps = journey(e);
 
   return (
@@ -96,6 +100,12 @@ export function EntryDetail({ nav, entryId }: { nav: Nav; entryId: string }) {
         {e.feeWei && <Row k="Network fee">{eth(e.feeWei, 8)} ETH</Row>}
         <Row k="Signed by">{SIGNER[e.signer]}</Row>
         {e.origin && <Row k="Asked by">{e.origin}</Row>}
+        {e.blockNumber && <Row k="Block">{Number(e.blockNumber).toLocaleString("en-US")}</Row>}
+        {txHash && (
+          <Row k="Transaction">
+            <CopyHash hash={txHash} />
+          </Row>
+        )}
       </dl>
       {steps && (
         <ol className="mt-8 border-t border-ink">
@@ -109,5 +119,24 @@ export function EntryDetail({ nav, entryId }: { nav: Nav; entryId: string }) {
       )}
       {e.status === "failed" && e.detail && <Notice tone="error">{e.detail}</Notice>}
     </Screen>
+  );
+}
+
+function CopyHash({ hash }: { hash: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={() =>
+        void navigator.clipboard?.writeText(hash).then(() => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1600);
+        })
+      }
+      className="font-mono text-[14px] underline decoration-dotted underline-offset-4 active:text-blue"
+      aria-label={`Copy transaction hash ${hash}`}
+    >
+      {copied ? "Copied" : short(hash)}
+    </button>
   );
 }
