@@ -991,3 +991,53 @@ Implements the "Groth16 engine" decision above. `packages/groth16`, MIT; `@leake
 ## Decision (2026-11-06): license exceptions for `@leaked/groth16`
 - **Accepted:** `subtle` (BSD-3-Clause; notice reproduced in THIRD_PARTY.md) and `foldhash` (Zlib). Both are permissive with no copyleft, and both are required by arkworks. The shipped extension stays MIT-compatible.
 - **Open (legal review, not engineering):** `withdraw.wasm` is circom compiler output embedding circom's field-arithmetic runtime, and circom itself is GPL-3.0. Whether the generated artifact is covered depends on the artifact's own license (see the circuits package license above) and on circom's position on generated code. Ask a lawyer or 0xbow before a store release.
+
+## 7579 modules: Open recipient mode and the bound vault identity (2026-11-06)
+
+Mirrors "Account: Open recipient mode and bound role signers" in `contracts/src/modules`; the "7579 modules after
+the security review" fixes (A1 to A5) and host matrix are unchanged. Commits `9dbb5a7` (modules + tests), `fd2573c`
+(anvil e2e), `d24cc3d` (watcher-core ABI regenerated).
+
+- **`LeakedPolicyHook` recipient mode.** `ILeakedModules.RecipientMode { Open, Strict }`. `HookInit.recipientMode`
+  is appended, so a zero-filled install gets Open (the default). It is stored as `bool recipientsOpen` in policy
+  slot 0, which the validator already reads, so ERC-7562 needs no new slot. The flag is inverted so that a slot that
+  was never written, or was cleared by `onUninstall`, reads Strict: `recipientMode(account)` is Strict for an unknown
+  account. `_checkCalls` follows the account's classification:
+  - In Open, `d.length == 0 && value > 0` to any target and an allowlisted priced token's `transfer` to any `to != 0`
+    count as payments, within `perTxMaxUsd` (static, in validation) and the bucket (in `postCheck`).
+  - In both modes these still need a session or the allowlist: a zero-value empty call, ETH with calldata,
+    `approve`, `transferFrom`, `increaseAllowance`, an unallowlisted token, a `transfer` to 0, and any call to the
+    account, the hook or the executor.
+  - `setRecipientMode(account, mode)` is executor-only. Open → Strict is instant. Strict → Open goes through
+    `_authLoosen`, so it must be queued. The executor's `_checkShape` admits the selector in vault batches only, so
+    guardians can still only freeze. Event: `RecipientModeSet(account, mode)`, emitted at install and on every change.
+- **`LeakedRoleExecutor` binding.** In 4337 the PQ check already runs in execution (`vaultExec` and the others), and
+  the role identity was already `(verifier, vaultPk/recoveryPk)` stored per account. There is no signer address to
+  derive, so nothing like `predictRoleSigner` is needed. Minimal change:
+  - `onInstall` probes `verifier.sigLength()` with `RoleSignerFactory`'s rule (1..65535) and refuses a
+    variable-length verifier (`BadConfig`).
+  - It stores the length (`sigLengthOf`) and emits `VaultBound(account, vaultPk, verifier, sigLength)`.
+  - `_verify` refuses a witness of any other length before it calls the verifier.
+- **Tests (317 module tests, all green).**
+  - Every host suite (MSA, Safe7579, Kernel) runs in Open, plus a `*StrictTest` re-run of each.
+  - The audit PoCs A1 to A7 run in both modes (`LeakedModulesAudit*StrictTest`).
+  - New recipient-mode tests: `test_recipientMode_*` and `test_executor_bindsVaultPkVerifierSigLength`. The ERC-7562
+    test validates an Open payment to a never-allowlisted recipient.
+  - Invariants run in Open and Strict and add `invariant_recipientPolicy`: no Strict payment to a non-allowlisted
+    address, a fallback probe never runs from a hot non-payment, and the mode changes only on vault paths. Instant
+    Strict → Open counts as an unauthorized write.
+  - Mutation check: treating Strict as Open fails the Strict invariant and tests. Admitting zero-value calls in Open
+    fails the probe and `nonPaymentsNeedSession`.
+  - The C13 fixture was regenerated because the MSA address moved with the init data.
+- **Anvil e2e** (`devnet-tests/4337`, `bun run e2e`, `last-run.json`). A new step 3a' sends $30 in Open mode to
+  `0x…0f2e55` (`isTarget` false): mined in tx `0x8dbb75f6…109c`, 300,262 gas, bucket debited to $670. The rest is
+  unchanged:
+  - over-perTx is refused in simulation;
+  - over-cap fails in execution with `OverCap(300, 220)`;
+  - the C13 vault exec is relayed by a SimpleAccount (sigLength 3688).
+
+  Account creation costs 676,372 gas (was 649,136).
+- **Watcher.** The live devnet test already builds `InitConfig` from the artifact (`20bfcd8`). It was re-run with
+  `LIVE_DEVNET=1` on the local devnet with anvil #9 and passes 26/26 (account `0xA69aBD84…CDcD`). The watcher-core
+  ABI now includes the modules' `RecipientModeSet` and `VaultBound`. `RecipientModeSet` decodes by name into a
+  settings change, so the frame and 4337 backends alert the same way. No rule reads `VaultBound` yet.
