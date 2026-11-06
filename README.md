@@ -65,6 +65,7 @@ Components, transaction shapes, migration and the trust model: [`docs/ARCHITECTU
 | [`packages/groth16`](packages/groth16/) | MIT Groth16 prover (arkworks → WASM) for the privacy circuits |
 | [`packages/watcher-core`](packages/watcher-core/), [`services/watcher`](services/watcher/) | Alert rules for LeanAccount; the self-hosted alert service |
 | [`apps/extension`](apps/extension/) | The MV3 browser extension (WXT + viem) |
+| [`apps/web`](apps/web/) | The landing page and PWA wallet (Next.js); runs the extension's wallet engine in a Web Worker; `/test` exercises every feature |
 | [`bench/`](bench/) | Post-quantum verifier benchmark |
 | [`devnet/`](devnet/) | Local EIP-8141 devnet (ethrex + Lighthouse + sidecar), deploy scripts, the BUDGET-010 sidecar |
 | [`upstream/`](upstream/) | Upstream contributions as patch series (BUDGET-010) |

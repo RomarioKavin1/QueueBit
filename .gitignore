@@ -22,3 +22,6 @@ devnet/data/
 /release/
 /audit/
 /sbom/
+.next/
+next-env.d.ts
+*.tsbuildinfo

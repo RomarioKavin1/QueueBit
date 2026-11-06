@@ -15,6 +15,9 @@ export default tseslint.config(
       // Generated: WXT build output and types.
       "**/.output/**",
       "**/.wxt/**",
+      // Generated: Next.js build output and types.
+      "**/.next/**",
+      "apps/web/next-env.d.ts",
       "**/playwright-report/**",
       "**/test-results/**",
       // Generated: wasm-bindgen glue.
@@ -39,6 +42,19 @@ export default tseslint.config(
   {
     files: ["apps/extension/**/*.{ts,tsx}"],
     languageOptions: { globals: { ...globals.browser, ...globals.webextensions } },
+  },
+  {
+    files: ["apps/web/**/*.{ts,tsx}"],
+    languageOptions: { globals: { ...globals.browser, ...globals.worker } },
+    plugins: { "react-hooks": reactHooks },
+    rules: {
+      "react-hooks/rules-of-hooks": "error",
+      "react-hooks/exhaustive-deps": "warn",
+    },
+  },
+  {
+    files: ["apps/web/public/sw.js"],
+    languageOptions: { globals: { ...globals.serviceworker } },
   },
   {
     // React code only: Playwright fixtures also call a function named `use`.

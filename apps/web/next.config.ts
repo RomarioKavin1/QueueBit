@@ -1,0 +1,66 @@
+import type { NextConfig } from "next";
+
+/**
+ * The web app runs the extension's wallet engine (`apps/extension/src/background`, the `Wallet` class) in a Web Worker,
+ * so both apps share one implementation of keys, accounts, sessions and moves. Workspace packages resolve to their
+ * TypeScript sources through the `source` export condition (as in vitest and the extension build), which is why the
+ * build uses webpack (`next build --webpack`): it takes custom resolve conditions.
+ *
+ * Build flags the engine reads (apps/extension/src/shared/build.ts), from the environment at build time:
+ *   NEXT_PUBLIC_QUEUEBIT_LOCAL_DEVNET=1    chain 1337 is the local devnet (devnet/), not the public one
+ *   NEXT_PUBLIC_QUEUEBIT_LEANPOOL_URL      the default LeanPool node (the /test page can override it at run time)
+ *   NEXT_PUBLIC_QUEUEBIT_FAUCET_URL        a local devnet's `?address=` faucet
+ */
+const LOCAL_DEVNET = process.env.NEXT_PUBLIC_QUEUEBIT_LOCAL_DEVNET === "1";
+const LEANPOOL_URL = (process.env.NEXT_PUBLIC_QUEUEBIT_LEANPOOL_URL ?? "http://127.0.0.1:8701").replace(/\/+$/u, "");
+const FAUCET_URL = LOCAL_DEVNET ? (process.env.NEXT_PUBLIC_QUEUEBIT_FAUCET_URL ?? "") : "";
+
+const WORKSPACE = [
+  "@queuebit/extension",
+  "@queuebit/account",
+  "@queuebit/frames",
+  "@queuebit/rpc",
+  "@queuebit/lean-sphincs",
+  "@queuebit/privacy",
+  "@queuebit/groth16",
+  "@queuebit/ur",
+];
+
+const config: NextConfig = {
+  reactStrictMode: true,
+  transpilePackages: WORKSPACE,
+  // The engine's sources live outside this app (apps/extension, packages/*).
+  outputFileTracingRoot: new URL("../..", import.meta.url).pathname,
+  webpack: (cfg, { webpack }) => {
+    cfg.resolve ??= {};
+    cfg.resolve.conditionNames = ["source", ...(cfg.resolve.conditionNames ?? ["..."])];
+    // The packages' sources import siblings as `./x.js` (NodeNext style) for files that are `./x.ts`.
+    cfg.resolve.extensionAlias = { ...cfg.resolve.extensionAlias, ".js": [".ts", ".tsx", ".js"] };
+    cfg.plugins ??= [];
+    cfg.plugins.push(
+      new webpack.DefinePlugin({
+        __QUEUEBIT_LOCAL_DEVNET__: JSON.stringify(LOCAL_DEVNET),
+        __QUEUEBIT_DESIGN__: JSON.stringify(false),
+        __QUEUEBIT_LEANPOOL_URL__: JSON.stringify(LEANPOOL_URL),
+        __QUEUEBIT_FAUCET_URL__: JSON.stringify(FAUCET_URL),
+      }),
+    );
+    // leanSPHINCS and the Groth16 prover ship their WASM inlined (no fetch); allow async WASM anyway for deps.
+    cfg.experiments = { ...cfg.experiments, asyncWebAssembly: true };
+    return cfg;
+  },
+  async headers() {
+    return [
+      {
+        // The service worker must never be cached by the HTTP cache, or an update can't land.
+        source: "/sw.js",
+        headers: [
+          { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+          { key: "Service-Worker-Allowed", value: "/" },
+        ],
+      },
+    ];
+  },
+};
+
+export default config;

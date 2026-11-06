@@ -28,3 +28,4 @@ upstream/
 /audit/
 /sbom/
 **/dist-relay/
+**/.next/
