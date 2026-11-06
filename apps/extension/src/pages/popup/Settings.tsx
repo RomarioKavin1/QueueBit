@@ -1,5 +1,7 @@
 import { useState } from "react";
+import { SHARED_DEVNET } from "../../shared/build";
 import { NETWORKS } from "../../shared/chains";
+import { sharedUi } from "../lib/boot";
 import { AUTO_LOCK_CHOICES, type Theme, type WalletState } from "../../shared/types";
 import { AddressChip, ArrowLeftIcon, Button, Card, LockIcon, PasswordField, SelectField } from "../../ui";
 import { formatMinutes, formatUsd } from "../../ui/format";
@@ -64,6 +66,8 @@ export function SettingsScreen({ state, onBack }: { state: WalletState; onBack: 
             Lock now
           </Button>
         </section>
+
+        {SHARED_DEVNET && sharedUi && <sharedUi.SharedDevnetSection />}
 
         <PrivateConnectionSection chainId={s.selectedChainId} enabled={s.anonRpc} />
         <PrivacyNetworkSection chainId={s.selectedChainId} />

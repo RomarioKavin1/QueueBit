@@ -13,6 +13,8 @@ export const FORBIDDEN = [
   // Local devnet network entries (src/shared/chains.ts, BUILD.localDevnet).
   { what: "local devnet RPC", re: /localhost:(8545|8546|4337|14337|14340)/u },
   { what: "local devnet network", re: /Local devnet|Local 4337 test chain/u },
+  // The shared-devnet flavour (src/shared/sharedDevnet.ts, BUILD.sharedDevnet).
+  { what: "shared devnet", re: /QueueBit devnet \(shared\)|queuebit:sharedDevnet|trycloudflare/u },
   // The e2e-only service-worker probe (entrypoints/background.ts).
   { what: "e2e probe", re: /__queuebitPq/u },
   // Source maps (they embed absolute paths and the sources).

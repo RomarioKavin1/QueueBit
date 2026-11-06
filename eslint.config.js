@@ -8,6 +8,7 @@ export default tseslint.config(
   {
     ignores: [
       "**/dist/**",
+      "**/dist-shared/**",
       "**/coverage/**",
       "**/node_modules/**",
       // Generated: WXT build output and types.

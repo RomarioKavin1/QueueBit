@@ -5,6 +5,8 @@ import { join } from "node:path";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defaultClientConditions, defineConfig, type Plugin } from "vite";
+// @ts-expect-error: plain ESM script without types
+import { loadSharedOverlay } from "./scripts/shared-overlay.mjs";
 
 /**
  * The companion is a static, offline-first PWA. Security posture enforced by the build:
@@ -129,6 +131,9 @@ function serviceWorker(): Plugin {
 
 const pkg = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8")) as { version: string };
 
+/** The shared-devnet flavour's registry overlay (`build:shared`), or null. */
+const sharedOverlay = (await loadSharedOverlay()) as unknown;
+
 export default defineConfig({
   base: "./",
   plugins: [react(), tailwindcss(), securityHeaders(), serviceWorker()],
@@ -137,6 +142,7 @@ export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
     __BUILD_ID__: JSON.stringify(gitShort()),
+    __QUEUEBIT_REGISTRY_OVERLAY__: JSON.stringify(sharedOverlay),
   },
   worker: { format: "es" },
   build: {

@@ -6,6 +6,8 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { keccak_256 } from "@noble/hashes/sha3.js";
+import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import * as prettier from "prettier";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -41,6 +43,9 @@ export async function render() {
   const roleSigner = strip(art("PQRoleSigner.sol", "PQRoleSigner").abi);
   const pqVerifier = strip(art("IPQVerifier.sol", "IPQVerifier").abi);
   const proxy = art("ERC1967Proxy.sol", "ERC1967Proxy").bytecode.object;
+  // AccountFactory has no constructor args and no immutables, so its runtime code is the same on every chain.
+  const factoryRuntime = art("AccountFactory.sol", "AccountFactory").deployedBytecode.object;
+  const factoryCodeHash = `0x${bytesToHex(keccak_256(hexToBytes(factoryRuntime.slice(2))))}`;
   const hook = strip(art("QueueBitPolicyHook.sol", "QueueBitPolicyHook").abi);
   const validator = strip(art("QueueBitHotValidator.sol", "QueueBitHotValidator").abi);
   const executor = strip(art("QueueBitRoleExecutor.sol", "QueueBitRoleExecutor").abi);
@@ -124,6 +129,9 @@ export const msaFactoryAbi = ${j(msaFactory)} as const;
 
 /** \`type(MSAProxy).creationCode\`: MSAFactory's CREATE2 init code is this ‖ abi.encode(implementation, initializeAccount(initCode)). */
 export const msaProxyCreationCode = ${j(msaProxy)} as const;
+
+/** keccak256 of \`AccountFactory\`'s runtime code: a shared devnet's factory must match it (src/shared/sharedDevnet.ts). */
+export const accountFactoryCodeHash = ${j(factoryCodeHash)} as const;
 
 /** Reference ERC-7579 \`Bootstrap\`: \`initMSA(validators, executors, hook, fallbacks)\`. */
 export const msaBootstrapAbi = ${j(bootstrap)} as const;

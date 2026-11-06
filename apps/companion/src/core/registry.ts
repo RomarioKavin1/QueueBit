@@ -1,5 +1,13 @@
 import { keccak256, parseAbi, toFunctionSelector, type Abi, type AbiFunction, type Address, type Hex } from "viem";
-import raw from "../registry/queuebit.descriptors.json" with { type: "json" };
+import bundled from "../registry/queuebit.descriptors.json" with { type: "json" };
+import { applyOverlay, type RegistryOverlay } from "./registryOverlay.js";
+
+/** Set only by the shared-devnet build (vite.config.ts `build:shared`): the shared devnet's addresses, baked in. */
+declare const __QUEUEBIT_REGISTRY_OVERLAY__: RegistryOverlay | null | undefined;
+const raw = applyOverlay(
+  bundled as unknown as Parameters<typeof applyOverlay>[0],
+  typeof __QUEUEBIT_REGISTRY_OVERLAY__ === "undefined" ? null : __QUEUEBIT_REGISTRY_OVERLAY__,
+);
 
 /**
  * Typed view of `src/registry/queuebit.descriptors.json`, the one data file that says how calls are decoded and worded.

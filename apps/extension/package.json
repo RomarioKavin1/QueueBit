@@ -18,7 +18,10 @@
     "icons": "node scripts/render-icons.mjs",
     "gen:contracts": "node scripts/gen-contracts.mjs",
     "build:local": "VITE_QUEUEBIT_LOCAL_DEVNET=1 wxt build",
+    "build:shared": "node scripts/build-shared.mjs",
     "test:devnet": "LOCAL_DEVNET=1 VITE_QUEUEBIT_LOCAL_DEVNET=1 vitest run test/devnet",
+    "test:shared": "vitest run test/devnet/shared-devnet.test.ts",
+    "e2e:shared": "node scripts/build-shared.mjs && QUEUEBIT_E2E_NO_4337=1 QUEUEBIT_E2E_EXTENSION=.output/shared/chrome-mv3 playwright test --project=shared",
     "release:build": "node scripts/release-build.mjs"
   },
   "dependencies": {

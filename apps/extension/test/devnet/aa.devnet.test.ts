@@ -16,6 +16,8 @@ import { local4337Deployment, roleExecutorAbi } from "../../src/generated/contra
 import { MemoryKV } from "../../src/shared/kv";
 
 vi.mock("../../src/shared/build", () => ({
+  SHARED_DEVNET: false,
+  SHARED_DEVNET_BASE: "",
   LOCAL_DEVNET: true,
   DESIGN_GALLERY: false,
   BUILD: { localDevnet: true, designGallery: false },

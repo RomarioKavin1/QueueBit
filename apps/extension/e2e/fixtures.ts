@@ -10,7 +10,10 @@ import type * as SimModule from "./support/companion-sim";
 import type * as PoolModule from "./support/privacy-pool";
 
 const here = dirname(fileURLToPath(import.meta.url));
-export const EXTENSION_PATH = join(here, "..", ".output", "chrome-mv3");
+/** The unpacked build under test (the shared-devnet e2e points this at `.output/shared/chrome-mv3`). */
+export const EXTENSION_PATH = process.env.QUEUEBIT_E2E_EXTENSION
+  ? join(here, "..", process.env.QUEUEBIT_E2E_EXTENSION)
+  : join(here, "..", ".output", "chrome-mv3");
 export const PASSWORD = "correct-horse-battery";
 
 interface Fixtures {

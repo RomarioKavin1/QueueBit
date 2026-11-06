@@ -15,7 +15,7 @@ import { digests, deterministicZip, git, sha256, sourceDateEpoch } from "../../.
 import { checkProductionBuild } from "./release-check.mjs";
 
 const APP = fileURLToPath(new URL("..", import.meta.url));
-const FLAGS = ["VITE_QUEUEBIT_LOCAL_DEVNET", "VITE_QUEUEBIT_DESIGN"];
+const FLAGS = ["VITE_QUEUEBIT_LOCAL_DEVNET", "VITE_QUEUEBIT_DESIGN", "VITE_QUEUEBIT_SHARED_BASE"];
 
 /** Builds the production extension into a fresh temporary directory; returns that directory's chrome-mv3 tree. */
 export async function buildProduction() {

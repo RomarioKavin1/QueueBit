@@ -1,6 +1,7 @@
 import { DEVNET_1337 } from "@queuebit/rpc";
 import { local4337Deployment, localDeployment, type LocalToken } from "../generated/contracts";
-import { LOCAL_DEVNET } from "./build";
+import { LOCAL_DEVNET, SHARED_DEVNET, SHARED_DEVNET_BASE } from "./build";
+import { sharedNetworks } from "./sharedDevnet";
 
 /**
  * The fixed network table (plan §30 §8). Sites cannot add networks (`wallet_addEthereumChain` is refused), so a
@@ -108,85 +109,95 @@ const localTokens = (t: { tokens?: LocalToken[] } | null): TokenPreset[] =>
       }))
     : [];
 
-const devnet: Network = LOCAL_DEVNET
-  ? {
-      chainId: DEVNET_1337.chainId,
-      name: "Local devnet",
-      shortName: "Local devnet",
-      rpcUrl: "http://localhost:8545",
-      sidecarUrl: "http://localhost:14337/rpc",
-      stakedSidecarUrl: "http://localhost:14340/rpc",
-      backend: "frame",
-      profileId: "ethrex-eip8141-tracer",
-      ...(localDeployment
-        ? {
-            deployment: {
-              factory: localDeployment.factory,
-              accountImpl: localDeployment.accountImpl,
-              roleSignerFactory: localDeployment.roleSignerFactory,
-              c13Verifier: localDeployment.c13Verifier,
-              stakingRegistry: localDeployment.stakingRegistry,
-            },
-          }
-        : {}),
-      accountKind: "Native account",
-      currency: { symbol: "ETH", decimals: 18 },
-      note: "Your local copy of the native-account test network. Test money only.",
-      testnet: true,
-      tokenPresets: localTokens(localDeployment),
-      enabled: true,
-    }
-  : {
-      chainId: DEVNET_1337.chainId,
-      name: "Alt-mempool devnet",
-      shortName: "Devnet",
-      rpcUrl: DEVNET_1337.nodeUrl,
-      sidecarUrl: DEVNET_1337.sidecarUrl,
-      backend: "frame",
-      profileId: "ethrex-eip8141-tracer",
-      accountKind: "Native account",
-      currency: { symbol: "ETH", decimals: 18 },
-      note: "Test network for native QueueBit accounts. Test money only.",
-      testnet: true,
-      tokenPresets: [],
-      enabled: true,
-    };
+/**
+ * The shared-devnet flavour (`build:shared`): 1337 and 31337 are the public "QueueBit devnet (shared)", unselectable
+ * until its addresses.json is loaded and checked (src/shared/sharedDevnetRuntime.ts fills them in).
+ */
+const shared: readonly [Network, Network] | undefined = SHARED_DEVNET ? sharedNetworks(SHARED_DEVNET_BASE) : undefined;
+
+const devnet: Network = shared
+  ? shared[0]
+  : LOCAL_DEVNET
+    ? {
+        chainId: DEVNET_1337.chainId,
+        name: "Local devnet",
+        shortName: "Local devnet",
+        rpcUrl: "http://localhost:8545",
+        sidecarUrl: "http://localhost:14337/rpc",
+        stakedSidecarUrl: "http://localhost:14340/rpc",
+        backend: "frame",
+        profileId: "ethrex-eip8141-tracer",
+        ...(localDeployment
+          ? {
+              deployment: {
+                factory: localDeployment.factory,
+                accountImpl: localDeployment.accountImpl,
+                roleSignerFactory: localDeployment.roleSignerFactory,
+                c13Verifier: localDeployment.c13Verifier,
+                stakingRegistry: localDeployment.stakingRegistry,
+              },
+            }
+          : {}),
+        accountKind: "Native account",
+        currency: { symbol: "ETH", decimals: 18 },
+        note: "Your local copy of the native-account test network. Test money only.",
+        testnet: true,
+        tokenPresets: localTokens(localDeployment),
+        enabled: true,
+      }
+    : {
+        chainId: DEVNET_1337.chainId,
+        name: "Alt-mempool devnet",
+        shortName: "Devnet",
+        rpcUrl: DEVNET_1337.nodeUrl,
+        sidecarUrl: DEVNET_1337.sidecarUrl,
+        backend: "frame",
+        profileId: "ethrex-eip8141-tracer",
+        accountKind: "Native account",
+        currency: { symbol: "ETH", decimals: 18 },
+        note: "Test network for native QueueBit accounts. Test money only.",
+        testnet: true,
+        tokenPresets: [],
+        enabled: true,
+      };
 
 /**
  * Chain 31337: a local anvil with EntryPoint v0.8 at its canonical address, the QueueBit 7579 modules and a minimal
  * bundler (`devnet/deploy`: `bun run up:4337`). The compatible-account backend runs here exactly as on Sepolia.
  */
-const local4337: Network | undefined = LOCAL_DEVNET
-  ? {
-      chainId: 31337,
-      name: "Local 4337 test chain",
-      shortName: "Local 4337",
-      rpcUrl: "http://localhost:8546",
-      bundlerUrl: "http://localhost:4337/rpc",
-      backend: "4337",
-      ...(local4337Deployment
-        ? {
-            aa: {
-              entryPoint: local4337Deployment.entryPoint,
-              factory: local4337Deployment.factory,
-              msaImpl: local4337Deployment.msaImpl,
-              bootstrap: local4337Deployment.bootstrap,
-              validator: local4337Deployment.validator,
-              hook: local4337Deployment.hook,
-              executor: local4337Deployment.executor,
-              c13Verifier: local4337Deployment.c13Verifier,
-            },
-          }
-        : {}),
-      accountKind: "Compatible account",
-      currency: { symbol: "ETH", decimals: 18 },
-      note: "A local chain without native accounts: your account is an ERC-4337 smart account with QueueBit's modules. Test money only.",
-      testnet: true,
-      tokenPresets: localTokens(local4337Deployment),
-      enabled: local4337Deployment !== null,
-      ...(local4337Deployment ? {} : { disabledReason: "Run devnet/deploy `bun run up:4337` and rebuild." }),
-    }
-  : undefined;
+const local4337: Network | undefined = shared
+  ? shared[1]
+  : LOCAL_DEVNET
+    ? {
+        chainId: 31337,
+        name: "Local 4337 test chain",
+        shortName: "Local 4337",
+        rpcUrl: "http://localhost:8546",
+        bundlerUrl: "http://localhost:4337/rpc",
+        backend: "4337",
+        ...(local4337Deployment
+          ? {
+              aa: {
+                entryPoint: local4337Deployment.entryPoint,
+                factory: local4337Deployment.factory,
+                msaImpl: local4337Deployment.msaImpl,
+                bootstrap: local4337Deployment.bootstrap,
+                validator: local4337Deployment.validator,
+                hook: local4337Deployment.hook,
+                executor: local4337Deployment.executor,
+                c13Verifier: local4337Deployment.c13Verifier,
+              },
+            }
+          : {}),
+        accountKind: "Compatible account",
+        currency: { symbol: "ETH", decimals: 18 },
+        note: "A local chain without native accounts: your account is an ERC-4337 smart account with QueueBit's modules. Test money only.",
+        testnet: true,
+        tokenPresets: localTokens(local4337Deployment),
+        enabled: local4337Deployment !== null,
+        ...(local4337Deployment ? {} : { disabledReason: "Run devnet/deploy `bun run up:4337` and rebuild." }),
+      }
+    : undefined;
 
 /** Not selectable until QueueBit's module stack has audited, recorded addresses there (plan §30 §8). */
 const NOT_YET = "QueueBit's account contracts aren't deployed on this network yet.";

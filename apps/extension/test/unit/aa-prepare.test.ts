@@ -7,6 +7,8 @@ import type { AccountChainState } from "../../src/background/policy";
 import { USD } from "../../src/background/account";
 
 vi.mock("../../src/shared/build", () => ({
+  SHARED_DEVNET: false,
+  SHARED_DEVNET_BASE: "",
   LOCAL_DEVNET: true,
   DESIGN_GALLERY: false,
   BUILD: { localDevnet: true, designGallery: false },

@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { isAddress, type Address } from "viem";
 import { AnimatedUr, UR_TYPES, singlePartUr } from "@queuebit/ur";
+import { SHARED_DEVNET } from "../../shared/build";
 import { NETWORKS, getNetwork, type TokenPreset } from "../../shared/chains";
+import { sharedUi } from "../lib/boot";
 import type { WalletState } from "../../shared/types";
 import type { PairPreview } from "../../shared/views";
 import {
@@ -1271,6 +1273,11 @@ function Done({ headingRef, state, go }: StepProps & { state: WalletState }) {
             )}
             <li>Press Activate account. It takes a few seconds.</li>
           </ol>
+          {SHARED_DEVNET && sharedUi && !tankOk && (
+            <div className="mt-3">
+              <sharedUi.FaucetCard chainId={net.chainId} targets={[{ label: "Fee tank", address: s.tank }]} />
+            </div>
+          )}
 
           {error && <RiskBanner className="mt-3" level="danger" title={error} />}
           <Button

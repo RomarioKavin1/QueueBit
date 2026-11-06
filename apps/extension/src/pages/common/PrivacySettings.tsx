@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { LOCAL_DEVNET } from "../../shared/build";
+import { LOCAL_DEVNET, SHARED_DEVNET } from "../../shared/build";
+import { sharedUi } from "../lib/boot";
 import { Button, Card, RiskBanner, TextField } from "../../ui";
 import { call, UiCallError } from "../lib/api";
 import { useAsync } from "../lib/hooks";
@@ -72,18 +73,20 @@ export function PrivateConnectionSection({ chainId, enabled }: { chainId: number
 export function PrivacyNetworkSection({ chainId }: { chainId: number }) {
   const view = useAsync(() => call("privacy:view", { chainId }), [chainId]);
   const cfg = view.data?.config;
-  const editable = LOCAL_DEVNET && chainId === 1337;
+  const editable = (LOCAL_DEVNET || SHARED_DEVNET) && chainId === 1337;
   const [open, setOpen] = useState(false);
   const [f, setF] = useState({ entrypoint: "", pool: "", poolPayer: "", deployBlock: "", sidecarUrl: "" });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const start = () => {
+    // The shared devnet publishes its pool in addresses.json: offered as the starting values.
+    const shared = SHARED_DEVNET ? sharedUi?.sharedDevnetState().config?.privacy : undefined;
     setF({
-      entrypoint: cfg?.entrypoint ?? "",
-      pool: cfg?.pool ?? "",
-      poolPayer: cfg?.poolPayer ?? "",
-      deployBlock: cfg?.deployBlock ?? "",
+      entrypoint: cfg?.entrypoint ?? shared?.entrypoint ?? "",
+      pool: cfg?.pool ?? shared?.pool ?? "",
+      poolPayer: cfg?.poolPayer ?? shared?.poolPayer ?? "",
+      deployBlock: cfg?.deployBlock ?? shared?.deployBlock ?? "",
       sidecarUrl: cfg?.sidecarUrl ?? "",
     });
     setOpen(true);

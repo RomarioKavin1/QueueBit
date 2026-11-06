@@ -59,7 +59,7 @@ import {
 } from "./router";
 import type { Call } from "./routing";
 import { SettingsStore } from "./settings";
-import { LOCAL_DEVNET } from "../shared/build";
+import { LOCAL_DEVNET, SHARED_DEVNET } from "../shared/build";
 import { siteWarning } from "../shared/sites";
 import { anonStatusFor } from "../shared/offscreen";
 import type { OffscreenClient } from "./offscreen";
@@ -164,7 +164,7 @@ export class Wallet {
               return env.offscreen.prover();
             },
             anonStatus: async (chainId) => anonStatusFor(chainId, { harnessBundled: false }),
-            localDevnet: LOCAL_DEVNET,
+            localDevnet: LOCAL_DEVNET || SHARED_DEVNET,
             now: this.now,
           })
         : undefined;
@@ -1562,7 +1562,8 @@ export class Wallet {
     },
     "privacy:saveConfig": async (req) => {
       const chainId = await this.chainOr(req.chainId);
-      if (!LOCAL_DEVNET || chainId !== 1337) throw new Error("Private-balance contracts are fixed on this network.");
+      if (!(LOCAL_DEVNET || SHARED_DEVNET) || chainId !== 1337)
+        throw new Error("Private-balance contracts are fixed on this network.");
       return this.priv().saveConfig({ ...req, chainId });
     },
     "privacy:connection": async ({ chainId }) => {

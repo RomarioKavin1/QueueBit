@@ -5,6 +5,7 @@ contracts/lib/
 contracts/out/
 contracts/cache/
 **/dist/
+**/dist-shared/
 coverage/
 *.md
 # Generated or upstream data

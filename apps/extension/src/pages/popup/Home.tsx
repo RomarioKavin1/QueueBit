@@ -1,5 +1,7 @@
 import { useState } from "react";
+import { SHARED_DEVNET } from "../../shared/build";
 import { getNetwork } from "../../shared/chains";
+import { sharedUi } from "../lib/boot";
 import type { WalletState } from "../../shared/types";
 import type { AccountStatus } from "../../shared/views";
 import {
@@ -134,6 +136,17 @@ export function Home({
       </div>
 
       {s && !s.deployed && <ActivationCard status={s} onActivate={onActivate} />}
+
+      {SHARED_DEVNET && sharedUi && s && !s.error && (
+        <sharedUi.FaucetCard
+          chainId={chainId}
+          targets={[
+            { label: "Fee tank", address: s.tank },
+            { label: "Account", address: s.address },
+          ]}
+          onFunded={() => setTimeout(() => void status.reload(), 4000)}
+        />
+      )}
 
       <section aria-labelledby="everyday-h" className="flex flex-col gap-2">
         <h2 id="everyday-h" className="t-strong">

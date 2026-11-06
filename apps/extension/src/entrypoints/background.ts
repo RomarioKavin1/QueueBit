@@ -8,7 +8,8 @@ import { OffscreenClient, chromeOffscreen } from "../background/offscreen";
 import { alertUrl, notificationFor } from "../background/watcher/alerts";
 import { EngineError } from "../background/engine";
 import { ProviderRpcError, serializeError } from "../shared/errors";
-import { LOCAL_DEVNET } from "../shared/build";
+import { LOCAL_DEVNET, SHARED_DEVNET } from "../shared/build";
+import { ensureSharedDevnet } from "../shared/sharedDevnetRuntime";
 import { schemes } from "@queuebit/pq-signer";
 import {
   PROVIDER_PORT,
@@ -39,6 +40,10 @@ export default defineBackground({
         rejectsGarbage: !schemes.c13.verify(new Uint8Array(32), new Uint8Array(32), new Uint8Array(3688)),
       };
     }
+
+    // Shared-devnet flavour: the network table gets its checked addresses before any request is handled.
+    const ready: () => Promise<void> = SHARED_DEVNET ? ensureSharedDevnet : () => Promise.resolve();
+    if (SHARED_DEVNET) void ready();
 
     const wallet = new Wallet({
       local: chromeKV(browser.storage.local),
@@ -101,17 +106,19 @@ export default defineBackground({
       port.onDisconnect.addListener(() => ports.delete(port));
       port.onMessage.addListener((msg: PortRequest) => {
         if (typeof msg?.id !== "string" || typeof msg.method !== "string") return;
-        wallet
-          .handleProvider(
-            {
-              origin,
-              requestId: `${tabKey}:${msg.id}`,
-              embedded,
-              ...(embedded && typeof msg.topOrigin === "string" && /^https?:\/\/[^/\s]+$/u.test(msg.topOrigin)
-                ? { topOrigin: msg.topOrigin }
-                : {}),
-            },
-            { method: msg.method, params: msg.params },
+        ready()
+          .then(() =>
+            wallet.handleProvider(
+              {
+                origin,
+                requestId: `${tabKey}:${msg.id}`,
+                embedded,
+                ...(embedded && typeof msg.topOrigin === "string" && /^https?:\/\/[^/\s]+$/u.test(msg.topOrigin)
+                  ? { topOrigin: msg.topOrigin }
+                  : {}),
+              },
+              { method: msg.method, params: msg.params },
+            ),
           )
           .then(
             (result) => safePost(port, { id: msg.id, result: result ?? null }),
@@ -134,26 +141,29 @@ export default defineBackground({
         // Content scripts share runtime messaging; they never get the UI API.
         return false;
       }
-      wallet.handleUi(msg.type, msg.payload).then(
-        (result) => sendResponse({ ok: true, result }),
-        (err: unknown) =>
-          sendResponse({
-            ok: false,
-            error: {
-              message: err instanceof Error ? err.message : "Something went wrong.",
-              ...(err instanceof KeyringError || err instanceof PaymentsError || err instanceof EngineError
-                ? { reason: err.reason }
-                : {}),
-            },
-          }),
-      );
+      ready()
+        .then(() => wallet.handleUi(msg.type, msg.payload))
+        .then(
+          (result) => sendResponse({ ok: true, result }),
+          (err: unknown) =>
+            sendResponse({
+              ok: false,
+              error: {
+                message: err instanceof Error ? err.message : "Something went wrong.",
+                ...(err instanceof KeyringError || err instanceof PaymentsError || err instanceof EngineError
+                  ? { reason: err.reason }
+                  : {}),
+              },
+            }),
+        );
       return true;
     });
 
     // ---- approval windows, auto-lock, first run ----
     browser.windows.onRemoved.addListener((windowId) => void wallet.approvals.onWindowRemoved(windowId));
 
-    browser.alarms.onAlarm.addListener((alarm) => {
+    browser.alarms.onAlarm.addListener((alarm) => void ready().then(() => onAlarm(alarm)));
+    const onAlarm = (alarm: Browser.alarms.Alarm) => {
       if (alarm.name === AUTOLOCK_ALARM) {
         void wallet.autoLockCheck();
         // Pending payments are also polled here, so a status survives the popup closing and SW restarts.
@@ -162,7 +172,7 @@ export default defineBackground({
       } else if (alarm.name === WATCHER_ALARM || alarm.name === DEADLINE_ALARM) {
         void wallet.pollAlerts().catch(() => undefined);
       }
-    });
+    };
     void browser.alarms.get(AUTOLOCK_ALARM).then((a) => {
       // Chrome 120+: 30 s is the minimum period (plan §30 §2.4).
       if (!a) void browser.alarms.create(AUTOLOCK_ALARM, { periodInMinutes: 0.5 });
@@ -195,8 +205,10 @@ export default defineBackground({
 
     // A pending approval in storage.session at startup means the previous SW instance died mid-approval.
     void wallet.approvals.resumeAfterRestart();
-    void wallet.payments?.rehydrate().catch(() => undefined);
-    void resumePrivacy();
+    void ready().then(() => {
+      void wallet.payments?.rehydrate().catch(() => undefined);
+      void resumePrivacy();
+    });
   },
 });
 

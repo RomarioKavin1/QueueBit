@@ -6,6 +6,8 @@ import { MemoryKV } from "../../src/shared/kv";
 import { priceWarning } from "../../src/pages/app/Onboarding";
 
 vi.mock("../../src/shared/build", () => ({
+  SHARED_DEVNET: false,
+  SHARED_DEVNET_BASE: "",
   LOCAL_DEVNET: true,
   DESIGN_GALLERY: false,
   BUILD: { localDevnet: true, designGallery: false },
