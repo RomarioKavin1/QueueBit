@@ -31,13 +31,16 @@ export function fakeChain() {
   const frames: unknown[] = [];
   const stages = new Map<string, string>();
   const receipts = new Map<string, "success" | "reverted">();
+  const txCount = new Map<string, number>();
+  /** Knobs: the sidecar refuses frame txs with this message; the LeanPool node reports another address or is down. */
+  const knobs: { refuseFrames?: string; nodeId?: Address; leanpoolDown?: boolean; sendDelayMs?: number } = {};
   const k = (a: string) => a.toLowerCase();
   const publicClient = {
     getCode: async ({ address }: { address: Address }) => code.get(k(address)),
     getBalance: async ({ address }: { address: Address }) => balances.get(k(address)) ?? 0n,
     getGasPrice: async () => parseGwei("1"),
     getBlock: async () => ({ baseFeePerGas: parseGwei("1") }),
-    getTransactionCount: async () => 0,
+    getTransactionCount: async ({ address }: { address: Address }) => txCount.get(k(address)) ?? 0,
     getStorageAt: async () => "0x0",
     estimateGas: async () => 200_000n,
     sendRawTransaction: async ({ serializedTransaction }: { serializedTransaction: Hex }) => {
@@ -56,6 +59,8 @@ export function fakeChain() {
     sidecar: () =>
       ({
         sendFrameTransaction: async (tx: unknown) => {
+          if (knobs.sendDelayMs) await new Promise((r) => setTimeout(r, knobs.sendDelayMs));
+          if (knobs.refuseFrames) throw new Error(knobs.refuseFrames);
           frames.push(tx);
           return `0x${String(frames.length).padStart(64, "5")}` as Hex;
         },
@@ -63,7 +68,10 @@ export function fakeChain() {
       }) as never,
     leanpool: () =>
       ({
-        status: async () => ({ name: "test", aggregating: true, nodeId: AGGREGATOR, pool: [] }),
+        status: async () => {
+          if (knobs.leanpoolDown) throw new Error("connection refused");
+          return { name: "test", aggregating: true, nodeId: knobs.nodeId ?? AGGREGATOR, pool: [] };
+        },
         sendTransaction: async (raw: Hex, sigs: Hex[]) => {
           const id = keccak256(raw);
           pooled.push({ raw, sigs, id });
@@ -85,6 +93,8 @@ export function fakeChain() {
     frames,
     stages,
     receipts,
+    txCount,
+    knobs,
     deploy: (a: Address) => code.set(k(a), "0x6001"),
     fund: (a: Address, wei: bigint) => balances.set(k(a), wei),
   };

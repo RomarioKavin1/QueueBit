@@ -72,11 +72,23 @@ export class OwnerKey {
     if (r.used >= this.budget) {
       throw new OwnerKeyError(
         "budget",
-        "Your owner key has made all the signatures it safely can. Add a new owner key before sending more.",
+        "Your owner key has made all the signatures it safely can, so it can't sign any more. In this version replacing the owner key isn't available yet: move what the account holds with a session, or ask your guardians to recover it.",
       );
     }
     await this.kv.set(StorageKeys.owner, { vk, used: r.used + 1 } satisfies OwnerRecord);
     return bytesToHex(key.sign(hexToBytes(message)));
+  }
+
+  /**
+   * Raises the count to at least `n` (never lowers it): on restore or unlock, `n` is how many owner transactions the
+   * account already made (AccountService.ownerTxCount). The count is per browser; signatures another device made that
+   * never reached the chain (refused, abandoned) are not visible to anyone, so after a restore the count can still
+   * be lower than the true number. The budget leaves room for that, but it is a gap until the count lives on chain.
+   */
+  async atLeast(n: number): Promise<void> {
+    const r = await this.record();
+    if (!r || r.used >= n) return;
+    await this.kv.set(StorageKeys.owner, { ...r, used: n } satisfies OwnerRecord);
   }
 
   /** Lock: free the key's memory. */

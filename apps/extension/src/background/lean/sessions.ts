@@ -1,5 +1,5 @@
-import { KIND, sessionKeyId, type SessionSpec } from "@queuebit/account";
-import { hexToBigInt, isAddress, parseEther, size, slice, type Address, type Hex } from "viem";
+import { KIND, checkSessionCalls, sessionKeyId, type SessionCheck, type SessionSpec } from "@queuebit/account";
+import { isAddress, parseEther, type Address, type Hex } from "viem";
 import { StorageKeys, type KV } from "../../shared/kv";
 
 /**
@@ -87,73 +87,50 @@ function parseUnitsSafe(v: string, decimals: number): bigint {
 
 export const sessionIdOf = (signer: Address): Hex => sessionKeyId({ signer, kind: KIND.ECDSA });
 
-const SEL = {
-  transfer: "0xa9059cbb",
-  transferFrom: "0x23b872dd",
-} as const;
-
-/** Selectors a session can never call (the account refuses them too: SessionRules.sol). */
-export const REFUSED_SELECTORS: Record<string, string> = {
-  "0x095ea7b3": "approve",
-  "0xd505accf": "permit",
-  "0x39509351": "increaseAllowance",
-  "0xa22cb465": "setApprovalForAll",
-  "0x42842e0e": "safeTransferFrom",
-  "0xb88d4fde": "safeTransferFrom",
-  "0xf242432a": "safeTransferFrom",
-  "0x2eb2c2d6": "safeBatchTransferFrom",
-};
-
 export interface SessionCall {
   target: Address;
   value: bigint;
   data: Hex;
 }
 
-export type Coverage = { ok: true; eth: bigint; tokens: Record<string, bigint> } | { ok: false; reason: string };
+export type Coverage = SessionCheck;
 
 export const utcDay = (nowMs: number) => Math.floor(nowMs / 86_400_000);
 
 /**
- * Whether `session` may send `calls` on its own (pure). The account checks the same rules on-chain; checking here
- * first means a request outside them asks the user (and the owner signs) instead of failing at a fee.
+ * Whether `session` may send `calls` on its own (pure). The call rules are the SDK's `checkSessionCalls`, the same as
+ * the keystore's (SessionRules.sol); on top, what the account checks in execution (the expiry, the daily limits) and
+ * the session's state here. Checking first means a request outside them asks the user (and the owner signs) instead
+ * of failing at a fee. `adminTargets`: the keystore and the account's modules.
  */
-export function sessionCovers(s: SessionRecord, calls: SessionCall[], nowMs: number): Coverage {
+export function sessionCovers(
+  s: SessionRecord,
+  calls: SessionCall[],
+  nowMs: number,
+  adminTargets: Address[] = [],
+): Coverage {
   if (s.status !== "active") return { ok: false, reason: "The session isn't active." };
   if (nowMs >= s.validUntil * 1000) return { ok: false, reason: "The session has ended." };
-  const lower = (a: string) => a.toLowerCase();
-  const targets = new Set(s.targets.map(lower));
-  const tokens = new Map(s.tokens.map((t) => [lower(t.token), t]));
-  let eth = 0n;
-  const moved: Record<string, bigint> = {};
-  for (const c of calls) {
-    eth += c.value;
-    const sel = size(c.data) >= 4 ? slice(c.data, 0, 4).toLowerCase() : "0x";
-    const refused = REFUSED_SELECTORS[sel];
-    if (refused) return { ok: false, reason: `A session can never ${refused}.` };
-    const token = tokens.get(lower(c.target));
-    if (token) {
-      let amount: bigint;
-      if (sel === SEL.transfer && size(c.data) >= 68) amount = hexToBigInt(slice(c.data, 36, 68));
-      else if (sel === SEL.transferFrom && size(c.data) >= 100) amount = hexToBigInt(slice(c.data, 68, 100));
-      else return { ok: false, reason: "On a token, a session may only transfer." };
-      const k = lower(token.token);
-      moved[k] = (moved[k] ?? 0n) + amount;
-      if (moved[k]! > BigInt(token.perTx)) return { ok: false, reason: "Over the session's per-payment token limit." };
-    } else if (!targets.has(lower(c.target))) {
-      return { ok: false, reason: "The session doesn't cover this contract." };
-    }
-  }
-  if (eth > BigInt(s.perTxEth)) return { ok: false, reason: "Over the session's per-payment ETH limit." };
+  const c = checkSessionCalls(
+    {
+      account: s.account,
+      adminTargets,
+      targets: [...s.targets, ...s.tokens.map((t) => t.token)],
+      tokens: s.tokens.map((t) => ({ token: t.token, perTx: BigInt(t.perTx) })),
+      perTxEth: BigInt(s.perTxEth),
+    },
+    calls.map((x) => ({ to: x.target, value: x.value, data: x.data })),
+  );
+  if (!c.ok) return c;
   const today = s.spent && s.spent.day === utcDay(nowMs) ? s.spent : undefined;
-  if (BigInt(s.dailyEth) > 0n && BigInt(today?.eth ?? "0") + eth > BigInt(s.dailyEth))
+  if (BigInt(s.dailyEth) > 0n && BigInt(today?.eth ?? "0") + c.eth > BigInt(s.dailyEth))
     return { ok: false, reason: "Over the session's daily ETH limit." };
-  for (const [k, amount] of Object.entries(moved)) {
-    const daily = BigInt(tokens.get(k)!.daily);
-    if (daily > 0n && BigInt(today?.tokens[k] ?? "0") + amount > daily)
+  for (const [k, amount] of Object.entries(c.tokens)) {
+    const t = s.tokens.find((x) => x.token.toLowerCase() === k)!;
+    if (BigInt(t.daily) > 0n && BigInt(today?.tokens[k] ?? "0") + amount > BigInt(t.daily))
       return { ok: false, reason: "Over the session's daily token limit." };
   }
-  return { ok: true, eth, tokens: moved };
+  return c;
 }
 
 /** The spend tally after a payment the session sent (pure). */

@@ -51,6 +51,12 @@ export interface Network {
   stakedSidecarUrl?: string;
   /** The LeanPool node owner-signed payments go to. */
   leanpoolUrl: string;
+  /**
+   * The LeanPool aggregator accounts on this network trust (`Policy.aggregator`). The account's address is bound to it,
+   * so it is pinned here: the same words give the same address whichever node answers. A node posting from another
+   * address is refused. Absent (a local devnet whose node changes per run): read from the node on first use.
+   */
+  aggregator?: `0x${string}`;
   /** `@queuebit/frames` codec profile. */
   profileId: string;
   /** The LeanAccount contracts on this chain, or undefined when this devnet has none deployed yet. */
@@ -133,6 +139,8 @@ const devnet: Network = LOCAL_DEVNET
       rpcUrl: DEVNET_1337.nodeUrl,
       sidecarUrl: DEVNET_1337.sidecarUrl,
       leanpoolUrl: BUILD_LEANPOOL_URL,
+      // QueueBit's LeanPool node for the public devnet (contracts/devnet-tests/leanpool-account/.keys/aggregator.json).
+      aggregator: "0x99Bd573ABC2E87D33429856d13712BA82203AF41",
       profileId: "ethrex-eip8141-tracer",
       ...(publicDeployment ? { deployment: deploymentOf(publicDeployment)! } : {}),
       tokens: tokensOf(publicDeployment),

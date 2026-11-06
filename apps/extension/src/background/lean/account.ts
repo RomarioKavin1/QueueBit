@@ -5,8 +5,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import { NO_DEPLOYMENT, getNetwork, type NetworkDeployment } from "../../shared/chains";
 import { StorageKeys, type KV } from "../../shared/kv";
 import type { AccountStatus } from "../../shared/views";
-import type { ActivityStore } from "../activity";
-import { intentTitle, stageCopy, type ActivityEntry } from "../activity";
+import { ethAmount, intentTitle, stageCopy, type ActivityEntry, type ActivityStore } from "../activity";
 import { SETUP_PATH, type KeyringController } from "../keyring";
 import { quoteLegacy, sendLegacy } from "./legacy";
 import type { OwnerKey } from "./owner";
@@ -36,7 +35,14 @@ export interface AccountRecord {
 export class AccountError extends Error {
   constructor(
     readonly reason:
-      "no-deployment" | "leanpool" | "not-created" | "busy" | "funds" | "setup-funds" | "already-created",
+      | "no-deployment"
+      | "leanpool"
+      | "not-created"
+      | "busy"
+      | "funds"
+      | "setup-funds"
+      | "already-created"
+      | "session-refused",
     message: string,
   ) {
     super(message);
@@ -114,18 +120,32 @@ export class AccountService {
     return plan;
   }
 
-  /** The aggregator a new account trusts: the LeanPool node's address. */
+  /**
+   * The aggregator a new account trusts: the network's pinned one (so restoring the words anywhere gives the same
+   * address), checked against the LeanPool node when it answers. Without a pin (a local devnet), the node's.
+   */
   private async aggregator(chainId: number): Promise<Address> {
     const net = getNetwork(chainId);
     let nodeId: Address | undefined;
+    let down = false;
     try {
       nodeId = (await this.d.io.leanpool(chainId).status()).nodeId;
     } catch {
+      down = true;
+    }
+    if (net.aggregator) {
+      if (nodeId && nodeId.toLowerCase() !== net.aggregator.toLowerCase())
+        throw new AccountError(
+          "leanpool",
+          `The LeanPool node at ${net.leanpoolUrl} posts from ${short(nodeId)}, not ${short(net.aggregator)}, the one accounts on ${net.name} trust. Point QueueBit at that network's node (VITE_QUEUEBIT_LEANPOOL_URL).`,
+        );
+      return net.aggregator;
+    }
+    if (down)
       throw new AccountError(
         "leanpool",
         `The LeanPool node at ${net.leanpoolUrl} isn't answering. Start it (services/leanpool-node), then try again.`,
       );
-    }
     if (!nodeId) throw new AccountError("leanpool", "The LeanPool node didn't say which address it posts from.");
     return nodeId;
   }
@@ -139,7 +159,10 @@ export class AccountService {
     const changing = opts.guardians !== undefined;
     if (cur && !changing) return cur;
     if (cur && changing && (await this.deployed(chainId, cur.address)))
-      throw new AccountError("already-created", "Your account exists: change guardians from Keys & recovery.");
+      throw new AccountError(
+        "already-created",
+        "Your account exists. In this version guardians are set only when the account is created.",
+      );
     const d = this.deployment(chainId);
     const vk = await this.d.owner.vk();
     const aggregator = cur?.aggregator ?? (await this.aggregator(chainId));
@@ -147,6 +170,8 @@ export class AccountService {
     const threshold = guardians.length ? (opts.guardianThreshold ?? cur?.guardianThreshold ?? 1) : 0;
     const input: PlanInput = { vk, aggregator, guardians, guardianThreshold: threshold };
     const plan = accountPlan(d, input);
+    // Restoring the words on a new device: the account may already have signed with this owner key.
+    if (!cur) await this.syncOwnerCount(chainId, plan.address).catch(() => undefined);
     return this.save({
       chainId,
       address: plan.address,
@@ -157,6 +182,28 @@ export class AccountService {
       guardianThreshold: threshold,
       createdAt: cur?.createdAt ?? this.now(),
     });
+  }
+
+  /**
+   * How many owner transactions the account made: its owner lane's nonce on chain, plus owner transactions still on
+   * their way. Over-counts by at most one (a contract's nonce starts at 1), never under.
+   */
+  async ownerTxCount(chainId: number, address: Address): Promise<number> {
+    if (!(await this.deployed(chainId, address))) return 0;
+    const onChain = Number(await this.nonce(chainId, address, OWNER_NONCE_KEY));
+    const pending = (await this.d.activity.pending()).filter(
+      (e) =>
+        e.chainId === chainId &&
+        e.signer === "owner" &&
+        e.account.toLowerCase() === address.toLowerCase() &&
+        BigInt(e.nonceSeq ?? "0") >= BigInt(onChain),
+    ).length;
+    return onChain + pending;
+  }
+
+  /** Raises the owner key's signature count to what the account shows it made. */
+  async syncOwnerCount(chainId: number, address: Address): Promise<void> {
+    await this.d.owner.atLeast(await this.ownerTxCount(chainId, address));
   }
 
   async deployed(chainId: number, address: Address): Promise<boolean> {
@@ -356,12 +403,13 @@ export class AccountService {
       ...(who === "owner" ? { leanpool: this.d.io.leanpool(chainId) } : {}),
       sidecar: this.d.io.sidecar(chainId),
     }).catch((e: unknown) => {
+      const why = ((e as Error).message ?? String(e)).split("\n")[0];
       if (who === "owner")
-        throw new AccountError(
-          "leanpool",
-          `The LeanPool node refused the payment: ${(e as Error).message}. Nothing was sent.`,
-        );
-      throw e;
+        throw new AccountError("leanpool", `The LeanPool node refused the payment: ${why}. Nothing was sent.`);
+      throw new AccountError(
+        "session-refused",
+        `The network refused the session's payment (${why}). Nothing was sent.`,
+      );
     });
     const entryCalls = toEntryCalls(calls);
     const entry = this.entry(chainId, {
@@ -477,6 +525,5 @@ function inputOf(rec: AccountRecord): PlanInput {
 
 const done = (e: ActivityEntry) => e.doneHeadline ?? (e.kind === "payment" ? `Paid ${e.headline}` : e.headline);
 
-function fmt(wei: bigint): string {
-  return (Number(wei) / 1e18).toFixed(6).replace(/\.?0+$/u, "") || "0";
-}
+const fmt = (wei: bigint) => ethAmount(wei).replace(/ ETH$/u, "");
+const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;

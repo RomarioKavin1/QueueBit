@@ -138,6 +138,11 @@ export interface TxPlan {
 export const VALIDATION_BUDGET = 100_000n;
 const ENTRY_COST: Record<string, bigint> = { ARBITRARY: 100n, SECP256K1: 2_800n };
 
+/** A SENDER frame's default gas: execution, and state for new storage or accounts (measured on the devnet: a payment
+ * to a fresh address costs ~281k state gas and the hook's first spend records more). */
+export const SENDER_GAS = 300_000n;
+export const SENDER_STATE = 400_000n;
+
 export interface BuildOptions {
   d: AccountDeployment;
   account: Address;
@@ -202,8 +207,8 @@ export async function buildAndSign(o: BuildOptions): Promise<TxPlan> {
       ...o.calls.map((c) =>
         senderFrame(profile, {
           target: o.account,
-          execution: o.senderGas ?? 300_000n,
-          state: o.senderState ?? 400_000n,
+          execution: o.senderGas ?? SENDER_GAS,
+          state: o.senderState ?? SENDER_STATE,
           data: executeCall(c),
         }),
       ),

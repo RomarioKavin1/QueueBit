@@ -75,6 +75,8 @@ export interface Approval {
   topOrigin?: string;
   /** `transaction` approvals: what the site asked to send. */
   tx?: ApprovalTx;
+  /** Why the site's session didn't send it (the network refused it, an embedded frame…), shown on the screen. */
+  sessionMiss?: string;
   /** Set when an approved transaction was sent (the dapp request returns it). */
   result?: { activityId: string; hash: `0x${string}`; batchId?: string };
   /** Set when the request ended without sending because it can't be sent (dapp gets 4100). */

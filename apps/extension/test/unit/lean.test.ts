@@ -171,15 +171,39 @@ describe("session caps check", () => {
     });
     expect(sessionCovers(s, [{ target: TOKEN, value: 0n, data: transfer(101n) }], NOW).ok).toBe(false);
     const approve = encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [SOMEONE, 1n] });
+    // On a token with a limit, only transfers: approve is not one.
     expect(sessionCovers(s, [{ target: TOKEN, value: 0n, data: approve }], NOW)).toMatchObject({
       ok: false,
-      reason: expect.stringMatching(/never approve/u),
+      reason: expect.stringMatching(/only transfer/u),
     });
-    // approve is refused even on an ordinary target.
-    expect(sessionCovers(s, [{ target: TARGET, value: 0n, data: approve }], NOW).ok).toBe(false);
+    // approve is refused on an ordinary target too.
+    expect(sessionCovers(s, [{ target: TARGET, value: 0n, data: approve }], NOW)).toMatchObject({
+      ok: false,
+      reason: expect.stringMatching(/never call approve/u),
+    });
     expect(sessionCovers(s, [{ target: TOKEN, value: 0n, data: "0x12345678" }], NOW).ok).toBe(false);
     const day = addSpend(s, { ok: true, eth: 0n, tokens: { [TOKEN.toLowerCase()]: 100n } }, NOW);
     expect(sessionCovers({ ...s, spent: day }, [{ target: TOKEN, value: 0n, data: transfer(60n) }], NOW).ok).toBe(
+      false,
+    );
+  });
+
+  it("the same rules as the account: no transfer without a token limit, the whole refused list, no admin targets", () => {
+    const s = session();
+    // TARGET is allowlisted but has no token limit: a transfer there has nothing to count against.
+    expect(sessionCovers(s, [{ target: TARGET, value: 0n, data: transfer(1n) }], NOW)).toMatchObject({
+      ok: false,
+      reason: expect.stringMatching(/no limit/u),
+    });
+    // Permit2 transferFrom, ERC-1363 transferAndCall, DAI push: refused like approve.
+    for (const sel of ["0x36c78516", "0x1296ee62", "0xb753a98c", "0xd73dd623"])
+      expect(
+        sessionCovers(s, [{ target: TARGET, value: 0n, data: `${sel}${"00".repeat(64)}` as Hex }], NOW).ok,
+        sel,
+      ).toBe(false);
+    // The keystore and the account's modules are admin targets, even if someone put them on the list.
+    const withKeystore = session({ targets: [TARGET, d.keystore] });
+    expect(sessionCovers(withKeystore, [{ target: d.keystore, value: 0n, data: "0x" }], NOW, [d.keystore]).ok).toBe(
       false,
     );
   });
@@ -303,6 +327,138 @@ describe("payment routing: owner vs session", () => {
     ).rejects.toMatchObject({ reason: "funds" });
     expect(chain.pooled).toHaveLength(0);
     expect(await wallet.owner.remaining()).toBe(wallet.owner.budget);
+  });
+});
+
+describe("session sends: refusals, races, embedded frames", () => {
+  async function withSession(perTxEth = "0.05", dailyEth = "0.08") {
+    const m = makeWallet();
+    const { wallet, chain } = m;
+    await wallet.keyring.import(MNEMONIC, "password-1");
+    await wallet.handleUi("setup:update", { completedAt: 1 });
+    const st = await wallet.handleUi("account:status", { chainId: 1337 });
+    chain.deploy(st.address!);
+    chain.fund(st.address!, parseEther("10"));
+    await wallet.permissions.grant(ORIGIN, [st.address!], 1337);
+    const s = await wallet.handleUi("sessions:create", {
+      chainId: 1337,
+      origin: ORIGIN,
+      targets: [TARGET],
+      perTxEth,
+      dailyEth,
+      hours: 24,
+    });
+    chain.stages.set(chain.pooled[0]!.id, "mined");
+    await wallet.refreshActivity();
+    return { ...m, session: s };
+  }
+  const send = (
+    wallet: ReturnType<typeof makeWallet>["wallet"],
+    value: bigint,
+    id: string,
+    ctx: { embedded?: boolean; topOrigin?: string } = {},
+  ) =>
+    wallet.handleProvider(
+      { origin: ORIGIN, requestId: id, ...ctx },
+      { method: "eth_sendTransaction", params: [{ to: TARGET, value: `0x${value.toString(16)}` }] },
+    );
+
+  it("a session send the network refuses falls back to the owner's approval, with the reason", async () => {
+    const { wallet, chain, w } = await withSession();
+    chain.knobs.refuseFrames = "validation frame 0: reverted";
+    const p = send(wallet, parseEther("0.01"), "x1");
+    await expect.poll(() => w.open.mock.calls.length).toBe(1);
+    const [a] = await wallet.approvals.store.pending();
+    expect(await wallet.handleUi("approval:preview", { id: a!.id })).toMatchObject({
+      signer: "owner",
+      sessionMiss: expect.stringMatching(/refused.*validation frame 0/u),
+    });
+    expect((await wallet.sessions.list())[0]!.spent).toBeUndefined();
+    await wallet.resolveApproval(a!.id, false);
+    await expect(p).rejects.toMatchObject({ code: 4001 });
+  });
+
+  it("concurrent requests: one session send per lane, the tally re-read, the second asks the owner", async () => {
+    const { wallet, chain, w, session: s } = await withSession("0.05", "0.08");
+    chain.knobs.sendDelayMs = 20;
+    const a = send(wallet, parseEther("0.05"), "c1");
+    const b = send(wallet, parseEther("0.05"), "c2").catch(() => undefined);
+    await a;
+    await expect.poll(() => w.open.mock.calls.length).toBe(1);
+    expect(chain.frames).toHaveLength(1);
+    expect((await wallet.sessions.get(s.id))?.spent?.eth).toBe(parseEther("0.05").toString());
+    const [pending] = await wallet.approvals.store.pending();
+    await wallet.resolveApproval(pending!.id, false);
+    await b;
+  });
+
+  it("a request from an embedded frame uses the session only when the page itself is the session's site", async () => {
+    const { wallet, chain, w } = await withSession();
+    void send(wallet, parseEther("0.01"), "e1", { embedded: true, topOrigin: "https://evil.example" }).catch(
+      () => undefined,
+    );
+    await expect.poll(() => w.open.mock.calls.length).toBe(1);
+    expect(chain.frames).toHaveLength(0);
+    void send(wallet, parseEther("0.01"), "e2", { embedded: true }).catch(() => undefined);
+    await expect.poll(() => w.open.mock.calls.length).toBe(2);
+    expect(chain.frames).toHaveLength(0);
+    await send(wallet, parseEther("0.01"), "e3", { embedded: true, topOrigin: ORIGIN });
+    expect(chain.frames).toHaveLength(1);
+  });
+});
+
+describe("restoring: the same words give the same account, and the signature count carries over", () => {
+  it("the address uses the network's pinned aggregator, even with the LeanPool node down", async () => {
+    const { wallet, chain } = makeWallet();
+    chain.knobs.leanpoolDown = true;
+    await wallet.keyring.import(MNEMONIC, "password-1");
+    const st = await wallet.handleUi("account:status", { chainId: 1337 });
+    expect(getNetwork(1337).aggregator).toBe(AGGREGATOR);
+    expect(st.address).toBe(accountPlan(d, { vk: await wallet.owner.vk(), aggregator: AGGREGATOR }).address);
+  });
+
+  it("a LeanPool node posting from another address is refused, not turned into a new address", async () => {
+    const { wallet, chain } = makeWallet();
+    chain.knobs.nodeId = SOMEONE;
+    await wallet.keyring.import(MNEMONIC, "password-1");
+    const st = await wallet.handleUi("account:status", { chainId: 1337 });
+    expect(st.address).toBeUndefined();
+    expect(st.error).toMatch(/LeanPool node .* posts from 0x0000…00b0, not 0x99Bd…AF41/u);
+    await expect(wallet.account!.ensure(1337)).rejects.toMatchObject({ reason: "leanpool" });
+  });
+
+  it("on restore and unlock, the owner key counts at least the transactions the account already made", async () => {
+    const { wallet, chain } = makeWallet();
+    await wallet.keyring.import(MNEMONIC, "password-1");
+    const st = await wallet.handleUi("account:status", { chainId: 1337 });
+    chain.deploy(st.address!);
+    chain.txCount.set(st.address!.toLowerCase(), 7);
+    await wallet.handleUi("keyring:lock", undefined);
+    await wallet.handleUi("keyring:unlock", { password: "password-1" });
+    expect(await wallet.owner.remaining()).toBe(wallet.owner.budget - 7);
+    // Never down: a lower count on chain leaves it.
+    chain.txCount.set(st.address!.toLowerCase(), 3);
+    await wallet.handleUi("keyring:lock", undefined);
+    await wallet.handleUi("keyring:unlock", { password: "password-1" });
+    expect(await wallet.owner.remaining()).toBe(wallet.owner.budget - 7);
+  });
+
+  it("errors say what is possible in this version", async () => {
+    const local = new MemoryKV();
+    const keyring = new KeyringController(local, new MemoryKV(), { scrypt: FAST });
+    await keyring.import(MNEMONIC, "password-1");
+    const owner = new OwnerKey(local, keyring, fakePq, 0);
+    await owner.vk();
+    await expect(owner.sign(`0x${"aa".repeat(32)}`)).rejects.toThrow(
+      /can't sign any more.*replacing the owner key isn't available yet/u,
+    );
+    const { wallet, chain } = makeWallet();
+    await wallet.keyring.import(MNEMONIC, "password-1");
+    const st = await wallet.handleUi("account:status", { chainId: 1337 });
+    chain.deploy(st.address!);
+    await expect(
+      wallet.handleUi("account:setGuardians", { chainId: 1337, guardians: [SOMEONE], threshold: 1 }),
+    ).rejects.toThrow(/only when the account is created/u);
   });
 });
 

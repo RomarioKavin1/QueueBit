@@ -1,6 +1,8 @@
 import {
   KIND,
   ROLE,
+  SENDER_GAS,
+  SENDER_STATE,
   VALIDATION_BUDGET,
   createAccountCall,
   predictAccount,
@@ -51,9 +53,8 @@ export function accountPlan(d: AccountDeployment, i: PlanInput): AccountPlan {
   return { options, address: predictAccount(d, options), create: createAccountCall(d, options) };
 }
 
-/** Frame gas per SENDER frame (execution; state for new storage and accounts): what @queuebit/account defaults to. */
-export const SENDER_GAS = 300_000n;
-export const SENDER_STATE = 400_000n;
+/** Frame gas per SENDER frame (execution; state for new storage and accounts): @queuebit/account's defaults. */
+export { SENDER_GAS, SENDER_STATE } from "@queuebit/account";
 
 /** The most a frame transaction with `frames` SENDER frames can cost: the account must hold this (plus its value). */
 export function frameMaxCost(

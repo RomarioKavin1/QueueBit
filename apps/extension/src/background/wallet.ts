@@ -298,7 +298,15 @@ export class Wallet {
     for (const p of await this.permissions.list()) this.env.emit("accountsChanged", accounts, p.origin);
   }
 
+  /** The owner key counts at least what each account already did (signatures made on other devices). */
+  private async syncOwnerBudget(): Promise<void> {
+    if (!this.account || !(await this.owner.record())) return;
+    for (const rec of Object.values(await this.account.all()))
+      await this.account.syncOwnerCount(rec.chainId, rec.address).catch(() => undefined);
+  }
+
   private async onUnlocked(): Promise<void> {
+    await this.syncOwnerBudget();
     for (const p of await this.permissions.list()) {
       const account = await this.accountFor(await this.chainOfOrigin(p.origin));
       if (account) this.env.emit("accountsChanged", [account], p.origin);
@@ -307,39 +315,68 @@ export class Wallet {
 
   // ---- transactions from sites ----
 
-  /** The site's session that covers `calls`, or why none does. */
+  /** The site's session that covers `calls`, or why none does (reads the sessions from storage). */
   async matchSession(
     chainId: number,
     origin: string,
     calls: Call[],
   ): Promise<{ session: SessionRecord; coverage: Extract<Coverage, { ok: true }> } | { miss: string }> {
     const rec = await this.account?.record(chainId);
-    if (!rec) return { miss: "No account yet." };
+    const d = findNetwork(chainId)?.deployment;
+    if (!rec || !d) return { miss: "No account yet." };
     const list = await this.sessions.forOrigin(chainId, rec.address, origin);
     if (!list.length) return { miss: "This site has no session." };
     const sc = calls.map((c) => ({ target: c.to, value: c.value ?? 0n, data: c.data ?? ("0x" as Hex) }));
     let miss = "";
     for (const s of list) {
-      const c = sessionCovers(s, sc, this.now());
+      const c = sessionCovers(s, sc, this.now(), [d.keystore, d.hook, d.recovery]);
       if (c.ok) return { session: s, coverage: c };
       miss ||= c.reason;
     }
     return { miss };
   }
 
+  /** One at a time per key: session sends of one site check, take a nonce, send and record without interleaving. */
+  private readonly locks = new Map<string, Promise<unknown>>();
+  private async locked<T>(key: string, fn: () => Promise<T>): Promise<T> {
+    const prev = this.locks.get(key) ?? Promise.resolve();
+    const run = prev.catch(() => undefined).then(fn);
+    const tail = run.catch(() => undefined);
+    this.locks.set(key, tail);
+    try {
+      return await run;
+    } finally {
+      if (this.locks.get(key) === tail) this.locks.delete(key);
+    }
+  }
+
+  /**
+   * Sends `calls` with the site's session if one covers them: under the site's lock, the sessions are re-read, the
+   * lane checked, the nonce taken, the tx sent and the day's tally recorded, so two requests can't both pass on the
+   * same allowance or nonce. Returns why not otherwise (the owner is asked instead).
+   */
   private async sendWithSession(
     chainId: number,
-    s: SessionRecord,
-    coverage: Extract<Coverage, { ok: true }>,
+    origin: string,
     calls: Call[],
-    o: { origin?: string; batchId?: string } = {},
-  ): Promise<ActivityEntry> {
-    const entry = await this.keyring.withKey(SESSION_PATH(s.index), (k) =>
-      this.acct().payWithSession(chainId, s, k, calls, o),
-    );
-    await this.sessions.update(s.id, { spent: addSpend(s, coverage, this.now()) });
-    void this.trackSoon();
-    return entry;
+    o: { batchId?: string } = {},
+  ): Promise<{ entry: ActivityEntry } | { miss: string }> {
+    return this.locked(`${chainId}:${origin}`, async () => {
+      const m = await this.matchSession(chainId, origin, calls);
+      if ("miss" in m) return m;
+      const s = m.session;
+      try {
+        const entry = await this.keyring.withKey(SESSION_PATH(s.index), (k) =>
+          this.acct().payWithSession(chainId, s, k, calls, { origin, ...o }),
+        );
+        await this.sessions.update(s.id, { spent: addSpend(s, m.coverage, this.now()) });
+        void this.trackSoon();
+        return { entry };
+      } catch (err) {
+        if (err instanceof AccountError) return { miss: err.message };
+        throw err;
+      }
+    });
   }
 
   private async requestTransaction(
@@ -351,19 +388,19 @@ export class Wallet {
       throw new ProviderRpcError(RpcErrorCode.unsupportedMethod, NO_DEPLOYMENT, { queuebitRule: "NO-DEPLOYMENT" });
     }
     const calls = toCalls(tx.calls);
-    // A session for this site that covers the request: its key signs, no prompt.
-    const m = await this.matchSession(chainId, ctx.origin, calls);
-    if ("session" in m) {
-      try {
-        const e = await this.sendWithSession(chainId, m.session, m.coverage, calls, {
-          origin: ctx.origin,
-          ...(tx.batchId ? { batchId: tx.batchId } : {}),
-        });
+    // A session is for a site, not for whatever page embeds it: only a top-level request (or a frame of the same
+    // site) may use it. A session that covers the request: its key signs, no prompt.
+    const topLevel = !ctx.embedded || ctx.topOrigin === ctx.origin;
+    let sessionMiss: string | undefined;
+    if (topLevel) {
+      const r = await this.sendWithSession(chainId, ctx.origin, calls, tx.batchId ? { batchId: tx.batchId } : {});
+      if ("entry" in r) {
+        const e = r.entry;
         return { hash: e.hash, activityId: e.id, ...(e.batchId ? { batchId: e.batchId } : {}) };
-      } catch (err) {
-        if (!(err instanceof AccountError)) throw err;
-        // the session lane is busy or the network said no: ask the user instead
       }
+      sessionMiss = r.miss;
+    } else {
+      sessionMiss = "This request comes from a frame inside another page, so the site's session isn't used.";
     }
     let record: Approval;
     try {
@@ -374,6 +411,7 @@ export class Wallet {
           chainId,
           firstVisit: false,
           tx,
+          ...(sessionMiss ? { sessionMiss } : {}),
           ...(ctx.embedded ? { embedded: true, ...(ctx.topOrigin ? { topOrigin: ctx.topOrigin } : {}) } : {}),
         },
         ctx.requestId,
@@ -447,6 +485,7 @@ export class Wallet {
     const a = await this.approvals.store.get(id);
     if (!a || a.kind !== "transaction" || !a.tx) throw new Error("No such request.");
     const calls = toCalls(a.tx.calls);
+    if (a.sessionMiss) return this.preview(a.chainId, calls, a.sessionMiss);
     const m = await this.matchSession(a.chainId, a.origin, calls);
     return this.preview(a.chainId, calls, "miss" in m ? m.miss : undefined);
   }
