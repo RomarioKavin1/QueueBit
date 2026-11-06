@@ -20,17 +20,19 @@ Each entry is tagged with its source. Remove an entry when it lands, and cite th
 - [x] Encrypt the activity log (it stores amounts and recipients in clear) (companion review). `16a8c71`.
 - [x] Cross-origin navigation as an exfil channel: document the limitation, or add a navigation guard (companion review). `16a8c71` (both).
 
+- [ ] Registry: formats for the typed registrations (`6324659`): `account.registerPermit2(token, amount, expiration, spender, sigDeadline, sessionSelector)`, `account.registerPermit2Transfer(token, amount, spender, nonce, deadline, sessionSelector)`, `account.registerTransferAuthorization(token, value, to, validAfter, validBefore, nonce, receiveAuth)` (role "any", everyday-key actions like `account.registerPermit`), then `abi:sync`. Not added by the contracts agent: the registry has no hot-path decoding section, and the companion is under review (contracts, 2026-11-06).
 - [x] leanSphincs-s usage guard (`16a8c71`; the count is not exported: a restore counts as exceeded instead) (if the experimental scheme is enabled): a per-key signature counter in companion storage, incremented on every returned `sign` (retries count); exported with the key metadata. A restored seed has unknown usage and counts as "exceeded". Warn at 50%, require rotation at 90%, refuse at 100% via `PQScheme.budgetStatus`. Rotation = a fresh `chainScope` label → a new VaultSigner clone (leanSphincs-s review, 7449363).
 
 ## Contracts
 - [x] Mirror the account's Open recipient mode and initialize-derived vault binding in the 7579 modules (module review). `9dbb5a7` (hook RecipientMode, executor binds pk/verifier/sigLength), `fd2573c` (anvil e2e).
 - [x] Modules: mirror the account's `SameRoleKey` rule at install/rotation (vault pk ≠ recovery pk; roles distinct from the hot key) (account hardening 7cd394b). `d160c2d`, plus the Open-mode `ForbiddenRecipient` set (allowlisted token, guardian) on top of d38fa6f.
-- [ ] `registerPermit` covers ERC-2612 only; add typed registration for EIP-3009 and Permit2 (account audit).
-- [ ] Vault policy guidance for non-monitored assets moved by session targets (account audit).
-- [ ] Document that a recovery-key compromise means an uncancellable 7-day vault takeover (account audit).
-- [ ] PoolPayer: enforce "no user tail frames" in `verify` (v1 decision); make `setOperator` two-step; calibrate `MIN_SETTLE_GAS` / `MAX_INTRINSIC_GAS` for mainnet (PoolPayer audit).
-- [ ] `recoveryStartVaultRotation` reverts if the hook was retired; migration flows must rotate first (module review).
-- [ ] Kernel `MAGIC_VALUE_SIG_REPLAYABLE`: the hot key can sign chain-agnostic userOps (module review, low).
+- [x] `registerPermit` covers ERC-2612 only; add typed registration for EIP-3009 and Permit2 (account audit). `6324659`: `registerPermit2` (PermitSingle), `registerPermit2Transfer` (PermitTransferFrom), `registerTransferAuthorization` (EIP-3009), digests on chain, typed debit, one consumer; mirrored in `LeakedPolicyHook`; deploy `848567e`.
+- [x] Vault policy guidance for non-monitored assets moved by session targets (account audit). `b3c56a1` (`docs/security/THREAT-MODEL.md` §5, `10-contracts.md` §10.12).
+- [x] Document that a recovery-key compromise means an uncancellable 7-day vault takeover (account audit). `b3c56a1` (THREAT-MODEL §4, with why it is a design choice).
+- [x] PoolPayer: enforce "no user tail frames" in `verify` (v1 decision); make `setOperator` two-step (PoolPayer audit). `00199c0` (privacy devnet e2e re-run, VERIFY 306,754 gas).
+- [ ] PoolPayer: calibrate `MIN_SETTLE_GAS` / `MAX_INTRINSIC_GAS` for mainnet (PoolPayer audit; needs a mainnet-like chain).
+- [x] `recoveryStartVaultRotation` reverts if the hook was retired; migration flows must rotate first (module review). Documented as the intended order: `b3c56a1` (THREAT-MODEL §6, `10-contracts.md` §10.12).
+- [x] Kernel `MAGIC_VALUE_SIG_REPLAYABLE`: the hot key can sign chain-agnostic userOps (module review, low). Documented (accepted: the cap applies per chain): `b3c56a1` (THREAT-MODEL §6, `10-contracts.md` §10.12).
 
 ## Privacy package (review of 72c290d..d20cfeb)
 - [ ] Enforce that the broadcaster's node RPC (nonce, simulation with the full proof, receipts) runs on the withdrawal's fresh Anon-RPC isolation key, not the account's circuit (linkability).
