@@ -1,7 +1,7 @@
 import { getProfile, roleSignerPathATx, roleSignerPathBTx, encodeTx, sigHash, type FrameTx } from "@leaked/frames";
 import { SCHEME_ID, keygen, schemes } from "@leaked/pq-signer";
 import { ROLE, TX_TYPE, encodeSignRequest, toHex, type SignRequest } from "@leaked/ur";
-import { encodeFunctionData, keccak256, stringToHex, type Address, type Hex } from "viem";
+import { encodeFunctionData, keccak256, parseAbi, stringToHex, type Address, type Hex } from "viem";
 import { ACCOUNT_ABI, ERC20_ABI, ROLE_SIGNER_ABI } from "../../src/core/clearsign.js";
 import { payerKeyFromSeed, seedFromEntropy, wordsToEntropy } from "../../src/core/keys.js";
 
@@ -188,6 +188,28 @@ export function unknownCall(): Built {
       policy: POLICY,
     },
   );
+}
+
+/** The local devnet's Privacy Pools Entrypoint (the registry's 1337 entry: the extension privacy e2e's deployment). */
+export const DEVNET_ENTRYPOINT: Address = "0x03b483F613e62e57fE6b2D007ae1b5b7d2a395A9";
+
+/**
+ * The extension's shield step as a Vault approval: `vaultExecute([Entrypoint.deposit(precommitment)] + value)`, with
+ * the advisory intent the extension sends for it (`send`, no recipient/amount: a contract call).
+ */
+export function privacyDeposit(
+  opts: { entrypoint?: Address; value?: bigint; precommitment?: bigint; label?: string } = {},
+): Built {
+  const value = opts.value ?? 50_000_000_000_000_000n;
+  const data = encodeFunctionData({
+    abi: parseAbi(["function deposit(uint256 _precommitment) payable returns (uint256)"]),
+    functionName: "deposit",
+    args: [opts.precommitment ?? 0x1234n],
+  });
+  return wrap(acct("vaultExecute", [[call(opts.entrypoint ?? DEVNET_ENTRYPOINT, data, value)], 150_000_000n]), {
+    policy: POLICY,
+    intent: { action: "send", summary: opts.label ?? "Deposit 0.05 ETH into your private balance (≈ $150)" },
+  });
 }
 
 /** Admin: Lockdown. */

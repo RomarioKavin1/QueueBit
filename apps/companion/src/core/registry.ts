@@ -8,6 +8,7 @@ import raw from "../registry/leaked.descriptors.json" with { type: "json" };
 
 export type FieldFormat =
   | { format: "addressName"; recipient?: boolean; path?: string }
+  /** `tokenPath`: an argument naming the token, `@.target` (the called token) or `@.native` (ETH). */
   | { format: "tokenAmount"; tokenPath: string; unlimitedAbove?: string; path?: string }
   | { format: "tokenName"; path?: string }
   | { format: "usd6"; path?: string }
@@ -25,6 +26,10 @@ export type FieldFormat =
   | { format: "bps"; path?: string }
   | { format: "count"; noun: string; path?: string }
   | { format: "raw"; unit?: string; path?: string }
+  /** A value only its owner can read (a Privacy Pools precommitment): shows `text`, never the digits. */
+  | { format: "opaque"; text: string; path?: string }
+  /** The called contract under a fixed name (only used where the registry binds that contract, e.g. `bindTo`). */
+  | { format: "contractName"; name: string; path?: string }
   | { format: "enum"; labels?: Record<string, string>; enum?: string; path?: string };
 
 export interface ChangeSpec {

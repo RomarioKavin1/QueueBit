@@ -144,7 +144,8 @@ export interface ActionView {
   currentFromBrowser?: boolean;
   /** Raises risk (has to go through the waiting period). */
   loosening?: boolean;
-  unknown?: { reason: string; target: Address; data: Hex; value: bigint };
+  /** `what`: what the step looks like when that is known ("Unfamiliar privacy pool"); the headline uses it. */
+  unknown?: { reason: string; target: Address; data: Hex; value: bigint; what?: string };
   compare?: { recipient?: Address; amount?: bigint; token?: Address };
 }
 
@@ -813,7 +814,23 @@ function renderExternalCall(target: Address, value: bigint, data: Hex, r: Render
   }
   const erc20 = lookup("erc20", data);
   const pp = privacyEntrypoint(r.chainId);
-  const ppEntry = pp && isAddressEqual(pp, target) ? lookup("privacyPoolsEntrypoint", data) : undefined;
+  const ppShape = lookup("privacyPoolsEntrypoint", data);
+  const ppEntry = pp && isAddressEqual(pp, target) ? ppShape : undefined;
+  if (ppShape && !ppEntry && !erc20) {
+    // A Privacy Pools call (deposit / relay) to a contract that is not the Entrypoint this app knows for the chain: the
+    // pool can't be vouched for, so it is an unknown step (raw call, long-press), named for what it looks like.
+    return unknownAction(
+      r.ctx,
+      r.chainId,
+      target,
+      data,
+      value,
+      pp
+        ? `It looks like a Privacy Pools call, but ${shortAddress(target)} is not the Privacy Pools contract this app knows for ${chainName(r.chainId)}.`
+        : `It looks like a Privacy Pools call, but this app knows no Privacy Pools contract on ${chainName(r.chainId)}.`,
+      "Unfamiliar privacy pool",
+    );
+  }
   const entry = ppEntry ?? erc20;
   if (!entry) return unknownAction(r.ctx, r.chainId, target, data, value, "Unrecognised call");
   let args: Record<string, unknown>;
@@ -822,8 +839,10 @@ function renderExternalCall(target: Address, value: bigint, data: Hex, r: Render
   } catch {
     return unknownAction(r.ctx, r.chainId, target, data, value, "Call data doesn't match its type");
   }
-  const view = renderFormatted(entry, args, target, r);
-  if (value > 0n) {
+  const view = renderFormatted(entry, args, target, r, value);
+  // A format that shows the call's value (a deposit's amount) already says where the ETH goes.
+  const valueShown = Object.values(entry.format?.fields ?? {}).some((f) => f.path === "@.value");
+  if (value > 0n && !valueShown) {
     view.title += ` and send ${formatEth(value)}`;
     view.details.push({ label: "Also sends", value: formatEth(value) });
   }
@@ -837,12 +856,14 @@ function unknownAction(
   data: Hex,
   value: bigint,
   reason: string,
+  /** What the step looks like, when that is known ("Unfamiliar privacy pool"); the target is appended. */
+  what = "Unrecognised call",
 ): ActionView {
   const recipient = recipientView(ctx, chainId, target);
   return {
     id: "unknown.call",
     action: "unknown",
-    title: `Unrecognised call to ${addressPhrase(recipient)}`,
+    title: `${what} ${what === "Unrecognised call" ? "to" : "at"} ${addressPhrase(recipient)}`,
     admin: false,
     timing: { text: "unknown" },
     recipient,
@@ -851,7 +872,7 @@ function unknownAction(
       ...(value > 0n ? [{ label: "Sends", value: formatEth(value) }] : []),
       { label: "Function", value: data.length >= 10 ? data.slice(0, 10) : "(none)", mono: true },
     ],
-    unknown: { reason, target, data, value },
+    unknown: { reason, target, data, value, ...(what !== "Unrecognised call" ? { what } : {}) },
   };
 }
 
@@ -859,11 +880,28 @@ function unknownAction(
 // Descriptor-driven rendering
 // ---------------------------------------------------------------------------------------------------------------
 
+/**
+ * A field's value: a decoded argument (or a `path` into one), or the call itself: `@.target` (the called contract),
+ * `@.value` (the ETH the call sends; a payable deposit).
+ */
+function fieldValue(
+  args: Record<string, unknown>,
+  name: string,
+  path: string | undefined,
+  target: Address,
+  value: bigint,
+) {
+  if (path === "@.target") return target;
+  if (path === "@.value") return value;
+  return path ? resolvePath(args, path) : args[name];
+}
+
 function renderFormatted(
   entry: FunctionEntry,
   args: Record<string, unknown>,
   target: Address,
   r: RenderCtx,
+  callValue = 0n,
 ): ActionView {
   const f = entry.format!;
   const details: DetailRow[] = [];
@@ -875,7 +913,7 @@ function renderFormatted(
   // Field values, rendered.
   const values: Record<string, string> = {};
   for (const [name, spec] of Object.entries(f.fields ?? {})) {
-    const raw = spec.path ? resolvePath(args, spec.path) : args[name];
+    const raw = fieldValue(args, name, spec.path, target, callValue);
     const rendered = renderField(spec, raw, target, r, args);
     values[name] = rendered.text;
     if (rendered.recipient && "recipient" in spec && spec.recipient) recipient = rendered.recipient;
@@ -947,14 +985,19 @@ function renderFormatted(
   };
   if (f.compare) {
     const cmp: ActionView["compare"] = {};
+    const at = (field: string) => fieldValue(args, field, f.fields?.[field]?.path, target, callValue);
     if (f.compare.recipient) {
-      const v = f.fields?.[f.compare.recipient]?.path
-        ? resolvePath(args, f.fields[f.compare.recipient]!.path!)
-        : args[f.compare.recipient];
+      const v = at(f.compare.recipient);
       if (typeof v === "string") cmp.recipient = checksum(v);
     }
-    if (f.compare.amount) cmp.amount = toBig(args[f.compare.amount]);
-    if (f.compare.token) cmp.token = f.compare.token === "@.target" ? target : (args[f.compare.token] as Address);
+    if (f.compare.amount) cmp.amount = toBig(at(f.compare.amount));
+    if (f.compare.token)
+      cmp.token =
+        f.compare.token === "@.target"
+          ? target
+          : f.compare.token === "@.native"
+            ? ZERO
+            : (args[f.compare.token] as Address);
     view.compare = cmp;
   }
   return view;
@@ -981,7 +1024,12 @@ function renderField(
       return { text: addressPhrase(rec), detail: checksum(String(raw)), mono: !rec.name, recipient: rec };
     }
     case "tokenAmount": {
-      const token = spec.tokenPath === "@.target" ? target : checksum(String(args[spec.tokenPath]));
+      const token =
+        spec.tokenPath === "@.target"
+          ? target
+          : spec.tokenPath === "@.native"
+            ? ZERO
+            : checksum(String(args[spec.tokenPath]));
       const v = toBig(raw);
       if (spec.unlimitedAbove && v >= BigInt(spec.unlimitedAbove)) {
         const sym = tokenSymbol(r, token);
@@ -1027,6 +1075,13 @@ function renderField(
     }
     case "raw":
       return { text: `${toBig(raw).toString()}${spec.unit ? ` ${spec.unit}` : ""}` };
+    case "opaque":
+      // A value only its owner can read (a Privacy Pools precommitment): shown as what it is, never as digits.
+      return { text: spec.text };
+    case "contractName": {
+      const a = checksum(String(raw));
+      return { text: `${spec.name} (${shortAddress(a)})`, detail: `${spec.name} (${a})` };
+    }
     case "enum": {
       const key = typeof raw === "bigint" || typeof raw === "number" ? toBig(raw).toString() : String(raw);
       return { text: (spec.enum ? enumLabel(spec.enum, key) : spec.labels?.[key]) ?? key };
@@ -1072,6 +1127,8 @@ const LABELS: Record<string, string> = {
   maxFee: "Network-fee limit",
   unstakeDelaySec: "Unlock delay",
   withdrawnValue: "Amount",
+  note: "Note",
+  pool: "Contract",
   recipient: "To",
   relayFeeBPS: "Relayer fee",
   mode: "Who everyday payments may go to",
@@ -1350,7 +1407,13 @@ function finish(
   const primary = known.find((a) => a.compare) ?? known.find((a) => a.admin) ?? known[0];
 
   // Headline: the primary action's sentence + its timing; "and N more" for batches.
-  let headline = primary ? primary.title : "Unrecognised approval";
+  // Nothing known: the unknown step's own name when it has one ("Unfamiliar privacy pool"), else the generic one.
+  const what = actions[0]?.unknown?.what;
+  let headline = primary
+    ? primary.title
+    : what && actions.every((a) => a.unknown?.what === what)
+      ? what
+      : "Unrecognised approval";
   if (
     primary &&
     primary.timing.text !== "takes effect now" &&

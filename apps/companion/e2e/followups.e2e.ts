@@ -174,6 +174,37 @@ test("Recovery fee key: the pairing code carries it, and recovery mode signs a P
   expect(r).toMatchObject({ witnessOk: true, payerOk: true });
 });
 
+test("Privacy Pools deposit: clear-signed at the known Entrypoint, raw + long-press at any other", async ({ page }) => {
+  const H = await h();
+  await restoreVault(page, H.VAULT_WORDS, H.PASSPHRASE);
+  const built = H.privacyDeposit();
+  await pasteRequest(page, H.requestText(built.cbor));
+  await expect(page.getByTestId("headline")).toHaveText("Move 0.05 ETH into your private balance (Privacy Pools)");
+  await expect(page.getByTestId("amount")).toHaveText("0.05 ETH");
+  await expect(page.getByText("private note (hidden)")).toBeVisible();
+  await expect(page.getByTestId("unknown-banner")).toHaveCount(0);
+  await expect(page.getByTestId("warning-mismatch")).toHaveCount(0);
+  await expect(page.getByTestId("approve")).toHaveText("Approve");
+  await shot(page, "25-review-privacy-deposit");
+  await approveWith(page, H.PASSPHRASE);
+  const r = await H.checkSignature(await page.getByTestId("ur-text").inputValue(), built, H.vault.pk, H.vault.payer);
+  expect(r.witnessOk).toBe(true);
+  expect(r.payerOk).toBe(true);
+  await page.getByTestId("signed-done").click();
+
+  await pasteRequest(
+    page,
+    H.requestText(H.privacyDeposit({ entrypoint: "0x5FE0b7510AB29f1C09295e45aCB746fE099927BD" }).cbor),
+  );
+  await expect(page.getByTestId("headline")).toHaveText("Unfamiliar privacy pool");
+  await expect(page.getByText(/0x5FE0…27BD is not the Privacy Pools contract this app knows/)).toBeVisible();
+  await expect(page.getByTestId("unknown-banner")).toContainText("UNKNOWN STEP");
+  await expect(page.getByTestId("raw-hex")).toContainText("0xb6b55f25");
+  await expect(page.getByTestId("approve")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Hold to review signing anyway/ })).toBeVisible();
+  await shot(page, "25b-review-privacy-unfamiliar");
+});
+
 test("activity log: encrypted at rest, readable with the passphrase", async ({ page }) => {
   const H = await h();
   await restoreVault(page, H.VAULT_WORDS, H.PASSPHRASE);
