@@ -115,11 +115,19 @@ function TabFrame({ tab, setTab, children }: { tab: Tab; setTab: (t: Tab) => voi
     <div className="flex min-h-dvh flex-col">
       <header className="sticky top-0 z-10 bg-paper pt-[env(safe-area-inset-top)]">
         <div className="mx-auto flex h-14 max-w-[560px] items-center gap-2.5 px-5">
-          <Mark size={24} />
-          <span className="font-display text-[1.25rem] leading-none font-light tracking-[-0.01em] text-blue">
-            QueueBit
-          </span>
-          <span className="ml-auto mono-label text-ink-3">Test network</span>
+          <button
+            type="button"
+            onClick={() => setTab("home")}
+            aria-label="QueueBit, home"
+            className="-ml-1 flex h-11 items-center gap-2.5 px-1 active:opacity-70"
+          >
+            <Mark size={24} />
+            <span className="font-display text-[1.25rem] leading-none font-light tracking-[-0.01em] text-blue">
+              QueueBit
+            </span>
+          </button>
+          <span className="ml-auto mono-label text-[11px] text-ink-3">Test network</span>
+          <LockButton />
         </div>
       </header>
       <main className="mx-auto w-full max-w-[560px] flex-1 px-5 pt-6 pb-10">{children}</main>
@@ -153,6 +161,31 @@ function TabFrame({ tab, setTab, children }: { tab: Tab; setTab: (t: Tab) => voi
         </ul>
       </nav>
     </div>
+  );
+}
+
+/** Locks the wallet now: the keys leave memory and the passkey (or password) opens it again. */
+function LockButton() {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  return (
+    <button
+      type="button"
+      disabled={busy}
+      onClick={() => {
+        setBusy(true);
+        void engine()
+          .call("keyring:lock")
+          .finally(() => router.replace("/start"));
+      }}
+      className="mono-label -mr-1 flex h-11 items-center gap-1.5 border border-ink px-2.5 text-[11px] active:bg-paper-3 disabled:text-ink-3"
+    >
+      <svg viewBox="0 0 14 16" aria-hidden className="h-3.5 w-3 fill-none stroke-current [stroke-width:1.3]">
+        <path d="M3.5 7V4.8a3.5 3.5 0 0 1 7 0V7" />
+        <rect x="1.5" y="7" width="11" height="8" />
+      </svg>
+      Lock
+    </button>
   );
 }
 

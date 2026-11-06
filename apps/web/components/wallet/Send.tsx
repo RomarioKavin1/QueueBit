@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getAddress, isAddress } from "viem";
-import { Notice, Primary, Screen, Secondary, Title, Working } from "@/components/onboarding/ui";
+import { Field, Notice, Primary, Screen, Secondary, Title, Working } from "@/components/onboarding/ui";
+import { PasskeyError, passkeySecret } from "@/lib/passkey";
 import { VSend } from "@/components/onboarding/vignettes";
 import { engine, EngineCallError } from "@/lib/engine/client";
 import type { UiApi } from "@/lib/engine/protocol";
@@ -449,7 +450,10 @@ function Confirm({
   onBack: () => void;
   onSend: () => void;
 }) {
-  const { status, net, activity } = useWallet();
+  const { status, net, activity, lockedWith } = useWallet();
+  const [pw, setPw] = useState("");
+  const [authing, setAuthing] = useState(false);
+  const [authErr, setAuthErr] = useState<string | null>(null);
   const fee = BigInt(preview.maxFeeWei);
   const total = draft.wei + fee;
   const creating = !preview.deployed;
@@ -458,6 +462,27 @@ function Confirm({
   const known = recipients(activity).find((r) => r.address.toLowerCase() === draft.to.toLowerCase());
   const left = status?.ownerSignaturesLeft;
 
+  // Every signature asks for the passkey (or password) again, so an unlocked wallet left open can't sign alone.
+  const confirm = async () => {
+    setAuthing(true);
+    setAuthErr(null);
+    try {
+      if (lockedWith === "passkey") {
+        const info = await engine().call("keyring:passkeyInfo");
+        if (!info) throw new Error("This wallet has no passkey.");
+        const { entropy } = await passkeySecret(navigator.credentials, info.credentialId);
+        await engine().call("keyring:verify", { entropy });
+      } else {
+        await engine().call("keyring:verify", { password: pw });
+      }
+      onSend();
+    } catch (e) {
+      setAuthErr(e instanceof PasskeyError || e instanceof Error ? e.message : "That didn't work. Try again.");
+    } finally {
+      setAuthing(false);
+    }
+  };
+
   return (
     <Screen
       onBack={onBack}
@@ -465,8 +490,13 @@ function Confirm({
       step={3}
       of={3}
       actions={
-        <Primary onClick={onSend} disabled={blocked}>
-          Send {eth(draft.wei)} ETH
+        <Primary
+          onClick={() => void confirm()}
+          disabled={blocked || lockedWith === null || (lockedWith === "password" && !pw)}
+          busy={authing}
+          busyLabel={lockedWith === "passkey" ? "Waiting for your passkey" : "Checking"}
+        >
+          {lockedWith === "passkey" ? `Confirm with passkey` : `Sign and send ${eth(draft.wei)} ETH`}
         </Primary>
       }
     >
@@ -521,6 +551,23 @@ function Confirm({
       {setupShort && net?.localDevnet && (
         <Notice tone="error">Fund the setup key {status?.setupKey} from a devnet key first (see the README).</Notice>
       )}
+      {lockedWith === "password" && (
+        <div className="mt-7">
+          <Field
+            label="Password, to sign"
+            type="password"
+            autoComplete="current-password"
+            value={pw}
+            onChange={(e) => {
+              setPw(e.target.value);
+              setAuthErr(null);
+            }}
+            onKeyDown={(e) => e.key === "Enter" && pw && void confirm()}
+            error={authErr}
+          />
+        </div>
+      )}
+      {lockedWith === "passkey" && authErr && <Notice tone="error">{authErr}</Notice>}
     </Screen>
   );
 }
@@ -646,8 +693,11 @@ function Sending({ nav, draft, preview, onRetry }: { nav: Nav; draft: Draft; pre
   return (
     <Screen
       method="Send"
+      onBrand={nav.back}
       actions={
-        done || stopped ? (
+        !done && !stopped ? (
+          <Secondary onClick={nav.back}>Back to home</Secondary>
+        ) : done || stopped ? (
           <>
             {err && !entry && <Primary onClick={onRetry}>Try again</Primary>}
             {(done || failed) && <Primary onClick={nav.back}>{done ? "Done" : "Back to wallet"}</Primary>}

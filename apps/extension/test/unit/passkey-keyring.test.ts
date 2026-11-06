@@ -67,6 +67,14 @@ describe("a passkey keyring", () => {
     await expect(k.revealWordsWithPasskey(entropy(0x01))).rejects.toMatchObject({ reason: "wrong-passkey" });
   });
 
+  it("verifies the same passkey again and refuses another one or a password", async () => {
+    const k = keyring();
+    await k.createFromPasskey(entropy(0x7f), CRED);
+    await k.verify({ entropy: entropy(0x7f) });
+    await expect(k.verify({ entropy: entropy(0x01) })).rejects.toMatchObject({ reason: "wrong-passkey" });
+    await expect(k.verify({ password: "a long password" })).rejects.toBeInstanceOf(KeyringError);
+  });
+
   it("tells a password keyring apart from a passkey one", async () => {
     const k = keyring();
     await k.import(SEVENF_WORDS, "a long password");

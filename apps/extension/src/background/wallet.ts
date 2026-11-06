@@ -819,6 +819,10 @@ export class Wallet {
       mnemonic: await this.keyring.revealWordsWithPasskey(hexToBytes(entropy)),
     }),
     "keyring:passkeyInfo": async () => (await this.keyring.passkeyInfo()) ?? null,
+    "keyring:verify": async (req) => {
+      await this.keyring.verify("entropy" in req ? { entropy: hexToBytes(req.entropy) } : { password: req.password });
+      return null;
+    },
     "keyring:lock": async () => {
       await this.keyring.lock();
       this.onLocked();

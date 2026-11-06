@@ -268,6 +268,30 @@ export class KeyringController {
     return record.accounts;
   }
 
+  /**
+   * Checks the password or the passkey without touching the session: the wallet asks for it again before each
+   * signature, so an unlocked wallet left open can't sign on its own.
+   */
+  async verify(proof: { password: string } | { entropy: Uint8Array }): Promise<void> {
+    if ("entropy" in proof) {
+      this.assertSamePasskey(await this.requirePasskeyRecord(), proof.entropy);
+      return;
+    }
+    const record = await this.requirePasswordRecord();
+    try {
+      const { dek, plaintext } = await decryptWithPassword(
+        proof.password,
+        record.blob,
+        aadFor(record.accounts.everyday),
+      );
+      dek.fill(0);
+      plaintext.fill(0);
+    } catch (err) {
+      if (err instanceof DecryptionError) throw new KeyringError("wrong-password", "That password didn't work.");
+      throw new KeyringError("damaged", "The stored keyring is damaged and can't be unlocked.");
+    }
+  }
+
   /** The backup words, for "Back up your words". Needs the password again. */
   async revealWords(password: string): Promise<string> {
     const record = await this.requirePasswordRecord();

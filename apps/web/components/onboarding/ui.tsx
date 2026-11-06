@@ -37,6 +37,7 @@ export function Screen({
   of,
   method,
   onBack,
+  onBrand,
   children,
   actions,
 }: {
@@ -44,6 +45,8 @@ export function Screen({
   of?: number;
   method?: string;
   onBack?: () => void;
+  /** Where the mark and wordmark lead (when there is no Back), e.g. the wallet's home. */
+  onBrand?: () => void;
   children: ReactNode;
   actions?: ReactNode;
 }) {
@@ -59,6 +62,18 @@ export function Screen({
             >
               <LineArrow dir="left" />
               Back
+            </button>
+          ) : onBrand ? (
+            <button
+              type="button"
+              onClick={onBrand}
+              aria-label="QueueBit, home"
+              className="-ml-1 flex h-11 items-center gap-2.5 px-1 active:opacity-70"
+            >
+              <Mark size={24} />
+              <span className="font-display text-[1.25rem] leading-none font-light tracking-[-0.01em] text-blue">
+                QueueBit
+              </span>
             </button>
           ) : (
             <span className="flex items-center gap-2.5">

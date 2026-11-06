@@ -199,6 +199,15 @@ describe("KeyringController", () => {
     expect(await k.withMnemonic((m) => m)).toBe(TEST_MNEMONIC);
   });
 
+  it("verifies the password again without touching the session", async () => {
+    const { k } = setup();
+    await k.import(TEST_MNEMONIC, "password-1");
+    await k.verify({ password: "password-1" });
+    await expect(k.verify({ password: "nope-nope" })).rejects.toMatchObject({ reason: "wrong-password" });
+    expect(await k.isUnlocked()).toBe(true);
+    await expect(k.verify({ entropy: new Uint8Array(32) })).rejects.toMatchObject({ reason: "not-passkey" });
+  });
+
   it("changes the password: old stops working, new works, secret unchanged", async () => {
     const { k } = setup();
     await k.import(TEST_MNEMONIC, "password-1");

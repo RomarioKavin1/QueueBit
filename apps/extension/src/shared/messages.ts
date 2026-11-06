@@ -108,6 +108,8 @@ export interface UiApi {
   "keyring:revealWordsWithPasskey": { req: { entropy: Hex }; res: { mnemonic: string } };
   /** The passkey a passkey wallet needs; null for a password wallet (or none). */
   "keyring:passkeyInfo": { req: undefined; res: { credentialId: string } | null };
+  /** Asks for the password or passkey again (before a signature); changes nothing. */
+  "keyring:verify": { req: { password: string } | { entropy: Hex }; res: null };
   "keyring:lock": { req: undefined; res: null };
   "keyring:changePassword": { req: { oldPassword: string; newPassword: string }; res: null };
   "keyring:reset": { req: undefined; res: null };
