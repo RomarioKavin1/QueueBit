@@ -20,6 +20,7 @@ Each entry is tagged with its source. Remove an entry when it lands, and cite th
 
 ## Contracts
 - [x] Mirror the account's Open recipient mode and initialize-derived vault binding in the 7579 modules (module review). `9dbb5a7` (hook RecipientMode, executor binds pk/verifier/sigLength), `fd2573c` (anvil e2e).
+- [ ] Modules: mirror the account's `SameRoleKey` rule at install/rotation (vault pk ≠ recovery pk; roles distinct from the hot key) (account hardening 7cd394b).
 - [ ] `registerPermit` covers ERC-2612 only; add typed registration for EIP-3009 and Permit2 (account audit).
 - [ ] Vault policy guidance for non-monitored assets moved by session targets (account audit).
 - [ ] Document that a recovery-key compromise means an uncancellable 7-day vault takeover (account audit).
