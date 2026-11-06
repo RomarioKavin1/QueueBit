@@ -47,6 +47,13 @@ export interface FactoryInit {
   executorInits: Hex[];
 }
 
+/** Seconds a guardian-approved reset waits before anyone can execute it (2 days). */
+export const DEFAULT_RECOVERY_DELAY = 2 * 86_400;
+
+/** GuardianRecovery's install data: `abi.encode(address[] guardians, uint8 threshold, uint32 delay)`. */
+export const guardianInit = (guardians: Address[], threshold: number, delay: number): Hex =>
+  encodeAbiParameters([{ type: "address[]" }, { type: "uint8" }, { type: "uint32" }], [guardians, threshold, delay]);
+
 /** `LeanAccountFactory.Init` for a configuration. */
 export function factoryInit(d: AccountDeployment, o: CreateOptions): FactoryInit {
   const withRecovery = (o.guardians?.length ?? 0) > 0;
@@ -57,12 +64,7 @@ export function factoryInit(d: AccountDeployment, o: CreateOptions): FactoryInit
     hookInit: "0x",
     executors: withRecovery ? [d.recovery] : [],
     executorInits: withRecovery
-      ? [
-          encodeAbiParameters(
-            [{ type: "address[]" }, { type: "uint8" }, { type: "uint32" }],
-            [o.guardians!, o.guardianThreshold ?? 1, o.recoveryDelay ?? 2 * 86_400],
-          ),
-        ]
+      ? [guardianInit(o.guardians!, o.guardianThreshold ?? 1, o.recoveryDelay ?? DEFAULT_RECOVERY_DELAY)]
       : [],
   };
 }

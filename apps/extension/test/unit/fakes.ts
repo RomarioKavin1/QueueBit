@@ -41,6 +41,8 @@ export function fakeChain() {
     sendDelayMs?: number;
     /** A legacy tx (the setup key's createAccount) deploys this address when it is sent. */
     deployOnLegacy?: Address;
+    /** The account has GuardianRecovery installed (isModuleInstalled). */
+    recoveryInstalled?: boolean;
   } = {};
   const k = (a: string) => a.toLowerCase();
   const publicClient = {
@@ -52,6 +54,10 @@ export function fakeChain() {
     // EIP-8250 keyed nonces live in the nonce manager at keccak(account ‖ key), as AccountService.nonce reads them.
     getStorageAt: async ({ slot }: { slot: Hex }) => storage.get(slot.toLowerCase()) ?? "0x0",
     estimateGas: async () => 200_000n,
+    readContract: async ({ functionName }: { functionName: string }) => {
+      if (functionName === "isModuleInstalled") return knobs.recoveryInstalled === true;
+      throw new Error(`fake chain: no ${functionName}`);
+    },
     sendRawTransaction: async ({ serializedTransaction }: { serializedTransaction: Hex }) => {
       legacy.push(serializedTransaction);
       if (knobs.deployOnLegacy) code.set(k(knobs.deployOnLegacy), "0x6001");

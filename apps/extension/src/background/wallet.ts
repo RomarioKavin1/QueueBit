@@ -665,10 +665,10 @@ export class Wallet {
     const [keys, guardians, recoveries] = deployed
       ? await Promise.all([
           readKeys(client, d, rec.address, rec.vk, nowSec),
-          readGuardians(client, d, rec.address, rec.guardians),
+          readGuardians(client, d, rec.address, rec.liveGuardians?.guardians ?? rec.guardians),
           readRecoveries(client, d, rec.address).catch(() => []),
         ])
-      : [[], rec.guardians.map((address) => ({ address, active: false })), []];
+      : [[], (rec.liveGuardians?.guardians ?? rec.guardians).map((address) => ({ address, active: false })), []];
     return {
       chainId,
       deployed,
@@ -875,6 +875,13 @@ export class Wallet {
       for (const g of guardians) if (!isAddress(g, { strict: false })) throw new Error(`${g} isn't an address.`);
       await this.acct().ensure(id, { guardians, guardianThreshold: threshold });
       return this.acct().status(id);
+    },
+    "account:updateGuardians": async ({ chainId, guardians, threshold }) => {
+      const id = await this.chainOr(chainId);
+      for (const g of guardians) if (!isAddress(g, { strict: false })) throw new Error(`${g} isn't an address.`);
+      const { entry } = await this.acct().updateGuardians(id, guardians, threshold);
+      if (entry) void this.trackSoon();
+      return { ...(entry ? { entry } : {}), status: await this.acct().status(id) };
     },
     "account:activate": async ({ chainId }) => {
       const entry = await this.acct().activate(await this.chainOr(chainId));

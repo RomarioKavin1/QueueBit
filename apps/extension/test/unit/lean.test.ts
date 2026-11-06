@@ -88,6 +88,35 @@ describe("account creation plan", () => {
   });
 });
 
+describe("guardians on an account that exists", () => {
+  const G1 = "0x00000000000000000000000000000000000000A1" as Address;
+  const G2 = "0x00000000000000000000000000000000000000A2" as Address;
+
+  it("the owner reinstalls recovery with the new guardians (one admin payment); the address doesn't change", async () => {
+    const { wallet, chain } = makeWallet();
+    await wallet.keyring.import(MNEMONIC, "password-1");
+    const st = await wallet.handleUi("account:status", { chainId: 1337 });
+    chain.deploy(st.address!);
+    chain.fund(st.address!, parseEther("1"));
+    chain.knobs.recoveryInstalled = true;
+    const r = await wallet.handleUi("account:updateGuardians", { chainId: 1337, guardians: [G1, G2], threshold: 2 });
+    expect(r.entry).toMatchObject({ kind: "admin", signer: "owner", via: "leanpool" });
+    expect(chain.pooled).toHaveLength(1);
+    expect(r.status).toMatchObject({ address: st.address, guardians: [G1, G2] });
+  });
+
+  it("before the account exists, guardians are part of its creation (its address follows them)", async () => {
+    const { wallet, chain } = makeWallet();
+    await wallet.keyring.import(MNEMONIC, "password-1");
+    const before = await wallet.handleUi("account:status", { chainId: 1337 });
+    const r = await wallet.handleUi("account:updateGuardians", { chainId: 1337, guardians: [G1], threshold: 1 });
+    expect(r.entry).toBeUndefined();
+    expect(chain.pooled).toHaveLength(0);
+    expect(r.status.address).not.toBe(before.address);
+    expect(r.status.guardians).toEqual([G1]);
+  });
+});
+
 describe("owner key signature budget", () => {
   it("counts every signature before making it and refuses past the budget", async () => {
     const local = new MemoryKV();

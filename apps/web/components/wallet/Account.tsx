@@ -6,9 +6,10 @@ import { Address, Choices, Notice, Title } from "@/components/onboarding/ui";
 import { engine } from "@/lib/engine/client";
 import { Row, Section } from "./bits";
 import { errText, useWallet } from "./state";
+import type { Nav } from "./Wallet";
 
 /** The account at a glance, plus the few things a person does rarely: back up, lock. */
-export function AccountTab() {
+export function AccountTab({ nav }: { nav: Nav }) {
   const router = useRouter();
   const { status, net, lockedWith, backedUp, budget } = useWallet();
   const [err, setErr] = useState<string | null>(null);
@@ -67,6 +68,14 @@ export function AccountTab() {
               title: backedUp ? "Show your 24 words" : "Back up your 24 words",
               body: "They rebuild this wallet on any device.",
               onSelect: () => router.push("/start#backup"),
+            },
+            {
+              key: "guardians",
+              title: "Guardians",
+              body: status?.guardians?.length
+                ? `${status.guardians.length} can reset your keys if you lose your passkey.`
+                : "Who can reset your keys if you lose your passkey.",
+              onSelect: () => nav.open({ id: "guardians" }),
             },
             {
               key: "lock",

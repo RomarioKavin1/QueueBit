@@ -1,4 +1,12 @@
-import { LEAN_PROFILE, buildAndSign, submit, type Call, type Signer } from "@queuebit/account";
+import {
+  LEAN_PROFILE,
+  buildAndSign,
+  leanAccountAbi,
+  setGuardiansCalls,
+  submit,
+  type Call,
+  type Signer,
+} from "@queuebit/account";
 import type { LeanPoolClient, NodeClient, SidecarClient } from "@queuebit/rpc";
 import { concat, keccak256, pad, parseGwei, toHex, type Address, type Hex, type PublicClient } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
@@ -26,8 +34,11 @@ export interface AccountRecord {
   vk: Hex;
   aggregator: Address;
   salt: Hex;
+  /** The guardians the account was created with: part of its address (planOf rebuilds it from them). */
   guardians: Address[];
   guardianThreshold: number;
+  /** The guardians now, when the owner changed them after creation (they don't change the address). */
+  liveGuardians?: { guardians: Address[]; threshold: number };
   createdAt: number;
   activation?: { hash: Hex; activityId: string; sentAt: number };
 }
@@ -196,6 +207,41 @@ export class AccountService {
   }
 
   /**
+   * Changes the guardians. Before the account exists they are part of its creation (its address follows them). After,
+   * the owner key signs one admin payment that reinstalls GuardianRecovery with the new set (a fresh set: recoveries
+   * the old guardians started die with it); the address stays.
+   */
+  async updateGuardians(
+    chainId: number,
+    guardians: Address[],
+    threshold: number,
+  ): Promise<{ entry?: ActivityEntry; record: AccountRecord }> {
+    const rec = await this.ensure(chainId);
+    if (!(await this.deployed(chainId, rec.address)))
+      return { record: await this.ensure(chainId, { guardians, guardianThreshold: threshold }) };
+    const d = this.deployment(chainId);
+    const installed = (await this.d.io.publicClient(chainId).readContract({
+      address: rec.address,
+      abi: leanAccountAbi,
+      functionName: "isModuleInstalled",
+      args: [2n, d.recovery, "0x"],
+    })) as boolean;
+    const calls = setGuardiansCalls(d, rec.address, { installed, guardians, threshold });
+    const entry = await this.pay(chainId, calls, {
+      kind: "admin",
+      label: guardians.length
+        ? `Setting ${guardians.length} guardian${guardians.length > 1 ? "s" : ""}`
+        : "Removing guardians",
+      doneLabel: guardians.length ? "Guardians updated" : "Guardians removed",
+    });
+    const record = await this.save({
+      ...rec,
+      liveGuardians: { guardians, threshold: guardians.length ? threshold : 0 },
+    });
+    return { entry, record };
+  }
+
+  /**
    * How many owner transactions the account made: its owner lane's nonce on chain, plus the account's plain nonce
    * (owner payments before the keyed lane, and a contract's starting 1), plus owner transactions still on their way.
    * Over-counts by at most one, never under.
@@ -269,7 +315,7 @@ export class AccountService {
         setupWei: setupWei.toString(),
         activationCostWei: activationCostWei.toString(),
         aggregator: rec.aggregator,
-        guardians: rec.guardians,
+        guardians: rec.liveGuardians?.guardians ?? rec.guardians,
         ...(rec.activation ? { activation: { hash: rec.activation.hash, sentAt: rec.activation.sentAt } } : {}),
       };
     } catch (e) {

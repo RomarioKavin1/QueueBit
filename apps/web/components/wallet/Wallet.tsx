@@ -10,6 +10,7 @@ import { AccountTab } from "./Account";
 import { ActivityTab, EntryDetail } from "./Activity";
 import { Home } from "./Home";
 import { Receive } from "./Receive";
+import { Guardians } from "./Guardians";
 import { Send } from "./Send";
 import { WalletProvider } from "./state";
 
@@ -20,7 +21,7 @@ import { WalletProvider } from "./state";
  */
 
 export type Tab = "home" | "activity" | "account";
-export type View = { id: "send" } | { id: "receive" } | { id: "entry"; entryId: string };
+export type View = { id: "send" } | { id: "receive" } | { id: "guardians" } | { id: "entry"; entryId: string };
 
 export interface Nav {
   tab: Tab;
@@ -99,13 +100,14 @@ function Shell() {
   const nav: Nav = { tab, setTab, open, back };
   if (view?.id === "send") return <Send nav={nav} />;
   if (view?.id === "receive") return <Receive nav={nav} />;
+  if (view?.id === "guardians") return <Guardians nav={nav} />;
   if (view?.id === "entry") return <EntryDetail nav={nav} entryId={view.entryId} />;
 
   return (
     <TabFrame tab={tab} setTab={setTab}>
       {tab === "home" && <Home nav={nav} />}
       {tab === "activity" && <ActivityTab nav={nav} />}
-      {tab === "account" && <AccountTab />}
+      {tab === "account" && <AccountTab nav={nav} />}
     </TabFrame>
   );
 }
