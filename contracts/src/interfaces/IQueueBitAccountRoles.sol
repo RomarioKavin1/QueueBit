@@ -23,6 +23,7 @@ interface IQueueBitAccountRoles {
     function vaultQueue(Call[] calldata calls, uint8 kind) external returns (bytes32 opId);
     function vaultCancel(bytes32 opId) external;
     function vaultSetHotKey(address newHotKey) external;
+    function vaultSetPQHotSigner(address signer) external;
     function vaultSetCap(uint256 capUsdPerDay, uint256 perTxMaxUsd, uint256 maxFeeWeiPerTx, uint8 maxHotFrames)
         external;
     function vaultSetFeePolicy(uint256 maxPriorityFeePerGas, bool selfPay, address tank) external;
@@ -72,4 +73,5 @@ interface IQueueBitAccountRoles {
     function isQueued(bytes32 opId) external view returns (bool);
     function isValueVerifier(address verifier) external view returns (bool);
     function isTrustedVerifier(address verifier) external view returns (bool);
+    function pqHotSigner() external view returns (address);
 }

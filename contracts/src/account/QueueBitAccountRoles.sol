@@ -123,6 +123,26 @@ contract QueueBitAccountRoles is QueueBitAccountBase {
         emit HotKeyRotated(old, newHotKey);
     }
 
+    /// @notice Installs (or, with address(0), removes) the post-quantum everyday signer: a `LeanPoolHotSigner` bound to
+    ///         this account, which spends through `hotExecuteFrom` under the same everyday limits as the hot key.
+    ///         Instant, like `vaultSetHotKey`: it draws on the same rolling bucket, so the most it can spend is
+    ///         unchanged. Does not clear bunker (only a new hot key does).
+    function vaultSetPQHotSigner(address signer) external delegated {
+        QueueBitAccountStorage.Layout storage $ = _authVault(false);
+        if (signer != address(0)) {
+            if (
+                signer == address(this) || signer == $.hotKey || signer == $.vaultSigner || signer == $.recoverySigner
+                    || signer == $.pendingVaultSigner
+            ) revert BadAddress(signer);
+            // A signer bound to another account (or an EOA) would never be able to spend here: refuse the typo.
+            (bool ok, bytes memory ret) = signer.staticcall(abi.encodeWithSignature("account()"));
+            if (!ok || ret.length < 32 || abi.decode(ret, (address)) != address(this)) revert BadAddress(signer);
+        }
+        address old = $.pqHotSigner;
+        $.pqHotSigner = signer;
+        emit PQHotSignerSet(old, signer);
+    }
+
     /// @notice Hot limits. Tightening (every value <= current) is instant; anything else must be queued.
     function vaultSetCap(uint256 capUsdPerDay, uint256 perTxMaxUsd, uint256 maxFeeWeiPerTx, uint8 maxHotFrames)
         external
@@ -522,6 +542,11 @@ contract QueueBitAccountRoles is QueueBitAccountBase {
         return _s().trustedVerifiers[verifier];
     }
 
+    /// The installed post-quantum everyday signer, or address(0).
+    function pqHotSigner() external view returns (address) {
+        return _s().pqHotSigner;
+    }
+
     function getTokenList() external view returns (address[] memory) {
         return _s().tokenList;
     }
@@ -548,14 +573,15 @@ contract QueueBitAccountRoles is QueueBitAccountBase {
 
     /// The account's own setters a queued op may call (no hot path, no upgrade, no queue re-entry).
     function _queueableSelfCall(bytes4 sel) private pure returns (bool) {
-        return sel == this.vaultSetHotKey.selector || sel == this.vaultSetCap.selector
-            || sel == this.vaultSetFeePolicy.selector || sel == this.vaultSetToken.selector
-            || sel == this.vaultSetTarget.selector || sel == this.vaultSetSession.selector
-            || sel == this.vaultSetRecipientMode.selector || sel == this.vaultSetValueVerifier.selector
-            || sel == this.vaultSetTrustedVerifier.selector || sel == this.vaultSetTimelock.selector
-            || sel == this.vaultSetRecoverySigner.selector || sel == this.vaultSetGuardian.selector
-            || sel == this.vaultFreeze.selector || sel == this.vaultUnfreeze.selector
-            || sel == this.vaultExtendFreeze.selector || sel == this.vaultEnableBunker.selector;
+        return sel == this.vaultSetHotKey.selector || sel == this.vaultSetPQHotSigner.selector
+            || sel == this.vaultSetCap.selector || sel == this.vaultSetFeePolicy.selector
+            || sel == this.vaultSetToken.selector || sel == this.vaultSetTarget.selector
+            || sel == this.vaultSetSession.selector || sel == this.vaultSetRecipientMode.selector
+            || sel == this.vaultSetValueVerifier.selector || sel == this.vaultSetTrustedVerifier.selector
+            || sel == this.vaultSetTimelock.selector || sel == this.vaultSetRecoverySigner.selector
+            || sel == this.vaultSetGuardian.selector || sel == this.vaultFreeze.selector
+            || sel == this.vaultUnfreeze.selector || sel == this.vaultExtendFreeze.selector
+            || sel == this.vaultEnableBunker.selector;
     }
 
     function _enqueue(QueueBitAccountStorage.Layout storage $, uint8 kind, bytes32 payloadHash)

@@ -356,3 +356,19 @@ the following restrictions:
 
 3. This notice may not be removed or altered from any source distribution.
 ```
+
+## LeanPool (the post-quantum everyday key)
+
+Ported from LeanPool ([`LeoFranklin015/Queue-bit`](https://github.com/LeoFranklin015/Queue-bit), branch `leanpool`,
+`main` @ `53732b1`), MIT, Copyright (c) 2026 the LeanPool authors (the same team). Plan:
+`docs/plan/60-leanpool-merge-plan.md`.
+
+| Where in this repo | Origin | License | What was taken |
+|---|---|---|---|
+| `contracts/src/leanpool/DepsRegistry.sol` | LeanPool `contracts/src/v2/DepsRegistry.sol` | MIT | Verbatim below an added provenance header |
+| `contracts/src/leanpool/LeanPoolMerkle.sol` | LeanPool `contracts/src/MerkleLib.sol` | MIT | Sorted-pair Merkle verification (the v1-only `leaf` dropped) |
+| `contracts/src/roles/LeanPoolHotSigner.sol` (VERIFY body) | LeanPool `contracts/src/v2/LeanWallet8288.sol` | MIT | Triple checks, witness layout and ring read, inside QueueBit's role-signer clone pattern |
+
+`@queuebit/lean-sphincs` compiles [`leanEthereum/leanVM`](https://github.com/leanEthereum/leanVM) `crates/signatures`
+@ `a39758de10f35c7b34023d061cc05dfc0b36d43a` (a Cargo git dependency, MIT OR Apache-2.0, used under MIT) into its
+WASM; no source is copied. Its vectors come from `@kevaundray/lean-pq` 0.7.0 (MIT OR Apache-2.0).

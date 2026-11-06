@@ -226,8 +226,21 @@ contract QueueBitAccountImpl is QueueBitVerify, QueueBitAccountBase, Initializab
     ///        the batch's total balance delta, whichever is larger) must not exceed it.
     function hotExecute(uint256 declaredUsd, Call[] calldata calls) external {
         if (msg.sender != address(this)) revert OnlySelf();
-        _noActiveContext();
+        _hotExecute(_s(), declaredUsd, calls);
+    }
+
+    /// @notice The everyday tier for the Vault-installed post-quantum hot signer (`LeanPoolHotSigner`, its own
+    ///         EIP-8141 sender: its VERIFY checks a LeanPool inclusion proof, its SENDER frame calls this). Exactly
+    ///         `hotExecute`'s limits apply: rolling USD cap, per-payment maximum, allowlists, freeze, bunker. VERIFY
+    ///         bounds (hot key, frame walk, fee) are the signer's own; the signer pays its own gas.
+    function hotExecuteFrom(uint256 declaredUsd, Call[] calldata calls) external {
         QueueBitAccountStorage.Layout storage $ = _s();
+        if (msg.sender != $.pqHotSigner || msg.sender == address(0)) revert Unauthorized();
+        _hotExecute($, declaredUsd, calls);
+    }
+
+    function _hotExecute(QueueBitAccountStorage.Layout storage $, uint256 declaredUsd, Call[] calldata calls) private {
+        _noActiveContext();
         if ($.bunker) revert BunkerActive();
         if ($.hotFrozen) revert HotFrozen();
         uint256 n = calls.length;

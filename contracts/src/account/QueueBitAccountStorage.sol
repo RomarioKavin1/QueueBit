@@ -65,6 +65,10 @@ library QueueBitAccountStorage {
         /// slot fails closed: an account upgraded from an implementation without the field keeps the recipient
         /// allowlist. Execution-only (VERIFY never reads it; I-2): written by `initialize` and the vault only.
         bool recipientsOpen;
+        // ---- appended (LeanPool PQ everyday key, 2026-11-06) ----
+        /// The Vault-installed `LeanPoolHotSigner` that may call `hotExecuteFrom`; address(0) = none. Execution-only
+        /// (VERIFY never reads it; I-2): written by the vault only.
+        address pqHotSigner;
     }
 
     bytes32 internal constant SLOT = 0xaaa3a40665f3919275337b30482a6844d30bf6a88669b7017e78138704481500;

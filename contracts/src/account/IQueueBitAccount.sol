@@ -190,6 +190,7 @@ interface IQueueBitAccount {
     event VaultExecuted(uint256 usdDebited, uint256 vaultAvailable, uint256 callCount);
 
     event HotKeyRotated(address indexed oldKey, address indexed newKey);
+    event PQHotSignerSet(address indexed oldSigner, address indexed newSigner);
     event CapUpdated(uint256 capUsdPerDay, uint256 perTxMaxUsd, uint256 maxFeeWeiPerTx, uint8 maxHotFrames);
     event FeePolicyUpdated(uint256 maxPriorityFeePerGas, bool selfPay, address indexed tank);
     event TokenConfigured(address indexed token, bool allowed, uint8 decimals, uint256 usdPerToken);

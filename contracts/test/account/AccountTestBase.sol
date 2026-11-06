@@ -182,7 +182,7 @@ abstract contract AccountTestBase is FrameSim {
     }
 
     /// Runs a hot batch as its SENDER frame would (msg.sender == account).
-    function _hot(uint256 declared, IQueueBitAccount.Call[] memory calls) internal {
+    function _hot(uint256 declared, IQueueBitAccount.Call[] memory calls) internal virtual {
         vm.prank(address(account));
         account.hotExecute(declared, calls);
     }
