@@ -13,4 +13,10 @@ overrides:
 # platform packages), and strictDepBuilds fails the install if a new or updated dependency asks for one, so adding to
 # the list is a reviewed change. Playwright browsers are installed explicitly (`playwright install`), not by a hook.
 onlyBuiltDependencies: []
+# Reviewed, never run: @reown/appkit's postinstall only checks its version (scripts/appkit-version-check.js);
+# bufferutil / utf-8-validate (via WalletConnect's `ws`) are optional native speedups with pure-JS fallbacks.
+ignoredBuiltDependencies:
+  - "@reown/appkit"
+  - bufferutil
+  - utf-8-validate
 strictDepBuilds: true
