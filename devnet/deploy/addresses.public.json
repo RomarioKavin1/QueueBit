@@ -71,6 +71,13 @@
       "initCodeHash": "0x2aa9e1a4a9b7692cee390aade5726d2a41b3a53888bc3050d162a3aecca9f5eb",
       "deployTx": "0xc8ce9f0530de4cdbfa11c80e594f9298f0575f2c5f9318eabd58bb5e1d4df177"
     },
+    "SafeToLeanAccount": {
+      "address": "0xE2e48D08632d2CA8Cc9A13F4F66979ea5144Bf9B",
+      "artifact": "SafeToLeanAccount.sol/SafeToLeanAccount",
+      "args": [],
+      "initCodeHash": "0xaa25247697fca7e638ed558757422299e7adced80a683a0d22d5c1048ae1e376",
+      "deployTx": "0x4bae6cb2442fbd872adb6361188d5bd4f654efba66099aa6697ce01ce38246c4"
+    },
     "Safe": {
       "address": "0x6e63789469BF7Bd5e245b6676540b897B7ECbf46",
       "artifact": "Safe.sol/Safe",

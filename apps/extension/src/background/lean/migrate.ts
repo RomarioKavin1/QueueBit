@@ -37,7 +37,7 @@ import { quoteLegacy, send7702, sendLegacy, waitLegacy } from "./legacy";
 export type MigrationKind = "eoa" | "safe" | "smart-account";
 
 export type MigrationMode =
-  "move" | "7702-delegate" | "7702-initialize" | "safe-move" | "account-upgrade" | "account-move";
+  "move" | "7702-delegate" | "7702-initialize" | "safe-move" | "safe-upgrade" | "account-upgrade" | "account-move";
 
 export interface MigrationPlan {
   kind: MigrationKind;
@@ -126,6 +126,28 @@ export function planMigration(
     if (!o.external && signers.size < s.threshold)
       throw new Error(`This Safe needs ${s.threshold} owner keys; ${signers.size} imported.`);
     if (src.eth === 0n && tokens.length === 0) throw new Error("This Safe holds nothing to move.");
+    if (o.external && d.safeMigrator)
+      return {
+        ...base,
+        mode: "safe-upgrade",
+        destination: src.address,
+        // The Safe DELEGATECALLs this: it points the proxy at LeanAccount and initializes it with your owner key.
+        calls: [
+          {
+            to: d.safeMigrator,
+            value: 0n,
+            data: encodeFunctionData({
+              abi: safeMigratorAbi,
+              functionName: "migrate",
+              args: [d.implementation, initializeData(d, target.options)],
+            }),
+          },
+        ],
+        steps: [
+          `${s.threshold} owner${s.threshold > 1 ? "s sign" : " signs"} one Safe transaction in their own wallet`,
+          "A connected owner sends it: the Safe becomes your quantum-safe account at the same address, funds and all",
+        ],
+      };
     if (o.external)
       return {
         ...base,
@@ -168,6 +190,9 @@ export function planMigration(
     steps: ["Its owner key sends one transaction: every token and all the ETH move to your account"],
   };
 }
+
+/** SafeToLeanAccount: a Safe DELEGATECALLs `migrate` to become a LeanAccount in place. */
+export const safeMigratorAbi = parseAbi(["function migrate(address leanImplementation, bytes initData)"]);
 
 /** An owner-operated smart account's batch entry point (LegacyAccount, SimpleAccount-style). */
 export const ownedAccountAbi = parseAbi(["function execute((address to, uint256 value, bytes data)[] calls) payable"]);

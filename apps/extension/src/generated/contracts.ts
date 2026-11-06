@@ -27,6 +27,7 @@ export const localDeployment: {
   multiSend: `0x${string}` | null;
   safeFallbackHandler: `0x${string}` | null;
   legacyAccount: `0x${string}` | null;
+  safeMigrator: `0x${string}` | null;
   tokens: LocalToken[];
 } | null = null;
 
@@ -46,6 +47,7 @@ export const publicDeployment: {
   multiSend: `0x${string}` | null;
   safeFallbackHandler: `0x${string}` | null;
   legacyAccount: `0x${string}` | null;
+  safeMigrator: `0x${string}` | null;
   tokens: LocalToken[];
 } | null = {
   chainId: 1337,
@@ -61,6 +63,7 @@ export const publicDeployment: {
   multiSend: "0xbB2004883b0B4bd69Ca926833f8fF9878D36c952",
   safeFallbackHandler: "0xE2Ba97d9bD688DEd2f031C4599E7eb4985B77E59",
   legacyAccount: "0xbb8F4693C27FC4a676c050da83B4c4cfAD60Dca5",
+  safeMigrator: "0xE2e48D08632d2CA8Cc9A13F4F66979ea5144Bf9B",
   tokens: [
     {
       address: "0x1F8669850fffF3D25528f80a017ec3F9A165632a",

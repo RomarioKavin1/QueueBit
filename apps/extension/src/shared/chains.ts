@@ -17,6 +17,8 @@ export interface NetworkDeployment extends AccountDeployment {
   multiSend: `0x${string}` | null;
   safeFallbackHandler: `0x${string}` | null;
   legacyAccount: `0x${string}` | null;
+  /** SafeToLeanAccount: upgrades a Safe into a LeanAccount in place (a Safe transaction DELEGATECALLs it). */
+  safeMigrator: `0x${string}` | null;
 }
 
 /** A token QueueBit shows on a network (balances, sessions' token limits, what a move takes along). */

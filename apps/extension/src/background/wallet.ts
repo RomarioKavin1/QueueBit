@@ -943,10 +943,25 @@ export class Wallet {
         external: true,
       });
       const d = this.acct().deployment(chainId);
-      if (!d.multiSend) throw new Error("This network has no MultiSend contract, so a Safe can't move here.");
+      if (plan.mode !== "safe-upgrade" && !d.multiSend)
+        throw new Error("This network has no MultiSend contract, so a Safe can't move here.");
       const client = this.env.io!.publicClient(chainId);
       const safe = await readSafe(client, address);
-      const tx = multiSendSafeTx(d.multiSend, plan.calls, safe.nonce);
+      const up = plan.mode === "safe-upgrade" ? plan.calls[0]! : undefined;
+      const tx: SafeTx = up
+        ? {
+            to: up.to,
+            value: 0n,
+            data: up.data ?? ("0x" as Hex),
+            operation: 1, // DELEGATECALL: the helper runs as the Safe
+            safeTxGas: 0n,
+            baseGas: 0n,
+            gasPrice: 0n,
+            gasToken: "0x0000000000000000000000000000000000000000",
+            refundReceiver: "0x0000000000000000000000000000000000000000",
+            nonce: safe.nonce,
+          }
+        : multiSendSafeTx(d.multiSend!, plan.calls, safe.nonce);
       const typed = safeTxTypedData(chainId, address, tx);
       const json: SafeTxJson = safeTxToJson(tx);
       return {

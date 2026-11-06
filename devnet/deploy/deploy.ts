@@ -163,6 +163,8 @@ const resetKeys = toFunctionSelector(
   ) as never,
 );
 await deploy("GuardianRecovery", "GuardianRecovery.sol", [keystore, resetKeys]);
+// A Safe upgrades into a LeanAccount in place: its owners' Safe transaction DELEGATECALLs this helper.
+await deploy("SafeToLeanAccount", "SafeToLeanAccount.sol", []);
 
 // Migration demo fixtures: Safe v1.4.1 (move) and a UUPS smart account (upgrade in place).
 await deploy("Safe", "Safe.sol", []);
