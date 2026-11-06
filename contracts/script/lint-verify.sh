@@ -1,162 +1,63 @@
 #!/usr/bin/env bash
-# Lint of the code reachable from the account's VERIFY frame (plan 10-contracts.md §10.1.4 items 2-3, §10.5.1,
-# docs/plan/50-devnet-review.md rules 1-4). Fails on banned opcodes, halting introspection reads and the other
-# constructs that are fatal in VERIFY on the devnet but invisible to FrameSim.
+# Lint of the code reachable from LeanAccount's VERIFY frame: the constructs that are fatal in VERIFY on the
+# alt mempool (ERC-7562) but invisible to Forge, which does not model the mempool's opcode and storage rules.
 #
-#   1. bytecode: every opcode of VerifyLintTarget (QueueBitVerify alone) and of the ERC1967 proxy;
-#      self-test: VerifyLintBadTarget must fail;
-#   2. source: QueueBitVerify.sol must not use time/block/gas/balance/transient/log constructs, SIGDATACOPY,
-#      FRAMEPARAM STATUS/*_GAS_USED, or SIGPARAM RESOLVED_SIGNER before the entry's SCHEME check;
-#   3. dynamic: VerifyOpcodesTest (opcodes actually executed in every VERIFY branch) must pass, not skip;
-#   4. I-2 (slot disjointness): the walker never reads the recipient policy (`recipientsOpen` / `RecipientMode` /
-#      `targets`), the mode lives in an appended execution-only slot, and the Audit I-2 tests (both recipient
-#      modes) pass: VERIFY reads only slots 0-2 and nothing a hot batch or the mode setter writes; likewise nothing
-#      initialize writes for `InitConfig.tokens`, at the same VERIFY gas (InitTokensAndPayers I-2 test, both modes);
-#   5. LeanPoolHotSigner (the quantum-safe everyday key's sender): its VERIFY code (from `fallback()` to the execution
-#      section) uses no time/block/gas/balance/transient/log/write constructs, makes exactly one external call (the
-#      registry's `rootAt`, its ring slot: storage keyed by the signer), checks entry 0's SCHEME, MSG and
-#      SIGNATURE_LENGTH before its SIGDATACOPY, never reads RESOLVED_SIGNER; `pqHotSigner` is appended (execution-only);
-#      the FrameSim suite that pins the ring slot as VERIFY's only foreign read passes.
+#   1. LeanAccount.verify(): no time/block/gas/balance/transient/log/write/creation constructs;
+#   2. KeystoreValidator: the clock and block environment (block.* except CHAINID, gasleft) only behind
+#      `s.atExecution`, or in pruneExpired, which VERIFY never reaches. ERC-7562 bans TIMESTAMP in validation, so key
+#      expiry is enforced in execution (KeystoreValidator.executionContext);
+#      no transient storage, no creation; every SIGDATACOPY preceded in the same function by a SIGPARAM read;
+#   3. storage: the tests that pin every slot the keystore reads in VERIFY as storage associated with the sender
+#      (ERC-7562 STO-021) and the account's own state as one ERC-7201 namespace pass, not skip.
 # Run from anywhere: contracts/script/lint-verify.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 fail=0
-lint_bytecode() { # name
-  local code
-  code=$(forge inspect "$1" deployedBytecode)
-  python3 script/lint/lint_bytecode.py "$1" "$code" || return 1
-}
+strip() { sed -e 's://.*$::' "$1" | perl -0pe 's:/\*.*?\*/::gs'; }
 
-echo "== 1. bytecode"
-lint_bytecode VerifyLintTarget || fail=1
-lint_bytecode ERC1967Proxy || fail=1
-if lint_bytecode VerifyLintBadTarget >/dev/null 2>&1; then
-  echo "lint-verify: self-test FAILED: VerifyLintBadTarget passed the bytecode lint"
-  fail=1
-else
-  echo "lint-verify: self-test OK (VerifyLintBadTarget rejected)"
-fi
-
-echo "== 2. source"
-src=src/account/QueueBitVerify.sol
-# strip comments before matching
-code=$(sed -e 's://.*$::' "$src" | perl -0pe 's:/\*.*?\*/::gs')
-check() { # regex description
-  if grep -nE "$1" <<<"$code" >/dev/null; then
-    echo "lint-verify: $src: $2"
-    grep -nE "$1" <<<"$code" | sed 's/^/    /'
-    fail=1
-  fi
-}
-check 'block\.|tx\.gasprice|tx\.origin|gasleft\(|blockhash\(' "time/block/gas environment read"
-check '\.balance|selfbalance|balance\(' "BALANCE/SELFBALANCE"
-check 'tload|tstore|\bemit\b|sstore|create2?\(|selfdestruct' "transient storage, logs, writes or creation"
-check 'sigdatacopy' "SIGDATACOPY (halts on SECP256K1 entries; the hot path has none to copy)"
-check 'FrameParam\.(STATUS|EXECUTION_GAS_USED|STATE_GAS_USED)' "FRAMEPARAM STATUS/*_GAS_USED (halts for the running frame)"
-check 'RollingCap|IERC20|\.call\(|staticcall\(|delegatecall\(' "external calls or execution-side libraries"
-check 'recipientsOpen|RecipientMode|\.targets\b|vaultSigner|recoverySigner' "the walker must not read the recipient policy or the role signers"
-# RESOLVED_SIGNER only for entry 0, and only after entry 0's SCHEME is checked to be SECP256K1
-rs=$(grep -nE 'SigParam\.RESOLVED_SIGNER' <<<"$code" | cut -d: -f1 || true)
-sc=$(grep -nE 'sigparam\(0, SigParam\.SCHEME\) != SCHEME_SECP256K1' <<<"$code" | head -1 | cut -d: -f1 || true)
-for line in $rs; do
-  if ! grep -nE 'sigparam\(0, SigParam\.RESOLVED_SIGNER\)' <<<"$code" | grep -q "^$line:" || [ -z "$sc" ] || [ "$line" -le "$sc" ]; then
-    echo "lint-verify: $src:$line: RESOLVED_SIGNER read without a prior SECP256K1 SCHEME check of the same entry"
-    fail=1
-  fi
-done
-# The role surface runs by DELEGATECALL from the implementation's fallback, so it executes in the account's context
-# with the VERIFY frame's data chosen by the hot key: it must hold no APPROVE helper (no HegotaSupport) so that no
-# selector routed to it can approve a frame (the lint then only needs QueueBitVerify's own reachable code).
-roles=src/account/QueueBitAccountRoles.sol
-if grep -nE 'HegotaSupport|\bapprove\(Scope|QueueBitVerify' "$roles" >/dev/null; then
-  echo "lint-verify: $roles: the roles module must not inherit HegotaSupport / reach APPROVE"
-  fail=1
-fi
-[ $fail -eq 0 ] && echo "lint-verify: source OK (QueueBitVerify.sol; roles module holds no APPROVE helper)"
-
-echo "== 3. executed opcodes (forge test -vvv)"
-out=$(forge test --match-contract VerifyOpcodesTest -vvv 2>&1 || true)
-if grep -qE 'Suite result: ok\. 3 passed; 0 failed; 0 skipped' <<<"$out"; then
-  echo "lint-verify: VerifyOpcodesTest OK (3 branches traced)"
-else
-  echo "$out" | grep -E 'PASS|FAIL|SKIP|Suite result' || echo "$out" | tail -20
-  echo "lint-verify: VerifyOpcodesTest did not pass all 3 traced branches"
-  fail=1
-fi
-
-echo "== 4. I-2: recipient mode outside the VERIFY slots"
-layout=src/account/QueueBitAccountStorage.sol
-# `recipientsOpen` must be declared after the last pre-existing field (append-only, never in slots 0-2).
-lr=$(grep -nE '^\s*bool recipientsOpen;' "$layout" | cut -d: -f1 || true)
-lf=$(grep -nE 'mapping\(bytes32 hash => address consumer\) registeredFor;' "$layout" | cut -d: -f1 || true)
-if [ -z "$lr" ] || [ -z "$lf" ] || [ "$lr" -le "$lf" ]; then
-  echo "lint-verify: $layout: recipientsOpen must be appended after registeredFor (execution-only slot)"
-  fail=1
-fi
-out=$(forge test --match-path test/account/Audit.t.sol --match-test 'test_I2_' 2>&1 || true)
-if grep -qE 'Suite result: ok\. 2 passed' <<<"$out" && [ "$(grep -cE 'Suite result: ok\. 2 passed; 0 failed' <<<"$out")" -eq 2 ]; then
-  echo "lint-verify: I-2 OK (Open and Strict suites)"
-else
-  echo "$out" | grep -E 'PASS|FAIL|Suite result' || echo "$out" | tail -20
-  echo "lint-verify: Audit I-2 tests did not pass in both recipient modes"
-  fail=1
-fi
-
-# Initial tokens (`InitConfig.tokens`): what initialize writes for the list is never read by VERIFY, and VERIFY costs
-# the same gas with and without a list, in both recipient modes.
-out=$(forge test --match-path test/account/InitTokensAndPayers.t.sol --match-test 'test_I2_' 2>&1 || true)
-if [ "$(grep -cE 'Suite result: ok\. 1 passed; 0 failed' <<<"$out")" -eq 2 ]; then
-  echo "lint-verify: I-2 OK for InitConfig.tokens (Open and Strict suites, same VERIFY gas)"
-else
-  echo "$out" | grep -E 'PASS|FAIL|Suite result' || echo "$out" | tail -20
-  echo "lint-verify: InitConfig.tokens I-2 tests did not pass in both recipient modes"
-  fail=1
-fi
-
-echo "== 5. LeanPoolHotSigner VERIFY"
-hs=src/roles/LeanPoolHotSigner.sol
-vcode=$(sed -e 's://.*$::' "$hs" | perl -0pe 's:/\*.*?\*/::gs' | awk '/fallback\(\) external payable/{on=1} /function execute\(/{on=0} on')
+echo "== 1. LeanAccount.verify"
+acct=src/account/LeanAccount.sol
+vcode=$(strip "$acct" | awk '/function verify\(bytes calldata data\)/{on=1} on{print} on&&/^    }$/{exit}')
 if [ -z "$vcode" ]; then
-  echo "lint-verify: $hs: VERIFY entry (fallback) not found"
+  echo "lint-verify: $acct: verify() not found"
   fail=1
 fi
-hcheck() { # regex description
-  if grep -nE "$1" <<<"$vcode" >/dev/null; then
-    echo "lint-verify: $hs: $2"
-    grep -nE "$1" <<<"$vcode" | sed 's/^/    /'
-    fail=1
-  fi
-}
-hcheck 'block\.|tx\.gasprice|tx\.origin|gasleft\(|blockhash\(' "time/block/gas environment read in VERIFY"
-hcheck '\.balance|selfbalance|balance\(' "BALANCE/SELFBALANCE in VERIFY"
-hcheck 'tload|tstore|\bemit\b|sstore|create2?\(|selfdestruct' "transient storage, logs, writes or creation in VERIFY"
-hcheck '\.call\(|\.call\{|delegatecall\(|staticcall\(' "low-level calls in VERIFY (only the typed registry read is allowed)"
-hcheck 'RESOLVED_SIGNER' "RESOLVED_SIGNER read (entry 0 is ARBITRARY: halts)"
-calls=$(grep -cE '\)\.[a-zA-Z]+\(' <<<"$(grep -vE 'abi\.|LeanPoolMerkle\.|this\.' <<<"$vcode")" || true)
-if [ "$(grep -cE 'IDepsRegistryRing\(reg\)\.rootAt\(' <<<"$vcode")" -ne 1 ] || [ "$calls" -ne 1 ]; then
-  echo "lint-verify: $hs: VERIFY must make exactly one external call, IDepsRegistryRing(reg).rootAt (found $calls)"
+if grep -nE 'block\.|tx\.gasprice|tx\.origin|gasleft\(|blockhash\(|\.balance|selfbalance|tload|tstore|\bemit\b|sstore|create2?\(|selfdestruct' <<<"$vcode"; then
+  echo "lint-verify: $acct: a construct banned in VERIFY (above)"
   fail=1
 fi
-sd=$(grep -nE 'sigdatacopy\(' <<<"$vcode" | head -1 | cut -d: -f1 || true)
-for guard in 'SigParam\.SCHEME' 'SigParam\.MSG' 'SigParam\.SIGNATURE_LENGTH'; do
-  gl=$(grep -nE "$guard" <<<"$vcode" | head -1 | cut -d: -f1 || true)
-  if [ -z "$sd" ] || [ -z "$gl" ] || [ "$gl" -ge "$sd" ]; then
-    echo "lint-verify: $hs: SIGDATACOPY without a prior $guard check of entry 0"
+
+echo "== 2. KeystoreValidator"
+ks=src/account/KeystoreValidator.sol
+# pruneExpired is an ordinary call (anyone deletes an expired key), never reached from VERIFY: it may read the clock.
+kcode=$(strip "$ks" | perl -0pe 's/    function pruneExpired\(.*?\n    \}\n//s')
+while IFS= read -r line; do
+  [ -z "$line" ] && continue
+  if ! grep -q 's\.atExecution' <<<"$line"; then
+    echo "lint-verify: $ks: clock read outside an \`s.atExecution\` guard: $line"
     fail=1
   fi
+done < <(grep -nE 'block\.(timestamp|number|basefee|blobbasefee|coinbase|prevrandao|difficulty|gaslimit)|gasleft\(|blockhash\(' <<<"$kcode" || true)
+if grep -nE 'tload|tstore|create2?\(|selfdestruct|tx\.origin|tx\.gasprice' <<<"$kcode"; then
+  echo "lint-verify: $ks: a construct banned in VERIFY (above)"
+  fail=1
+fi
+# Each SIGDATACOPY (_sigdatacopy) must read the entry's SIGPARAM first, within the same function.
+unchecked=$(perl -0ne 'while (/function\s+(\w+)[^{]*\{(.*?)\n    \}/gs) { my ($n,$b)=($1,$2); my $c=index($b,"_sigdatacopy("); next if $c<0; my $p=index($b,"_sigparam("); print "$n\n" if $p<0 || $p>$c }' <<<"$kcode")
+for fn in $unchecked; do
+  echo "lint-verify: $ks: $fn copies a signature entry before reading its SIGPARAM"
+  fail=1
 done
-lp=$(grep -nE '^\s*address pqHotSigner;' "$layout" | cut -d: -f1 || true)
-if [ -z "$lp" ] || [ -z "$lr" ] || [ "$lp" -le "$lr" ]; then
-  echo "lint-verify: $layout: pqHotSigner must be appended after recipientsOpen (execution-only slot)"
-  fail=1
-fi
-out=$(forge test --match-path test/leanpool/LeanPoolHotPath.t.sol --match-test 'test_verify_readsOnlyItsOwnRingSlot' 2>&1 || true)
-if grep -qE 'Suite result: ok\. 1 passed; 0 failed' <<<"$out"; then
-  echo "lint-verify: LeanPoolHotSigner OK (source rules; VERIFY's only foreign read is its own ring slot)"
+
+echo "== 3. storage association (Forge)"
+out=$(forge test --match-path test/account/LeanAccount.t.sol \
+  --match-test 'test_keystoreSlotsAreAssociatedWithTheAccount|test_storageIsNamespaced' 2>&1 || true)
+if grep -qE 'Suite result: ok\. 2 passed; 0 failed' <<<"$out"; then
+  echo "lint-verify: storage association tests pass"
 else
   echo "$out" | grep -E 'PASS|FAIL|Suite result' || echo "$out" | tail -20
-  echo "lint-verify: LeanPoolHotSigner ring-slot test did not pass"
+  echo "lint-verify: the storage association tests did not pass"
   fail=1
 fi
 

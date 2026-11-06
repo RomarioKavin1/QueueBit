@@ -1,0 +1,11 @@
+{
+  "registry": "0x8139de17dd2a043f17b41999ee2ade17353f5da1",
+  "vk": "0x20510777cd52ec4714f0e645371f204c2a9052b3d4ad4061d2c8aab91d975d92",
+  "previousWallets": [
+    {
+      "address": "0xb44b1a1a19fe7959acfc58d4b91c29bf691d3bad",
+      "note": "no receive(): could not accept plain ETH; holds the first live v2 txs (blocks 358, 362)"
+    }
+  ],
+  "wallet": "0xf8299765149d1e0c47fff0441167cdc16c1543ed"
+}
