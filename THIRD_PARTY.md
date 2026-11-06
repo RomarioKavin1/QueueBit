@@ -359,9 +359,5 @@ WASM; no source is copied. Its vectors come from `@kevaundray/lean-pq` 0.7.0 (MI
 
 ## Web app fonts (`apps/web`)
 
-| Where in this repo | Origin | License | What was taken |
-|---|---|---|---|
-| `apps/web/app/fonts/DepartureMono-Regular.woff2` | [Departure Mono](https://github.com/rektdeckard/departure-mono) v1.500 release (`DepartureMono-1.500.zip`), © 2022–2024 Helena Zhang | SIL OFL 1.1 (`apps/web/app/fonts/DepartureMono-LICENSE.txt`) | The font file, unmodified, self-hosted for the wordmark, labels and controls |
-
-EB Garamond (SIL OFL 1.1) is fetched at build time by `next/font/google` and self-hosted in the build output; no
-font file is committed.
+EB Garamond, Exo 2 and Geist Mono (all SIL OFL 1.1) are fetched at build time by `next/font/google` and self-hosted in the
+build output; no font file is committed.

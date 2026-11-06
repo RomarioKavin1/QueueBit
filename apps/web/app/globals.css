@@ -74,7 +74,8 @@
   --color-danger: var(--red);
   --color-danger-bg: var(--red-wash);
   --font-serif: var(--font-garamond), "EB Garamond", Georgia, serif;
-  --font-mono: var(--font-departure), ui-monospace, "SF Mono", Menlo, monospace;
+  --font-mono: var(--font-label), ui-monospace, "SF Mono", Menlo, monospace;
+  --font-display: var(--font-exo), "Exo 2", system-ui, sans-serif;
   --radius-sm: 2px;
   --radius-md: 3px;
   --radius-lg: 4px;
@@ -165,7 +166,7 @@
     font-family: var(--font-mono);
     font-size: 12px;
     line-height: 1.2;
-    letter-spacing: 0.02em;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
   }
 }
@@ -191,5 +192,161 @@
   *::after {
     animation-duration: 0.001ms !important;
     transition-duration: 0.001ms !important;
+  }
+}
+
+/* ---- onboarding vignettes: small looping line drawings (reduced motion rests on the last frame) ---- */
+@keyframes qb-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes qb-draw-loop {
+  0% {
+    stroke-dashoffset: 1;
+  }
+  45%,
+  85% {
+    stroke-dashoffset: 0;
+  }
+  100% {
+    stroke-dashoffset: -1;
+  }
+}
+@keyframes qb-pop {
+  0%,
+  55% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  70%,
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes qb-scan {
+  0%,
+  100% {
+    transform: translateY(-26px);
+  }
+  50% {
+    transform: translateY(26px);
+  }
+}
+@keyframes qb-fill {
+  0%,
+  10% {
+    opacity: 0;
+  }
+  25%,
+  85% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes qb-shackle-close {
+  0%,
+  20% {
+    transform: translateY(-9px);
+  }
+  45%,
+  100% {
+    transform: none;
+  }
+}
+@keyframes qb-shackle-open {
+  0%,
+  30% {
+    transform: none;
+  }
+  60%,
+  100% {
+    transform: translateY(-9px);
+  }
+}
+@keyframes qb-travel {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0);
+  }
+  10% {
+    opacity: 1;
+  }
+  50% {
+    transform: translate(calc(var(--dx) / 2), calc(var(--dy) / 2 - 26px));
+  }
+  80% {
+    opacity: 1;
+    transform: translate(var(--dx), var(--dy));
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--dx), var(--dy));
+  }
+}
+@keyframes qb-dot {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0);
+  }
+  15% {
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+    transform: translate(var(--dx), var(--dy));
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--dx), var(--dy));
+  }
+}
+/* Only the animated parts pivot on themselves; static drawing keeps its SVG transforms as authored. */
+.vg :is(.vg-pop, .vg-pop-once, .vg-scan, .vg-fill, .vg-close, .vg-open, .vg-travel, .vg-dot) {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.vg-draw {
+  stroke-dasharray: 1;
+  animation: qb-draw 900ms var(--ease-out) both;
+}
+.vg-draw-loop {
+  stroke-dasharray: 1;
+  animation: qb-draw-loop 3.2s var(--ease-out) infinite both;
+}
+.vg-pop {
+  animation: qb-pop 3.2s var(--ease-out) infinite both;
+}
+.vg-pop-once {
+  animation: qb-pop 1.4s var(--ease-out) both;
+}
+.vg-scan {
+  animation: qb-scan 2.4s ease-in-out infinite;
+}
+.vg-fill {
+  animation: qb-fill 3.6s ease-out infinite both;
+}
+.vg-close {
+  animation: qb-shackle-close 2.8s var(--ease-out) infinite both;
+}
+.vg-open {
+  animation: qb-shackle-open 2.8s var(--ease-out) infinite both;
+}
+.vg-travel {
+  animation: qb-travel 2.6s cubic-bezier(0.65, 0, 0.35, 1) infinite both;
+}
+.vg-dot {
+  animation: qb-dot 2.4s cubic-bezier(0.65, 0, 0.35, 1) infinite both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .vg,
+  .vg * {
+    animation: none !important;
   }
 }

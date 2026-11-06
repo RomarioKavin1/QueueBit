@@ -105,7 +105,7 @@ function Drawing({ L }: { L: Layout }) {
             <text
               x={x + 4}
               y={y - 4}
-              fontFamily="var(--font-departure), monospace"
+              fontFamily="var(--font-label), monospace"
               fontSize={8}
               fill="var(--ink-3)"
               letterSpacing="0.04em"

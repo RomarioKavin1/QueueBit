@@ -138,7 +138,7 @@ function Drawing({ L, tc, step, reset }: { L: Layout; tc: number; step: number; 
       <text
         x={w.x + 10}
         y={w.y + 22}
-        fontFamily="var(--font-departure), monospace"
+        fontFamily="var(--font-label), monospace"
         fontSize={8.5}
         fill="var(--ink-3)"
         letterSpacing="0.04em"
@@ -260,7 +260,7 @@ function Drawing({ L, tc, step, reset }: { L: Layout; tc: number; step: number; 
             <text
               x={x + 14}
               y={y + 12.5}
-              fontFamily="var(--font-departure), monospace"
+              fontFamily="var(--font-label), monospace"
               fontSize={9}
               fill="var(--ink)"
               letterSpacing="0.03em"

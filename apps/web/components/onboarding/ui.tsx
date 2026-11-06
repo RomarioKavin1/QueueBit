@@ -6,21 +6,27 @@ import { Mark } from "@/components/paper/Logo";
 /**
  * Onboarding building blocks, mobile first: the PWA runs full screen on phones, so every screen is one column with
  * its action pinned to the bottom above the home indicator, 48px targets, and 16px inputs (iOS never zooms them).
- * The look is the manual's: paper, serif reading text, Departure Mono for labels and controls, square corners.
+ * The look is the manual's: paper, serif reading text, Geist Mono for labels and controls, square corners.
  */
 
-export function PixelArrow({ dir = "right", className = "" }: { dir?: "right" | "left"; className?: string }) {
+export function LineArrow({ dir = "right", className = "" }: { dir?: "right" | "left"; className?: string }) {
   return (
     <svg
-      width="12"
-      height="9"
-      viewBox="0 0 12 9"
+      width="14"
+      height="10"
+      viewBox="0 0 14 10"
       aria-hidden
-      shapeRendering="crispEdges"
       className={className}
       style={dir === "left" ? { transform: "scaleX(-1)" } : undefined}
     >
-      <path d="M0 4h9v1H0zM7 2h1v1H7zM8 3h1v1H8zM8 5h1v1H8zM7 6h1v1H7zM9 4h1v1H9z" fill="currentColor" />
+      <path
+        d="M1 5h11M8.5 1.5 12 5 8.5 8.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
@@ -51,13 +57,15 @@ export function Screen({
               onClick={onBack}
               className="mono-label -ml-2 flex h-11 items-center gap-2 px-2 text-ink-2 active:text-blue"
             >
-              <PixelArrow dir="left" />
+              <LineArrow dir="left" />
               Back
             </button>
           ) : (
             <span className="flex items-center gap-2.5">
-              <Mark size={17} />
-              <span className="mono-label text-[13px]">QueueBit</span>
+              <Mark size={24} />
+              <span className="font-display text-[1.25rem] leading-none font-light tracking-[-0.01em] text-blue">
+                QueueBit
+              </span>
             </span>
           )}
           <span className="ml-auto mono-label text-ink-3">
@@ -75,7 +83,7 @@ export function Screen({
       </header>
       <main className="mx-auto w-full max-w-[560px] flex-1 px-5 pt-8 pb-10">{children}</main>
       {actions && (
-        <footer className="sticky bottom-0 z-10 bg-paper/95 pb-[max(16px,env(safe-area-inset-bottom))] backdrop-blur-[2px]">
+        <footer className="sticky bottom-0 z-10 bg-paper pb-[max(16px,env(safe-area-inset-bottom))]">
           <div className="mx-auto flex max-w-[560px] flex-col gap-2 px-5 pt-3">{actions}</div>
         </footer>
       )}
@@ -113,7 +121,7 @@ export function Primary({
       ) : (
         <>
           {children}
-          <PixelArrow />
+          <LineArrow />
         </>
       )}
     </button>
@@ -144,12 +152,16 @@ export function TextButton({ children, ...rest }: ButtonHTMLAttributes<HTMLButto
   );
 }
 
-/** Three blinking pixels: work in progress, in the manual's voice. */
+/** Three blinking dots: work in progress. */
 export function Working() {
   return (
     <span aria-hidden className="inline-flex gap-[3px]">
       {[0, 1, 2].map((i) => (
-        <span key={i} className="size-[5px] animate-pulse bg-current" style={{ animationDelay: `${i * 160}ms` }} />
+        <span
+          key={i}
+          className="size-[5px] animate-pulse rounded-full bg-current"
+          style={{ animationDelay: `${i * 160}ms` }}
+        />
       ))}
     </span>
   );
@@ -177,7 +189,7 @@ export function Choices({
               <span className="mt-1 block text-[0.95rem] leading-[1.5] text-ink-2">{it.body}</span>
               {it.note && <span className="mt-1.5 block mono-label text-[12px] text-ink-3">{it.note}</span>}
             </span>
-            <PixelArrow className="mr-1 text-ink-3 group-active:text-blue" />
+            <LineArrow className="mr-1 text-ink-3 group-active:text-blue" />
           </button>
         </li>
       ))}

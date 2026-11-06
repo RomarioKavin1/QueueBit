@@ -24,12 +24,12 @@ import {
   Primary,
   Screen,
   Secondary,
-  Steps,
   TextButton,
   Title,
   WordGrid,
   Working,
 } from "./ui";
+import { VChoose, VConfirm, VMove, VPasskey, VPassword, VReady, VSource, VUnlock, VWords } from "./vignettes";
 
 /**
  * Onboarding, three ways in:
@@ -141,15 +141,14 @@ export function Onboarding() {
             </p>
           }
         >
-          <Title sub="Your account will be owned by a quantum-safe key. Choose how you want to start.">
-            Set up QueueBit
-          </Title>
+          <VChoose />
+          <Title sub="Three ways in. All end in an account a quantum computer can't forge.">Set up QueueBit</Title>
           <Choices
             items={[
               {
                 key: "passkey",
                 title: "Passkey",
-                body: "Face ID or fingerprint locks a new wallet. Nothing to write down now.",
+                body: "Face ID or fingerprint. Nothing to write down.",
                 onSelect: () => go({ id: "passkey" }),
                 disabled: prf === false,
                 ...(prf === false ? { note: "Not available on this device" } : {}),
@@ -157,13 +156,13 @@ export function Onboarding() {
               {
                 key: "phrase",
                 title: "Secret phrase",
-                body: "Write down 24 new words, or restore a QueueBit phrase you already have.",
+                body: "24 words on paper, or restore yours.",
                 onSelect: () => go({ id: "phrase-choose" }),
               },
               {
                 key: "migrate",
                 title: "Move from your current wallet",
-                body: "Bring the balances of MetaMask or another wallet across in one step.",
+                body: "Bring MetaMask or another wallet across.",
                 onSelect: () => go({ id: "lock", path: "migrate" }),
               },
             ]}
@@ -189,21 +188,20 @@ export function Onboarding() {
     case "phrase-choose":
       return (
         <Screen onBack={back} method="Secret phrase">
-          <Title sub="A secret phrase is 24 words that can rebuild every key of your wallet on any device.">
-            New phrase, or one you have?
-          </Title>
+          <VWords />
+          <Title sub="24 words that rebuild your wallet anywhere.">New phrase, or one you have?</Title>
           <Choices
             items={[
               {
                 key: "new",
                 title: "Create a new phrase",
-                body: "We show you 24 words to write down, then check three of them.",
+                body: "Write them down, then check three.",
                 onSelect: () => go({ id: "lock", path: "phrase-new" }),
               },
               {
                 key: "restore",
                 title: "Restore my QueueBit phrase",
-                body: "Type or paste the 24 words of a QueueBit wallet you set up before.",
+                body: "Paste the 24 words you saved.",
                 onSelect: () => go({ id: "restore" }),
               },
             ]}
@@ -227,11 +225,7 @@ export function Onboarding() {
           {...meta}
           prf={prf}
           onBack={canBack ? back : undefined}
-          intro={
-            path === "migrate"
-              ? "First, a new QueueBit wallet to move into. Lock it with a passkey, or a password if this device has none."
-              : "This locks the wallet on this device. Your words are the backup; this is how you open it day to day."
-          }
+          intro={path === "migrate" ? "First, a new wallet to move into." : "How you open the wallet on this phone."}
           onLocked={async (pw, method) => {
             if (path === "phrase-restore") {
               await engine().call("keyring:import", { mnemonic: screen.mnemonic!, password: pw });
@@ -258,9 +252,7 @@ export function Onboarding() {
           onBack={screen.mode === "backup" ? () => commit({ id: "ready" }) : undefined}
           actions={<WordsAck onNext={() => go({ id: "confirm", words: screen.words, mode: screen.mode })} />}
         >
-          <Title sub="Write them on paper, in order. Anyone with these words controls your wallet; QueueBit can't recover them for you.">
-            Your 24 words
-          </Title>
+          <Title sub="On paper, in order. Whoever has them owns the wallet.">Your 24 words</Title>
           <WordGrid words={screen.words} />
         </Screen>
       );
@@ -413,16 +405,9 @@ function LockStep({
         )
       }
     >
-      <Title sub={intro}>{mode === "passkey" ? "Lock it with a passkey" : "Choose a password"}</Title>
-      {mode === "passkey" ? (
-        <Steps
-          items={[
-            "Your phone asks for Face ID, fingerprint or your screen lock.",
-            "It makes a passkey for QueueBit that never leaves this device's secure chip.",
-            "Opening the wallet later is the same gesture. No password to remember.",
-          ]}
-        />
-      ) : (
+      {mode === "passkey" ? <VPasskey /> : <VPassword />}
+      <Title sub={intro}>{mode === "passkey" ? "Lock it with your face or finger" : "Choose a password"}</Title>
+      {mode === "passkey" ? null : (
         <form className="space-y-5" onSubmit={(e) => e.preventDefault()}>
           <Field
             label="Password"
@@ -488,14 +473,8 @@ function PasskeyCreate({
         </>
       }
     >
-      <Title sub="A new wallet, opened with the same gesture that unlocks your phone.">Create a passkey</Title>
-      <Steps
-        items={[
-          "Your phone asks for Face ID, fingerprint or your screen lock.",
-          "The passkey locks the quantum-safe key that owns your account. It never leaves this device.",
-          "Your 24 backup words come later, from the checklist, when you have pen and paper.",
-        ]}
-      />
+      <VPasskey />
+      <Title sub="The gesture that unlocks your phone opens your wallet. Back up words later.">Create a passkey</Title>
       {err && <Notice tone="error">{errText(err)}</Notice>}
     </Screen>
   );
@@ -542,7 +521,8 @@ function Unlock({ onDone }: { onDone: (secret: string) => void }) {
         )
       }
     >
-      <Title sub="The wallet locks when the app closes. Your keys stay encrypted on this device.">Welcome back</Title>
+      <VUnlock />
+      <Title sub="Your keys stay encrypted on this phone.">Welcome back</Title>
       {mode === "password" && (
         <Field
           label="Password"
@@ -596,9 +576,7 @@ function Restore({ onBack, onNext }: { onBack: () => void; onNext: (mnemonic: st
         </Primary>
       }
     >
-      <Title sub="The 24 words you wrote down when you set QueueBit up. They rebuild the same account.">
-        Restore your phrase
-      </Title>
+      <Title sub="The same words bring back the same account.">Restore your phrase</Title>
       <Area
         label={`Secret phrase · ${words.length} / 24`}
         value={text}
@@ -683,7 +661,8 @@ function ConfirmWords({
         </Primary>
       }
     >
-      <Title sub="Type these three words from your paper, so we know the copy is right.">Check three words</Title>
+      <VConfirm />
+      <Title sub="From your paper.">Check three words</Title>
       <div className="space-y-5">
         {picks.map((p, i) => (
           <Field
@@ -748,9 +727,8 @@ function BackupAuth({
         )
       }
     >
-      <Title sub="Find pen and paper and a place nobody can see your screen. The words rebuild your wallet anywhere.">
-        Back up your 24 words
-      </Title>
+      <VWords />
+      <Title sub="Pen, paper, and nobody looking.">Back up your 24 words</Title>
       {method === "password" && !secret && (
         <Field
           label="Password"
@@ -785,7 +763,8 @@ function SourceChoice({
   const w = wallets?.[0];
   return (
     <Screen method="Move in" step={2} of={4}>
-      <Title sub="Your new wallet is ready. Now tell QueueBit which wallet to move from.">Where are your funds?</Title>
+      <VSource />
+      <Title sub="Your new wallet is ready. Which one do we move from?">Where are your funds?</Title>
       <Choices
         items={[
           ...(w
@@ -793,7 +772,7 @@ function SourceChoice({
                 {
                   key: "wallet",
                   title: `Connect ${w.name}`,
-                  body: "It signs the move itself. Nothing to paste.",
+                  body: "It signs the move. Nothing to paste.",
                   onSelect: async () => {
                     setBusy(true);
                     setErr(null);
@@ -812,13 +791,13 @@ function SourceChoice({
           {
             key: "phrase",
             title: "Paste its secret phrase",
-            body: "The 12 or 24 words of MetaMask or another wallet. Used once for the move, never stored.",
+            body: "12 or 24 words. Used once, never stored.",
             onSelect: onPhrase,
           },
           {
             key: "key",
             title: "Paste its private key",
-            body: "The key of one address (0x + 64 characters). Used once, never stored.",
+            body: "0x + 64 characters. Used once, never stored.",
             onSelect: onKey,
           },
         ]}
@@ -875,9 +854,7 @@ function SourcePhrase({
         </Primary>
       }
     >
-      <Title sub="QueueBit uses it once, in this tab, to sign the move. It is never saved or sent anywhere.">
-        Your old wallet&rsquo;s phrase
-      </Title>
+      <Title sub="Used once to sign the move. Never stored.">Your old wallet&rsquo;s phrase</Title>
       <Area
         label={`Secret phrase · ${words.length} words`}
         value={text}
@@ -939,9 +916,7 @@ function SourceKey({
         </Primary>
       }
     >
-      <Title sub="QueueBit uses it once, in this tab, to sign the move. It is never saved or sent anywhere.">
-        Your old wallet&rsquo;s private key
-      </Title>
+      <Title sub="Used once to sign the move. Never stored.">Your old wallet&rsquo;s private key</Title>
       <Area
         label="Private key"
         value={text}
@@ -1009,7 +984,8 @@ function MovePreview({
         </Primary>
       }
     >
-      <Title sub="Check what will move. Nothing happens until you confirm.">What we found</Title>
+      <VMove />
+      <Title sub="Nothing moves until you confirm.">What we found</Title>
       {!p && !err && (
         <p className="flex items-center gap-3 mono-label text-ink-3">
           <Working /> Reading {short(source.address)}
@@ -1041,7 +1017,6 @@ function MovePreview({
               <span className="block text-[0.9rem] text-ink-2">Your quantum-safe account. The move creates it.</span>
             </p>
           </div>
-          <Steps items={p.steps} />
           <p className="text-[0.92rem] leading-[1.6] text-ink-2">
             {source.kind === "wallet"
               ? `Your wallet asks you to confirm ${txCount} transaction${txCount > 1 ? "s" : ""}. A little ETH stays behind for the last fee.`
@@ -1108,13 +1083,8 @@ function Moving({ source, onDone, onBack }: { source: Source; onDone: () => void
         ) : undefined
       }
     >
-      <Title
-        sub={
-          done
-            ? "Everything arrived in your quantum-safe account. The old wallet is empty."
-            : "Keep this screen open until every step is done."
-        }
-      >
+      <VMove done={done} />
+      <Title sub={done ? "Everything arrived. The old wallet is empty." : "Keep this screen open."}>
         {done ? "Moved" : "Moving your wallet"}
       </Title>
       <ol className="border-t border-ink">
@@ -1206,7 +1176,8 @@ function Ready({ net, onBackup }: { net?: NetworkInfo; onBackup: () => void }) {
         ) : undefined
       }
     >
-      <Title sub="Owned by a quantum-safe key, on the QueueBit test network.">Your account</Title>
+      <VReady />
+      <Title sub="Owned by a quantum-safe key. Test network.">Your account</Title>
       {!status && !err && (
         <p className="flex items-center gap-3 mono-label text-ink-3">
           <Working /> Reading your account
@@ -1247,7 +1218,7 @@ function Ready({ net, onBackup }: { net?: NetworkInfo; onBackup: () => void }) {
               {
                 key: "backup",
                 title: "Back up your 24 words",
-                body: "Without them, losing this phone means losing the wallet.",
+                body: "Lose the phone without them, lose the wallet.",
                 onSelect: onBackup,
               },
             ]}

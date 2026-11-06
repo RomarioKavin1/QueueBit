@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-06T20:42:18+00:00",
+  "generatedAt": "2026-11-06T21:23:27+00:00",
   "title": "Design System: QueueBit",
   "extensions": {
     "colorMeta": {
@@ -17,6 +17,36 @@
           "oklch(0.75 0 0)",
           "oklch(0.87 0 0)",
           "oklch(0.95 0 0)"
+        ]
+      },
+      "paper-2": {
+        "role": "neutral",
+        "displayName": "Paper 2",
+        "canonical": "oklch(0.97 0.006 265)",
+        "tonalRamp": [
+          "oklch(0.2 0.006 265)",
+          "oklch(0.32 0.006 265)",
+          "oklch(0.45 0.006 265)",
+          "oklch(0.58 0.006 265)",
+          "oklch(0.7 0.006 265)",
+          "oklch(0.82 0.006 265)",
+          "oklch(0.92 0.006 265)",
+          "oklch(0.97 0.006 265)"
+        ]
+      },
+      "paper-3": {
+        "role": "neutral",
+        "displayName": "Paper 3",
+        "canonical": "oklch(0.945 0.012 265)",
+        "tonalRamp": [
+          "oklch(0.2 0.01 265)",
+          "oklch(0.32 0.012 265)",
+          "oklch(0.45 0.012 265)",
+          "oklch(0.58 0.012 265)",
+          "oklch(0.7 0.012 265)",
+          "oklch(0.82 0.012 265)",
+          "oklch(0.9 0.012 265)",
+          "oklch(0.945 0.012 265)"
         ]
       },
       "ink": {
@@ -138,6 +168,21 @@
           "oklch(0.8 0.11 266)",
           "oklch(0.925 0.05 266)",
           "oklch(0.965 0.022 266)"
+        ]
+      },
+      "blue-wash": {
+        "role": "primary",
+        "displayName": "Blue Wash",
+        "canonical": "oklch(0.95 0.03 266)",
+        "tonalRamp": [
+          "oklch(0.3 0.17 265)",
+          "oklch(0.4 0.24 265)",
+          "oklch(0.5058 0.2886 264.84)",
+          "oklch(0.66 0.18 266)",
+          "oklch(0.68 0.17 266)",
+          "oklch(0.8 0.11 266)",
+          "oklch(0.925 0.05 266)",
+          "oklch(0.95 0.03 266)"
         ]
       },
       "blue-t1": {
@@ -279,11 +324,19 @@
     "typographyMeta": {
       "wordmark": {
         "displayName": "Wordmark",
-        "purpose": "The pixel QUEUEBIT title in manual blue, uppercase; once per surface."
+        "purpose": "QUEUEBIT in Geist Mono Light, uppercase, tight tracking, manual blue; once per surface."
+      },
+      "screen-title": {
+        "displayName": "Screen Title",
+        "purpose": "The one heading of an app screen."
+      },
+      "screen-sub": {
+        "displayName": "Screen Subtitle",
+        "purpose": "The one line under a screen title, in ink-2."
       },
       "headline": {
         "displayName": "Headline",
-        "purpose": "Section headings, after a blue mono section number."
+        "purpose": "Landing section headings after a blue mono number; choice-row titles."
       },
       "lede": {
         "displayName": "Lede",
@@ -291,35 +344,43 @@
       },
       "body": {
         "displayName": "Body",
-        "purpose": "All running text, justified and hyphenated."
+        "purpose": "All running text on the landing, justified and hyphenated."
       },
       "note": {
         "displayName": "Note",
-        "purpose": "Table explanations, references, legend glosses, in ink-2."
+        "purpose": "Explanations, references, glosses, hints and errors."
       },
       "label": {
         "displayName": "Label",
-        "purpose": "Uppercase mono for controls, navigation, table and algorithm headers, footer."
+        "purpose": "Uppercase Geist Mono at 0.06em for controls, navigation, field labels, step counters, headers, footer."
       },
       "section-number": {
         "displayName": "Section Number",
-        "purpose": "Zero-padded 01 to 06 before headings, blue."
+        "purpose": "Zero-padded blue mono numbers before headings, in choice rows and steps."
       },
       "fig-tag": {
         "displayName": "Figure Tag",
-        "purpose": "Vertical FIG_00n / [ TITLE ] / ALG_001 tags on panels, ink-3."
+        "purpose": "Vertical FIG and title tags on plates."
       },
       "plate-label": {
         "displayName": "Plate Label",
-        "purpose": "SVG labels inside plates, with paper knockout and leaders."
+        "purpose": "Knocked-out labels inside plates."
       },
       "code": {
         "displayName": "Code",
-        "purpose": "Algorithm box pseudocode (13px on phones)."
+        "purpose": "Algorithm box pseudocode."
       },
       "readout": {
         "displayName": "Readout",
         "purpose": "Fixed-digit counters inside plates."
+      },
+      "field": {
+        "displayName": "Field",
+        "purpose": "Text inputs at 16px so iOS never zooms."
+      },
+      "word": {
+        "displayName": "Word",
+        "purpose": "Recovery words and addresses, which must be copied exactly."
       }
     },
     "shadows": [
@@ -333,7 +394,12 @@
       {
         "name": "ease-out",
         "value": "cubic-bezier(0.22, 1, 0.36, 1)",
-        "purpose": "CSS state changes: Start hover arrow, readout digit drop."
+        "purpose": "CSS state changes and vignette arrivals: Start arrow, readout digit, draw, pop, fill, shackle."
+      },
+      {
+        "name": "ease-in-out-travel",
+        "value": "cubic-bezier(0.65, 0, 0.35, 1)",
+        "purpose": "Vignette travel: a coin on an arc, dots along a path."
       },
       {
         "name": "plate-arrival",
@@ -348,7 +414,7 @@
       {
         "name": "button-colour",
         "value": "200ms",
-        "purpose": "Start control border/fill/text colour change on hover."
+        "purpose": "Start control colour change on hover."
       },
       {
         "name": "digit-in",
@@ -356,12 +422,32 @@
         "purpose": "A readout digit dropping 35% into its cell."
       },
       {
+        "name": "vignette-draw",
+        "value": "900ms once; 3.2s loop (draw, hold, clear)",
+        "purpose": "A line drawing itself."
+      },
+      {
+        "name": "vignette-loop",
+        "value": "2.4s to 3.6s cycles, staggers 140 to 800ms",
+        "purpose": "Pop, scan, fill, shackle close/open, travel, dot loops."
+      },
+      {
         "name": "plate-clock",
         "value": "starts at 15% visible, freezes off screen, frame step max 50ms, loops 5 to 11s",
         "purpose": "One clock per plate."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "plates: explanatory still; vignettes: animation none, resting state",
+        "purpose": "Never a blank frame."
       }
     ],
     "breakpoints": [
+      {
+        "name": "word-grid",
+        "value": "480px",
+        "purpose": "Word grid goes from two to three columns."
+      },
       {
         "name": "sm",
         "value": "640px",
@@ -384,49 +470,121 @@
       "leader": "0.7",
       "arrowhead": "filled triangle, manual blue or ink-3"
     },
-    "ditherBand": {
-      "glyph": "U+2591 in Departure Mono",
-      "size": "12px",
-      "color": "ink-3 at 60% opacity",
+    "dottedRule": {
+      "dot": "radial 0.8px in ink-3",
+      "pitch": "4px",
+      "height": "7px",
+      "opacity": 0.5,
       "placements": [
-        "top bar",
+        "landing top bar",
         "under hero",
         "footer"
       ]
     },
+    "mark": {
+      "grid": "24 x 28",
+      "stroke": "1.6, round join",
+      "outline": "blue stroke, blue-t1 body, blue keyhole",
+      "solid": "blue body, paper keyhole; top bars at 21px; app icons on #fbfbfb",
+      "source": "apps/web/components/paper/Logo.tsx"
+    },
+    "vignette": {
+      "height": "132px",
+      "drawingHeight": "104px",
+      "viewBox": "0 0 240 110",
+      "strokes": "1 to 1.8, round caps",
+      "fills": "blue-t1 to blue-t3"
+    },
     "scope": {
       "adopted": [
-        "apps/web"
+        "apps/web (landing /, onboarding /start)"
       ],
       "notAdopted": [
         "apps/extension"
       ]
-    }
+    },
+    "lineage": "Palette and text layout follow makingsoftware.com at the user's request (2026-11-07); type, mark, figures, vignettes and copy are QueueBit's own. Pixel type and the bitmap mark were rejected by the user on 2026-11-07."
   },
   "components": [
     {
       "name": "Start Control",
       "kind": "button",
       "refersTo": "button-start",
-      "description": "The single action: a typed command in a ruled box, filling blue on hover.",
-      "html": "<a class=\"ds-start\" href=\"#\">Start with a passkey <svg width=\"12\" height=\"9\" viewBox=\"0 0 12 9\" shape-rendering=\"crispEdges\" aria-hidden=\"true\"><path d=\"M0 4h9v1H0zM7 2h1v1H7zM8 3h1v1H8zM8 5h1v1H8zM7 6h1v1H7zM9 4h1v1H9z\" fill=\"currentColor\"/></svg></a>",
-      "css": ".ds-start { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px; font-family: var(--font-departure), ui-monospace, monospace; font-size: 13px; line-height: 1.2; letter-spacing: 0.02em; text-transform: uppercase; color: var(--ink, #171717); background: var(--paper, #fbfbfb); border: 1px solid var(--ink, #171717); border-radius: 0; text-decoration: none; transition: background-color 200ms, border-color 200ms, color 200ms; } .ds-start svg { transition: transform 300ms cubic-bezier(0.22, 1, 0.36, 1); } .ds-start:hover { background: var(--blue, oklch(0.5058 0.2886 264.84)); border-color: var(--blue, oklch(0.5058 0.2886 264.84)); color: var(--on-blue, #fbfbfb); } .ds-start:hover svg { transform: translateX(2px); } .ds-start:focus-visible { outline: 2px solid transparent; box-shadow: 0 0 0 2px #fbfbfb, 0 0 0 3.5px oklch(0.5058 0.2886 264.84); }"
+      "description": "The landing's single action: a typed command in a ruled box, filling blue on hover.",
+      "html": "<a class=\"ds-start\" href=\"#\">Start with a passkey <svg width=\"14\" height=\"10\" viewBox=\"0 0 14 10\" aria-hidden=\"true\"><path d=\"M1 5h11M8.5 1.5 12 5l-3.5 3.5\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg></a>",
+      "css": ".ds-start { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px; font-family: var(--font-label), 'Geist Mono', ui-monospace, monospace; font-size: 13px; line-height: 1.2; letter-spacing: 0.06em; text-transform: uppercase; color: #171717; background: #fbfbfb; border: 1px solid #171717; border-radius: 0; text-decoration: none; transition: background-color 200ms, border-color 200ms, color 200ms; } .ds-start svg { transition: transform 300ms cubic-bezier(0.22, 1, 0.36, 1); } .ds-start:hover { background: oklch(0.5058 0.2886 264.84); border-color: oklch(0.5058 0.2886 264.84); color: #fbfbfb; } .ds-start:hover svg { transform: translateX(2px); } .ds-start:focus-visible { outline: 2px solid transparent; box-shadow: 0 0 0 2px #fbfbfb, 0 0 0 3.5px oklch(0.5058 0.2886 264.84); }"
     },
     {
-      "name": "Start Control, Small",
+      "name": "App Primary Button",
       "kind": "button",
-      "refersTo": "button-start-sm",
-      "description": "The top bar's Start.",
-      "html": "<a class=\"ds-start-sm\" href=\"#\">Start <svg width=\"12\" height=\"9\" viewBox=\"0 0 12 9\" shape-rendering=\"crispEdges\" aria-hidden=\"true\"><path d=\"M0 4h9v1H0zM7 2h1v1H7zM8 3h1v1H8zM8 5h1v1H8zM7 6h1v1H7zM9 4h1v1H9z\" fill=\"currentColor\"/></svg></a>",
-      "css": ".ds-start-sm { display: inline-flex; align-items: center; gap: 8px; height: 28px; padding: 0 10px; font-family: var(--font-departure), ui-monospace, monospace; font-size: 12px; letter-spacing: 0.02em; text-transform: uppercase; color: #171717; background: #fbfbfb; border: 1px solid #171717; border-radius: 0; text-decoration: none; transition: background-color 200ms, border-color 200ms, color 200ms; } .ds-start-sm:hover { background: oklch(0.5058 0.2886 264.84); border-color: oklch(0.5058 0.2886 264.84); color: #fbfbfb; } .ds-start-sm:focus-visible { outline: 2px solid transparent; box-shadow: 0 0 0 2px #fbfbfb, 0 0 0 3.5px oklch(0.5058 0.2886 264.84); }"
+      "refersTo": "button-app-primary",
+      "description": "The pinned action of an app screen, resting filled because touch has no hover.",
+      "html": "<button class=\"ds-app-primary\" type=\"button\">Create passkey <svg width=\"14\" height=\"10\" viewBox=\"0 0 14 10\" aria-hidden=\"true\"><path d=\"M1 5h11M8.5 1.5 12 5l-3.5 3.5\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg></button>",
+      "css": ".ds-app-primary { display: flex; width: 100%; height: 48px; align-items: center; justify-content: center; gap: 10px; font-family: var(--font-label), 'Geist Mono', ui-monospace, monospace; font-size: 13px; line-height: 1.2; letter-spacing: 0.06em; text-transform: uppercase; color: #fbfbfb; background: oklch(0.5058 0.2886 264.84); border: 1px solid oklch(0.5058 0.2886 264.84); border-radius: 0; transition: filter 150ms; } .ds-app-primary:active { filter: brightness(0.9); } .ds-app-primary:disabled { background: oklch(0.945 0.012 265); border-color: oklch(0.86 0.005 265); color: oklch(0 0 0 / 0.5); } .ds-app-primary:focus-visible { outline: 2px solid transparent; box-shadow: 0 0 0 2px #fbfbfb, 0 0 0 3.5px oklch(0.5058 0.2886 264.84); }"
     },
     {
-      "name": "Top Bar",
+      "name": "App Secondary Button",
+      "kind": "button",
+      "refersTo": "button-app-secondary",
+      "description": "A ruled paper button under the primary.",
+      "html": "<button class=\"ds-app-secondary\" type=\"button\">I have a phrase</button>",
+      "css": ".ds-app-secondary { display: flex; width: 100%; height: 48px; align-items: center; justify-content: center; font-family: var(--font-label), 'Geist Mono', ui-monospace, monospace; font-size: 13px; line-height: 1.2; letter-spacing: 0.06em; text-transform: uppercase; color: #171717; background: #fbfbfb; border: 1px solid #171717; border-radius: 0; } .ds-app-secondary:active { background: oklch(0.945 0.012 265); } .ds-app-secondary:focus-visible { outline: 2px solid transparent; box-shadow: 0 0 0 2px #fbfbfb, 0 0 0 3.5px oklch(0.5058 0.2886 264.84); }"
+    },
+    {
+      "name": "Landing Top Bar",
       "kind": "nav",
       "refersTo": "top-bar",
-      "description": "Pixel mark and QUEUEBIT, a dither band, mono nav, Start.",
-      "html": "<header class=\"ds-bar\"><span class=\"ds-bar-brand\"><svg width=\"15\" height=\"17\" viewBox=\"0 0 13 15\" shape-rendering=\"crispEdges\" aria-hidden=\"true\"><path fill=\"oklch(0.5058 0.2886 264.84)\" d=\"M6 0h1v1H6zM5 1h3v1H5zM4 2h5v1H4zM3 3h7v1H3zM2 4h9v1H2zM1 5h11v1H1zM1 6h4v1H1zM8 6h4v1H8zM0 7h4v2H0zM9 7h4v2H9zM0 9h5v2H0zM8 9h5v2H8zM0 11h4v1H0zM9 11h4v1H9zM1 12h3v1H1zM9 12h3v1H9zM2 13h9v1H2zM4 14h5v1H4z\"/></svg>QueueBit</span><span class=\"ds-bar-band\" aria-hidden=\"true\">░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░</span><nav class=\"ds-bar-nav\"><a href=\"#\">Problem</a><a href=\"#\">Account</a><a href=\"#\">Owner key</a></nav></header>",
-      "css": ".ds-bar { display: flex; align-items: center; gap: 20px; height: 48px; padding: 0 40px; background: #fbfbfb; } .ds-bar-brand { display: flex; align-items: center; gap: 10px; flex-shrink: 0; font-family: var(--font-departure), ui-monospace, monospace; font-size: 13px; letter-spacing: 0.02em; text-transform: uppercase; color: #171717; } .ds-bar-band { flex: 1; min-width: 32px; overflow: hidden; white-space: nowrap; font-family: var(--font-departure), ui-monospace, monospace; font-size: 12px; line-height: 1; color: oklch(0 0 0 / 0.5); opacity: 0.6; } .ds-bar-nav { display: flex; gap: 20px; flex-shrink: 0; } .ds-bar-nav a { font-family: var(--font-departure), ui-monospace, monospace; font-size: 12px; letter-spacing: 0.02em; text-transform: uppercase; color: oklch(0 0 0 / 0.5); text-decoration: none; } .ds-bar-nav a:hover { color: oklch(0.5058 0.2886 264.84); } .ds-bar-nav a:focus-visible { outline: 2px solid transparent; box-shadow: 0 0 0 2px #fbfbfb, 0 0 0 3.5px oklch(0.5058 0.2886 264.84); }"
+      "description": "Solid mark and QUEUEBIT, a dotted rule, mono nav, Start.",
+      "html": "<header class=\"ds-bar\"><span class=\"ds-bar-brand\"><svg width=\"18\" height=\"21\" viewBox=\"0 0 24 28\" aria-hidden=\"true\"><path d=\"M12 1.6C12 1.6 3.2 11.6 3.2 17.6a8.8 8.8 0 0 0 17.6 0C20.8 11.6 12 1.6 12 1.6Z\" fill=\"oklch(0.5058 0.2886 264.84)\" stroke=\"oklch(0.5058 0.2886 264.84)\" stroke-width=\"1.6\" stroke-linejoin=\"round\"/><path d=\"M12 13.9a2.55 2.55 0 0 1 1.38 4.7l.92 4.1h-4.6l.92-4.1A2.55 2.55 0 0 1 12 13.9Z\" fill=\"#fbfbfb\"/></svg>QueueBit</span><span class=\"ds-bar-dots\" aria-hidden=\"true\"></span><nav class=\"ds-bar-nav\"><a href=\"#\">Problem</a><a href=\"#\">Account</a><a href=\"#\">Owner key</a></nav></header>",
+      "css": ".ds-bar { display: flex; align-items: center; gap: 20px; height: 48px; padding: 0 20px; background: #fbfbfb; } .ds-bar-brand { display: flex; align-items: center; gap: 10px; font-family: var(--font-label), 'Geist Mono', ui-monospace, monospace; font-size: 13px; line-height: 1.2; letter-spacing: 0.06em; text-transform: uppercase; color: #171717; } .ds-bar-dots { flex: 1; height: 7px; background-image: radial-gradient(circle, oklch(0 0 0 / 0.5) 0.8px, transparent 1px); background-size: 4px 4px; opacity: 0.5; } .ds-bar-nav { display: flex; gap: 20px; } .ds-bar-nav a { font-family: var(--font-label), 'Geist Mono', ui-monospace, monospace; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: oklch(0 0 0 / 0.5); text-decoration: none; } .ds-bar-nav a:hover { color: oklch(0.5058 0.2886 264.84); } .ds-bar-nav a:focus-visible { outline: 2px solid transparent; box-shadow: 0 0 0 2px #fbfbfb, 0 0 0 3.5px oklch(0.5058 0.2886 264.84); }"
+    },
+    {
+      "name": "Screen Top Bar",
+      "kind": "nav",
+      "refersTo": "app-top-bar",
+      "description": "Back, method and step, with 3px progress segments.",
+      "html": "<header class=\"ds-screen-bar\"><div class=\"ds-screen-row\"><button type=\"button\" class=\"ds-back\"><svg width=\"14\" height=\"10\" viewBox=\"0 0 14 10\" aria-hidden=\"true\"><path d=\"M13 5H2M5.5 1.5 2 5l3.5 3.5\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg>Back</button><span class=\"ds-step\">Passkey · 2 / 4</span></div><div class=\"ds-progress\" aria-hidden=\"true\"><span class=\"on\"></span><span class=\"on\"></span><span></span><span></span></div></header>",
+      "css": ".ds-screen-bar { background: #fbfbfb; max-width: 560px; } .ds-screen-row { display: flex; align-items: center; height: 56px; padding: 0 20px; } .ds-back { display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 8px; margin-left: -8px; background: none; border: 0; font-family: var(--font-label), 'Geist Mono', ui-monospace, monospace; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: oklch(0 0 0 / 0.62); } .ds-back:active { color: oklch(0.5058 0.2886 264.84); } .ds-back:focus-visible { outline: 2px solid transparent; box-shadow: 0 0 0 2px #fbfbfb, 0 0 0 3.5px oklch(0.5058 0.2886 264.84); } .ds-step { margin-left: auto; font-family: var(--font-label), 'Geist Mono', ui-monospace, monospace; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: oklch(0 0 0 / 0.5); } .ds-progress { display: flex; gap: 4px; padding: 0 20px; } .ds-progress span { flex: 1; height: 3px; background: oklch(0.92 0.004 265); } .ds-progress span.on { background: oklch(0.5058 0.2886 264.84); }"
+    },
+    {
+      "name": "Vignette",
+      "kind": "custom",
+      "refersTo": "vignette",
+      "description": "The 132px dot-grid panel that opens an app screen, with one looping line drawing (here a padlock closing).",
+      "html": "<div class=\"ds-vg\" role=\"img\" aria-label=\"A padlock closes; four dots stand for the typed password.\"><svg viewBox=\"0 0 240 110\" height=\"104\"><g class=\"ds-vg-shackle\"><path d=\"M108 52v-12a12 12 0 0 1 24 0v12\" fill=\"none\" stroke=\"oklch(0.5058 0.2886 264.84)\" stroke-width=\"1.6\" stroke-linecap=\"round\"/></g><rect x=\"98\" y=\"52\" width=\"44\" height=\"34\" fill=\"oklch(0.965 0.022 266)\" stroke=\"oklch(0.5058 0.2886 264.84)\" stroke-width=\"1.2\"/><circle class=\"ds-vg-dot\" cx=\"108\" cy=\"70\" r=\"2.4\" fill=\"oklch(0.5058 0.2886 264.84)\"/><circle class=\"ds-vg-dot\" style=\"animation-delay:180ms\" cx=\"116\" cy=\"70\" r=\"2.4\" fill=\"oklch(0.5058 0.2886 264.84)\"/><circle class=\"ds-vg-dot\" style=\"animation-delay:360ms\" cx=\"124\" cy=\"70\" r=\"2.4\" fill=\"oklch(0.5058 0.2886 264.84)\"/><circle class=\"ds-vg-dot\" style=\"animation-delay:540ms\" cx=\"132\" cy=\"70\" r=\"2.4\" fill=\"oklch(0.5058 0.2886 264.84)\"/></svg></div>",
+      "css": ".ds-vg { display: grid; place-items: center; height: 132px; background-color: #fbfbfb; background-image: radial-gradient(circle, oklch(0 0 0 / 0.1) 0.7px, transparent 0.9px); background-size: 4px 4px; background-position: 2px 2px; outline: 1px dashed oklch(0 0 0 / 0.06); outline-offset: -1px; } .ds-vg svg { overflow: visible; } .ds-vg-shackle { animation: ds-close 2.8s cubic-bezier(0.22, 1, 0.36, 1) infinite both; } .ds-vg-dot { animation: ds-fill 3.6s ease-out infinite both; } @keyframes ds-close { 0%, 20% { transform: translateY(-9px); } 45%, 100% { transform: none; } } @keyframes ds-fill { 0%, 10% { opacity: 0; } 25%, 85% { opacity: 1; } 100% { opacity: 0; } } @media (prefers-reduced-motion: reduce) { .ds-vg * { animation: none !important; } }"
+    },
+    {
+      "name": "Choices",
+      "kind": "custom",
+      "refersTo": "choice-row",
+      "description": "A ruled list of choices you can press: number, title, one line, arrow.",
+      "html": "<ul class=\"ds-choices\"><li><button type=\"button\"><span class=\"n\">01</span><span><span class=\"t\">Passkey</span><span class=\"b\">Your face or finger. Fastest.</span></span><svg width=\"14\" height=\"10\" viewBox=\"0 0 14 10\" aria-hidden=\"true\"><path d=\"M1 5h11M8.5 1.5 12 5l-3.5 3.5\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg></button></li><li><button type=\"button\"><span class=\"n\">02</span><span><span class=\"t\">Secret phrase</span><span class=\"b\">24 words you write down.</span></span><svg width=\"14\" height=\"10\" viewBox=\"0 0 14 10\" aria-hidden=\"true\"><path d=\"M1 5h11M8.5 1.5 12 5l-3.5 3.5\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg></button></li></ul>",
+      "css": ".ds-choices { list-style: none; margin: 0; padding: 0; border-top: 1px solid #171717; } .ds-choices li { border-bottom: 1px solid oklch(0.86 0.005 265); } .ds-choices button { display: grid; grid-template-columns: 2.2rem 1fr auto; gap: 8px; align-items: center; width: 100%; min-height: 84px; padding: 16px 0; text-align: left; background: none; border: 0; font-family: var(--font-garamond), 'EB Garamond', Georgia, serif; color: #171717; } .ds-choices button:active { background: oklch(0.95 0.03 266); } .ds-choices button:focus-visible { outline: 2px solid transparent; box-shadow: 0 0 0 2px #fbfbfb, 0 0 0 3.5px oklch(0.5058 0.2886 264.84); } .ds-choices .n { align-self: start; padding-top: 4px; font-family: var(--font-label), 'Geist Mono', ui-monospace, monospace; font-size: 13px; color: oklch(0.5058 0.2886 264.84); } .ds-choices .t { display: block; font-size: 1.12rem; font-weight: 500; line-height: 1.375; } .ds-choices .b { display: block; margin-top: 4px; font-size: 0.95rem; line-height: 1.5; color: oklch(0 0 0 / 0.62); } .ds-choices svg { color: oklch(0 0 0 / 0.5); margin-right: 4px; } .ds-choices button:active svg { color: oklch(0.5058 0.2886 264.84); }"
+    },
+    {
+      "name": "Field",
+      "kind": "input",
+      "refersTo": "field-input",
+      "description": "Mono label, 48px square input at 16px, hint or error beneath.",
+      "html": "<label class=\"ds-field\"><span class=\"l\">Password</span><input type=\"password\" value=\"••••••••\"/><span class=\"h\">At least 12 characters.</span></label>",
+      "css": ".ds-field { display: block; } .ds-field .l { font-family: var(--font-label), 'Geist Mono', ui-monospace, monospace; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: oklch(0 0 0 / 0.62); } .ds-field input { display: block; width: 100%; height: 48px; margin-top: 8px; padding: 0 12px; font-family: var(--font-garamond), 'EB Garamond', Georgia, serif; font-size: 16px; background: #fbfbfb; border: 1px solid #171717; border-radius: 0; outline: none; caret-color: oklch(0.5058 0.2886 264.84); } .ds-field input:focus { border-color: oklch(0.5058 0.2886 264.84); box-shadow: 0 0 0 2px #fbfbfb, 0 0 0 3.5px oklch(0.5058 0.2886 264.84); } .ds-field input[aria-invalid=true] { border-color: oklch(0.55 0.21 27); } .ds-field .h { display: block; margin-top: 6px; font-family: var(--font-garamond), 'EB Garamond', Georgia, serif; font-size: 0.9rem; color: oklch(0 0 0 / 0.5); }"
+    },
+    {
+      "name": "Notice",
+      "kind": "custom",
+      "refersTo": "notice-error",
+      "description": "Inline message: problem and what to do; error tone shown.",
+      "html": "<p class=\"ds-notice\" role=\"alert\"><span class=\"e\">Error</span>Those words do not match. Check word 7 on your paper.</p>",
+      "css": ".ds-notice { margin: 0; padding: 12px 14px; border: 1px solid oklch(0.55 0.21 27); background: oklch(0.93 0.04 27); color: #171717; font-family: var(--font-garamond), 'EB Garamond', Georgia, serif; font-size: 0.95rem; line-height: 1.55; border-radius: 0; } .ds-notice .e { margin-right: 8px; font-family: var(--font-label), 'Geist Mono', ui-monospace, monospace; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: oklch(0.55 0.21 27); }"
+    },
+    {
+      "name": "Address",
+      "kind": "custom",
+      "refersTo": "word",
+      "description": "An address in groups of four, alternate groups blue, wrapping only between groups.",
+      "html": "<span class=\"ds-addr\" aria-label=\"0x3f9a71c2e0b4d85a\"><span><span class=\"x\">0x</span>3f9a&nbsp;</span><span class=\"b\">71c2&nbsp;</span><span>e0b4&nbsp;</span><span class=\"b\">d85a</span></span>",
+      "css": ".ds-addr { font-family: var(--font-label), 'Geist Mono', ui-monospace, monospace; font-size: 15px; letter-spacing: 0.01em; color: #171717; } .ds-addr > span { display: inline-block; white-space: nowrap; } .ds-addr .b { color: oklch(0.5058 0.2886 264.84); } .ds-addr .x { color: oklch(0 0 0 / 0.5); }"
     },
     {
       "name": "Plate",
@@ -434,7 +592,7 @@
       "refersTo": "plate",
       "description": "A dot-grid panel with vertical FIG and title tags holding a line drawing in the manual blue.",
       "html": "<figure class=\"ds-plate\"><span class=\"ds-tag ds-tag-l\" aria-hidden=\"true\">FIG_001</span><span class=\"ds-tag ds-tag-r\" aria-hidden=\"true\">[ One attack, two keys ]</span><svg viewBox=\"0 0 320 120\" width=\"100%\" role=\"img\" aria-label=\"A tree of hashes\"><defs><marker id=\"ds-a\" viewBox=\"0 0 8 8\" refX=\"7.5\" refY=\"4\" markerWidth=\"6\" markerHeight=\"6\" orient=\"auto\"><path d=\"M0 1 L8 4 L0 7 Z\" fill=\"oklch(0.5058 0.2886 264.84)\"/></marker></defs><line x1=\"160\" y1=\"28\" x2=\"100\" y2=\"78\" stroke=\"oklch(0.66 0.18 266)\" stroke-width=\"0.8\"/><line x1=\"160\" y1=\"28\" x2=\"220\" y2=\"78\" stroke=\"oklch(0.5058 0.2886 264.84)\" stroke-width=\"1.4\"/><rect x=\"152\" y=\"20\" width=\"16\" height=\"16\" fill=\"oklch(0.8 0.11 266)\" stroke=\"oklch(0.5058 0.2886 264.84)\" stroke-width=\"0.9\"/><rect x=\"92\" y=\"78\" width=\"16\" height=\"16\" fill=\"oklch(0.965 0.022 266)\" stroke=\"oklch(0.5058 0.2886 264.84)\" stroke-width=\"0.9\"/><rect x=\"212\" y=\"78\" width=\"16\" height=\"16\" fill=\"oklch(0.68 0.17 266)\" stroke=\"oklch(0.5058 0.2886 264.84)\" stroke-width=\"0.9\"/><line x1=\"262\" y1=\"28\" x2=\"174\" y2=\"28\" stroke=\"oklch(0.5058 0.2886 264.84)\" stroke-width=\"0.7\" marker-end=\"url(#ds-a)\"/><rect x=\"263\" y=\"20\" width=\"50\" height=\"11\" fill=\"#fbfbfb\"/><text x=\"266\" y=\"29\" font-family=\"monospace\" font-size=\"9\" letter-spacing=\"0.04em\" fill=\"oklch(0.5058 0.2886 264.84)\">ROOT</text></svg></figure>",
-      "css": ".ds-plate { position: relative; margin: 0; padding: 32px 40px; background-color: #fbfbfb; background-image: radial-gradient(circle, oklch(0 0 0 / 0.1) 0.7px, transparent 0.9px); background-size: 4px 4px; background-position: 2px 2px; outline: 1px dashed oklch(0 0 0 / 0.06); outline-offset: -1px; } .ds-tag { position: absolute; top: 12px; writing-mode: vertical-rl; font-family: var(--font-departure), ui-monospace, monospace; font-size: 10px; line-height: 1; letter-spacing: 0.04em; text-transform: uppercase; color: oklch(0 0 0 / 0.5); } .ds-tag-l { left: 10px; } .ds-tag-r { right: 10px; }"
+      "css": ".ds-plate { position: relative; margin: 0; padding: 32px 40px; background-color: #fbfbfb; background-image: radial-gradient(circle, oklch(0 0 0 / 0.1) 0.7px, transparent 0.9px); background-size: 4px 4px; background-position: 2px 2px; outline: 1px dashed oklch(0 0 0 / 0.06); outline-offset: -1px; } .ds-tag { position: absolute; top: 12px; writing-mode: vertical-rl; font-family: var(--font-label), 'Geist Mono', ui-monospace, monospace; font-size: 10px; line-height: 1; letter-spacing: 0.04em; text-transform: uppercase; color: oklch(0 0 0 / 0.5); } .ds-tag-l { left: 10px; } .ds-tag-r { right: 10px; }"
     },
     {
       "name": "Readout",
@@ -442,7 +600,7 @@
       "refersTo": "readout",
       "description": "A fixed-digit counter: each digit in its own cell, leading zeros dimmed.",
       "html": "<span class=\"ds-readout\"><span class=\"ds-cells\"><span class=\"ds-cell ds-dim\">0</span><span class=\"ds-cell\">4</span><span class=\"ds-cell\">2</span><span class=\"ds-cell\">7</span><span class=\"ds-cell\">6</span></span><span class=\"ds-unit\">bytes</span></span>",
-      "css": ".ds-readout { display: inline-flex; align-items: baseline; gap: 8px; } .ds-cells { display: inline-flex; border: 1px solid oklch(0.86 0.005 265); background: #fbfbfb; font-family: var(--font-departure), ui-monospace, monospace; font-size: 1.05rem; line-height: 1; color: oklch(0.5058 0.2886 264.84); font-variant-numeric: tabular-nums lining-nums; } .ds-cell { display: grid; place-items: center; width: 1.15em; height: 1.9em; } .ds-cell + .ds-cell { border-left: 1px solid oklch(0.92 0.004 265); } .ds-dim { color: oklch(0.66 0.18 266 / 0.45); } .ds-unit { font-family: var(--font-departure), ui-monospace, monospace; font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase; color: oklch(0 0 0 / 0.62); }"
+      "css": ".ds-readout { display: inline-flex; align-items: baseline; gap: 8px; } .ds-cells { display: inline-flex; border: 1px solid oklch(0.86 0.005 265); background: #fbfbfb; font-family: var(--font-label), 'Geist Mono', ui-monospace, monospace; font-size: 1.05rem; line-height: 1; color: oklch(0.5058 0.2886 264.84); font-variant-numeric: tabular-nums lining-nums; } .ds-cell { display: grid; place-items: center; width: 1.15em; height: 1.9em; } .ds-cell + .ds-cell { border-left: 1px solid oklch(0.92 0.004 265); } .ds-dim { color: oklch(0.66 0.18 266 / 0.45); } .ds-unit { font-family: var(--font-label), 'Geist Mono', ui-monospace, monospace; font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase; color: oklch(0 0 0 / 0.62); }"
     },
     {
       "name": "Algorithm Box",
@@ -450,44 +608,30 @@
       "refersTo": "algorithm-box",
       "description": "Numbered mono pseudocode on the dot grid, tagged ALG_001.",
       "html": "<div class=\"ds-alg\"><span class=\"ds-alg-tag\" aria-hidden=\"true\">ALG_001</span><p class=\"ds-alg-head\">Algorithm 1 · Start</p><ol><li><span>1</span><span>passkey ← create on this device</span></li><li><span>2</span><span>account ← address(owner) <em>▷ known before anything is on chain</em></span></li><li><span>3</span><span>return account</span></li></ol></div>",
-      "css": ".ds-alg { position: relative; padding: 32px 40px; background-color: #fbfbfb; background-image: radial-gradient(circle, oklch(0 0 0 / 0.1) 0.7px, transparent 0.9px); background-size: 4px 4px; outline: 1px dashed oklch(0 0 0 / 0.06); outline-offset: -1px; font-family: var(--font-departure), ui-monospace, monospace; color: #171717; } .ds-alg-tag { position: absolute; top: 12px; left: 10px; writing-mode: vertical-rl; font-size: 10px; letter-spacing: 0.04em; color: oklch(0 0 0 / 0.5); } .ds-alg-head { margin: 0; font-size: 12px; letter-spacing: 0.02em; text-transform: uppercase; color: oklch(0.5058 0.2886 264.84); } .ds-alg ol { list-style: none; margin: 16px 0 0; padding: 0; font-size: 14px; line-height: 2.1; } .ds-alg li { display: grid; grid-template-columns: 2.2ch 1fr; gap: 12px; } .ds-alg li > span:first-child, .ds-alg em { color: oklch(0 0 0 / 0.5); font-style: normal; } .ds-alg em { margin-left: 16px; }"
-    },
-    {
-      "name": "Section Heading",
-      "kind": "custom",
-      "refersTo": "headline",
-      "description": "Small serif heading after a blue mono section number, over justified body.",
-      "html": "<div class=\"ds-sec\"><h2><span>01</span>The problem with the key you have</h2><p>An ordinary wallet is one secret number <i>k</i> and a public point <i>P</i> on an elliptic curve. Working back from <i>P</i> to <i>k</i> is out of reach for every computer that exists <a href=\"#\">[1]</a>.</p></div>",
-      "css": ".ds-sec { max-width: 420px; font-family: 'EB Garamond', Georgia, serif; color: #171717; } .ds-sec h2 { margin: 0 0 12px; font-size: 1.12rem; line-height: 1.4; font-weight: 500; } .ds-sec h2 span { margin-right: 8px; font-family: var(--font-departure), ui-monospace, monospace; font-size: 13px; color: oklch(0.5058 0.2886 264.84); } .ds-sec p { margin: 0; font-size: 1rem; line-height: 1.85; text-align: justify; hyphens: auto; } .ds-sec a { font-family: var(--font-departure), ui-monospace, monospace; font-size: 11px; color: oklch(0.5058 0.2886 264.84); text-decoration: none; } .ds-sec a:hover { text-decoration: underline; }"
-    },
-    {
-      "name": "Stacked Table",
-      "kind": "custom",
-      "description": "A table rendered as a ruled definition list at every width.",
-      "html": "<div class=\"ds-tbl\"><p>Table 1 · By the wallet you start from</p><dl><div><dt><span>A Safe</span><b>New address</b></dt><dd>Its owners sign one Safe transaction that moves everything.</dd></div><div><dt><span>An upgradeable smart account</span><b>Same address</b></dt><dd>It is upgraded in place.</dd></div></dl></div>",
-      "css": ".ds-tbl { max-width: 420px; font-family: 'EB Garamond', Georgia, serif; color: #171717; } .ds-tbl > p { margin: 0; font-family: var(--font-departure), ui-monospace, monospace; font-size: 11px; letter-spacing: 0.02em; text-transform: uppercase; color: oklch(0 0 0 / 0.5); } .ds-tbl dl { margin: 8px 0 0; border-top: 1px solid #171717; } .ds-tbl dl > div { padding: 10px 0; border-bottom: 1px solid oklch(0.86 0.005 265); } .ds-tbl dt { display: flex; justify-content: space-between; gap: 16px; font-size: 0.95rem; font-weight: 500; } .ds-tbl dt b { font-weight: 400; font-family: var(--font-departure), ui-monospace, monospace; font-size: 11px; text-transform: uppercase; color: oklch(0.5058 0.2886 264.84); } .ds-tbl dd { margin: 4px 0 0; font-size: 0.9rem; line-height: 1.6; color: oklch(0 0 0 / 0.62); }"
+      "css": ".ds-alg { position: relative; padding: 32px 40px; background-color: #fbfbfb; background-image: radial-gradient(circle, oklch(0 0 0 / 0.1) 0.7px, transparent 0.9px); background-size: 4px 4px; outline: 1px dashed oklch(0 0 0 / 0.06); outline-offset: -1px; font-family: var(--font-label), 'Geist Mono', ui-monospace, monospace; color: #171717; } .ds-alg-tag { position: absolute; top: 12px; left: 10px; writing-mode: vertical-rl; font-size: 10px; letter-spacing: 0.04em; color: oklch(0 0 0 / 0.5); } .ds-alg-head { margin: 0; font-size: 12px; letter-spacing: 0.02em; text-transform: uppercase; color: oklch(0.5058 0.2886 264.84); } .ds-alg ol { list-style: none; margin: 16px 0 0; padding: 0; font-size: 14px; line-height: 2.1; } .ds-alg li { display: grid; grid-template-columns: 2.2ch 1fr; gap: 12px; } .ds-alg li > span:first-child, .ds-alg em { color: oklch(0 0 0 / 0.5); font-style: normal; } .ds-alg em { margin-left: 16px; }"
     }
   ],
   "narrative": {
     "northStar": "The Manual That Runs",
-    "overview": "QueueBit's surfaces are set as one continuous sheet of a technical manual: a near-white page, near-black ink in a book serif set justified, and a single electric blue that draws every figure. Text and animated figure plates share a three-column flow, the text in one column and the plate across the other two, the plate changing sides from row to row. Nothing divides the sections but space. The persuading is done by the figures, which are drawn in code and *run*: the attack sweeps, the signature fills, the fourth payment is refused. The page reads as a manual that shows its working, never as a product page.\n\n**Lineage, stated honestly.** On 2026-11-07 the user replaced the previous world (STIX Two and Martian Mono on cool paper, Bayer-dithered plates, crop marks, visible captions, a cyanotype dark scheme) and asked for the colour scheme and text layout to match makingsoftware.com exactly, with continuous flow and a top bar and logo in that aesthetic. The palette (paper, ink, the blue and its tints, half-ink labels), the justified serif text layout, the dot-grid plate panels with vertical tags, and the dither-band dividers are therefore deliberately matched to that site. The figures, the pixel wordmark, the pixel keyhole mark and every word of copy are QueueBit's own, and the product truth they carry comes from PRODUCT.md (measured figures only; no users, audits or mainnet claims).\n\nThe system refuses the crypto landing: dark hero, glowing gradient, stat strip, feature cards, crypto/hype styling. It is light only; the manual is a printed object.\n\n**Scope.** This world is built in `apps/web` (the landing, and the PWA start URL). The browser extension (`apps/extension`) has not adopted it yet and still carries its own earlier styling; new extension surfaces should move toward this system, not extend the old one.",
+    "overview": "QueueBit's surfaces are set as one continuous sheet of a technical manual: a near-white page, near-black ink in a book serif set justified, and a single electric blue that draws every figure. On the landing, text and animated figure plates share a three-column flow, the text in one column and the plate across the other two, changing sides from row to row, with nothing but space between sections. The persuading is done by the figures, which are drawn in code and *run*: the attack sweeps, the signature fills, the fourth payment is refused. The app screens (onboarding first) are the same manual folded to a phone: one column, one short line of copy per screen, a small looping drawing at the top, and the action pinned to the bottom.\n\n**Lineage, stated honestly.** On 2026-11-07 the user asked for the colour scheme and text layout to match makingsoftware.com, with continuous flow and a top bar in that aesthetic. The palette (paper, ink, the blue and its tints, half-ink labels), the justified serif text layout and the dot-grid plate panels with vertical tags follow that site at the user's request. The type pairing, the mark, the figures, the vignettes and every word of copy are QueueBit's own, and the product truth they carry comes from PRODUCT.md. The same day the user rejected the pixel style for both the font and the logo: Departure Mono and the bitmap keyhole are gone, replaced by Geist Mono and a vector line-art mark, and the ░ dither bands became dotted rules.\n\nThe system refuses the crypto landing: dark hero, glowing gradient, stat strip, feature cards, crypto/hype styling. It is light only; the manual is a printed object.\n\n**Scope.** This world is built in `apps/web` (the landing at `/`, the onboarding at `/start`, the PWA). The browser extension (`apps/extension`) has not adopted it yet and still carries its own earlier styling; new extension surfaces should move toward this system, not extend the old one.\n\n**Motion grammar.** Things move only to show what is happening: a plate runs its mechanism, a vignette loops its one gesture, a readout digit drops into its cell, a control changes colour. Arrivals ease out (cubic-bezier(0.22, 1, 0.36, 1) in CSS, exponential ease-out inside plates); travel along a path eases in and out. No bounce, no elastic, no animated page chrome. With reduced motion every drawing rests on its meaningful state, never on a blank frame.",
     "keyCharacteristics": [
-      "One sheet, light only: #fbfbfb paper, #171717 ink, one electric blue, red only for what can be forged.",
-      "Two voices: EB Garamond for everything read, Departure Mono for the wordmark, labels, numbers, controls and navigation.",
-      "Three-column flow: text column beside a two-column plate, alternating sides; gap-only separation between sections.",
-      "Plates on a faint dot grid, tagged vertically with FIG_00n on the left and [ TITLE ] on the right; no visible caption.",
-      "░ dither bands, set in Departure Mono, are the only dividers: under the hero, in the top bar, in the footer.",
+      "One sheet, light only: paper, ink, one electric blue for every line, flat blue tints for every fill, red only for what can be forged.",
+      "Two voices: EB Garamond for everything read, Geist Mono for the wordmark, labels, numbers, controls and navigation.",
+      "Landing: three-column flow, text beside a two-column plate, alternating sides; space-only separation between sections.",
+      "App screens: one 560px column, a dot-grid vignette, a serif title and one line, the action pinned above the safe area.",
+      "Drawings sit on a faint 4px dot grid; dotted rules are the only dividers.",
+      "Vector line art throughout: the mark, the plates and the vignettes are strokes and flat fills, never pixels.",
       "Square corners everywhere; no shadows, no cards, no glass."
     ],
     "rules": [
       {
         "name": "The One Blue Rule",
-        "body": "Every drawn line on the page is the manual blue or its light variant; fills are its flat tints. A second accent colour is prohibited.",
+        "body": "Every drawn line on every surface is the manual blue or its light variant; fills are its flat tints. A second accent colour is prohibited.",
         "section": "colors"
       },
       {
         "name": "The Forgeable Rule",
-        "body": "Red appears only where something can be forged or is refused, at most one event per plate. Red as brand, emphasis or decoration is prohibited. If a reader can't say what failed when they see red, the red is wrong.",
+        "body": "Red appears only where something can be forged, is refused, or is in error, at most one event per plate. Red as brand, emphasis or decoration is prohibited. If a reader can't say what failed when they see red, the red is wrong.",
         "section": "colors"
       },
       {
@@ -497,46 +641,65 @@
       },
       {
         "name": "The Two Voices Rule",
-        "body": "Prose, headings and the drop cap are always EB Garamond. The wordmark, labels, numbers, navigation, controls, code and readouts are always Departure Mono. Mono for a paragraph, or serif for a control, is prohibited.",
+        "body": "Prose, headings and the drop cap are always EB Garamond. The wordmark, labels, numbers, navigation, controls, code, readouts, words and addresses are always Geist Mono. Mono for a paragraph, or serif for a control, is prohibited.",
+        "section": "typography"
+      },
+      {
+        "name": "The Drawn Type Rule",
+        "body": "Type is outline type at its designed weights. No pixel, bitmap or dot-matrix face, for the wordmark or anything else.",
         "section": "typography"
       },
       {
         "name": "The Justified Column Rule",
-        "body": "Running text is justified and hyphenated in its column; headings, tables, lists and the hero lede are left- or right-aligned, never justified.",
+        "body": "Running text on the landing is justified and hyphenated in its column; headings, tables, lists, the hero lede and all app-screen text are left- or right-aligned, never justified.",
         "section": "typography"
       },
       {
+        "name": "The Space Divides Rule",
+        "body": "Sections are divided by space. A dotted rule appears only in the top bar, under the hero and in the footer; never between sections.",
+        "section": "layout"
+      },
+      {
+        "name": "The One Line Rule",
+        "body": "An app screen says one thing: a title and one line under it. Anything more is a list, a field or a drawing, not a paragraph.",
+        "section": "layout"
+      },
+      {
         "name": "The Flat Sheet Rule",
-        "body": "If anything on the page looks lifted off the paper, it is wrong. Panels sit in the sheet; they are not stacked on it.",
+        "body": "If anything looks lifted off the paper, it is wrong. Panels and bars sit in the sheet; they are not stacked on it, and they are opaque paper, not frosted.",
         "section": "elevation"
       }
     ],
     "dos": [
-      "Do keep every surface on the one light sheet: #fbfbfb paper, #171717 ink, the manual blue for every line, flat blue tints for every fill.",
-      "Do lay out sections as the three-column flow, text beside a two-column plate, alternating sides, separated by space alone (64px phone, 96px desktop).",
-      "Do set running text in EB Garamond, justified and hyphenated at line-height 1.85, and every label, number, control and nav item in uppercase Departure Mono.",
-      "Do draw explanation as a plate: SVG from geometry on the dot grid, vertical FIG_00n and [ TITLE ] tags, knocked-out mono labels with leaders and filled arrowheads.",
-      "Do keep red for the single failure event in a plate (the forgeable key, the refused payment).",
-      "Do give every plate one on-screen-only clock, a full-sentence accessible description, and an explanatory reduced-motion still.",
-      "Do recompose wide drawings vertically below 640px.",
-      "Do show changing quantities as fixed-digit readouts with real figures from the repo (4,276 bytes, 120,000 signatures).",
-      "Do keep corners square (0px) and the page flat."
+      "**Do** keep every surface on the one light sheet: paper, ink, the manual blue for every line, flat blue tints for every fill.",
+      "**Do** set running text in EB Garamond and every label, number, control, word, address and nav item in Geist Mono (labels uppercase at 0.06em).",
+      "**Do** draw the mark, figures and vignettes as vector line art: blue strokes, flat tints, round joins.",
+      "**Do** lay out landing sections as the three-column flow, text beside a two-column plate, alternating sides, separated by space alone.",
+      "**Do** open every app screen with a vignette, then a serif title and one line, with the action pinned in the bottom bar.",
+      "**Do** draw explanation as a plate: SVG from geometry on the dot grid, vertical FIG and title tags, knocked-out mono labels with leaders and filled arrowheads.",
+      "**Do** give every plate one on-screen-only clock, and every plate and vignette a full-sentence accessible description and a meaningful reduced-motion state.",
+      "**Do** keep red for the single failure event in a plate, or an error on an app screen.",
+      "**Do** keep inputs at 16px, controls at 48px and touch targets at least 44px.",
+      "**Do** set addresses in groups of four and recovery words in a numbered grid.",
+      "**Do** keep corners square (0px) and the page flat."
     ],
     "donts": [
-      "Don't build the crypto landing: no dark hero, no glowing gradient, no stat strip, no feature cards, no crypto/hype styling.",
-      "Don't add a dark scheme or a cyanotype variant; this world is light only.",
-      "Don't put a rule, band or background change between sections; the ░ dither band appears only in the top bar, under the hero and in the footer.",
-      "Don't show a visible caption under a plate or crop marks around it; the vertical tags and the accessible caption carry the figure's identity.",
-      "Don't use a gradient or dither as a tone inside a plate; fills are the flat tints.",
-      "Don't put an eyebrow or kicker above a heading; the mono section number is the only label a heading takes.",
-      "Don't use cards: no rounded, shadowed or filled boxes holding content. The dot-grid panel is the only container.",
-      "Don't use glass: no translucent panels, no backdrop blur, no frosted chrome.",
-      "Don't use em dashes in copy; use a colon, a comma or a full stop.",
-      "Don't set a paragraph or heading in Departure Mono, or a control or nav item in the serif.",
-      "Don't use red as brand, emphasis or a second accent.",
-      "Don't shrink a desktop drawing onto a phone or hide a figure behind sideways scroll.",
-      "Don't animate a plate off screen or start it from a blank frame for reduced-motion users.",
-      "Don't claim audits, mainnet availability or protected mainnet funds, and never invent users, testimonials, partners or TVL (PRODUCT.md)."
+      "**Don't** use pixel or bitmap type or marks: no pixel fonts, no bitmap logos or icons, no crisp-edged pixel glyphs, no ░ or dither characters as decoration.",
+      "**Don't** build the crypto landing: no dark hero, no glowing gradient, no stat strip, no feature cards, no crypto/hype styling.",
+      "**Don't** add a dark scheme; this world is light only.",
+      "**Don't** put a rule, band or background change between sections; the dotted rule appears only in the top bar, under the hero and in the footer.",
+      "**Don't** show a visible caption under a plate or crop marks around it.",
+      "**Don't** use a gradient or dither as a tone inside a plate or vignette; fills are the flat tints.",
+      "**Don't** put an eyebrow or kicker above a heading; the mono section number is the only label a heading takes.",
+      "**Don't** use cards: no rounded, shadowed or filled boxes holding content. The dot-grid panel, the ruled list and the notice are the containers.",
+      "**Don't** use glass: no translucent panels, no backdrop blur, no frosted bars.",
+      "**Don't** write a paragraph on an app screen; one line under the title.",
+      "**Don't** animate for decoration: a vignette loops one gesture that shows the screen's action; page chrome does not animate beyond state changes.",
+      "**Don't** use em dashes in copy; use a colon, a comma or a full stop.",
+      "**Don't** set a paragraph or heading in Geist Mono, or a control or nav item in the serif.",
+      "**Don't** use red as brand, emphasis or a second accent.",
+      "**Don't** shrink a desktop drawing onto a phone or hide a figure behind sideways scroll.",
+      "**Don't** animate a plate off screen or start any drawing from a blank frame for reduced-motion users."
     ]
   }
 }

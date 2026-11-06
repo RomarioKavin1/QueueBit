@@ -217,19 +217,17 @@ export default function Landing() {
 
 // ---- furniture ----------------------------------------------------------------------------------------------------
 
-/** A row of dither, the manual's divider (Departure Mono draws ░ as a pixel stipple). */
+/** A dotted rule, the manual's divider. */
 function DitherBand({ label, className = "" }: { label?: string; className?: string }) {
-  const band = "░".repeat(240);
+  const dots =
+    "h-[7px] min-w-0 flex-1 bg-[radial-gradient(circle,var(--ink-3)_0.8px,transparent_1px)] bg-[length:4px_4px] opacity-50";
   return (
-    <div
-      aria-hidden
-      className={`flex items-center gap-4 overflow-hidden font-mono text-[12px] leading-none text-ink-3 ${className}`}
-    >
-      <span className="min-w-0 flex-1 overflow-hidden whitespace-nowrap opacity-60">{band}</span>
+    <div aria-hidden className={`flex items-center gap-4 ${className}`}>
+      <span className={dots} />
       {label && (
         <>
-          <span className="shrink-0 tracking-[0.04em] uppercase">{label}</span>
-          <span className="min-w-0 flex-1 overflow-hidden whitespace-nowrap opacity-60">{band}</span>
+          <span className="shrink-0 font-display text-[1.1rem] leading-none font-light text-blue">{label}</span>
+          <span className={dots} />
         </>
       )}
     </div>
@@ -248,8 +246,10 @@ function TopBar() {
     <header className="sticky top-0 z-20 bg-paper">
       <div className="mx-auto flex h-12 max-w-[1600px] items-center gap-5 px-5 sm:px-10">
         <Link href="/" className="flex shrink-0 items-center gap-2.5 no-underline" aria-label="QueueBit, home">
-          <Mark size={17} />
-          <span className="mono-label text-[13px] text-ink">QueueBit</span>
+          <Mark size={24} />
+          <span className="font-display text-[1.25rem] leading-none font-light tracking-[-0.01em] text-blue">
+            QueueBit
+          </span>
         </Link>
         <DitherBand className="min-w-8 flex-1" />
         <nav aria-label="Sections" className="hidden shrink-0 items-center gap-5 lg:flex">
@@ -268,7 +268,7 @@ function TopBar() {
 function Hero() {
   return (
     <section className="grid grid-cols-1 gap-x-16 gap-y-6 pt-10 pb-8 lg:grid-cols-3 lg:items-end lg:pt-14">
-      <h1 className="font-mono text-[clamp(3.4rem,9vw,8.4rem)] leading-[0.86] tracking-[0.01em] text-blue uppercase lg:col-span-2">
+      <h1 className="font-display text-[clamp(3.6rem,9.4vw,8.6rem)] leading-[0.95] font-extralight tracking-[-0.03em] text-blue lg:col-span-2">
         QueueBit
       </h1>
       <div className="flex flex-col gap-4 lg:items-end lg:text-right">
@@ -300,20 +300,26 @@ function StartLink({ size = "lg" }: { size?: "sm" | "lg" }) {
   return (
     <Link
       href="/start"
-      className={`group mono-label inline-flex shrink-0 items-center gap-2 border border-ink bg-paper/60 text-ink no-underline transition-colors duration-200 hover:border-blue hover:bg-blue hover:text-on-blue ${
+      className={`group mono-label inline-flex shrink-0 items-center gap-2 border border-ink bg-paper text-ink no-underline transition-colors duration-200 hover:border-blue hover:bg-blue hover:text-on-blue ${
         size === "sm" ? "h-7 px-2.5" : "h-9 px-3.5 text-[13px]"
       }`}
     >
       {size === "sm" ? "Start" : "Start with a passkey"}
       <svg
-        width="12"
-        height="9"
-        viewBox="0 0 12 9"
+        width="14"
+        height="10"
+        viewBox="0 0 14 10"
         aria-hidden
-        shapeRendering="crispEdges"
         className="transition-transform duration-300 ease-[var(--ease-out)] group-hover:translate-x-0.5"
       >
-        <path d="M0 4h9v1H0zM7 2h1v1H7zM8 3h1v1H8zM8 5h1v1H8zM7 6h1v1H7zM9 4h1v1H9z" fill="currentColor" />
+        <path
+          d="M1 5h11M8.5 1.5 12 5 8.5 8.5"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.3"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
       </svg>
     </Link>
   );
@@ -488,7 +494,7 @@ function Footer() {
       <DitherBand label="QueueBit" />
       <div className="mono-label mt-4 flex flex-wrap justify-between gap-3 text-[12px] text-ink-3">
         <span>MIT licensed</span>
-        <span>Set in EB Garamond and Departure Mono. Figures drawn in code.</span>
+        <span>Set in EB Garamond, Exo 2 and Geist Mono. Figures drawn in code.</span>
       </div>
     </footer>
   );

@@ -1,21 +1,26 @@
 import type { Metadata, Viewport } from "next";
-import { EB_Garamond } from "next/font/google";
-import localFont from "next/font/local";
+import { EB_Garamond, Exo_2, Geist_Mono } from "next/font/google";
 import type { ReactNode } from "react";
 import { RegisterServiceWorker } from "./sw-register";
 import "./globals.css";
 
-// The manual's two voices: a book serif for everything a reader reads, and a pixel mono (Departure Mono, OFL,
-// app/fonts/DepartureMono-LICENSE.txt) for the title, figure labels, readouts and controls.
+// Two voices: a book serif for everything a reader reads, and a clean technical mono (Geist Mono) for the wordmark,
+// figure labels, readouts and controls.
 const garamond = EB_Garamond({
   subsets: ["latin"],
   style: ["normal", "italic"],
   variable: "--font-garamond",
   display: "swap",
 });
-const departure = localFont({
-  src: "./fonts/DepartureMono-Regular.woff2",
-  variable: "--font-departure",
+// The wordmark's face: Exo 2, thin (extra light on the landing, heavier only where it is small).
+const display = Exo_2({
+  subsets: ["latin"],
+  variable: "--font-exo",
+  display: "swap",
+});
+const mono = Geist_Mono({
+  subsets: ["latin"],
+  variable: "--font-label",
   display: "swap",
 });
 
@@ -38,7 +43,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className={`${garamond.variable} ${departure.variable}`}>
+    <html lang="en" className={`${garamond.variable} ${display.variable} ${mono.variable}`}>
       <body className="min-h-screen">
         {children}
         <RegisterServiceWorker />

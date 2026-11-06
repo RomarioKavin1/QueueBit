@@ -45,14 +45,7 @@ function Chip({ x, y, eth, refused }: { x: number; y: number; eth: number; refus
     <g>
       <rect x={x - 26} y={y - 10} width={52} height={20} fill="var(--paper)" stroke={c} strokeWidth={0.9} />
       <rect x={x - 26} y={y - 10} width={10} height={20} fill={tone(refused ? "r8" : "b12")} />
-      <text
-        x={x + 5}
-        y={y + 3.5}
-        textAnchor="middle"
-        fontFamily="var(--font-departure), monospace"
-        fontSize={9}
-        fill={c}
-      >
+      <text x={x + 5} y={y + 3.5} textAnchor="middle" fontFamily="var(--font-label), monospace" fontSize={9} fill={c}>
         {eth}
       </text>
     </g>
@@ -68,7 +61,7 @@ function Meter({ x, y, w, used }: { x: number; y: number; w: number; used: numbe
       <text
         x={x}
         y={y + 32}
-        fontFamily="var(--font-departure), monospace"
+        fontFamily="var(--font-label), monospace"
         fontSize={9}
         fill="var(--ink-2)"
         letterSpacing="0.04em"

@@ -274,7 +274,7 @@ export function Label({
         y={y}
         textAnchor={anchor}
         fill={color}
-        fontFamily="var(--font-departure), monospace"
+        fontFamily="var(--font-label), monospace"
         fontSize={size}
         letterSpacing="0.04em"
         style={{ textTransform: caps ? "uppercase" : "none" }}
