@@ -1,77 +1,77 @@
 {
-  "startedAt": "2026-11-05T23:43:12.754Z",
+  "startedAt": "2026-11-06T00:12:31.928Z",
   "gate": "G1 (plan §5.2)",
   "node": {
     "chainId": "1337",
     "client": "ethrex/v23.0.0-eip8141-tracer-9aa3645d795945c64400f41a70aace0edfa7f383/x86_64-unknown-linux-gnu/rustc-v1.93.1",
-    "block": "1481"
+    "block": "1771"
   },
   "fundDeployer": {
     "deployer": "0x677540C8c722DBcFFDC7D2162804C353D6D0Af46",
     "anvil0Tx": null
   },
   "keys": {
-    "hot": "0x77992ce6A5E9775e608f097906899d76cBC30ED9",
-    "tank": "0x5e651461743De36aA71557c75f97c856af92c56E",
-    "vaultPayer": "0xaB075cA8451C076B99F5445e2e00C0612Aa04239",
-    "recoveryPayer": "0x41b369Fc37d7aCbc464eef1218BA840BAAcD02Ec",
-    "guardianKey": "0x0a1D9d26ceF7DE4bE2E57835ea855a83E35b98e7",
-    "recipient": "0xEfa589Ef8d721c1ee10a48f97bEB09C31593C756",
+    "hot": "0xB0dfe96A81680318c66F41722824571Df1ae9a97",
+    "tank": "0xB51fBA296364b86446D9278D6F64BBB5Fbf35047",
+    "vaultPayer": "0xd76cC4588cB8E8acABEbA15a4b54ED62C29df935",
+    "recoveryPayer": "0x9ef79Ec23A1463e27256FC1E6B1fD4cAAEE1AfA5",
+    "guardianKey": "0xC3559DD1EB93fe393a5Be87e6F7dFc42c646A75b",
+    "recipient": "0xaA9037fdcA4e8A58438171946B3590c677C5F0EA",
     "vaultPk": "0x5a2c1a567673522118916ce1b435a484d60ea9a452a9d1e9e990ab80e3664e7d",
     "recoveryPk": "0xfdd6f9eadf37144819d3a3dd4b5bcb7bf7c375c55834d590b56dca1d0890c866"
   },
   "deployments": {
     "C13Verifier": {
-      "hash": "0x2fc4a84894686c7be7bba1a0bd7f985df827def3f7ed242d0a264ba526a6d325",
-      "address": "0xccf90a090b76da8920d3a0caab49fbee6b3ca6e8",
+      "hash": "0xeca5f91197afc4a16cba3f2b11c25532b07d4f6dd156e00e7f64b39c05a019a0",
+      "address": "0x995529aeffb884535547d930edad1d9c90d16c1a",
       "gasUsed": "2932364"
     },
     "LeakedAccountRoles": {
-      "hash": "0x190d7c231ccd7d693b29c0606efffb3d287271fd72264be54cd1a349dd7297a3",
-      "address": "0x48dd0ee479e9b95107d194626dcafea4a850de23",
-      "gasUsed": "28041142"
+      "hash": "0x2b5eaa74b0a2d8189901badf210e0e85b4d561c29f8f40cd3571697977275071",
+      "address": "0xc451d9461e1fcae79055a5fd3c910f427264af4a",
+      "gasUsed": "28856172"
     },
     "LeakedAccountImpl": {
-      "hash": "0x2b1f81322f68861987d678f48ca17e75d1580e9d2cc13bdf38d0368657d83872",
-      "address": "0x038bbf18f66d78c48a663a7b9d9980b662750b9a",
-      "gasUsed": "32067619"
+      "hash": "0x10c362a2a5f94fa553c255cce24c1771c2a31832cf4168eeed9a84b095fc8c51",
+      "address": "0x92da08ae7362c909fc3c33f0fc676e937514d711",
+      "gasUsed": "33170300"
     },
     "AccountFactory": {
-      "hash": "0x8f39ff1dba2095825f1ecdd2c8c60886ab0ebfe1a5666f3feb583d00026a4748",
-      "address": "0xfbb645a8fa617e245fd9dfc332a4a103923a24d1",
+      "hash": "0x1aaaa17753ba7722abb250536827c62ae6f8c8686bab496ba5d274f707036e65",
+      "address": "0x213322de6154a0e087a1ac8a3a35bc18ef07a895",
       "gasUsed": "2315543"
     },
     "RoleSignerFactory": {
-      "hash": "0x1276e6f6124bd7b883a643de2b515fa09187686465a2b067989f078e6777d292",
-      "address": "0x08baba0841e7b60a869cfd7bb39c00ca1b91b6e8",
+      "hash": "0xd269950cb31cdb6d488db8559b513028eabd13a58c332e1308e1f1488a52a7d3",
+      "address": "0x2559e57494309a02d65b6083880d239ed84f4931",
       "gasUsed": "15243341",
-      "implementation": "0xDAbfacEEdc53195C927594AeBEfa4D56932C6162"
+      "implementation": "0xe6bf88aC908bCe2029D79a0fD3163f63BF29E098"
     }
   },
   "wiring": {
     "account": {
-      "address": "0x0E66eD210417b08081897F50C5c8BC17df5E728F",
-      "createTx": "0x09b293b0538b03c8489d1d34a88a09dd0172fc0a1158de26545765e427c17ef3",
-      "createGas": "2504524"
+      "address": "0xC63c4cBB99Ad0FfaA7897920677AAff7498fc411",
+      "createTx": "0x7a6bb352835281087fd9686025621942ac0ba3f4c2fc841ca21579078106518b",
+      "createGas": "2504904"
     },
     "vaultSigner": {
-      "address": "0x5D0B56600676F408BCF46A571a7DEe910C0A8152",
+      "address": "0x223Fe4fE55f6FC1Ef3c803D8A274674F430948F9",
       "mode": "bound to the account, derived by initialize, clone deployed lazily",
-      "derivedByInitialize": "0x5D0B56600676F408BCF46A571a7DEe910C0A8152",
+      "derivedByInitialize": "0x223Fe4fE55f6FC1Ef3c803D8A274674F430948F9",
       "codeBeforeLazyDeploy": false,
-      "tx": "0x4614e684cbd472b3d059cf1cbe0242c3de38c66f15e424a13bc9af043ac03f15",
+      "tx": "0xbeb55fe768e6267bea878cfd82f8e96090b57eac49e5fca8d13e9cef78c62338",
       "gasUsed": "575946"
     },
     "recoverySigner": {
-      "address": "0xf6008A58d54519613b81EB9969b2A6C8Ab28ef9F",
+      "address": "0x73785dd80087bB86a918e4b5Cf5319B6cf3DD256",
       "mode": "bound to the account, derived by initialize, clone deployed lazily",
-      "derivedByInitialize": "0xf6008A58d54519613b81EB9969b2A6C8Ab28ef9F",
-      "tx": "0x4e02bac381f750b882c681a98ef68de22fd23a16a983539737fa902c8a166f29",
-      "gasUsed": "575984"
+      "derivedByInitialize": "0x73785dd80087bB86a918e4b5Cf5319B6cf3DD256",
+      "tx": "0xb52741e35c27c956fa2bd8c1fe82ed185e1598e8f8c0148e2a21677f4aa449e9",
+      "gasUsed": "575972"
     },
     "guardianSigner": {
-      "address": "0xb377ea852af5684cd1d78fed53c1d2ed2688b1a0",
-      "tx": "0x3e2efa059f5b73f7699365fddad38da49108ee5db14f8ef4bfe61348be51ac73",
+      "address": "0xcf82a825e84c36d2b71317ed9fc54f76e30bb5e3",
+      "tx": "0xfecaa5bb30e9597d16a0fdec4ba13bcc0ff485437ccd00e073fbc7c3c514d668",
       "gasUsed": "5353243"
     }
   },
@@ -79,22 +79,22 @@
     "vaultCodeIsProxyToImpl": true,
     "recoveryCodeIsProxyToImpl": true,
     "vault": {
-      "account": "0x0E66eD210417b08081897F50C5c8BC17df5E728F",
+      "account": "0xC63c4cBB99Ad0FfaA7897920677AAff7498fc411",
       "role": 1,
       "pk": "0x5a2c1a567673522118916ce1b435a484d60ea9a452a9d1e9e990ab80e3664e7d",
-      "verifier": "0xCCF90A090b76da8920D3a0cAab49fbee6b3cA6E8",
+      "verifier": "0x995529AEFfB884535547D930eDAD1d9c90D16c1A",
       "sigLength": "3688",
-      "payerKey": "0xaB075cA8451C076B99F5445e2e00C0612Aa04239",
+      "payerKey": "0xd76cC4588cB8E8acABEbA15a4b54ED62C29df935",
       "maxFee": "50000000000000000",
       "feeParam": 6
     },
     "recovery": {
-      "account": "0x0E66eD210417b08081897F50C5c8BC17df5E728F",
+      "account": "0xC63c4cBB99Ad0FfaA7897920677AAff7498fc411",
       "role": 2,
       "pk": "0xfdd6f9eadf37144819d3a3dd4b5bcb7bf7c375c55834d590b56dca1d0890c866",
-      "verifier": "0xCCF90A090b76da8920D3a0cAab49fbee6b3cA6E8",
+      "verifier": "0x995529AEFfB884535547D930eDAD1d9c90D16c1A",
       "sigLength": "3688",
-      "payerKey": "0x41b369Fc37d7aCbc464eef1218BA840BAAcD02Ec",
+      "payerKey": "0x9ef79Ec23A1463e27256FC1E6B1fD4cAAEE1AfA5",
       "maxFee": "50000000000000000",
       "feeParam": 6
     },
@@ -104,7 +104,7 @@
     },
     "instanceGas": {
       "vault": "575946",
-      "recovery": "575984",
+      "recovery": "575972",
       "target": "300000",
       "bareCreateFloor": {
         "codeBytes": 150,
@@ -116,9 +116,9 @@
   "setup": {
     "vaultSetGuardian": {
       "via": "ethrex eth_sendRawTransaction (canonical public mempool)",
-      "hash": "0x9733b72ff987d912742f23e2c0761922d5673b6422cb89066702331e5d16e44f",
-      "block": "1496",
-      "payer": "0x5d0b56600676f408bcf46a571a7dee910c0a8152",
+      "hash": "0x2d23f4f6641fa2e19379162d22c3f5f1ea29c372fd19858f7fdc63131ab95247",
+      "block": "1785",
+      "payer": "0x223fe4fe55f6fc1ef3c803d8a274674f430948f9",
       "gasUsed": "372330",
       "frames": [
         {
@@ -148,15 +148,15 @@
           "transient": 0,
           "outOfGas": false,
           "delegateCallees": [
-            "0xdabfaceedc53195c927594aebefa4d56932c6162",
-            "0x3526d80b521c8bb87ec1e8a9b44aa028ed161f9c"
+            "0xe6bf88ac908bce2029d79a0fd3163f63bf29e098",
+            "0x1120e571a236e6ed47a873509fb4635e5e028392"
           ]
         }
       }
     },
     "getRoles": [
-      "0x5D0B56600676F408BCF46A571a7DEe910C0A8152",
-      "0xf6008A58d54519613b81EB9969b2A6C8Ab28ef9F",
+      "0x223Fe4fE55f6FC1Ef3c803D8A274674F430948F9",
+      "0x73785dd80087bB86a918e4b5Cf5319B6cf3DD256",
       "0x0000000000000000000000000000000000000000",
       0,
       0
@@ -164,10 +164,10 @@
   },
   "a_hotPayment": {
     "via": "ethrex eth_sendRawTransaction (canonical public mempool)",
-    "hash": "0x3eba3a36ec68d8687926f43ebf8b1aac85eb6d52d694d66b944c1a6144f4338f",
-    "block": "1497",
-    "payer": "0x5e651461743de36aa71557c75f97c856af92c56e",
-    "gasUsed": "314037",
+    "hash": "0xfa1b42ff3d7d98dc1d9911a2be71f6da54f93de0189148db720386a23e09cbd0",
+    "block": "1786",
+    "payer": "0xb51fba296364b86446d9278d6f64bbb5fbf35047",
+    "gasUsed": "323033",
     "frames": [
       {
         "status": "success",
@@ -183,7 +183,7 @@
       },
       {
         "status": "success",
-        "execution": "58358",
+        "execution": "67354",
         "state": "183600",
         "logs": 2
       }
@@ -202,13 +202,13 @@
         "transient": 0,
         "outOfGas": false,
         "delegateCallees": [
-          "0x038bbf18f66d78c48a663a7b9d9980b662750b9a",
-          "0xb0859b35a725b475853c73ec7c8391f34fc0df81"
+          "0x92da08ae7362c909fc3c33f0fc676e937514d711",
+          "0xf78f8e2a0e18005908305ba0cdbbb3d90e3df05d"
         ]
       }
     },
     "recipientMode": "Open",
-    "payee": "0xF91a29184551e323F1c93a66BE103D30f5d766e4",
+    "payee": "0x0eFB1155dD33AabBae9cc49Dc3e89C612D61BAa5",
     "payeeIsTarget": false,
     "before": {
       "payee": "0",
@@ -230,10 +230,10 @@
   "b_pathB": {
     "tighten": {
       "via": "ethrex eth_sendRawTransaction (canonical public mempool)",
-      "hash": "0x0e240d3037770fc631e0b27f34acd6e9c60ebf709e79cf36522ba0b1271ba04e",
-      "block": "1499",
-      "payer": "0x5d0b56600676f408bcf46a571a7dee910c0a8152",
-      "gasUsed": "301508",
+      "hash": "0xdf57ff8ad74c27a29f748d069101d2f6895ec74ef2a7dd5bc86d0082b5870aeb",
+      "block": "1787",
+      "payer": "0x223fe4fe55f6fc1ef3c803d8a274674f430948f9",
+      "gasUsed": "301520",
       "frames": [
         {
           "status": "success",
@@ -262,8 +262,8 @@
           "transient": 0,
           "outOfGas": false,
           "delegateCallees": [
-            "0xdabfaceedc53195c927594aebefa4d56932c6162",
-            "0x3526d80b521c8bb87ec1e8a9b44aa028ed161f9c"
+            "0xe6bf88ac908bce2029d79a0fd3163f63bf29e098",
+            "0x1120e571a236e6ed47a873509fb4635e5e028392"
           ]
         }
       },
@@ -271,10 +271,10 @@
     },
     "spend": {
       "via": "ethrex eth_sendRawTransaction (canonical public mempool)",
-      "hash": "0x2c365124140af18d0395af93bd371ed6134ee679fcade2a5f71eb797f77dbe0f",
-      "block": "1500",
-      "payer": "0x5d0b56600676f408bcf46a571a7dee910c0a8152",
-      "gasUsed": "493092",
+      "hash": "0xdf17ee4156f5ac5fd50057d4fdc4acd5cd42cc09f31aff74bf2ee8393528d889",
+      "block": "1788",
+      "payer": "0x223fe4fe55f6fc1ef3c803d8a274674f430948f9",
+      "gasUsed": "493044",
       "frames": [
         {
           "status": "success",
@@ -303,8 +303,8 @@
           "transient": 0,
           "outOfGas": false,
           "delegateCallees": [
-            "0xdabfaceedc53195c927594aebefa4d56932c6162",
-            "0x3526d80b521c8bb87ec1e8a9b44aa028ed161f9c"
+            "0xe6bf88ac908bce2029d79a0fd3163f63bf29e098",
+            "0x1120e571a236e6ed47a873509fb4635e5e028392"
           ]
         }
       },
@@ -331,9 +331,9 @@
   "c_forged": {
     "pathB": {
       "via": "ethrex eth_sendRawTransaction (canonical public mempool)",
-      "hash": "0xb695b38c46a232d5e7bfffee272603b0fb25699d8b6bc01bc05e71b1f7b700a5",
-      "block": "1501",
-      "payer": "0x5d0b56600676f408bcf46a571a7dee910c0a8152",
+      "hash": "0xfbb04f0c95191ffdfb9704155eed6fa3ddf06b806757353afc2908099a48c3aa",
+      "block": "1789",
+      "payer": "0x223fe4fe55f6fc1ef3c803d8a274674f430948f9",
       "gasUsed": "286698",
       "frames": [
         {
@@ -363,8 +363,8 @@
           "transient": 0,
           "outOfGas": false,
           "delegateCallees": [
-            "0xdabfaceedc53195c927594aebefa4d56932c6162",
-            "0x3526d80b521c8bb87ec1e8a9b44aa028ed161f9c"
+            "0xe6bf88ac908bce2029d79a0fd3163f63bf29e098",
+            "0x1120e571a236e6ed47a873509fb4635e5e028392"
           ]
         }
       },
@@ -377,7 +377,7 @@
           3600
         ],
         "cap": "6000000",
-        "signer": "998833069991831490",
+        "signer": "998833105990664848",
         "nonce": "4"
       },
       "after": {
@@ -389,10 +389,10 @@
           3600
         ],
         "cap": "6000000",
-        "signer": "998546371989824604",
+        "signer": "998546407988371264",
         "nonce": "5"
       },
-      "signerPaid": "286698002006886"
+      "signerPaid": "286698002293584"
     },
     "pathA": {
       "submitted": false,
@@ -401,7 +401,7 @@
         "violation": "prefix gas budget exceeded: 300100 > 100000 (MAX_VERIFY_GAS)",
         "verifyFrameGas": null,
         "executionStatus": null,
-        "executionError": "Invalid Transaction: Invalid frame transaction: VERIFY frame 0 (target 0x5d0b56600676f408bcf46a571a7dee910c0a8152, 150 bytes of code) failed: RevertOpcode",
+        "executionError": "Invalid Transaction: Invalid frame transaction: VERIFY frame 0 (target 0x223fe4fe55f6fc1ef3c803d8a274674f430948f9, 150 bytes of code) failed: RevertOpcode",
         "gate": {
           "error": "no trace"
         }
@@ -410,10 +410,10 @@
   },
   "d_overCap": {
     "via": "ethrex eth_sendRawTransaction (canonical public mempool)",
-    "hash": "0xc910de1fd1b21a020e41054a6de0c434b1084a4584c3eaecea699981659f72dd",
-    "block": "1502",
-    "payer": "0x5e651461743de36aa71557c75f97c856af92c56e",
-    "gasUsed": "112884",
+    "hash": "0x2bccaa057ca672241fa2fce9155055d06f50951c3cd6e241c50e76a9c64d90f8",
+    "block": "1790",
+    "payer": "0xb51fba296364b86446d9278d6f64bbb5fbf35047",
+    "gasUsed": "117401",
     "frames": [
       {
         "status": "success",
@@ -429,7 +429,7 @@
       },
       {
         "status": "reverted",
-        "execution": "40805",
+        "execution": "45322",
         "state": "0",
         "logs": 0
       }
@@ -448,13 +448,13 @@
         "transient": 0,
         "outOfGas": false,
         "delegateCallees": [
-          "0x038bbf18f66d78c48a663a7b9d9980b662750b9a",
-          "0xb0859b35a725b475853c73ec7c8391f34fc0df81"
+          "0x92da08ae7362c909fc3c33f0fc676e937514d711",
+          "0xf78f8e2a0e18005908305ba0cdbbb3d90e3df05d"
         ]
       }
     },
     "before": {
-      "tank": "299685962997801741",
+      "tank": "299676966997415736",
       "account": "189000000000000000",
       "bucket": {
         "available": "6000000",
@@ -462,22 +462,22 @@
       }
     },
     "after": {
-      "tank": "299573078997011553",
+      "tank": "299559565996476528",
       "account": "189000000000000000",
       "bucket": {
         "available": "6000000",
         "cap": "6000000"
       }
     },
-    "tankPaid": "112884000790188"
+    "tankPaid": "117401000939208"
   },
   "e_recoveryPriority": {
     "queue": {
       "via": "ethrex eth_sendRawTransaction (canonical public mempool)",
-      "hash": "0xf3c425e996e341c24f567aa657bb8fa23a7e197b4235538b35e9470ecaf93307",
-      "block": "1503",
-      "payer": "0x5d0b56600676f408bcf46a571a7dee910c0a8152",
-      "gasUsed": "596866",
+      "hash": "0xafe13d2c1d23876cf2775475961c5d4baf39a6811f28802ca5841e0e171ef5c7",
+      "block": "1791",
+      "payer": "0x223fe4fe55f6fc1ef3c803d8a274674f430948f9",
+      "gasUsed": "596806",
       "frames": [
         {
           "status": "success",
@@ -506,26 +506,26 @@
           "transient": 0,
           "outOfGas": false,
           "delegateCallees": [
-            "0xdabfaceedc53195c927594aebefa4d56932c6162",
-            "0x3526d80b521c8bb87ec1e8a9b44aa028ed161f9c"
+            "0xe6bf88ac908bce2029d79a0fd3163f63bf29e098",
+            "0x1120e571a236e6ed47a873509fb4635e5e028392"
           ]
         }
       },
-      "opId": "0x7b95577f476fc0b4aa967db3e373bd2d36d3c4f2edec32d5d8eb4a93b787603c",
+      "opId": "0x121f17731e38811fc89871c39d42f1c2b663178b19519c7e05a17c4632d8ac27",
       "pending": {
-        "eta": 1793925920,
+        "eta": 1793927666,
         "kind": 1,
         "state": 1,
         "vaultEpoch": 0,
-        "payloadHash": "0x904dffb985eb9f224fd71cd2cd6bd0b93b843fcbaa174bd70c77e4a568d3cc5b"
+        "payloadHash": "0xef1933ea6f76b8f02394be5a43e54b82bffbc37870f4ce3b06b9f58d6403f8ad"
       }
     },
     "cancel": {
       "via": "ethrex eth_sendRawTransaction (canonical public mempool)",
-      "hash": "0x963188fb30903c52fba63f5bbcceb867cc33ecf317a1cb4d759dd07281397b78",
-      "block": "1504",
-      "payer": "0xf6008a58d54519613b81eb9969b2a6c8ab28ef9f",
-      "gasUsed": "273392",
+      "hash": "0xbb357c30ccc14ad5687bb7711d152525fc4fd95328c87c3268b86227ee51bf94",
+      "block": "1792",
+      "payer": "0x73785dd80087bb86a918e4b5cf5319b6cf3dd256",
+      "gasUsed": "273404",
       "frames": [
         {
           "status": "success",
@@ -554,26 +554,26 @@
           "transient": 0,
           "outOfGas": false,
           "delegateCallees": [
-            "0xdabfaceedc53195c927594aebefa4d56932c6162",
-            "0x3526d80b521c8bb87ec1e8a9b44aa028ed161f9c"
+            "0xe6bf88ac908bce2029d79a0fd3163f63bf29e098",
+            "0x1120e571a236e6ed47a873509fb4635e5e028392"
           ]
         }
       },
       "op": {
-        "eta": 1793925920,
+        "eta": 1793927666,
         "kind": 1,
         "state": 3,
         "vaultEpoch": 0,
-        "payloadHash": "0x904dffb985eb9f224fd71cd2cd6bd0b93b843fcbaa174bd70c77e4a568d3cc5b"
+        "payloadHash": "0xef1933ea6f76b8f02394be5a43e54b82bffbc37870f4ce3b06b9f58d6403f8ad"
       }
     }
   },
   "f_freeze": {
     "guardianFreeze": {
       "via": "ethrex eth_sendRawTransaction (canonical public mempool)",
-      "hash": "0x580c5365429e7b97cdeb903dbfd891672cfbba96832b2bfffcf7ce6d5df589b1",
-      "block": "1505",
-      "payer": "0xb377ea852af5684cd1d78fed53c1d2ed2688b1a0",
+      "hash": "0x7484a3db0f4c936f82c874c6beaea680e5de9307741b6fa6af7a2b7d46af81d0",
+      "block": "1793",
+      "payer": "0xcf82a825e84c36d2b71317ed9fc54f76e30bb5e3",
       "gasUsed": "193020",
       "frames": [
         {
@@ -603,11 +603,11 @@
           "transient": 0,
           "outOfGas": false,
           "delegateCallees": [
-            "0xcc5192dd9711511150eca86adbadc1e926c563ac"
+            "0xb963c67adde0f654a727fa8176b14307ac994854"
           ]
         }
       },
-      "frozenUntil": 1794181532
+      "frozenUntil": 1794183278
     },
     "blockedWhileGuardianFrozen": {
       "submitted": false,
@@ -616,7 +616,7 @@
         "violation": "validation prefix frame reverted",
         "verifyFrameGas": null,
         "executionStatus": null,
-        "executionError": "Invalid Transaction: Invalid frame transaction: VERIFY frame 0 (target 0x0e66ed210417b08081897f50c5c8bc17df5e728f, 89 bytes of code) failed: RevertOpcode",
+        "executionError": "Invalid Transaction: Invalid frame transaction: VERIFY frame 0 (target 0xc63c4cbb99ad0ffaa7897920677aaff7498fc411, 89 bytes of code) failed: RevertOpcode",
         "gate": {
           "error": "no trace"
         }
@@ -624,9 +624,9 @@
     },
     "vaultUnfreeze": {
       "via": "ethrex eth_sendRawTransaction (canonical public mempool)",
-      "hash": "0xbcdaa0238b028728dcd2c5c3c4fe6aa8ad38eab65a1e8fb93f7fe258ad11fca0",
-      "block": "1506",
-      "payer": "0x5d0b56600676f408bcf46a571a7dee910c0a8152",
+      "hash": "0x0460fb24e8a91d21db93613e7e610aac9a147cbe25eb8c95af6e0bed16f90588",
+      "block": "1794",
+      "payer": "0x223fe4fe55f6fc1ef3c803d8a274674f430948f9",
       "gasUsed": "270314",
       "frames": [
         {
@@ -656,18 +656,18 @@
           "transient": 0,
           "outOfGas": false,
           "delegateCallees": [
-            "0xdabfaceedc53195c927594aebefa4d56932c6162",
-            "0x3526d80b521c8bb87ec1e8a9b44aa028ed161f9c"
+            "0xe6bf88ac908bce2029d79a0fd3163f63bf29e098",
+            "0x1120e571a236e6ed47a873509fb4635e5e028392"
           ]
         }
       }
     },
     "shortFreeze": {
       "via": "ethrex eth_sendRawTransaction (canonical public mempool)",
-      "hash": "0xed4a48ea949140cb48ad6ef5337c425d0dfc910717ceaafffd8259b5f702e4d9",
-      "block": "1507",
-      "payer": "0x5d0b56600676f408bcf46a571a7dee910c0a8152",
-      "gasUsed": "378611",
+      "hash": "0x2a17db998e6aae1364c484bc3692513eccb2a9767152f64465d16f0e969bd9c2",
+      "block": "1795",
+      "payer": "0x223fe4fe55f6fc1ef3c803d8a274674f430948f9",
+      "gasUsed": "378635",
       "frames": [
         {
           "status": "success",
@@ -696,12 +696,12 @@
           "transient": 0,
           "outOfGas": false,
           "delegateCallees": [
-            "0xdabfaceedc53195c927594aebefa4d56932c6162",
-            "0x3526d80b521c8bb87ec1e8a9b44aa028ed161f9c"
+            "0xe6bf88ac908bce2029d79a0fd3163f63bf29e098",
+            "0x1120e571a236e6ed47a873509fb4635e5e028392"
           ]
         }
       },
-      "frozenUntil": 1793922378
+      "frozenUntil": 1793924124
     },
     "blockedWhileShortFrozen": {
       "submitted": false,
@@ -710,7 +710,7 @@
         "violation": "validation prefix frame reverted",
         "verifyFrameGas": null,
         "executionStatus": null,
-        "executionError": "Invalid Transaction: Invalid frame transaction: VERIFY frame 0 (target 0x0e66ed210417b08081897f50c5c8bc17df5e728f, 89 bytes of code) failed: RevertOpcode",
+        "executionError": "Invalid Transaction: Invalid frame transaction: VERIFY frame 0 (target 0xc63c4cbb99ad0ffaa7897920677aaff7498fc411, 89 bytes of code) failed: RevertOpcode",
         "gate": {
           "error": "no trace"
         }
@@ -718,10 +718,10 @@
     },
     "clearExpiredFreeze": {
       "via": "ethrex eth_sendRawTransaction (canonical public mempool)",
-      "hash": "0xa143699ed63e27f07c6ca97324a801243ebc8a9f202eeedbaa0b7dc5ef302b16",
-      "block": "1514",
-      "payer": "0x5e651461743de36aa71557c75f97c856af92c56e",
-      "gasUsed": "84635",
+      "hash": "0xd611ca63533646d69afec5a50079b5b8cd1f15f56ef2c3e907baf621a682f586",
+      "block": "1802",
+      "payer": "0xb51fba296364b86446d9278d6f64bbb5fbf35047",
+      "gasUsed": "84599",
       "frames": [
         {
           "status": "success",
@@ -756,18 +756,18 @@
           "transient": 0,
           "outOfGas": false,
           "delegateCallees": [
-            "0x038bbf18f66d78c48a663a7b9d9980b662750b9a",
-            "0xb0859b35a725b475853c73ec7c8391f34fc0df81"
+            "0x92da08ae7362c909fc3c33f0fc676e937514d711",
+            "0xf78f8e2a0e18005908305ba0cdbbb3d90e3df05d"
           ]
         }
       }
     },
     "hotPaymentAfterClear": {
       "via": "ethrex eth_sendRawTransaction (canonical public mempool)",
-      "hash": "0x594889a2e7b306ed17ad3dbe85b95184c35387af9404fdc61fb1e5e6f9b42c12",
-      "block": "1515",
-      "payer": "0x5e651461743de36aa71557c75f97c856af92c56e",
-      "gasUsed": "125285",
+      "hash": "0x6651ee32f72cb8a2cd30816ff81ff1fa26b35c1e8a0907a9b3a94e72d2abb26a",
+      "block": "1803",
+      "payer": "0xb51fba296364b86446d9278d6f64bbb5fbf35047",
+      "gasUsed": "129802",
       "frames": [
         {
           "status": "success",
@@ -783,7 +783,7 @@
         },
         {
           "status": "success",
-          "execution": "53230",
+          "execution": "57747",
           "state": "0",
           "logs": 2
         }
@@ -802,8 +802,8 @@
           "transient": 0,
           "outOfGas": false,
           "delegateCallees": [
-            "0x038bbf18f66d78c48a663a7b9d9980b662750b9a",
-            "0xb0859b35a725b475853c73ec7c8391f34fc0df81"
+            "0x92da08ae7362c909fc3c33f0fc676e937514d711",
+            "0xf78f8e2a0e18005908305ba0cdbbb3d90e3df05d"
           ]
         }
       }
@@ -812,10 +812,10 @@
   "g_pathA": {
     "stake": {
       "via": "ethrex eth_sendRawTransaction (canonical public mempool)",
-      "hash": "0x1c24517b93af563c0547df9a8461c9d159e4259bda739dc4124861be85b3ed45",
-      "block": "1516",
-      "payer": "0x5d0b56600676f408bcf46a571a7dee910c0a8152",
-      "gasUsed": "474765",
+      "hash": "0x228076e5954d7abbf9716e82d5a458ae99f7754991e40d1e32033ff1386b43b1",
+      "block": "1804",
+      "payer": "0x223fe4fe55f6fc1ef3c803d8a274674f430948f9",
+      "gasUsed": "474777",
       "frames": [
         {
           "status": "success",
@@ -844,8 +844,8 @@
           "transient": 0,
           "outOfGas": false,
           "delegateCallees": [
-            "0xdabfaceedc53195c927594aebefa4d56932c6162",
-            "0x3526d80b521c8bb87ec1e8a9b44aa028ed161f9c"
+            "0xe6bf88ac908bce2029d79a0fd3163f63bf29e098",
+            "0x1120e571a236e6ed47a873509fb4635e5e028392"
           ]
         }
       },
@@ -871,9 +871,9 @@
     },
     "pathA": {
       "via": "BUDGET-010 sidecar eth_sendFrameTransaction (http://localhost:14340/rpc)",
-      "hash": "0xc28efb891d069c8c0db9fb5f34a14c988e33a649ad3b6bf712c7f08b19076ada",
+      "hash": "0xe24d2f72d61e2eb49c72899293d2a45df3dbe1afd1e471d71ad7f664e39f48fe",
       "status": "Submitted",
-      "block": "1519",
+      "block": "1808",
       "gasUsed": "291390",
       "frames": [
         {
@@ -903,8 +903,8 @@
           "transient": 0,
           "outOfGas": false,
           "delegateCallees": [
-            "0xdabfaceedc53195c927594aebefa4d56932c6162",
-            "0x3526d80b521c8bb87ec1e8a9b44aa028ed161f9c"
+            "0xe6bf88ac908bce2029d79a0fd3163f63bf29e098",
+            "0x1120e571a236e6ed47a873509fb4635e5e028392"
           ]
         }
       },
@@ -917,35 +917,35 @@
     "log": [
       "  chain id 1337",
       "  expected fee TXPARAM 6",
-      "    ok 0x08baba0841E7B60a869cFd7bB39c00CA1B91B6e8",
-      "    ok 0xDAbfacEEdc53195C927594AeBEfa4D56932C6162",
-      "    ok 0x5D0B56600676F408BCF46A571a7DEe910C0A8152",
-      "    ok 0xf6008A58d54519613b81EB9969b2A6C8Ab28ef9F",
-      "    ok 0xb377EA852Af5684CD1d78FED53C1D2ED2688B1a0",
+      "    ok 0x2559e57494309A02d65b6083880d239ed84F4931",
+      "    ok 0xe6bf88aC908bCe2029D79a0fD3163f63BF29E098",
+      "    ok 0x223Fe4fE55f6FC1Ef3c803D8A274674F430948F9",
+      "    ok 0x73785dd80087bB86a918e4b5Cf5319B6cf3DD256",
+      "    ok 0xCF82A825e84c36D2B71317Ed9fC54F76E30bb5E3",
       "  fee profile OK"
     ]
   },
   "pqSignMs": [
-    7309,
-    5782,
-    4742,
-    4577,
+    3906,
+    3674,
+    3817,
+    4335,
+    3780,
+    3796,
+    4761,
+    3571,
     4208,
-    4618,
-    3947,
-    4173,
-    4062,
-    3772,
-    4094
+    3663,
+    4030
   ],
   "checklist": {
-    "a": "PASS: Open-mode hot payment to an arbitrary recipient 0xF91a29184551e323F1c93a66BE103D30f5d766e4 mined via public mempool (0x3eba3a36ec68d8687926f43ebf8b1aac85eb6d52d694d66b944c1a6144f4338f); VERIFY 45750 gas; bucket debited",
-    "b": "PASS: Path B C13 vault txs mined via public mempool: tightening 0x0e240d3037770fc631e0b27f34acd6e9c60ebf709e79cf36522ba0b1271ba04e, spend 0x2c365124140af18d0395af93bd371ed6134ee679fcade2a5f71eb797f77dbe0f; VERIFY 36213 gas",
-    "c": "PASS: forged vault sig moves nothing: Path B 0xb695b38c46a232d5e7bfffee272603b0fb25699d8b6bc01bc05e71b1f7b700a5 mined with SENDER reverted (balances, cap, allowance unchanged; signer paid 286698002006886 wei, nonce 4->5); Path A rejected in VERIFY (Invalid Transaction: Invalid frame transaction: VERIFY frame 0 (target 0x5d0b56600676f408bcf46a571a7dee910c0a8152, 150 bytes of code) failed: RevertOpcode)",
-    "d": "PASS: over-cap hot tx 0xc910de1fd1b21a020e41054a6de0c434b1084a4584c3eaecea699981659f72dd: SENDER reverted, account unchanged, tank paid 112884000790188 wei",
-    "e": "PASS: loosening queued by the vault (0xf3c425e996e341c24f567aa657bb8fa23a7e197b4235538b35e9470ecaf93307, op 0x7b95577f476fc0b4aa967db3e373bd2d36d3c4f2edec32d5d8eb4a93b787603c), cancelled by the RecoverySigner (0x963188fb30903c52fba63f5bbcceb867cc33ecf317a1cb4d759dd07281397b78), state CANCELLED",
-    "f": "PASS: GuardianSigner freeze 0x580c5365429e7b97cdeb903dbfd891672cfbba96832b2bfffcf7ce6d5df589b1 blocks the hot path (VERIFY: Invalid Transaction: Invalid frame transaction: VERIFY frame 0 (target 0x0e66ed210417b08081897f50c5c8bc17df5e728f, 89 bytes of code) failed: RevertOpcode); vault unfreeze 0xbcdaa0238b028728dcd2c5c3c4fe6aa8ad38eab65a1e8fb93f7fe258ad11fca0; short freeze 0xed4a48ea949140cb48ad6ef5337c425d0dfc910717ceaafffd8259b5f702e4d9 expired and cleared by clearExpiredFreeze 0xa143699ed63e27f07c6ca97324a801243ebc8a9f202eeedbaa0b7dc5ef302b16; hot payment 0x594889a2e7b306ed17ad3dbe85b95184c35387af9404fdc61fb1e5e6f9b42c12",
-    "g": "PASS: VaultSigner staked (0x1c24517b93af563c0547df9a8461c9d159e4259bda739dc4124861be85b3ed45); Path A tightening 0xc28efb891d069c8c0db9fb5f34a14c988e33a649ad3b6bf712c7f08b19076ada admitted by the BUDGET-010 sidecar (stock sidecar and ethrex reject: MAX_VERIFY_GAS), mined; VERIFY 151701 gas"
+    "a": "PASS: Open-mode hot payment to an arbitrary recipient 0x0eFB1155dD33AabBae9cc49Dc3e89C612D61BAa5 mined via public mempool (0xfa1b42ff3d7d98dc1d9911a2be71f6da54f93de0189148db720386a23e09cbd0); VERIFY 45750 gas; bucket debited",
+    "b": "PASS: Path B C13 vault txs mined via public mempool: tightening 0xdf57ff8ad74c27a29f748d069101d2f6895ec74ef2a7dd5bc86d0082b5870aeb, spend 0xdf17ee4156f5ac5fd50057d4fdc4acd5cd42cc09f31aff74bf2ee8393528d889; VERIFY 36213 gas",
+    "c": "PASS: forged vault sig moves nothing: Path B 0xfbb04f0c95191ffdfb9704155eed6fa3ddf06b806757353afc2908099a48c3aa mined with SENDER reverted (balances, cap, allowance unchanged; signer paid 286698002293584 wei, nonce 4->5); Path A rejected in VERIFY (Invalid Transaction: Invalid frame transaction: VERIFY frame 0 (target 0x223fe4fe55f6fc1ef3c803d8a274674f430948f9, 150 bytes of code) failed: RevertOpcode)",
+    "d": "PASS: over-cap hot tx 0x2bccaa057ca672241fa2fce9155055d06f50951c3cd6e241c50e76a9c64d90f8: SENDER reverted, account unchanged, tank paid 117401000939208 wei",
+    "e": "PASS: loosening queued by the vault (0xafe13d2c1d23876cf2775475961c5d4baf39a6811f28802ca5841e0e171ef5c7, op 0x121f17731e38811fc89871c39d42f1c2b663178b19519c7e05a17c4632d8ac27), cancelled by the RecoverySigner (0xbb357c30ccc14ad5687bb7711d152525fc4fd95328c87c3268b86227ee51bf94), state CANCELLED",
+    "f": "PASS: GuardianSigner freeze 0x7484a3db0f4c936f82c874c6beaea680e5de9307741b6fa6af7a2b7d46af81d0 blocks the hot path (VERIFY: Invalid Transaction: Invalid frame transaction: VERIFY frame 0 (target 0xc63c4cbb99ad0ffaa7897920677aaff7498fc411, 89 bytes of code) failed: RevertOpcode); vault unfreeze 0x0460fb24e8a91d21db93613e7e610aac9a147cbe25eb8c95af6e0bed16f90588; short freeze 0x2a17db998e6aae1364c484bc3692513eccb2a9767152f64465d16f0e969bd9c2 expired and cleared by clearExpiredFreeze 0xd611ca63533646d69afec5a50079b5b8cd1f15f56ef2c3e907baf621a682f586; hot payment 0x6651ee32f72cb8a2cd30816ff81ff1fa26b35c1e8a0907a9b3a94e72d2abb26a",
+    "g": "PASS: VaultSigner staked (0x228076e5954d7abbf9716e82d5a458ae99f7754991e40d1e32033ff1386b43b1); Path A tightening 0xe24d2f72d61e2eb49c72899293d2a45df3dbe1afd1e471d71ad7f664e39f48fe admitted by the BUDGET-010 sidecar (stock sidecar and ethrex reject: MAX_VERIFY_GAS), mined; VERIFY 151701 gas"
   },
-  "finishedAt": "2026-11-05T23:46:57.874Z"
+  "finishedAt": "2026-11-06T00:16:09.773Z"
 }
