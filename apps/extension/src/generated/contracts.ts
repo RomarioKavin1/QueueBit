@@ -2990,6 +2990,888 @@ export const accountFactoryAbi = [
   },
 ] as const;
 
+/** `RoleSignerFactory`: deploys (`createRoleSigner`) and predicts the Vault / Recovery signer clones. */
+export const roleSignerFactoryAbi = [
+  {
+    type: "function",
+    name: "createRoleSigner",
+    inputs: [
+      {
+        name: "salt",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+      {
+        name: "role",
+        type: "uint8",
+        internalType: "uint8",
+      },
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "pk",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+      {
+        name: "pqVerifier",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "payerKey",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    outputs: [
+      {
+        name: "signer",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    stateMutability: "payable",
+  },
+  {
+    type: "function",
+    name: "defaultMaxFee",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "devnet",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "uint8",
+        internalType: "enum Devnet",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "feeParam",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "uint8",
+        internalType: "enum TxParam",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "implementation",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "address",
+        internalType: "contract PQRoleSigner",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "predictRoleSigner",
+    inputs: [
+      {
+        name: "salt",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+      {
+        name: "role",
+        type: "uint8",
+        internalType: "uint8",
+      },
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "pk",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+      {
+        name: "pqVerifier",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "payerKey",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "stakingRegistry",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "address",
+        internalType: "contract IStakingRegistry",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "event",
+    name: "RoleSignerCreated",
+    inputs: [
+      {
+        name: "signer",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "role",
+        type: "uint8",
+        indexed: false,
+        internalType: "uint8",
+      },
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "error",
+    name: "InvalidConfig",
+    inputs: [],
+  },
+] as const;
+
+/** `PQRoleSigner` (the clones' implementation): `verifyFrame`, `executePQ` (Path B), `relay` (Path A), views. */
+export const pqRoleSignerAbi = [
+  {
+    type: "receive",
+    stateMutability: "payable",
+  },
+  {
+    type: "function",
+    name: "PATH_A",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "uint8",
+        internalType: "uint8",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "PATH_B",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "uint8",
+        internalType: "uint8",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "ROLE_RECOVERY",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "uint8",
+        internalType: "uint8",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "ROLE_VAULT",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "uint8",
+        internalType: "uint8",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "account",
+    inputs: [],
+    outputs: [
+      {
+        name: "a",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "executePQ",
+    inputs: [
+      {
+        name: "sigIndex",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "target",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "data",
+        type: "bytes",
+        internalType: "bytes",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "factory",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "feeParam",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "uint8",
+        internalType: "enum TxParam",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "initialize",
+    inputs: [
+      {
+        name: "payerKey_",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "maxFee_",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "maxFee",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "pathAEnabled",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "bool",
+        internalType: "bool",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "payerKey",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "pk",
+    inputs: [],
+    outputs: [
+      {
+        name: "p",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "relay",
+    inputs: [
+      {
+        name: "target",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "data",
+        type: "bytes",
+        internalType: "bytes",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "role",
+    inputs: [],
+    outputs: [
+      {
+        name: "r",
+        type: "uint8",
+        internalType: "uint8",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "setMaxFee",
+    inputs: [
+      {
+        name: "newMaxFee",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "setPathA",
+    inputs: [
+      {
+        name: "enabled",
+        type: "bool",
+        internalType: "bool",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "setPayerKey",
+    inputs: [
+      {
+        name: "newPayerKey",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "sigLength",
+    inputs: [],
+    outputs: [
+      {
+        name: "n",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "stake",
+    inputs: [
+      {
+        name: "unstakeDelaySec",
+        type: "uint32",
+        internalType: "uint32",
+      },
+      {
+        name: "amount",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "stakingRegistry",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "address",
+        internalType: "contract IStakingRegistry",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "unlockStake",
+    inputs: [],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "verifier",
+    inputs: [],
+    outputs: [
+      {
+        name: "v",
+        type: "address",
+        internalType: "contract IPQVerifier",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "verifyFrame",
+    inputs: [
+      {
+        name: "sigIndex",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+    outputs: [],
+    stateMutability: "payable",
+  },
+  {
+    type: "function",
+    name: "withdrawStake",
+    inputs: [
+      {
+        name: "to",
+        type: "address",
+        internalType: "address payable",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "event",
+    name: "MaxFeeSet",
+    inputs: [
+      {
+        name: "maxFee",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "PathASet",
+    inputs: [
+      {
+        name: "enabled",
+        type: "bool",
+        indexed: false,
+        internalType: "bool",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "PayerKeySet",
+    inputs: [
+      {
+        name: "payerKey",
+        type: "address",
+        indexed: false,
+        internalType: "address",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "RoleTxExecuted",
+    inputs: [
+      {
+        name: "sigHash",
+        type: "bytes32",
+        indexed: true,
+        internalType: "bytes32",
+      },
+      {
+        name: "path",
+        type: "uint8",
+        indexed: false,
+        internalType: "uint8",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "StakeUnlocked",
+    inputs: [],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "StakeWithdrawn",
+    inputs: [
+      {
+        name: "to",
+        type: "address",
+        indexed: false,
+        internalType: "address",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "Staked",
+    inputs: [
+      {
+        name: "amount",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "delay",
+        type: "uint32",
+        indexed: false,
+        internalType: "uint32",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "error",
+    name: "BadFrameShape",
+    inputs: [
+      {
+        name: "frameIndex",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "BadPayerEntry",
+    inputs: [
+      {
+        name: "sigIndex",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "BadSignatureCount",
+    inputs: [
+      {
+        name: "count",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "BadWitnessEntry",
+    inputs: [
+      {
+        name: "sigIndex",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "FeeParamMismatch",
+    inputs: [
+      {
+        name: "devnet",
+        type: "uint8",
+        internalType: "enum Devnet",
+      },
+      {
+        name: "feeParam",
+        type: "uint8",
+        internalType: "enum TxParam",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "FeeTooHigh",
+    inputs: [
+      {
+        name: "fee",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "maxFee",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "HelperDeploymentFailed",
+    inputs: [
+      {
+        name: "devnet",
+        type: "uint8",
+        internalType: "enum Devnet",
+      },
+      {
+        name: "opcode",
+        type: "uint8",
+        internalType: "enum Opcode",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "InvalidConfig",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "InvalidPQSignature",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "NotClone",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "NotFactory",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "NotVerifyFrame",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "OnlySelf",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "OpcodeUnsupported",
+    inputs: [
+      {
+        name: "devnet",
+        type: "uint8",
+        internalType: "enum Devnet",
+      },
+      {
+        name: "opcode",
+        type: "uint8",
+        internalType: "enum Opcode",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "PathBDisabled",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "ScopeNotSelfVerify",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "TargetNotAllowed",
+    inputs: [
+      {
+        name: "target",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "selector",
+        type: "bytes4",
+        internalType: "bytes4",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "UnexpectedOutputLength",
+    inputs: [
+      {
+        name: "length",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+  },
+] as const;
+
+/** `IPQVerifier`: `schemeId`, `sigLength`, `verifyGasEstimate`, `verify`. */
+export const pqVerifierAbi = [
+  {
+    type: "function",
+    name: "schemeId",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+    stateMutability: "pure",
+  },
+  {
+    type: "function",
+    name: "sigLength",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+    stateMutability: "pure",
+  },
+  {
+    type: "function",
+    name: "verify",
+    inputs: [
+      {
+        name: "pk",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+      {
+        name: "digest",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+      {
+        name: "sig",
+        type: "bytes",
+        internalType: "bytes",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "bool",
+        internalType: "bool",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "verifyGasEstimate",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+    stateMutability: "pure",
+  },
+] as const;
+
 /** `type(ERC1967Proxy).creationCode`: the factory's CREATE2 init code is this ‖ abi.encode(implementation, initData). */
 export const erc1967ProxyCreationCode =
   "0x6080604052610279803803806100148161016e565b9283398101604082820312610156578151916001600160a01b03831690818403610156576020810151906001600160401b038211610156570182601f82011215610156578051906001600160401b03821161015a5761007c601f8301601f191660200161016e565b938285526020838301011161015657815f9260208093018387015e8401015281511561014757823b15610135577f360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc80546001600160a01b031916821790557fbc7cd75a20ee27fd9adebab32041f755214dbc6bffa90cc0225b39da2e5c2d3b5f80a280511561011e5761010e91610193565b505b604051605990816102208239f35b505034156101105763b398979f60e01b5f5260045ffd5b634c9c8ce360e01b5f5260045260245ffd5b6330a289cf60e21b5f5260045ffd5b5f80fd5b634e487b7160e01b5f52604160045260245ffd5b6040519190601f01601f191682016001600160401b0381118382101761015a57604052565b905f8091602081519101845af4808061020c575b156101c75750506040513d81523d5f602083013e60203d82010160405290565b156101ec57639996b31560e01b5f9081526001600160a01b0391909116600452602490fd5b3d156101fd576040513d5f823e3d90fd5b63d6bda27560e01b5f5260045ffd5b503d1515806101a75750813b15156101a756fe60806040527f360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc545f9081906001600160a01b0316368280378136915af43d5f803e156048573d5ff35b3d5ffdfea164736f6c634300081c000a" as const;
@@ -3003,15 +3885,18 @@ export const localDeployment: {
   factory: `0x${string}`;
   c13Verifier: `0x${string}`;
   roleSignerFactory: `0x${string}`;
-  /** Public devnet key standing in for the Vault signer until Vault pairing (M4). */
+  /** ERC-8421 staking registry the sidecars read (stake of the role signers, Path A). */
+  stakingRegistry: `0x${string}`;
+  /** Legacy public devnet key for explicit-mode test accounts only; the extension never uses it. */
   testVault: `0x${string}`;
 } | null = {
   chainId: 1337,
-  accountImpl: "0xa23d5438Ef67E35829C2E0B03aD13eC3B108C520",
-  accountImplInitCodeHash: "0xc95260bb308955523f2bf42f7929f0349f90ac008099488d436a7dff8f21ad9f",
-  rolesModule: "0x4B24758fe942aE4da205f8a506e004CAE6A66b89",
+  accountImpl: "0x399E76c5a058c32c1fC44727aA491F6594Bdc556",
+  accountImplInitCodeHash: "0x0a7a3a9ee6c0e6c07edf094fa8abb130f25bd983634cd569cf14655bbbc64f51",
+  rolesModule: "0x0DA4a2e6FABac2EEb55dC3cfa48a8aEed2bAEefc",
   factory: "0x12e7A64982e85868C345165bD149d6bE55fcA345",
   c13Verifier: "0xf67f51B70d6e751db52E9Ab8C20e5430dBB04715",
   roleSignerFactory: "0x6E721ac3171b611eE9E2FD3e989B7B2563B3A578",
+  stakingRegistry: "0x8464135c8F25Da09e49BC8782676a84730C318bC",
   testVault: "0xd2A752cbA5c92DfEEa06957819F229a6fdC1107a",
 };

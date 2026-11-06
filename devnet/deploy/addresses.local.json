@@ -9,22 +9,22 @@
   "stakingRegistry": "0x8464135c8F25Da09e49BC8782676a84730C318bC",
   "contracts": {
     "LeakedAccountRoles": {
-      "address": "0x4B24758fe942aE4da205f8a506e004CAE6A66b89",
+      "address": "0x0DA4a2e6FABac2EEb55dC3cfa48a8aEed2bAEefc",
       "artifact": "LeakedAccountRoles.sol/LeakedAccountRoles",
       "args": [],
-      "initCodeHash": "0xc2c51a54c1f351666002e8e18ec4bf0150d0253d23c432637ae4285c082aec72",
-      "deployTx": "0x2b8c49ee7095d958d77bd1c585a3c233f4e5bb0bd448f74cc87b7071e447e33e"
+      "initCodeHash": "0x017777c49638799130b9800adc8585630f6b8cc0fac26b5f06dc0d633bd5d87b",
+      "deployTx": "0x6c38e00944b3b4c1d847fad3b78f8c3eeb3c90d01198d5b090f066ea11c375d5"
     },
     "LeakedAccountImpl": {
-      "address": "0xa23d5438Ef67E35829C2E0B03aD13eC3B108C520",
+      "address": "0x399E76c5a058c32c1fC44727aA491F6594Bdc556",
       "artifact": "LeakedAccountImpl.sol/LeakedAccountImpl",
       "args": [
         0,
         true,
-        "0x4B24758fe942aE4da205f8a506e004CAE6A66b89"
+        "0x0DA4a2e6FABac2EEb55dC3cfa48a8aEed2bAEefc"
       ],
-      "initCodeHash": "0xc95260bb308955523f2bf42f7929f0349f90ac008099488d436a7dff8f21ad9f",
-      "deployTx": "0x3f815872f6cd8619df61abe095bdd51e75ba66d558a08e6b848b618cc7f4471f"
+      "initCodeHash": "0x0a7a3a9ee6c0e6c07edf094fa8abb130f25bd983634cd569cf14655bbbc64f51",
+      "deployTx": "0x018dff3d5d5cc432cf6f60c054a0cea00866b08fdfd679e4a7abb4aa63d14eb4"
     },
     "AccountFactory": {
       "address": "0x12e7A64982e85868C345165bD149d6bE55fcA345",

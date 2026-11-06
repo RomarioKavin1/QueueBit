@@ -36,6 +36,9 @@ const strip = (abi) => abi.filter((x) => x.type !== "constructor");
 
 export async function render() {
   const factory = strip(art("AccountFactory.sol", "AccountFactory").abi);
+  const roleSignerFactory = strip(art("RoleSignerFactory.sol", "RoleSignerFactory").abi);
+  const roleSigner = strip(art("PQRoleSigner.sol", "PQRoleSigner").abi);
+  const pqVerifier = strip(art("IPQVerifier.sol", "IPQVerifier").abi);
   const proxy = art("ERC1967Proxy.sol", "ERC1967Proxy").bytecode.object;
   const deployment = existsSync(DEPLOYMENT_FILE) ? JSON.parse(readFileSync(DEPLOYMENT_FILE, "utf8")) : null;
   const local = deployment
@@ -47,6 +50,7 @@ export async function render() {
         factory: deployment.contracts.AccountFactory.address,
         c13Verifier: deployment.contracts.C13Verifier.address,
         roleSignerFactory: deployment.contracts.RoleSignerFactory.address,
+        stakingRegistry: deployment.stakingRegistry,
         testVault: deployment.testVault.address,
       }
     : null;
@@ -57,6 +61,15 @@ export async function render() {
 export const accountAbi = ${j(accountAbi())} as const;
 
 export const accountFactoryAbi = ${j(factory)} as const;
+
+/** \`RoleSignerFactory\`: deploys (\`createRoleSigner\`) and predicts the Vault / Recovery signer clones. */
+export const roleSignerFactoryAbi = ${j(roleSignerFactory)} as const;
+
+/** \`PQRoleSigner\` (the clones' implementation): \`verifyFrame\`, \`executePQ\` (Path B), \`relay\` (Path A), views. */
+export const pqRoleSignerAbi = ${j(roleSigner)} as const;
+
+/** \`IPQVerifier\`: \`schemeId\`, \`sigLength\`, \`verifyGasEstimate\`, \`verify\`. */
+export const pqVerifierAbi = ${j(pqVerifier)} as const;
 
 /** \`type(ERC1967Proxy).creationCode\`: the factory's CREATE2 init code is this ‖ abi.encode(implementation, initData). */
 export const erc1967ProxyCreationCode = ${j(proxy)} as const;
@@ -70,7 +83,9 @@ export const localDeployment: {
   factory: \`0x\${string}\`;
   c13Verifier: \`0x\${string}\`;
   roleSignerFactory: \`0x\${string}\`;
-  /** Public devnet key standing in for the Vault signer until Vault pairing (M4). */
+  /** ERC-8421 staking registry the sidecars read (stake of the role signers, Path A). */
+  stakingRegistry: \`0x\${string}\`;
+  /** Legacy public devnet key for explicit-mode test accounts only; the extension never uses it. */
   testVault: \`0x\${string}\`;
 } | null = ${j(local)};
 `;
