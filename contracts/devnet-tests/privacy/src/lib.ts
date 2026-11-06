@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { profile } from "@forshtat/hegota-support/profiles/ethrex-eip8141-tracer";
 import { encodeTx, frame, newTx, secp256k1Placeholder, signTx, txHash, type Frame, type FrameTx } from "@forshtat/hegota-support/tx";
 import { rpc, toWire } from "@forshtat/hegota-support/rpc";
-import { encodeDeployData, type Abi, type Address, type Hex } from "viem";
+import { concat, encodeDeployData, keccak256, toHex, type Abi, type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
 export { profile, encodeTx, frame, newTx, secp256k1Placeholder, signTx, txHash, toWire };
@@ -17,8 +17,14 @@ export const SIDECAR = process.env.SIDECAR_URL ?? "http://localhost:14337/rpc";
 export const PATCHED_SIDECAR = process.env.PATCHED_SIDECAR_URL ?? "http://localhost:14340/rpc";
 export const CHAIN_ID = 1337n;
 export const REGISTRY: Address = (process.env.STAKING_REGISTRY as Address) ?? "0x8464135c8F25Da09e49BC8782676a84730C318bC";
-/** anvil #5: the privacy workstream's funding key (public test key). */
-export const FUNDER: Hex = "0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba";
+/** anvil #5: the privacy workstream's root funding key (public test key). */
+export const ROOT_FUNDER: Hex = "0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba";
+/** The key the scripts fund from: anvil #5 itself, or (`FUNDER_LABEL=x`) the sub-account
+ *  keccak256(anvil#5 ‖ "leaked.privacy.sub:" ‖ x), topped up from anvil #5 by `ensureFunder` (so a run never shares
+ *  nonces with another script on anvil #5). */
+export const FUNDER: Hex = process.env.FUNDER_LABEL
+  ? keccak256(concat([ROOT_FUNDER, toHex(`leaked.privacy.sub:${process.env.FUNDER_LABEL}`)]))
+  : ROOT_FUNDER;
 export const addr = (k: Hex): Address => privateKeyToAccount(k).address;
 
 export const ethrex = (m: string, p: unknown[] = []) => rpc(ETHREX, m, p) as Promise<any>;
@@ -51,6 +57,15 @@ export async function send(key: Hex, to: Address | null, data: Hex = "0x", value
   const r = await waitReceipt(hash);
   if (r.status !== "0x1") throw new Error(`tx reverted: ${hash}`);
   return r;
+}
+
+/** Tops the sub-account funder up to `minWei` from anvil #5 (no-op when FUNDER is anvil #5). */
+export async function ensureFunder(minWei: bigint): Promise<void> {
+  if (FUNDER === ROOT_FUNDER) return;
+  const have = BigInt(await ethrex("eth_getBalance", [addr(FUNDER), "latest"]));
+  if (have >= minWei) return;
+  const r = await send(ROOT_FUNDER, addr(FUNDER), "0x", minWei - have, 300_000n); // a fresh account costs state gas on this devnet
+  log("funder top-up (sub-account of anvil #5)", { funder: addr(FUNDER), tx: r.transactionHash });
 }
 
 const OUT = new URL("../../../out/", import.meta.url).pathname;

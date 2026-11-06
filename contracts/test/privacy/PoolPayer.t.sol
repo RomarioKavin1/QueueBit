@@ -41,14 +41,34 @@ contract PoolPayerTest is PoolPayerBase {
         assertEq(payer.pendingSig(), ~sim().sigHash(), "refund consumed");
     }
 
-    function test_tailCalls_allowedWhenRecipientIsSender() public {
+    /// v1: no user tail frames, even when the recipient is the sender (exactly [pay, settle, refund]).
+    function test_reject_tailFrames_evenWhenRecipientIsSender() public {
         (PrivacyPoolsTypes.Withdrawal memory w, PrivacyPoolsTypes.WithdrawProof memory p) = _good();
         Shape memory s = _shape();
         s.tailFrames = 2;
         _buildTx(w, p, s);
-        SimResult memory r = simRunValid();
-        assertEq(r.frames[5].status, STATUS_SUCCESS);
-        assertGt(sender.balance, Fx.WITHDRAWN - FEE);
+        _expectVerifyRevert(abi.encodeWithSelector(PoolPayer.BadFrameShape.selector, uint256(6)));
+    }
+
+    /// v1: nothing but VERIFY frames before the pay frame (a user DEFAULT frame there is a user call PoolPayer
+    /// would pay for, with refund effects the estimator cannot see).
+    function test_reject_executionFrameBeforePay() public {
+        (PrivacyPoolsTypes.Withdrawal memory w, PrivacyPoolsTypes.WithdrawProof memory p) = _good();
+        simBegin(sender);
+        simSetFees(1 gwei, 2 gwei, MAX_COST);
+        simAddFrame(MODE_DEFAULT, 0, makeAddr("dapp"), 50_000, 0, 0, hex"01");
+        simAddFrame(MODE_VERIFY, ONLY_VERIFY, address(0), 10_000, 0, 0, "");
+        simAddFrame(MODE_VERIFY, PAY, address(payer), PAY_GAS, PAY_STATE, 0, _verifyData(w, p, Fx.STATE_ROOT_INDEX));
+        simAddFrame(MODE_DEFAULT, 0, address(payer), SETTLE_GAS, SETTLE_STATE, 0, abi.encodeCall(PoolPayer.settle, (2)));
+        simAddFrame(MODE_DEFAULT, 0, address(payer), REFUND_GAS, REFUND_STATE, 0, abi.encodeCall(PoolPayer.refund, ()));
+        simAddSecp256k1(address(0));
+        simSignSecp256k1(0, senderPk);
+        SimResult memory r = simRun();
+        assertFalse(r.valid, "tx must be invalid");
+        assertEq(uint256(r.reason), uint256(InvalidReason.VERIFY_FAILED));
+        assertEq(r.index, 2);
+        assertEq(r.frames[2].returnData, abi.encodeWithSelector(PoolPayer.BadFrameShape.selector, uint256(0)));
+        assertEq(address(payer).balance, FLOAT);
     }
 
     // ------------------------------------------------------------------------------ verify(): rejections ------
@@ -176,7 +196,8 @@ contract PoolPayerTest is PoolPayerBase {
         // append a SENDER frame after refund(): the last frame is no longer refund()
         sim().pushFrame(FrameTxModel.Frame(MODE_SENDER, 0, makeAddr("dapp"), 50_000, 0, 0, hex"01"));
         simSignSecp256k1(0, senderPk); // the sig hash covers the frames
-        _expectVerifyRevert(abi.encodeWithSelector(PoolPayer.BadFrameShape.selector, uint256(4)));
+        // refused by the frame count (n = 5 != i + 3) before the refund-frame check
+        _expectVerifyRevert(abi.encodeWithSelector(PoolPayer.BadFrameShape.selector, uint256(5)));
     }
 
     function test_reject_starvedRefundFrame() public {
@@ -200,7 +221,7 @@ contract PoolPayerTest is PoolPayerBase {
         Shape memory s = _shape();
         s.tailFrames = 1;
         _buildTx(w, p, s);
-        _expectVerifyRevert(abi.encodeWithSelector(PoolPayer.TailCallsNeedRecipientSender.selector));
+        _expectVerifyRevert(abi.encodeWithSelector(PoolPayer.BadFrameShape.selector, uint256(5)));
     }
 
     function test_reject_wrongScope() public {
@@ -455,13 +476,46 @@ contract PoolPayerTest is PoolPayerBase {
         assertEq(operator.balance, 1 ether);
     }
 
-    function test_setOperator() public {
+    /// Two-step handover: the old operator keeps its powers until the proposed one accepts; a proposal can be
+    /// replaced or cancelled (address(0)); nobody else can accept.
+    function test_operator_twoStep() public {
         vm.prank(bob);
         vm.expectRevert(PoolPayer.NotOperator.selector);
-        payer.setOperator(bob);
+        payer.proposeOperator(bob);
+        vm.prank(bob);
+        vm.expectRevert(PoolPayer.NotPendingOperator.selector);
+        payer.acceptOperator();
+
         vm.prank(operator);
-        payer.setOperator(bob);
+        vm.expectEmit(address(payer));
+        emit PoolPayer.OperatorProposed(bob);
+        payer.proposeOperator(bob);
+        assertEq(payer.operator(), operator, "not yet");
+        assertEq(payer.pendingOperator(), bob);
+        vm.prank(makeAddr("mallory"));
+        vm.expectRevert(PoolPayer.NotPendingOperator.selector);
+        payer.acceptOperator();
+        // cancel, then nobody can accept (address(0) included)
+        vm.prank(operator);
+        payer.proposeOperator(address(0));
+        vm.prank(bob);
+        vm.expectRevert(PoolPayer.NotPendingOperator.selector);
+        payer.acceptOperator();
+        vm.prank(address(0));
+        vm.expectRevert(PoolPayer.NotPendingOperator.selector);
+        payer.acceptOperator();
+
+        vm.prank(operator);
+        payer.proposeOperator(bob);
+        vm.prank(bob);
+        vm.expectEmit(address(payer));
+        emit PoolPayer.OperatorChanged(bob);
+        payer.acceptOperator();
         assertEq(payer.operator(), bob);
+        assertEq(payer.pendingOperator(), address(0));
+        vm.prank(operator);
+        vm.expectRevert(PoolPayer.NotOperator.selector);
+        payer.withdrawFloat(payable(operator), 1);
     }
 
     function test_config_capsEnforceAtCost() public {
@@ -539,7 +593,7 @@ contract PoolPayerTest is PoolPayerBase {
             fail("pre-fix: a failed atomic batch strands the refund in the operator's float");
         }
         assertEq(uint256(r.reason), uint256(InvalidReason.VERIFY_FAILED));
-        assertEq(r.frames[1].returnData, abi.encodeWithSelector(PoolPayer.BadFrameShape.selector, uint256(3)));
+        assertEq(r.frames[1].returnData, abi.encodeWithSelector(PoolPayer.BadFrameShape.selector, uint256(5)));
     }
 
     /// Blob gas is charged to the payer but priced in neither GASPRICE nor costEstimate: v1 refuses blob txs.
@@ -568,32 +622,24 @@ contract PoolPayerTest is PoolPayerBase {
         _expectVerifyRevert(abi.encodeWithSelector(PoolPayer.BadFrameShape.selector, uint256(1)));
     }
 
-    function test_audit_tailFrameData_capped() public {
+    /// Tail frames are refused whatever their size (v1); before the no-tail rule their data was capped.
+    function test_audit_tailFrameData_refused() public {
         (PrivacyPoolsTypes.Withdrawal memory w, PrivacyPoolsTypes.WithdrawProof memory p) = _good();
         uint256 cap = payer.MAX_UNPRICED_DATA_BYTES();
         Shape memory s = _shape();
         s.withRefund = false;
-        _buildTx(w, p, s);
-        sim().pushFrame(FrameTxModel.Frame(MODE_SENDER, 0, makeAddr("dapp"), 50_000, 0, 0, new bytes(cap + 1)));
-        sim().pushFrame(
-            FrameTxModel.Frame(
-                MODE_DEFAULT, 0, address(payer), REFUND_GAS, REFUND_STATE, 0, abi.encodeCall(PoolPayer.refund, ())
-            )
-        );
-        simSignSecp256k1(0, senderPk);
-        _expectVerifyRevert(abi.encodeWithSelector(PoolPayer.TooMuchUnpricedData.selector, cap + 1));
-
-        // At the cap: accepted.
-        _buildTx(w, p, s);
-        sim().pushFrame(FrameTxModel.Frame(MODE_SENDER, 0, makeAddr("dapp"), 50_000, 0, 0, new bytes(cap)));
-        sim().pushFrame(
-            FrameTxModel.Frame(
-                MODE_DEFAULT, 0, address(payer), REFUND_GAS, REFUND_STATE, 0, abi.encodeCall(PoolPayer.refund, ())
-            )
-        );
-        simSignSecp256k1(0, senderPk);
-        SimResult memory r = simRunValid();
-        assertEq(r.frames[4].status, STATUS_SUCCESS);
+        uint256[2] memory sizes = [cap + 1, 1];
+        for (uint256 k; k < 2; k++) {
+            _buildTx(w, p, s);
+            sim().pushFrame(FrameTxModel.Frame(MODE_SENDER, 0, makeAddr("dapp"), 50_000, 0, 0, new bytes(sizes[k])));
+            sim().pushFrame(
+                FrameTxModel.Frame(
+                    MODE_DEFAULT, 0, address(payer), REFUND_GAS, REFUND_STATE, 0, abi.encodeCall(PoolPayer.refund, ())
+                )
+            );
+            simSignSecp256k1(0, senderPk);
+            _expectVerifyRevert(abi.encodeWithSelector(PoolPayer.BadFrameShape.selector, uint256(5)));
+        }
     }
 
     /// Frames before the pay frame (expiry / deploy / pre_verify) count against the same cap.
@@ -629,8 +675,8 @@ contract PoolPayerTest is PoolPayerBase {
         _expectVerifyRevert(abi.encodeWithSelector(PoolPayer.TooManySignatures.selector));
     }
 
-    /// A value-carrying tail frame costs TX_VALUE_COST of intrinsic gas: priced by the estimator.
-    function test_audit_valueTailFrame_priced() public {
+    /// A value-carrying tail frame (priced by the estimator before v1's no-tail rule) is now refused outright.
+    function test_audit_valueTailFrame_refused() public {
         (PrivacyPoolsTypes.Withdrawal memory w, PrivacyPoolsTypes.WithdrawProof memory p) = _good();
         Shape memory s = _shape();
         s.withRefund = false;
@@ -642,10 +688,8 @@ contract PoolPayerTest is PoolPayerBase {
             )
         );
         simSignSecp256k1(0, senderPk);
-        SimResult memory r = simRunValid();
-        uint256 refund = _referenceRefund(r, FEE);
-        assertEq(sender.balance, Fx.WITHDRAWN - FEE + refund - 1 wei);
-        assertEq(makeAddr("dapp").balance, 1 wei);
+        _expectVerifyRevert(abi.encodeWithSelector(PoolPayer.BadFrameShape.selector, uint256(5)));
+        assertEq(makeAddr("dapp").balance, 0);
     }
 
     /// Paying the withdrawal or the refund to PoolPayer itself would turn user money into operator float.

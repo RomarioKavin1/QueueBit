@@ -10,14 +10,15 @@
 //   node src/e2e.ts            (needs `forge build` in contracts/ first)
 import { writeFileSync, mkdirSync } from "node:fs";
 import type { Address, Hex } from "viem";
-import { ethrex, sidecar, SIDECAR, PATCHED_SIDECAR, toWire, txHash, profile, waitReceipt, log, big, sleep } from "./lib.ts";
+import { ethrex, sidecar, SIDECAR, PATCHED_SIDECAR, toWire, txHash, profile, waitReceipt, log, big, sleep, ensureFunder, addr, FUNDER } from "./lib.ts";
 import { checkArtifacts, terminate } from "./pp.ts";
 import { deployPool, NOTE_VALUE } from "./deploy.ts";
 import { deployPayer, prepareWithdrawal, payerEvents, balance, LIMITS, type Estimator } from "./payer.ts";
 
 checkArtifacts();
+await ensureFunder(5_000_000_000_000_000_000n); // 5 ETH: deposits, floats, stakes, PoseidonT3 (~47M gas)
 const tag = `e2e-${Date.now()}`;
-const results: any = { tag, startedAt: new Date().toISOString() };
+const results: any = { tag, startedAt: new Date().toISOString(), funder: addr(FUNDER) };
 const d = await deployPool(3, tag);
 results.pool = { entrypoint: d.entrypoint, pool: d.pool, verifier: d.verifier, txs: d.txs };
 const stateLeaves = [...d.stateLeaves];

@@ -17,12 +17,14 @@ import {
 ///         and the pool's preconditions read-only and approves payment; the withdrawal runs in the execution body with
 ///         `processooor = PoolPayer`; the last frame refunds what the user pre-paid beyond the gas actually used.
 ///
-///         Frame layout (v1: the sender is a fresh default-code EOA, the withdrawal recipient):
-///           [0..]   VERIFY            optional expiry_verify, then only_verify(tx.sender) (default code, SECP256K1)
+///         Frame layout (v1: the sender is a fresh default-code EOA, the withdrawal recipient), exactly:
+///           [0..i)  VERIFY            optional expiry_verify, then only_verify(tx.sender) (default code, SECP256K1)
 ///           i       VERIFY  PAY       PoolPayer.verify(scope, withdrawal, proof, rootIndexHint)
 ///           i+1     DEFAULT           PoolPayer.settle(i)        (no proof bytes: read from frame i, FRAMEDATACOPY)
-///           i+2..   SENDER            optional tail calls, only when the recipient is tx.sender
-///           last    DEFAULT           PoolPayer.refund()
+///           i+2     DEFAULT           PoolPayer.refund()         (the last frame)
+///         v1 decision (PoolPayer review): no user tail frames, and nothing but VERIFY frames before the pay frame.
+///         User calls (and their EIP-3529 refund effects, which `costEstimate` cannot see) go in a separate
+///         transaction from the recipient.
 ///
 ///         `withdrawal.data = abi.encode(FeeData{recipient, feeRecipient = PoolPayer, fee, refundRecipient})`
 ///         (Kohaku's `encodeFeeData` layout). The proof binds it through `context`.
@@ -43,8 +45,8 @@ import {
 ///         And, so that the estimator's under-charge stays bounded (audit, 2026-11-06): no blobs; the pay frame's data
 ///         is exactly the canonical encoding; the other frames' data and ARBITRARY witnesses are capped
 ///         (`MAX_UNPRICED_DATA_BYTES`); at most `MAX_SIGNATURES` signature entries; value-carrying frames are priced
-///         (`VALUE_FRAME_GAS`); the frame before `refund()` must not open an atomic batch (a failed batch would skip
-///         `refund()` and strand the user's refund in the float); the recipients are never PoolPayer itself.
+///         (`VALUE_FRAME_GAS`); the frame before `refund()` (settle) is not an atomic batch (a failed batch would skip
+///         `refund()` and strand the user's refund in the float); no user tail frames (v1); the recipients are never PoolPayer itself.
 /// @dev    VERIFY-reachable code (`verify`, `quote`, the frame-shape helpers) reads no `block.*`, `tx.gasprice`,
 ///         balances, `gasleft()` or transient storage and emits no events (IMPLEMENTATION-NOTES, FrameSim blind spots;
 ///         `_payoutOrCredit` reads `gasleft()` but runs in the DEFAULT frames only);
@@ -145,6 +147,8 @@ contract PoolPayer is HegotaSupport {
 
     /// The vault / owner key that funds the float and manages the stake. It has no access to user funds.
     address public operator;
+    /// Two-step operator handover: the proposed operator must `acceptOperator` (a typo cannot brick the float).
+    address public pendingOperator;
 
     /// Pull fallback: amounts a recipient's push could not take (reverting or gas-hungry `receive`).
     mapping(address => uint256) public claimable;
@@ -169,6 +173,7 @@ contract PoolPayer is HegotaSupport {
     event Credited(address indexed to, uint256 amount);
     event Claimed(address indexed from, address indexed to, uint256 amount);
     event OperatorChanged(address indexed operator);
+    event OperatorProposed(address indexed operator);
     event FloatWithdrawn(address indexed to, uint256 amount);
 
     // ----------------------------------------------------------------------------------------------- errors ------
@@ -182,7 +187,7 @@ contract PoolPayer is HegotaSupport {
     error NotPoolPayerTx();
     error InvalidProcessooor();
     error InvalidFeeData();
-    error TailCallsNeedRecipientSender();
+    error NotPendingOperator();
     error PoolNotFound();
     error UnsupportedAsset();
     error ContextMismatch();
@@ -267,8 +272,8 @@ contract PoolPayer is HegotaSupport {
                 || frameparam(i, FrameParam.FLAGS) != uint256(Scope.PAYMENT)
                 || frameparam(i, FrameParam.STATE_GAS_LIMIT) < MIN_PAY_STATE_GAS
         ) revert BadFrameShape(i);
-        // settle(i) right after us, refund() last, and they are different frames.
-        if (n < i + 3) revert BadFrameShape(n);
+        // v1: exactly [pay, settle(i), refund()] after the sender's verification (no user tail frames).
+        if (n != i + 3) revert BadFrameShape(n);
         _requireOwnFrame(i + 1, 36, this.settle.selector, MIN_SETTLE_GAS, MIN_SETTLE_STATE_GAS);
         if (uint256(framedataload(4, i + 1)) != i) revert BadFrameShape(i + 1);
         _requireOwnFrame(n - 1, 4, this.refund.selector, MIN_REFUND_GAS, MIN_REFUND_STATE_GAS);
@@ -279,6 +284,8 @@ contract PoolPayer is HegotaSupport {
         if (frameparam(i, FrameParam.DATA_LENGTH) != VERIFY_DATA_LENGTH) revert BadFrameShape(i);
         uint256 unpriced;
         for (uint256 f; f < i; f++) {
+            // Only the sender's verification precedes the pay frame: no user execution frame anywhere.
+            if (frameparam(f, FrameParam.MODE) != uint256(FrameMode.VERIFY)) revert BadFrameShape(f);
             unpriced += frameparam(f, FrameParam.DATA_LENGTH);
         }
         uint256 sigs = txparam(TxParam.SIGNATURE_COUNT);
@@ -296,18 +303,6 @@ contract PoolPayer is HegotaSupport {
             fee.feeRecipient != address(this) || fee.recipient == address(0) || fee.recipient == address(this)
                 || fee.refundRecipient == address(this) || fee.fee > type(uint96).max
         ) revert InvalidFeeData();
-        // Tail calls (frames between settle and refund) must be SENDER frames, and only when the recipient is the
-        // sender (the same anti-griefing rule as 0xbow's fee adapter). Their data counts as unpriced bytes, and the
-        // last of them must not open an atomic batch, or `refund()` would be the batch's terminator and skipped if
-        // the batch fails (status 2) with the refund stranded in `pendingFee`.
-        if (n > i + 3) {
-            if (fee.recipient != address(uint160(txparam(TxParam.SENDER)))) revert TailCallsNeedRecipientSender();
-            for (uint256 f = i + 2; f < n - 1; f++) {
-                if (frameparam(f, FrameParam.MODE) != uint256(FrameMode.SENDER)) revert BadFrameShape(f);
-                unpriced += frameparam(f, FrameParam.DATA_LENGTH);
-            }
-            if (frameparam(n - 2, FrameParam.ATOMIC_BATCH) != 0) revert BadFrameShape(n - 2);
-        }
         if (unpriced > MAX_UNPRICED_DATA_BYTES) revert TooMuchUnpricedData(unpriced);
 
         // 2. Pool and context.
@@ -404,8 +399,8 @@ contract PoolPayer is HegotaSupport {
     /// + REFUND_FRAME_GAS                                                              (this frame, lower bound)
     /// Priced at GASPRICE, which EIP-8141 defines as a lower bound of the per-gas price paid (§Fee budget, L1495).
     /// It is a lower bound as long as nothing earns an SSTORE refund larger than the intrinsic slack: PoolPayer never
-    /// zeroes or restores a slot, and neither does `PrivacyPool.withdraw`. (A user's own tail call or receive hook
-    /// can earn EIP-3529 refunds or state-gas refills that lower the protocol's charge below this estimate; that
+    /// zeroes or restores a slot, and neither does `PrivacyPool.withdraw`. (The recipient's receive hook (v1 has no
+    /// user tail frames) can earn EIP-3529 refunds or state-gas refills that lower the protocol's charge below this estimate; that
     /// difference stays with PoolPayer, by the user's choice, and is bounded by MAX_REFUND_QUOTIENT.)
     function costEstimate(uint256 self) public view returns (uint256 gas) {
         uint256 n = txparam(TxParam.FRAME_COUNT);
@@ -460,10 +455,19 @@ contract PoolPayer is HegotaSupport {
         emit FloatWithdrawn(to, amount);
     }
 
-    function setOperator(address newOperator) external onlyOperator {
-        if (newOperator == address(0)) revert InvalidConfig();
-        operator = newOperator;
-        emit OperatorChanged(newOperator);
+    /// Step 1 of the handover (address(0) cancels a pending proposal). The current operator keeps every power
+    /// until the new one accepts.
+    function proposeOperator(address newOperator) external onlyOperator {
+        pendingOperator = newOperator;
+        emit OperatorProposed(newOperator);
+    }
+
+    /// Step 2: the proposed operator takes over.
+    function acceptOperator() external {
+        if (msg.sender != pendingOperator || msg.sender == address(0)) revert NotPendingOperator();
+        operator = msg.sender;
+        pendingOperator = address(0);
+        emit OperatorChanged(msg.sender);
     }
 
     // ------------------------------------------------------------------------------------------ internals ------
