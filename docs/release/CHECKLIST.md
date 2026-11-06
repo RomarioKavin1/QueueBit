@@ -14,11 +14,15 @@ Status on 2026-11-06: **none of the release gates below is met.** LEAKED is pre-
 - [ ] The latest nightly `devnet` run is green (gate G1, the extension e2e against the devnet, the watcher and rpc
       live tests), and its `last-run.json` is attached to the release notes.
 - [ ] `node scripts/release/verify-reproducible.mjs` passes with `REQUIRE_ALL=1` (both the companion and the
-      extension; the extension hook is still a placeholder: [`scripts/release/README.md`](../../scripts/release/README.md)).
+      extension zip, [`scripts/release/README.md`](../../scripts/release/README.md); passes locally since `f94e135`,
+      needs the CI run on the tag).
 - [ ] Two maintainers build the release independently from the tag and get the same `SHA256SUMS` as the `release`
       workflow. The hashes are committed (or published in the release notes) **before** the store upload.
-- [ ] The extension zip is built without the local-devnet flags, and its `manifest.json` permissions match the
-      previous release, or every new permission has a changelog line (plan §30 §9 item 7).
+- [ ] The extension zip is built without the local-devnet flags (enforced: `release-build.mjs` refuses them and
+      `release-check.mjs` refuses devnet/gallery markers), and `apps/extension/scripts/store-package.mjs` passes: its
+      `manifest.json` permissions match the previous release (`apps/extension/store/permissions.json`), or every new
+      permission has a changelog line (plan §30 §9 item 7), and each has a justification in
+      [`store-listing.md`](store-listing.md). Store screenshots at 1280×800 and the privacy policy URL are in place.
 - [ ] `docs/plan/BACKLOG.md` has no open item tagged as blocking this release.
 
 ## 2. Audits
@@ -52,8 +56,9 @@ Status on 2026-11-06: **none of the release gates below is met.** LEAKED is pre-
       ([`IMPLEMENTATION-NOTES.md`](../plan/IMPLEMENTATION-NOTES.md), "license exceptions for `@leaked/groth16`").
 - [ ] Kohaku: written license terms from the maintainers before shipping anything that bundles `@kohaku-eth/*`
       (plan §1 item 15). Today nothing does; re-check that the lockfile still has no `@kohaku-eth/*`.
-- [ ] Phishing list data license (plan §30 §9 item 2): `eth-phishing-detect` is DBAD; confirm the data source and its
-      license with counsel if a list is bundled.
+- [ ] Phishing list data license (plan §30 §9 item 2): only permissively licensed lists or ours are bundled
+      ([`phishing-list.md`](phishing-list.md); today only LEAKED's own MIT list); `eth-phishing-detect` (DBAD) is
+      excluded. Confirm with counsel before any third-party list is added.
 - [ ] Accepted non-MIT/Apache licenses are still only `subtle` (BSD-3-Clause) and `foldhash` (Zlib) in the WASM
       (check the cargo SBOMs), and `THIRD_PARTY.md` lists every copied file.
 - [ ] Privacy rules of plan §40.7: no operated pool, no fees, PoolPayer at cost and handed off. Not legal advice:
