@@ -1,0 +1,12 @@
+# Used by BuildKit for `docker build -f services/leanpool-node/Dockerfile .` (context = repository root).
+**
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!tsconfig.base.json
+!packages/frames/package.json
+!packages/frames/tsconfig*.json
+!packages/frames/src/**
+!services/leanpool-node/package.json
+!services/leanpool-node/tsconfig*.json
+!services/leanpool-node/src/**

@@ -5,3 +5,5 @@ export type { BlockTag, FrameRpc, NodeClient, PartialWireFrameTx, SidecarClient 
 export { frameTxFromEthrexJson } from "./ethrexJson.js";
 export type { EthrexFrameTransactionRpc } from "./ethrexJson.js";
 export type * from "./types.js";
+export { createLeanPoolClient, isFinalLeanPoolStage } from "./leanpool.js";
+export type { LeanPoolClient, LeanPoolStatus, LeanPoolTxStatus } from "./leanpool.js";

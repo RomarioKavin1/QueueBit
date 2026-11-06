@@ -1,4 +1,4 @@
-import { encodeFunctionData, parseAbi, type Address, type Hex } from "viem";
+import { encodeAbiParameters, encodeFunctionData, parseAbi, type Address, type Hex } from "viem";
 import type { Profile } from "../profiles/types.js";
 import {
   arbitraryEntry,
@@ -139,5 +139,57 @@ export function roleSignerPathATx(profile: Profile, init: RoleSignerInit): Frame
       senderFrame(profile, { target: init.roleSigner, ...init.body }),
     ],
     signatures: [arbitraryEntry(profile, init.sigLength)],
+  });
+}
+
+// ---------------------------------------------------------------------------------------- LeanPool (PQ hot) ----
+
+/** EIP-8288 `LEANSPHINCS_SCHEME`: the scheme byte of a leanSPHINCS dependency triple. */
+export const LEANSPHINCS_SCHEME = 0x10;
+
+/**
+ * The 96-byte EIP-8288 dependency triple `(LEANSPHINCS_SCHEME, data_hash = 0, vk)`: "a leanSPHINCS signature by `vk`
+ * over this transaction's signature hash exists" (a zero data_hash stands for the containing tx's own sig hash). It is
+ * the `LeanPoolHotSigner`'s VERIFY frame data, covered by the sig hash; the LeanPool node reads it from there.
+ */
+export const leanPoolTriple = (vk: Hex): Hex =>
+  encodeAbiParameters(
+    [{ type: "uint256" }, { type: "bytes32" }, { type: "bytes32" }],
+    [BigInt(LEANSPHINCS_SCHEME), `0x${"00".repeat(32)}`, vk],
+  );
+
+/** The witness a LeanPool node puts in entry 0 once the batch is posted: `abi.encode(root, ringPosition, proof)`. */
+export const leanPoolWitness = (root: Hex, ring: number, proof: Hex[]): Hex =>
+  encodeAbiParameters([{ type: "bytes32" }, { type: "uint8" }, { type: "bytes32[]" }], [root, ring, proof]);
+
+export interface LeanPoolHotInit extends Common {
+  /** The `LeanPoolHotSigner` clone: its own EIP-8141 sender. */
+  signer: Address;
+  /** Its leanSPHINCS public key (`signer.vk()`). */
+  vk: Hex;
+  /** EIP-8250 nonce lane: independent lanes let several payments wait for their batches at once. */
+  nonceKey: bigint;
+  verifyGas: bigint;
+  /** `execute(declaredUsd, calls)` on the signer. */
+  body: Body;
+}
+
+/**
+ * Post-quantum everyday payment through LeanPool (ERC-8421 alt mempool): `[VERIFY 0x3 (null = signer, triple),
+ * SENDER(signer, execute(...))]` with `[ARBITRARY witness, empty]`. The leanSPHINCS key signs the sig hash while the
+ * witness entry is empty (its bytes are elided from the hash); the LeanPool node fills it after posting the batch.
+ */
+export function leanPoolHotTx(profile: Profile, init: LeanPoolHotInit): FrameTx {
+  return newTx({
+    chainId: init.chainId,
+    sender: init.signer,
+    nonceKeys: [init.nonceKey],
+    nonceSeq: init.nonceSeq,
+    fees: init.fees,
+    frames: [
+      selfVerify(profile, { execution: init.verifyGas, data: leanPoolTriple(init.vk) }),
+      senderFrame(profile, { target: init.signer, ...init.body }),
+    ],
+    signatures: [arbitraryEntry(profile, 0)],
   });
 }

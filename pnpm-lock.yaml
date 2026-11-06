@@ -380,6 +380,31 @@ importers:
         specifier: 2.57.16
         version: 2.57.16(typescript@6.0.3)(zod@4.6.7)
 
+  services/leanpool-node:
+    dependencies:
+      '@kevaundray/lean-pq':
+        specifier: 0.7.0
+        version: 0.7.0
+      '@queuebit/frames':
+        specifier: workspace:*
+        version: link:../../packages/frames
+      viem:
+        specifier: 2.57.16
+        version: 2.57.16(typescript@6.0.3)(zod@4.6.7)
+    devDependencies:
+      '@forshtat/hegota-support':
+        specifier: 0.0.1
+        version: 0.0.1(viem@2.57.16(typescript@6.0.3)(zod@4.6.7))
+      '@types/node':
+        specifier: 26.6.6
+        version: 26.6.6
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: 5.1.0
+        version: 5.1.0(@types/node@26.6.6)(@vitest/coverage-v8@5.1.0)(vite@8.3.6(@types/node@26.6.6)(jiti@2.7.0)(terser@5.51.2))
+
   services/watcher:
     dependencies:
       '@queuebit/frames':
@@ -535,6 +560,16 @@ packages:
   '@fatsolutions/privacy-pools-core-circuits@1.0.5':
     resolution: {integrity: sha512-0E15p9wmWkUXEpPLuw7crpp301xNhLzCnjrvIzqIy/xE85FIsdbTdgWGW0Y9TwwjpxGsLjaCimyTujYbtza4ZA==}
 
+  '@forshtat/hegota-support@0.0.1':
+    resolution: {integrity: sha512-F6ZvduwrMBjzjoYE85DH7JHRaDyx2V2+kgSsi2eUDLiAJR1uiqp6mRzkYOLA+Y3pjxDpw60Z07mTer/4bebcZQ==}
+    engines: {node: '>=20.12'}
+    peerDependencies:
+      solc: 0.8.28
+      viem: ^2.57.0
+    peerDependenciesMeta:
+      solc:
+        optional: true
+
   '@humanfs/core@0.19.2':
     resolution: {integrity: sha512-UhXNm+CFMWcbChXywFwkmhqjs3PRCmcSa/hfBgLIb7oQ5HNb1wS0icWsGtSAUNgefHeI+eBrA8I1fxmbHsGdvA==}
     engines: {node: '>=18.18.0'}
@@ -579,6 +614,56 @@ packages:
 
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
+
+  '@kevaundray/lean-pq-darwin-arm64@0.7.0':
+    resolution: {integrity: sha512-4QEIaZBgu5w0GMQSw5qCheH95XntFDsTMXI7mzhBh0tQUCE0agricdeHodQzPQTe/Tbk+sGg3qHrfBLOME6OeQ==}
+    engines: {node: '>=18.17.0'}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@kevaundray/lean-pq-darwin-x64@0.7.0':
+    resolution: {integrity: sha512-TkXrIB/noP7cXJeoiJ5fwjmjfuiRMGg1OYcmvXsAarsdxO5915pFKL8dygewVHEFW49Yirzs0Mld8hWVKUStdw==}
+    engines: {node: '>=18.17.0'}
+    cpu: [x64]
+    os: [darwin]
+
+  '@kevaundray/lean-pq-linux-arm64-gnu@0.7.0':
+    resolution: {integrity: sha512-7XgpziTEDDWa20sNya9leTobx7aVNOHA1NF4S6wavLVurhTPgBDPsREI4NT5KqSCcuYafje9VTgEJqFXCyVGXQ==}
+    engines: {node: '>=18.17.0'}
+    cpu: [arm64]
+    os: [linux]
+    libc: [glibc]
+
+  '@kevaundray/lean-pq-linux-arm64-musl@0.7.0':
+    resolution: {integrity: sha512-JXbysN66zTt/bKqCCnEt1Ose8g+m9/QEZstKFNaqdYw1upUtWsB30zFpxYN2SwU37Yf70YMRIq/JD2BHbCRDJw==}
+    engines: {node: '>=18.17.0'}
+    cpu: [arm64]
+    os: [linux]
+    libc: [musl]
+
+  '@kevaundray/lean-pq-linux-x64-gnu@0.7.0':
+    resolution: {integrity: sha512-qUE8Yzbe7lE+2IOV4qMiaBHLlXzYPIRgcQGL1fFk/hqLZK3HfuR5pzyRQbnQoyQNCUD2AJb/wlEpXa9sTEwuGw==}
+    engines: {node: '>=18.17.0'}
+    cpu: [x64]
+    os: [linux]
+    libc: [glibc]
+
+  '@kevaundray/lean-pq-linux-x64-musl@0.7.0':
+    resolution: {integrity: sha512-8ekSu7Drhty1ir531Vc/KaZZmbECJfuPm8EcSFe34+tHJRUbJ+1z0Sryo1Q3x2tFvLKv6ASBNhXVvkP3Ort3iA==}
+    engines: {node: '>=18.17.0'}
+    cpu: [x64]
+    os: [linux]
+    libc: [musl]
+
+  '@kevaundray/lean-pq-win32-x64-msvc@0.7.0':
+    resolution: {integrity: sha512-K5q3hgNf6E1/MQS3CRQQa/0V9txLdX3NEhTGR8CFqJ19CFcsBerQIN6PZT5swsikLUt3kvXcS+974KtVxbS6sg==}
+    engines: {node: '>=18.17.0'}
+    cpu: [x64]
+    os: [win32]
+
+  '@kevaundray/lean-pq@0.7.0':
+    resolution: {integrity: sha512-O/4g4tL1jO4JCNuE9GCCCCSHhlVZvTFqjSJ+HLdknva0+rwPl2PUEYSLhrA7B998b6iaqrAx3WqaczfY6glfAg==}
+    engines: {node: '>=18.17.0'}
 
   '@keyv/bigmap@1.3.1':
     resolution: {integrity: sha512-WbzE9sdmQtKy8vrNPa9BRnwZh5UF4s1KTmSK0KUVLo3eff5BlQNNWDnFOouNpKfPKDnms9xynJjsMYjMaT/aFQ==}
@@ -2700,6 +2785,10 @@ snapshots:
     transitivePeerDependencies:
       - react-native-b4a
 
+  '@forshtat/hegota-support@0.0.1(viem@2.57.16(typescript@6.0.3)(zod@4.6.7))':
+    dependencies:
+      viem: 2.57.16(typescript@6.0.3)(zod@4.6.7)
+
   '@humanfs/core@0.19.2':
     dependencies:
       '@humanfs/types': 0.15.0
@@ -2747,6 +2836,37 @@ snapshots:
     dependencies:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
+
+  '@kevaundray/lean-pq-darwin-arm64@0.7.0':
+    optional: true
+
+  '@kevaundray/lean-pq-darwin-x64@0.7.0':
+    optional: true
+
+  '@kevaundray/lean-pq-linux-arm64-gnu@0.7.0':
+    optional: true
+
+  '@kevaundray/lean-pq-linux-arm64-musl@0.7.0':
+    optional: true
+
+  '@kevaundray/lean-pq-linux-x64-gnu@0.7.0':
+    optional: true
+
+  '@kevaundray/lean-pq-linux-x64-musl@0.7.0':
+    optional: true
+
+  '@kevaundray/lean-pq-win32-x64-msvc@0.7.0':
+    optional: true
+
+  '@kevaundray/lean-pq@0.7.0':
+    optionalDependencies:
+      '@kevaundray/lean-pq-darwin-arm64': 0.7.0
+      '@kevaundray/lean-pq-darwin-x64': 0.7.0
+      '@kevaundray/lean-pq-linux-arm64-gnu': 0.7.0
+      '@kevaundray/lean-pq-linux-arm64-musl': 0.7.0
+      '@kevaundray/lean-pq-linux-x64-gnu': 0.7.0
+      '@kevaundray/lean-pq-linux-x64-musl': 0.7.0
+      '@kevaundray/lean-pq-win32-x64-msvc': 0.7.0
 
   '@keyv/bigmap@1.3.1(keyv@5.6.0)':
     dependencies:

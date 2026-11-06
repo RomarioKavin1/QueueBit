@@ -1,0 +1,33 @@
+{
+  "name": "@queuebit/leanpool-node",
+  "version": "0.1.0",
+  "private": true,
+  "description": "LeanPool node for QueueBit's post-quantum everyday key: verifies leanSPHINCS signatures natively, batches them (EIP-8288 wrappers), posts Merkle roots to DepsRegistry, attaches recursive STARK hashes, and delivers the transactions to an ERC-8421 alt-mempool sidecar",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "queuebit-leanpool-node": "./dist/main.js",
+    "queuebit-leanpool-verify-batch": "./dist/verify-batch.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "start": "node dist/main.js",
+    "test": "vitest run",
+    "test:slow": "LEANPOOL_SLOW=1 vitest run"
+  },
+  "dependencies": {
+    "@kevaundray/lean-pq": "0.7.0",
+    "@queuebit/frames": "workspace:*",
+    "viem": "2.57.16"
+  },
+  "devDependencies": {
+    "@forshtat/hegota-support": "0.0.1",
+    "@types/node": "26.6.6",
+    "typescript": "6.0.3",
+    "vitest": "5.1.0"
+  }
+}

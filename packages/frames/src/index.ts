@@ -35,15 +35,19 @@ export type { CallInit, FrameInit, TxInit, VerifyInit } from "./tx/build.js";
 export { MAX_FRAMES, validateTx } from "./tx/validate.js";
 export { MAX_RECENT_ROOT_REFERENCES, RECENT_ROOT_TUPLE_BYTES, encodeRecentRootData } from "./tx/recentRoots.js";
 export {
+  LEANSPHINCS_SCHEME,
   QUEUEBIT_VERIFY_ABI,
   accountVerifyData,
   hotSpendTx,
+  leanPoolHotTx,
+  leanPoolTriple,
+  leanPoolWitness,
   roleSignerPathATx,
   roleSignerPathBTx,
   roleSignerVerifyData,
   selfPaidHotTx,
 } from "./tx/shapes.js";
-export type { HotSpendInit, RoleSignerInit, SelfPaidHotInit } from "./tx/shapes.js";
+export type { HotSpendInit, LeanPoolHotInit, RoleSignerInit, SelfPaidHotInit } from "./tx/shapes.js";
 export { fromWire, toWire } from "./wire.js";
 export type { WireFrameTx } from "./wire.js";
 export { bodyOutcome, frameStatus, parseEthrexReceipt, parseSidecarReceipt } from "./receipts.js";
