@@ -6,15 +6,7 @@ import { english, mnemonicToAccount, privateKeyToAccount } from "viem/accounts";
 import { engine, EngineCallError } from "@/lib/engine/client";
 import type { NetworkInfo } from "@/lib/engine/protocol";
 import { connect, discoverWallets, sendAndWait, type Injected } from "@/lib/injected";
-import {
-  PasskeyError,
-  createPasskey,
-  lockMethod,
-  passkeySupport,
-  setLockMethod,
-  unlockSecret,
-  type LockMethod,
-} from "@/lib/passkey";
+import { PasskeyError, createPasskey, passkeySecret, passkeySupport, type PasskeySecret } from "@/lib/passkey";
 import {
   Address,
   Area,
@@ -63,6 +55,31 @@ type Source =
   | { kind: "key"; key: `0x${string}`; address: `0x${string}`; via: "phrase" | "key" }
   | { kind: "wallet"; wallet: Injected; address: `0x${string}` };
 
+type LockMethod = "passkey" | "password";
+/** How the wallet is locked: a passkey wallet's words come from its passkey (nothing secret stored). */
+type Lock = { kind: "password"; pw: string } | { kind: "passkey"; passkey: PasskeySecret };
+
+const newPasskey = () => createPasskey(navigator.credentials, { userName: "QueueBit wallet" });
+
+/** The passkey a passkey wallet needs, asked for its PRF output (a biometric prompt). */
+async function askPasskey(): Promise<PasskeySecret> {
+  const info = await engine().call("keyring:passkeyInfo");
+  if (!info) throw new Error("This wallet is locked with a password.");
+  return passkeySecret(navigator.credentials, info.credentialId);
+}
+
+/** "passkey" or "password" for the wallet on this device (null while unknown). */
+function useLockMethod(): LockMethod | null {
+  const [m, setM] = useState<LockMethod | null>(null);
+  useEffect(() => {
+    void engine()
+      .call("keyring:passkeyInfo")
+      .then((i) => setM(i ? "passkey" : "password"))
+      .catch(() => setM(null));
+  }, []);
+  return m;
+}
+
 const errText = (e: unknown) =>
   e instanceof EngineCallError || e instanceof PasskeyError || e instanceof Error ? e.message : "Something went wrong.";
 
@@ -106,10 +123,16 @@ export function Onboarding() {
     });
   }, [commit]);
 
-  const createWallet = useCallback(async (pw: string, method: LockMethod, reveal: boolean) => {
-    const r = await engine().call("keyring:create", { password: pw, revealWords: reveal });
-    setLockMethod(method);
-    secret.current = pw;
+  /** Creates the wallet. A passkey wallet's 24 words ARE its passkey's secret: reveal reads them from it. */
+  const createWallet = useCallback(async (lock: Lock, reveal: boolean) => {
+    if (lock.kind === "passkey") {
+      await engine().call("keyring:createFromPasskey", lock.passkey);
+      secret.current = null;
+      if (!reveal) return undefined;
+      return (await engine().call("keyring:revealWordsWithPasskey", { entropy: lock.passkey.entropy })).mnemonic;
+    }
+    const r = await engine().call("keyring:create", { password: lock.pw, revealWords: reveal });
+    secret.current = lock.pw;
     return r.mnemonic;
   }, []);
 
@@ -179,8 +202,8 @@ export function Onboarding() {
         <PasskeyCreate
           onBack={back}
           onFallback={() => go({ id: "lock", path: "phrase-new" })}
-          onCreated={async (pw) => {
-            await createWallet(pw, "passkey", false);
+          onCreated={async (passkey) => {
+            await createWallet({ kind: "passkey", passkey }, false);
             commit({ id: "ready" });
           }}
         />
@@ -232,17 +255,19 @@ export function Onboarding() {
               ? "First, a new QueueBit wallet to move into. Lock it with a passkey, or a password if this device has none."
               : "This locks the wallet on this device. Your words are the backup; this is how you open it day to day."
           }
-          onLocked={async (pw, method) => {
+          passkeyAllowed={path !== "phrase-restore"}
+          onLocked={async (lock) => {
             if (path === "phrase-restore") {
-              await engine().call("keyring:import", { mnemonic: screen.mnemonic!, password: pw });
-              setLockMethod(method);
-              secret.current = pw;
+              // A passkey derives its own words, so restored words are locked with a password.
+              if (lock.kind !== "password") throw new Error("Restored words are locked with a password.");
+              await engine().call("keyring:import", { mnemonic: screen.mnemonic!, password: lock.pw });
+              secret.current = lock.pw;
               commit({ id: "ready" });
             } else if (path === "phrase-new") {
-              const m = await createWallet(pw, method, true);
+              const m = await createWallet(lock, true);
               commit({ id: "words", words: (m ?? "").split(" "), mode: "new" });
             } else {
-              await createWallet(pw, method, false);
+              await createWallet(lock, false);
               commit({ id: "source" });
             }
           }}
@@ -344,6 +369,7 @@ function LockStep({
   intro,
   onBack,
   onLocked,
+  passkeyAllowed = true,
 }: {
   method: string;
   step: number;
@@ -351,9 +377,11 @@ function LockStep({
   prf: boolean | null;
   intro: string;
   onBack?: () => void;
-  onLocked: (secret: string, method: LockMethod) => Promise<void>;
+  onLocked: (lock: Lock) => Promise<void>;
+  passkeyAllowed?: boolean;
 }) {
-  const [mode, setMode] = useState<"passkey" | "password">(prf === false ? "password" : "passkey");
+  const canPasskey = passkeyAllowed && prf !== false;
+  const [mode, setMode] = useState<"passkey" | "password">(canPasskey ? "passkey" : "password");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [pw, setPw] = useState("");
@@ -387,7 +415,7 @@ function LockStep({
             <Primary
               busy={busy}
               busyLabel="Waiting for your passkey"
-              onClick={() => void run(async () => onLocked(await createPasskey(), "passkey"))}
+              onClick={() => void run(async () => onLocked({ kind: "passkey", passkey: await newPasskey() }))}
             >
               Lock with a passkey
             </Primary>
@@ -401,12 +429,12 @@ function LockStep({
               onClick={() => {
                 setTouched(true);
                 if (pw.length < 8 || pw !== pw2) return;
-                void run(() => onLocked(pw, "password"));
+                void run(() => onLocked({ kind: "password", pw }));
               }}
             >
               Lock with this password
             </Primary>
-            {prf !== false && (
+            {canPasskey && (
               <TextButton onClick={() => (setErr(null), setMode("passkey"))}>Use a passkey instead</TextButton>
             )}
           </>
@@ -454,7 +482,7 @@ function PasskeyCreate({
   onFallback,
 }: {
   onBack: () => void;
-  onCreated: (secret: string) => Promise<void>;
+  onCreated: (passkey: PasskeySecret) => Promise<void>;
   onFallback: () => void;
 }) {
   const [busy, setBusy] = useState(false);
@@ -472,7 +500,7 @@ function PasskeyCreate({
               setBusy(true);
               setErr(null);
               try {
-                await onCreated(await createPasskey());
+                await onCreated(await newPasskey());
               } catch (e) {
                 setErr(e as Error);
               } finally {
@@ -501,19 +529,25 @@ function PasskeyCreate({
   );
 }
 
-function Unlock({ onDone }: { onDone: (secret: string) => void }) {
-  const method = lockMethod();
-  const [mode, setMode] = useState<LockMethod>(method ?? "passkey");
+function Unlock({ onDone }: { onDone: (secret: string | null) => void }) {
+  const method = useLockMethod();
+  const [chosen, setMode] = useState<LockMethod | null>(null);
+  const mode: LockMethod = chosen ?? method ?? "passkey";
   const [pw, setPw] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const unlock = async (getSecret: () => Promise<string>) => {
+  const unlock = async (how: LockMethod) => {
     setBusy(true);
     setErr(null);
     try {
-      const s = await getSecret();
-      await engine().call("keyring:unlock", { password: s });
-      onDone(s);
+      if (how === "passkey") {
+        const p = await askPasskey();
+        await engine().call("keyring:unlockWithPasskey", { entropy: p.entropy });
+        onDone(null);
+        return;
+      }
+      await engine().call("keyring:unlock", { password: pw });
+      onDone(pw);
     } catch (e) {
       setErr(
         e instanceof EngineCallError && e.reason === "wrong-password" ? "That didn't open the wallet." : errText(e),
@@ -527,14 +561,14 @@ function Unlock({ onDone }: { onDone: (secret: string) => void }) {
       actions={
         mode === "passkey" ? (
           <>
-            <Primary busy={busy} busyLabel="Waiting for your passkey" onClick={() => void unlock(unlockSecret)}>
+            <Primary busy={busy} busyLabel="Waiting for your passkey" onClick={() => void unlock("passkey")}>
               Unlock with passkey
             </Primary>
             <TextButton onClick={() => setMode("password")}>Use a password</TextButton>
           </>
         ) : (
           <>
-            <Primary busy={busy} busyLabel="Unlocking" onClick={() => void unlock(async () => pw)}>
+            <Primary busy={busy} busyLabel="Unlocking" onClick={() => void unlock("password")}>
               Unlock
             </Primary>
             <TextButton onClick={() => setMode("passkey")}>Use a passkey</TextButton>
@@ -550,7 +584,7 @@ function Unlock({ onDone }: { onDone: (secret: string) => void }) {
           autoComplete="current-password"
           value={pw}
           onChange={(e) => setPw(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && void unlock(async () => pw)}
+          onKeyDown={(e) => e.key === "Enter" && void unlock("password")}
         />
       )}
       {err && <Notice tone="error">{err}</Notice>}
@@ -712,15 +746,19 @@ function BackupAuth({
   secret: string | null;
   onWords: (words: string[]) => void;
 }) {
-  const method = lockMethod();
+  const method = useLockMethod();
   const [pw, setPw] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const reveal = async (s: string) => {
+  /** A password wallet reveals with its password; a passkey wallet asks its passkey (its words are its secret). */
+  const reveal = async (s: string | null) => {
     setBusy(true);
     setErr(null);
     try {
-      const { mnemonic } = await engine().call("keyring:revealWords", { password: s });
+      const { mnemonic } =
+        s === null
+          ? await engine().call("keyring:revealWordsWithPasskey", { entropy: (await askPasskey()).entropy })
+          : await engine().call("keyring:revealWords", { password: s });
       onWords(mnemonic.split(" "));
     } catch (e) {
       setErr(errText(e));
@@ -741,7 +779,7 @@ function BackupAuth({
           <Primary
             busy={busy}
             busyLabel={secret ? "Opening" : "Waiting for your passkey"}
-            onClick={() => void (secret ? reveal(secret) : unlockSecret().then(reveal, (e) => setErr(errText(e))))}
+            onClick={() => void reveal(method === "passkey" ? null : secret)}
           >
             Show my words
           </Primary>
@@ -1195,7 +1233,7 @@ function Ready({ net, onBackup }: { net?: NetworkInfo; onBackup: () => void }) {
     }
   };
 
-  const method = lockMethod();
+  const method = useLockMethod();
   return (
     <Screen
       actions={

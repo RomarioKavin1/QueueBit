@@ -2,7 +2,7 @@ import { hkdf } from "@noble/hashes/hkdf.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, hexToBytes, utf8ToBytes } from "@noble/hashes/utils.js";
 import { HDKey } from "@scure/bip32";
-import { generateMnemonic, mnemonicToSeedSync, validateMnemonic } from "@scure/bip39";
+import { entropyToMnemonic, generateMnemonic, mnemonicToSeedSync, validateMnemonic } from "@scure/bip39";
 import { wordlist } from "@scure/bip39/wordlists/english.js";
 import type { Address } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
@@ -31,6 +31,10 @@ import {
  *     notes' spend keys), never transactions.
  *   - the identity key    m/44'/60'/0'/0/0  secp256k1: signs nothing; its address binds the encrypted blob (AAD).
  * Paths and labels are fixed: the same words restore the same keys and the same account address.
+ *
+ * A passkey keyring has no password and stores no secret: the passkey's WebAuthn PRF output (32 bytes, for the fixed
+ * input PASSKEY_PRF_SALT) is the 24 words' entropy. Every unlock asks the passkey again; the words exist only in memory
+ * while unlocked, and the same passkey (or its words) restores the same keys.
  */
 export const IDENTITY_PATH = (index = 0) => `m/44'/60'/0'/0/${index}`;
 export const SETUP_PATH = `m/44'/60'/1'/0/0`;
@@ -38,6 +42,9 @@ export const SESSION_PATH = (index: number) => `m/44'/60'/2'/0/${index}`;
 export const PRIVACY_PAYER_PATH = `m/44'/60'/4'/0/0`;
 export const OWNER_SEED_SALT = "queuebit.leanaccount.owner.v1";
 export const OWNER_SEED_INFO = (index = 0) => `leanSPHINCS/${index}`;
+
+/** The WebAuthn PRF input every QueueBit passkey is evaluated at: sha256("queuebit.passkey.prf.v1"). */
+export const PASSKEY_PRF_SALT: Uint8Array = sha256(utf8ToBytes("queuebit.passkey.prf.v1"));
 
 export const MIN_PASSWORD_LENGTH = 8;
 export const MNEMONIC_STRENGTH_BITS = 256; // 24 words
@@ -49,16 +56,23 @@ export interface KeyringAccounts {
   setup: Address;
 }
 
-export interface KeyringRecord {
+export interface PasskeyInfo {
+  /** The WebAuthn credential id (base64url), so unlock can ask for this passkey. */
+  credentialId: string;
+}
+
+export type KeyringRecord = {
   v: 1;
-  blob: EncryptedBlob;
   accounts: KeyringAccounts;
   createdAt: number;
-  source: "created" | "imported";
-}
+} & (
+  | { source: "created" | "imported"; blob: EncryptedBlob; passkey?: undefined }
+  | { source: "passkey"; passkey: PasskeyInfo; blob?: undefined }
+);
 
 /** Lives in chrome.storage.session: in memory only, cleared on browser restart, hidden from content scripts. */
 export interface SessionRecord {
+  /** The blob's data key; for a passkey keyring, the passkey's PRF output (the words' entropy). */
   dek: string;
   unlockedAt: number;
   lastActivity: number;
@@ -70,7 +84,18 @@ interface Secret {
 
 export class KeyringError extends Error {
   constructor(
-    readonly reason: "exists" | "missing" | "locked" | "weak-password" | "bad-mnemonic" | "wrong-password" | "damaged",
+    readonly reason:
+      | "exists"
+      | "missing"
+      | "locked"
+      | "weak-password"
+      | "bad-mnemonic"
+      | "wrong-password"
+      | "damaged"
+      | "bad-passkey"
+      | "wrong-passkey"
+      | "passkey"
+      | "not-passkey",
     message: string,
   ) {
     super(message);
@@ -80,6 +105,14 @@ export class KeyringError extends Error {
 
 export function normalizeMnemonic(words: string): string {
   return words.trim().toLowerCase().split(/\s+/u).join(" ");
+}
+
+/** The 24 words a passkey's 32-byte PRF output stands for (BIP-39 entropy). */
+export function passkeyMnemonic(entropy: Uint8Array): string {
+  if (entropy.length !== 32) {
+    throw new KeyringError("bad-passkey", "This passkey didn't return a 32-byte secret (WebAuthn PRF).");
+  }
+  return entropyToMnemonic(entropy, wordlist);
 }
 
 function derivePrivateKey(seed: Uint8Array, path: string): Uint8Array {
@@ -160,7 +193,7 @@ export class KeyringController {
     return this.store(mnemonic, password, "imported");
   }
 
-  private async store(mnemonic: string, password: string, source: KeyringRecord["source"]): Promise<KeyringAccounts> {
+  private async store(mnemonic: string, password: string, source: "created" | "imported"): Promise<KeyringAccounts> {
     if (await this.isInitialized()) throw new KeyringError("exists", "This browser already has a QueueBit account.");
     assertPassword(password);
     const accounts = deriveAccounts(mnemonic);
@@ -173,8 +206,57 @@ export class KeyringController {
     return accounts;
   }
 
-  async unlock(password: string): Promise<KeyringAccounts> {
+  /** Create a keyring from a passkey's PRF output. Stores only the credential id and the public addresses. */
+  async createFromPasskey(entropy: Uint8Array, credentialId: string): Promise<KeyringAccounts> {
+    if (await this.isInitialized()) throw new KeyringError("exists", "This browser already has a QueueBit account.");
+    const accounts = deriveAccounts(passkeyMnemonic(entropy));
+    const record: KeyringRecord = {
+      v: 1,
+      accounts,
+      createdAt: this.now(),
+      source: "passkey",
+      passkey: { credentialId },
+    };
+    await this.local.set(StorageKeys.keyring, record);
+    await this.startSession(entropy.slice());
+    return accounts;
+  }
+
+  /** The passkey this keyring needs, or undefined for a password keyring. */
+  async passkeyInfo(): Promise<PasskeyInfo | undefined> {
+    return (await this.record())?.passkey;
+  }
+
+  async unlockWithPasskey(entropy: Uint8Array): Promise<KeyringAccounts> {
+    const record = await this.requirePasskeyRecord();
+    this.assertSamePasskey(record, entropy);
+    await this.startSession(entropy.slice());
+    return record.accounts;
+  }
+
+  /** A passkey keyring's words, for an offline backup. Needs the same passkey again. */
+  async revealWordsWithPasskey(entropy: Uint8Array): Promise<string> {
+    const record = await this.requirePasskeyRecord();
+    this.assertSamePasskey(record, entropy);
+    return passkeyMnemonic(entropy);
+  }
+
+  private async requirePasskeyRecord(): Promise<KeyringRecord & { source: "passkey" }> {
     const record = await this.requireRecord();
+    if (record.source !== "passkey") {
+      throw new KeyringError("not-passkey", "This wallet uses a password, not a passkey.");
+    }
+    return record;
+  }
+
+  private assertSamePasskey(record: KeyringRecord, entropy: Uint8Array): void {
+    if (deriveAccounts(passkeyMnemonic(entropy)).everyday !== record.accounts.everyday) {
+      throw new KeyringError("wrong-passkey", "That passkey belongs to a different wallet.");
+    }
+  }
+
+  async unlock(password: string): Promise<KeyringAccounts> {
+    const record = await this.requirePasswordRecord();
     let dek: Uint8Array;
     try {
       ({ dek } = await decryptWithPassword(password, record.blob, aadFor(record.accounts.everyday)));
@@ -188,7 +270,7 @@ export class KeyringController {
 
   /** The backup words, for "Back up your words". Needs the password again. */
   async revealWords(password: string): Promise<string> {
-    const record = await this.requireRecord();
+    const record = await this.requirePasswordRecord();
     let plaintext: Uint8Array;
     try {
       ({ plaintext } = await decryptWithPassword(password, record.blob, aadFor(record.accounts.everyday)));
@@ -207,7 +289,7 @@ export class KeyringController {
 
   async changePassword(oldPassword: string, newPassword: string): Promise<void> {
     assertPassword(newPassword);
-    const record = await this.requireRecord();
+    const record = await this.requirePasswordRecord();
     const aad = aadFor(record.accounts.everyday);
     let plaintext: Uint8Array;
     try {
@@ -248,6 +330,7 @@ export class KeyringController {
     const record = await this.requireRecord();
     const s = await this.session.get<SessionRecord>(StorageKeys.session);
     if (!s) throw new KeyringError("locked", "QueueBit is locked.");
+    if (record.source === "passkey") return fn(passkeyMnemonic(hexToBytes(s.dek)));
     let plaintext: Uint8Array;
     try {
       plaintext = await decryptWithKey(hexToBytes(s.dek), record.blob, aadFor(record.accounts.everyday));
@@ -310,6 +393,14 @@ export class KeyringController {
   async reset(): Promise<void> {
     await this.lock();
     await this.local.remove(StorageKeys.keyring);
+  }
+
+  private async requirePasswordRecord(): Promise<KeyringRecord & { blob: EncryptedBlob }> {
+    const record = await this.requireRecord();
+    if (record.source === "passkey") {
+      throw new KeyringError("passkey", "This wallet uses a passkey, not a password.");
+    }
+    return record;
   }
 
   private async requireRecord(): Promise<KeyringRecord> {

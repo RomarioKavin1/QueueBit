@@ -1,3 +1,4 @@
+import type { Hex } from "viem";
 import type { ActivityEntry } from "../background/activity";
 import type { SessionRecord, SessionRequest } from "../background/lean/sessions";
 import type { SerializedRpcError } from "./errors";
@@ -72,6 +73,12 @@ export interface UiApi {
   /** Back up your words: the words, after the password is typed again. */
   "keyring:revealWords": { req: { password: string }; res: { mnemonic: string } };
   "keyring:unlock": { req: { password: string }; res: null };
+  /** A passkey wallet: `entropy` is the passkey's 32-byte WebAuthn PRF output (hex) at PASSKEY_PRF_SALT. */
+  "keyring:createFromPasskey": { req: { entropy: Hex; credentialId: string }; res: null };
+  "keyring:unlockWithPasskey": { req: { entropy: Hex }; res: null };
+  "keyring:revealWordsWithPasskey": { req: { entropy: Hex }; res: { mnemonic: string } };
+  /** The passkey a passkey wallet needs; null for a password wallet (or none). */
+  "keyring:passkeyInfo": { req: undefined; res: { credentialId: string } | null };
   "keyring:lock": { req: undefined; res: null };
   "keyring:changePassword": { req: { oldPassword: string; newPassword: string }; res: null };
   "keyring:reset": { req: undefined; res: null };
