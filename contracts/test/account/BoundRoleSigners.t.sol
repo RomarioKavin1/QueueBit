@@ -144,4 +144,29 @@ contract BoundRoleSignersTest is AccountTestBase {
         vm.expectRevert(abi.encodeWithSelector(ILeakedAccount.NotAllowed.selector, recipient, bytes4(0)));
         acct.hotExecute(3 * USD, _one(_ethSend(recipient, 0.001 ether)));
     }
+
+    /// The derived address commits to every clone parameter (salt, role, account, pk, verifier, payerKey): a clone
+    /// with any one of them changed lands elsewhere (with code), the derived address stays empty until the exact
+    /// parameters are used, so nothing but the vault's own configuration can ever get code where the account looks.
+    function test_derivedAddress_commitsToEveryCloneParam() public {
+        C13Verifier c13b = new C13Verifier();
+        address a = address(acct);
+        address[6] memory other = [
+            signerFactory.createRoleSigner(keccak256("other-salt"), 1, a, kat.pk, address(c13), payer),
+            signerFactory.createRoleSigner(SALT, 2, a, kat.pk, address(c13), payer),
+            signerFactory.createRoleSigner(SALT, 1, makeAddr("otherAccount"), kat.pk, address(c13), payer),
+            signerFactory.createRoleSigner(SALT, 1, a, bytes32(uint256(kat.pk) ^ 1), address(c13), payer),
+            signerFactory.createRoleSigner(SALT, 1, a, kat.pk, address(c13b), payer),
+            signerFactory.createRoleSigner(SALT, 1, a, kat.pk, address(c13), alice)
+        ];
+        for (uint256 i; i < 6; ++i) {
+            assertTrue(other[i] != derived, "a changed parameter landed on the derived address");
+            assertGt(other[i].code.length, 0);
+            for (uint256 j; j < i; ++j) {
+                assertTrue(other[i] != other[j]);
+            }
+        }
+        assertEq(derived.code.length, 0, "only the exact parameters deploy the derived signer");
+        assertEq(address(_deploySigner(stranger)), derived);
+    }
 }

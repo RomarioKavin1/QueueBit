@@ -185,3 +185,30 @@ contract MockPQVerifier {
         return sig.length == sigLength && keccak256(sig) == keccak256(abi.encode(pk, digest));
     }
 }
+
+/// An arbitrary Open-mode payee: a contract whose `receive` calls back into the account (the account is its
+/// caller, mid-batch) and/or refunds part of the payment before the batch settles.
+contract ReentrantRecipient {
+    address public hookTarget;
+    bytes public hookData;
+    uint256 public refund;
+    bool public lastOk;
+    bytes public lastRet;
+
+    function setHook(address t, bytes calldata d) external {
+        hookTarget = t;
+        hookData = d;
+    }
+
+    function setRefund(uint256 r) external {
+        refund = r;
+    }
+
+    receive() external payable {
+        if (hookTarget != address(0)) (lastOk, lastRet) = hookTarget.call(hookData);
+        if (refund != 0) {
+            (bool ok,) = msg.sender.call{value: refund}("");
+            require(ok, "refund");
+        }
+    }
+}

@@ -10,7 +10,7 @@ import {LeakedAccountImpl} from "../../src/account/LeakedAccountImpl.sol";
 import {LeakedAccountRoles} from "../../src/account/LeakedAccountRoles.sol";
 import {LeakedAccountStorage} from "../../src/account/LeakedAccountStorage.sol";
 import {AccountTestBase} from "./AccountTestBase.sol";
-import {PermitToken1271, MockRouter, Verifier1271} from "./mocks/AccountMocks.sol";
+import {PermitToken1271, MockRouter, Verifier1271, ReentrantRecipient} from "./mocks/AccountMocks.sol";
 
 /// Security-audit regressions (2026-11-06). Each test names the finding it pins; every one of them failed on the
 /// code as first implemented (the leaked hot key could do what the test forbids). This suite runs in
@@ -387,6 +387,72 @@ contract AuditTest is AccountTestBase {
         );
         _hot(1 * USD, _one(ILeakedAccount.Call(address(dai), 0, abi.encodeCall(IERC20.transfer, (attacker, 1 ether)))));
         assertEq(dai.balanceOf(attacker), 0);
+    }
+
+    // ------------------------------------------- delta review 2026-11-06: Open-mode payee reentry, mode slot ------
+
+    /// An Open-mode payee is an arbitrary contract whose `receive` runs with the account as caller while the hot
+    /// batch is open (in Strict the same contract is reached once allowlisted). It gains nothing: no hot batch of
+    /// its own (`OnlySelf`), no ready queued loosening (Strict -> Open) executed mid-batch (`Reentrancy`), no mode
+    /// change (`Unauthorized`); and refunding part of the payment does not net the debit (max(static, measured)).
+    function test_open_recipientReentry_cannotEscalate_andNoNetting() public {
+        ReentrantRecipient payee = new ReentrantRecipient();
+        bool strict = account.recipientMode() == ILeakedAccount.RecipientMode.Strict;
+        if (strict) _queueLoosen(abi.encodeCall(LeakedAccountRoles.vaultSetTarget, (address(payee), true)));
+        // A ready Strict -> Open op (an Open -> Open no-op in the Open suite) the payee tries to run mid-batch.
+        ILeakedAccount.Call[] memory q = _one(
+            _selfCall(abi.encodeCall(LeakedAccountRoles.vaultSetRecipientMode, (ILeakedAccount.RecipientMode.Open)))
+        );
+        vm.prank(vault);
+        bytes32 op = roles.vaultQueue(q, 1);
+        vm.warp(vm.getBlockTimestamp() + DELAY);
+
+        uint256 pay = 0.001 ether; // $3
+        bytes[3] memory hooks = [
+            abi.encodeCall(LeakedAccountImpl.hotExecute, (1 * USD, _one(_usdcTransfer(attacker, 1 * USD)))),
+            abi.encodeCall(LeakedAccountRoles.executeQueued, (op, q)),
+            abi.encodeCall(LeakedAccountRoles.vaultSetRecipientMode, (ILeakedAccount.RecipientMode.Open))
+        ];
+        bytes4[3] memory errs = [
+            ILeakedAccount.OnlySelf.selector, ILeakedAccount.Reentrancy.selector, ILeakedAccount.Unauthorized.selector
+        ];
+        for (uint256 i; i < 3; ++i) {
+            payee.setHook(address(account), hooks[i]);
+            uint256 before = _bucketAvailable();
+            _hot(3 * USD, _one(_ethSend(address(payee), pay)));
+            assertFalse(payee.lastOk(), "the payee's reentry succeeded");
+            assertEq(bytes4(payee.lastRet()), errs[i]);
+            assertEq(before - _bucketAvailable(), 3 * USD, "debited the payment");
+        }
+        assertEq(usdc.balanceOf(attacker), 0);
+        assertTrue(roles.isQueued(op), "the loosening stays pending");
+        assertEq(uint256(account.recipientMode()), strict ? 1 : 0, "the mode did not change mid-batch");
+
+        payee.setHook(address(0), "");
+        payee.setRefund(pay / 2);
+        uint256 bucket = _bucketAvailable();
+        uint256 bal = address(account).balance;
+        _hot(3 * USD, _one(_ethSend(address(payee), pay)));
+        assertEq(bal - address(account).balance, pay / 2, "half came back");
+        assertEq(bucket - _bucketAvailable(), 3 * USD, "a refund does not net the debit");
+    }
+
+    /// The mode slot's zero value is Strict: an account upgraded from an implementation without the field (its
+    /// appended slot is zero) keeps the recipient allowlist until the vault queues Strict -> Open, which is the one
+    /// path that writes the non-zero (Open) value.
+    function test_modeSlot_zeroIsStrict_failClosedAfterUpgrade() public {
+        vm.record();
+        vm.prank(vault);
+        roles.vaultSetRecipientMode(ILeakedAccount.RecipientMode.Strict);
+        (, bytes32[] memory w) = vm.accesses(address(account));
+        assertEq(w.length, 1, "the mode is one slot");
+        assertEq(vm.load(address(account), w[0]), bytes32(0), "Strict is the zero value");
+        assertEq(uint256(account.recipientMode()), uint256(ILeakedAccount.RecipientMode.Strict));
+        vm.expectRevert(abi.encodeWithSelector(ILeakedAccount.NotAllowed.selector, stranger, bytes4(0)));
+        _hot(1, _one(_ethSend(stranger, 1)));
+        _queueLoosen(abi.encodeCall(LeakedAccountRoles.vaultSetRecipientMode, (ILeakedAccount.RecipientMode.Open)));
+        assertEq(uint256(vm.load(address(account), w[0])), 1, "Open is the non-zero value");
+        assertEq(uint256(account.recipientMode()), uint256(ILeakedAccount.RecipientMode.Open));
     }
 }
 
