@@ -68,6 +68,11 @@ const OWNER_NONCE_KEY = 0n;
 const toEntryCalls = (calls: Call[]) =>
   calls.map((c) => ({ target: c.to, value: (c.value ?? 0n).toString(), data: c.data ?? ("0x" as Hex) }));
 
+/** How long a LeanPool payment its node doesn't know (restarted) may stay pending before it counts as not sent. */
+const LOST_UNKNOWN_MS = 90_000;
+/** The same while the node doesn't answer at all. */
+const LOST_UNREACHABLE_MS = 10 * 60_000;
+
 export interface AccountDeps {
   kv: KV;
   io: LeanIo;
@@ -479,10 +484,32 @@ export class AccountService {
     return done;
   }
 
+  /** A LeanPool payment its node can't account for: settled from the account's nonce on its lane. */
+  private async settleLost(e: ActivityEntry, graceMs: number): Promise<Partial<ActivityEntry> | undefined> {
+    if (e.nonceKey === undefined || e.nonceSeq === undefined) return undefined;
+    const next = await this.nonce(e.chainId, e.account, BigInt(e.nonceKey));
+    if (next > BigInt(e.nonceSeq)) return { status: "confirmed", detail: "Included on the network", headline: done(e) };
+    if (this.now() - e.createdAt < graceMs) return undefined;
+    return {
+      status: "failed",
+      detail: "The payment service lost this payment before it was sent. Nothing moved; you can send it again.",
+    };
+  }
+
   private async poll(e: ActivityEntry): Promise<Partial<ActivityEntry> | undefined> {
     if (e.via === "leanpool") {
-      const st = await this.d.io.leanpool(e.chainId).getTx(e.hash);
-      if (!st || st.stage === e.stage) return undefined;
+      let st: Awaited<ReturnType<LeanPoolClient["getTx"]>> | undefined;
+      let unreachable = false;
+      try {
+        st = await this.d.io.leanpool(e.chainId).getTx(e.hash);
+      } catch {
+        unreachable = true;
+      }
+      // The node keeps payments in memory: after a restart it no longer knows one (or it may be down for good).
+      // The chain decides then: a used nonce means it was included; an unused one, after a grace period, means
+      // nothing was sent, and a new payment takes the same nonce, so the old one can never land as well.
+      if (!st) return this.settleLost(e, unreachable ? LOST_UNREACHABLE_MS : LOST_UNKNOWN_MS);
+      if (st.stage === e.stage) return undefined;
       const c = stageCopy(st.stage);
       return {
         stage: st.stage,

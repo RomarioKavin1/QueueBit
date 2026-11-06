@@ -280,6 +280,40 @@ describe("payment routing: owner vs session", () => {
     expect(await wallet.owner.remaining()).toBe(wallet.owner.budget - 1);
   });
 
+  it("a payment the LeanPool node forgot (it restarted): settled from the account's nonce, so the lane frees up", async () => {
+    const { wallet, chain } = await ready();
+    const pay = async (id: string) => {
+      const p = send(wallet, parseEther("0.01"), id);
+      await flush();
+      await flush();
+      const [a] = await wallet.approvals.store.pending();
+      await wallet.resolveApproval(a!.id, true);
+      return p;
+    };
+    const hash = await pay("lost-1");
+    const [e] = await wallet.activity.list();
+    chain.stages.delete(hash as string); // the node no longer knows it
+
+    // Recent: give the node a moment (it may be catching up).
+    await wallet.refreshActivity();
+    expect((await wallet.activity.get(e!.id))?.status).toBe("confirming");
+
+    // Past the grace period with the nonce unused: nothing was sent, and the next payment may go.
+    await wallet.activity.update(e!.id, { createdAt: Date.now() - 120_000 });
+    await wallet.refreshActivity();
+    expect(await wallet.activity.get(e!.id)).toMatchObject({ status: "failed" });
+    await pay("lost-2");
+    expect(chain.pooled).toHaveLength(2);
+
+    // Forgotten again, but this time the nonce was used: it was included.
+    const [e2] = await wallet.activity.list();
+    chain.stages.delete(chain.pooled[1]!.id);
+    const account = (await wallet.handleUi("account:status", { chainId: 1337 })).address!;
+    chain.txCount.set(account.toLowerCase(), Number(e2!.nonceSeq) + 1);
+    await wallet.refreshActivity();
+    expect(await wallet.activity.get(e2!.id)).toMatchObject({ status: "confirmed" });
+  });
+
   it("a site with a session that covers the request: the session key signs, straight to the sidecar, no prompt", async () => {
     const { wallet, chain, w } = await ready();
     const s = await wallet.handleUi("sessions:create", {
