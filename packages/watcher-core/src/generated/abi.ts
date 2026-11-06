@@ -314,6 +314,11 @@ export const frameAccountAbi = [
   },
   {
     type: "error",
+    name: "NonceUsed",
+    inputs: [],
+  },
+  {
+    type: "error",
     name: "NoRotationPending",
     inputs: [],
   },
@@ -1507,6 +1512,11 @@ export const moduleAbi = [
   {
     type: "error",
     name: "MustQueue",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "NonceUsed",
     inputs: [],
   },
   {

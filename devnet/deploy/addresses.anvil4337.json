@@ -22,20 +22,20 @@
       "initCodeHash": "0xbd891ce65dd5aae84d024a2486db2f8df341d1dbcce437d27104064991d53458"
     },
     "LeakedPolicyHook": {
-      "address": "0x856Fb066E6433BCB989436337502a61fA0489702",
+      "address": "0x8400e96a45928a473bD18C153a7609669413BB32",
       "artifact": "LeakedPolicyHook.sol/LeakedPolicyHook",
       "args": [
         "0x94656178267d434D9103018339E5aD43a170f4B4"
       ],
-      "initCodeHash": "0x82b7caac0cef51e6e074a5fa99a0c669931617acdf30b2c1ea2d889910b83b11"
+      "initCodeHash": "0x0fcb5e2cb60bc04e7f8a044bd089a10d4d4af9e21925583f32925944f0a491ea"
     },
     "LeakedHotValidator": {
-      "address": "0x3Dbda88bA775DDD894739b324dB19Bb5393fC3e0",
+      "address": "0xc41FC70648563A7E719FF4D9A0064ef387e7E979",
       "artifact": "LeakedHotValidator.sol/LeakedHotValidator",
       "args": [
-        "0x856Fb066E6433BCB989436337502a61fA0489702"
+        "0x8400e96a45928a473bD18C153a7609669413BB32"
       ],
-      "initCodeHash": "0x363e8e24d9f3243c21b78d1d0999c600e6f1eacc944caf7832b60b069395ee03"
+      "initCodeHash": "0xf5d6971d538f6b15b6867f5a9c286b95bed9403c65a68231d99a48bf7c72f6fc"
     },
     "MSAAdvancedEP": {
       "address": "0x4165661A01cf071b05167E325f276dE43D63C083",

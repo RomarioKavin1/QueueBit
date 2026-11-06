@@ -16,15 +16,15 @@
       "deployTx": "0x6c38e00944b3b4c1d847fad3b78f8c3eeb3c90d01198d5b090f066ea11c375d5"
     },
     "LeakedAccountImpl": {
-      "address": "0xF9e611c4c168b6Ab6A41E6fe4a6e52e8D2fceeC9",
+      "address": "0x4306F6A38F5E8939a89Fc5f8331E0538BB4fe8fb",
       "artifact": "LeakedAccountImpl.sol/LeakedAccountImpl",
       "args": [
         0,
         true,
         "0x0DA4a2e6FABac2EEb55dC3cfa48a8aEed2bAEefc"
       ],
-      "initCodeHash": "0x6f913bd79dbeca914c385e727e291551d9ea808582777bfcf2713fb54dd02099",
-      "deployTx": "0xc0256fcfd9e0149c0126585ca1894a86f28d2d3b074c729ccc6d83d55eab56dd"
+      "initCodeHash": "0xd8cd6e35c9b8be58195e78e54b634d2db915d745cd660d0fb5778ba44f1ff07c",
+      "deployTx": "0x3dcc5765da78a6d1106a72ee57490c43c2fa32bb4ddef82baad5d6670710bfb3"
     },
     "AccountFactory": {
       "address": "0x12e7A64982e85868C345165bD149d6bE55fcA345",
