@@ -26,6 +26,9 @@ function chain(
       c.posts++;
       return { tx: keccak256(root), block: 7n, ring: 3 };
     },
+    async ringPosition() {
+      return null;
+    },
     async attachProof(_root: Hex, proofHash: Hex) {
       return keccak256(proofHash);
     },

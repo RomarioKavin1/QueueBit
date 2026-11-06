@@ -54,6 +54,8 @@ export interface Chain8288 {
   holdsKey(sender: Address, vk: Hex, validator: Address | null): Promise<boolean>;
   /** Posts the root and writes it into the ring of every wallet in the batch; returns the ring position. */
   postRoot(root: Hex, count: number, wallets: Address[]): Promise<{ tx: Hex; block: bigint; ring: number }>;
+  /** Where this aggregator's `root` sits in every wallet's ring (the same slot for all), or null when it isn't there. */
+  ringPosition(root: Hex, wallets: Address[]): Promise<number | null>;
   attachProof(root: Hex, proofHash: Hex): Promise<Hex>;
   /** Sends the finished tx to this node's alt-mempool sidecar and waits for its receipt. Throws AdmittedButPending when
    * the sidecar took it but no receipt came in time; any other error means the sidecar refused it. */
@@ -337,13 +339,23 @@ export class Node8288 {
       const root = rootOfDeps(self.deps);
       const wallets = [...new Set(items.map((p) => p.tx.sender.toLowerCase() as Address))];
       let posted: Awaited<ReturnType<Chain8288["postRoot"]>>;
+      let reused = false;
       try {
         posted = await this.opts.chain.postRoot(root, leaves.length, wallets);
       } catch (e) {
         if (!ROOT_EXISTS.test((e as Error).message)) throw e;
-        // Retrying would rebuild the same root and revert forever: drop these txs from the queue.
-        items.forEach((p) => this.remove(p.hash));
-        throw new Error(`root ${root} is already posted; dropped its ${items.length} txs from the queue`, { cause: e });
+        // The same txs rebuild the same root: an earlier batch posted it and then failed to deliver them (the sidecar
+        // refused). While the root is still in every wallet's ring, deliver them with it; once it has left the ring,
+        // retrying would revert forever, so drop them.
+        const ring = await this.opts.chain.ringPosition(root, wallets);
+        if (ring === null) {
+          items.forEach((p) => this.remove(p.hash));
+          throw new Error(`root ${root} is already posted and no longer in the ring; dropped its ${items.length} txs`, {
+            cause: e,
+          });
+        }
+        posted = { tx: "0x", block: 0n, ring };
+        reused = true;
       }
       const rec: BatchRecord = {
         root,
@@ -354,12 +366,18 @@ export class Node8288 {
         results: [],
       };
       pushCapped(this.batches, rec);
-      this.log(`root ${root} (${items.length} txs) posted in block ${posted.block}, ring position ${posted.ring}`);
-      // The STARK's claims must equal the batch's deduplicated deps exactly.
-      const sigOf = new Map(
-        items.flatMap((p) => p.deps.map((d, i) => [depKey(d), toSignedClaim(d, p.sigs[i]!)] as const)),
-      );
-      this.proofQueue.push({ root, txs: items.map((p) => p.tx), sigs: self.deps.map((d) => sigOf.get(depKey(d))!) });
+      if (reused) {
+        this.log(
+          `root ${root} (${items.length} txs) is already posted, ring position ${posted.ring}: delivering again`,
+        );
+      } else {
+        this.log(`root ${root} (${items.length} txs) posted in block ${posted.block}, ring position ${posted.ring}`);
+        // The STARK's claims must equal the batch's deduplicated deps exactly.
+        const sigOf = new Map(
+          items.flatMap((p) => p.deps.map((d, i) => [depKey(d), toSignedClaim(d, p.sigs[i]!)] as const)),
+        );
+        this.proofQueue.push({ root, txs: items.map((p) => p.tx), sigs: self.deps.map((d) => sigOf.get(depKey(d))!) });
+      }
 
       await Promise.all(
         items.map(async (p) => {

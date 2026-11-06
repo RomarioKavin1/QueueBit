@@ -172,6 +172,27 @@ export function makeChain(cfg: NodeConfig, log: (...a: unknown[]) => void): Node
       });
       return { tx: r.transactionHash, block: r.blockNumber, ring: ringOf(r.logs) };
     },
+    async ringPosition(root, wallets) {
+      let at: number | null = null;
+      for (const w of wallets) {
+        let found: number | null = null;
+        for (let i = 0; i < 8; i++) {
+          const r = await pub.readContract({
+            address: cfg.registry,
+            abi: REGISTRY_ABI,
+            functionName: "rootAt",
+            args: [account.address, w, i],
+          });
+          if (r.toLowerCase() === root.toLowerCase()) {
+            found = i;
+            break;
+          }
+        }
+        if (found === null || (at !== null && found !== at)) return null;
+        at = found;
+      }
+      return at;
+    },
     async attachProof(root, proofHash) {
       const r = await sendLegacy({
         to: cfg.registry,

@@ -38,8 +38,16 @@ function fakeChain(): FakeChain {
       return held.some((k) => !!k && k.toLowerCase() === vk.toLowerCase());
     },
     async postRoot(root: Hex, count: number, wallets: Address[]) {
+      // DepsRegistry refuses a root it already has (RootExists()).
+      if (c.posted.some((p) => p.root === root)) throw new Error("Execution reverted with reason: 0x3293a2cf.");
       c.posted.push({ root, count, wallets });
       return { tx: keccak256(root), block: 1n, ring: (c.posted.length - 1) % 8 };
+    },
+    async ringPosition(root: Hex, ws: Address[]) {
+      const i = c.posted.findIndex((p) => p.root === root);
+      if (i < 0 || c.posted.length - i > 8) return null; // never posted, or pushed out of the 8-slot ring
+      const p = c.posted[i]!;
+      return ws.every((w) => p.wallets.some((x) => x.toLowerCase() === w.toLowerCase())) ? i % 8 : null;
     },
     async attachProof(root: Hex, proofHash: Hex) {
       c.proofs.push({ root, proofHash });
@@ -250,6 +258,26 @@ test("a batch whose root is already posted is dropped, not retried forever", asy
   await expect(a.batchOnce()).rejects.toThrow(/already posted/);
   expect(a.pool.size).toBe(0);
   expect(await a.batchOnce()).toBeNull();
+});
+
+test("a tx retried after its delivery failed reuses its root, which is already posted", async () => {
+  const { a, chainA } = pair();
+  const t = await signedTx(62);
+  await a.intake(t.raw, [t.sig]);
+  const submit = chainA.submit;
+  chainA.submit = async () => {
+    throw new Error("Internal error"); // the sidecar refused it (e.g. its disk was full)
+  };
+  await a.batchOnce();
+  expect(chainA.posted).toHaveLength(1);
+  expect(a.pool.size).toBe(1); // kept for the next batch
+  chainA.submit = submit;
+  // The next batch rebuilds the same root: RootExists. The tx goes out with the posted root's witness instead.
+  const second = await a.batchOnce();
+  expect(second?.txs).toEqual([txHash(t.tx)]);
+  expect(chainA.posted).toHaveLength(1);
+  expect(chainA.submitted).toHaveLength(1);
+  expect(a.pool.size).toBe(0);
 });
 
 test("each batch result names its LeanPool tx, and the batch records its ring position", async () => {
