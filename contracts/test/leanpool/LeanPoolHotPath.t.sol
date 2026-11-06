@@ -47,8 +47,12 @@ contract LeanPoolHotPathTest is AccountTestBase {
             payable(hotFactory.createHotSigner{value: 1 ether}(address(account), aggregator, PQ_PK, HOT_MAX_FEE))
         );
         vm.label(address(signer), "pqHotSigner");
-        vm.prank(vault);
-        roles.vaultSetPQHotSigner(address(signer));
+        _installPq(address(signer));
+    }
+
+    /// Installing is loosening: through the queue, as production does.
+    function _installPq(address s) internal {
+        _queueLoosen(abi.encodeCall(QueueBitAccountRoles.vaultSetPQHotSigner, (s)));
     }
 
     // ------------------------------------------------------------------------------------------ builders ------
@@ -310,35 +314,45 @@ contract LeanPoolHotPathTest is AccountTestBase {
 
     function test_setter_refusesSignerOfAnotherAccount() public {
         address other = hotFactory.createHotSigner(stranger, aggregator, PQ_PK, HOT_MAX_FEE);
-        vm.expectRevert(abi.encodeWithSelector(IQueueBitAccount.BadAddress.selector, other));
-        vm.prank(vault);
-        roles.vaultSetPQHotSigner(other);
+        _queueLoosenReverts(abi.encodeCall(QueueBitAccountRoles.vaultSetPQHotSigner, (other)));
+        assertEq(roles.pqHotSigner(), address(signer));
     }
 
     function test_setter_refusesEoaAndRoleAddresses() public {
-        vm.startPrank(vault);
-        vm.expectRevert(abi.encodeWithSelector(IQueueBitAccount.BadAddress.selector, alice));
-        roles.vaultSetPQHotSigner(alice);
-        vm.expectRevert(abi.encodeWithSelector(IQueueBitAccount.BadAddress.selector, hot));
-        roles.vaultSetPQHotSigner(hot);
-        vm.expectRevert(abi.encodeWithSelector(IQueueBitAccount.BadAddress.selector, vault));
-        roles.vaultSetPQHotSigner(vault);
-        vm.stopPrank();
+        _queueLoosenReverts(abi.encodeCall(QueueBitAccountRoles.vaultSetPQHotSigner, (alice)));
+        _queueLoosenReverts(abi.encodeCall(QueueBitAccountRoles.vaultSetPQHotSigner, (hot)));
+        _queueLoosenReverts(abi.encodeCall(QueueBitAccountRoles.vaultSetPQHotSigner, (vault)));
+        assertEq(roles.pqHotSigner(), address(signer));
     }
 
-    function test_setter_emitsAndIsReadable() public {
+    function test_setter_installOrReplace_mustQueue() public {
         address next = hotFactory.createHotSigner(address(account), otherAggregator, PQ_PK, HOT_MAX_FEE);
-        vm.expectEmit(address(account));
-        emit IQueueBitAccount.PQHotSignerSet(address(signer), next);
+        vm.expectRevert(IQueueBitAccount.MustQueue.selector);
         vm.prank(vault);
         roles.vaultSetPQHotSigner(next);
+        _installPq(next);
         assertEq(roles.pqHotSigner(), next);
     }
 
-    function test_setter_reachableFromAQueuedOp() public {
-        address next = hotFactory.createHotSigner(address(account), otherAggregator, PQ_PK, HOT_MAX_FEE);
-        _queueAndExecute(_one(_selfCall(abi.encodeCall(QueueBitAccountRoles.vaultSetPQHotSigner, (next)))), 1);
-        assertEq(roles.pqHotSigner(), next);
+    function test_setter_removal_isInstant() public {
+        vm.expectEmit(address(account));
+        emit IQueueBitAccount.PQHotSignerSet(address(signer), address(0));
+        vm.prank(vault);
+        roles.vaultSetPQHotSigner(address(0));
+        assertEq(roles.pqHotSigner(), address(0));
+    }
+
+    function test_bunker_removesThePqSignerForGood() public {
+        vm.prank(vault);
+        roles.vaultEnableBunker();
+        assertEq(roles.pqHotSigner(), address(0));
+        // A new hot key clears bunker; the old PQ signer stays out.
+        vm.prank(vault);
+        roles.vaultSetHotKey(makeAddr("newHot"));
+        assertEq(roles.pqHotSigner(), address(0));
+        vm.expectRevert(IQueueBitAccount.Unauthorized.selector);
+        vm.prank(address(signer));
+        account.hotExecuteFrom(1 * USD, _one(_usdcTransfer(alice, 1 * USD)));
     }
 
     // ------------------------------------------------------------------------------------- signer & factory ------

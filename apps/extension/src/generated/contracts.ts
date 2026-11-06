@@ -11379,9 +11379,9 @@ export const localDeployment: {
   tokens: LocalToken[];
 } | null = {
   chainId: 1337,
-  accountImpl: "0x22EA04Cf20818679B8051ba9A007fF590F0e3eb4",
-  accountImplInitCodeHash: "0x179a0cdb1524c0082195086491850fec80dec9b8918439f80824eb2c586487ad",
-  rolesModule: "0x59eAbF5f82400CA7F6615Fcfd814b93369d3d970",
+  accountImpl: "0xca23b000C0BB233f4bAc79812aC9D33117F8A35B",
+  accountImplInitCodeHash: "0x2b7756e9c7a3724124f60a04895233b5ab6c04144c380e45e1444e66949f89fa",
+  rolesModule: "0xf67249175A1dDB089B685a8a795923c0c093c88B",
   factory: "0x602D0b1A46d6fc77A8690691844Fe0F9a7Be7316",
   c13Verifier: "0xAD7432C0BFd52Dd1c62774701005eeAbBc224152",
   roleSignerFactory: "0xc9de1A8cBf55331acF4180bF30f64045e75C364E",
@@ -11421,7 +11421,7 @@ export const publicDeployment: {
   tokens: LocalToken[];
 } | null = {
   chainId: 1337,
-  accountImpl: "0x22EA04Cf20818679B8051ba9A007fF590F0e3eb4",
+  accountImpl: "0xca23b000C0BB233f4bAc79812aC9D33117F8A35B",
   factory: "0x602D0b1A46d6fc77A8690691844Fe0F9a7Be7316",
   c13Verifier: "0xAD7432C0BFd52Dd1c62774701005eeAbBc224152",
   roleSignerFactory: "0x1b140b91B0d3f4BE6761963b9D3A0761BD8Aac08",

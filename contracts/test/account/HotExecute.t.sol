@@ -109,7 +109,7 @@ contract HotExecuteTest is AccountTestBase {
         _hot(1 * USD, _one(_usdcTransfer(alice, 1 * USD)));
     }
 
-    function test_revert_bunker() public {
+    function test_revert_bunker() public virtual {
         vm.prank(vault);
         roles.vaultEnableBunker();
         vm.expectRevert(IQueueBitAccount.BunkerActive.selector);

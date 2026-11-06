@@ -125,10 +125,10 @@ contract QueueBitAccountRoles is QueueBitAccountBase {
 
     /// @notice Installs (or, with address(0), removes) the post-quantum everyday signer: a `LeanPoolHotSigner` bound to
     ///         this account, which spends through `hotExecuteFrom` under the same everyday limits as the hot key.
-    ///         Instant, like `vaultSetHotKey`: it draws on the same rolling bucket, so the most it can spend is
-    ///         unchanged. Does not clear bunker (only a new hot key does).
+    ///         Removing it is tightening, instant. Installing or replacing it adds a spender and trusts a new LeanPool
+    ///         aggregator: loosening, so it must be queued (timelock; Recovery can cancel). Does not clear bunker.
     function vaultSetPQHotSigner(address signer) external delegated {
-        QueueBitAccountStorage.Layout storage $ = _authVault(false);
+        QueueBitAccountStorage.Layout storage $ = _authVault(signer != address(0));
         if (signer != address(0)) {
             if (
                 signer == address(this) || signer == $.hotKey || signer == $.vaultSigner || signer == $.recoverySigner
@@ -345,6 +345,13 @@ contract QueueBitAccountRoles is QueueBitAccountBase {
         $.hotKey = address(0);
         emit BunkerEnabled();
         emit HotKeyRotated(old, address(0));
+        // The quantum-safe everyday signer is part of the hot tier: lockdown removes it for good (a new hot key clears
+        // bunker; the signer must then be installed again, through the queue).
+        address oldPq = $.pqHotSigner;
+        if (oldPq != address(0)) {
+            $.pqHotSigner = address(0);
+            emit PQHotSignerSet(oldPq, address(0));
+        }
     }
 
     // ---------------------------------------------------------------------------------- upgrade / migrate ------

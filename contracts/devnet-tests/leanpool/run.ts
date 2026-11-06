@@ -6,7 +6,8 @@
 //
 // 1. A fresh QueueBit account in bound mode (C13 Vault, Path B), funded; its VaultSigner clone deployed lazily.
 // 2. A LeanPoolHotSigner clone for the account (leanSPHINCS key, the node's aggregator), created by the fee tank.
-// 3. The Vault installs it: Path B `vaultSetPQHotSigner`, public mempool.
+// 3. The Vault queues installing it (Path B `vaultQueue`, public mempool: adding a spender is loosening); after the
+//    1 h timelock anyone executes it.
 // 4. A post-quantum everyday payment: the leanSPHINCS key signs the frame tx's sig hash; the LeanPool node verifies it,
 //    posts the batch root into the signer's ring, fills the witness and delivers the tx to the alt mempool, which
 //    admits it unstaked and mines it. The canonical mempool's verdict on the same tx is recorded (StorageReadNonSender).
@@ -20,6 +21,7 @@ import {
   concat,
   createPublicClient,
   decodeErrorResult,
+  parseEventLogs,
   encodeFunctionData,
   hexToBytes,
   http,
@@ -238,10 +240,32 @@ async function vaultPathB(label: string, data: Hex) {
   if (r.frameReceipts[1]?.status !== "success") throw new Error(`${label}: SENDER frame failed`);
   return { label, hash, block: r.blockNumber, gasUsed: r.gasUsed, c13SignMs: signMs };
 }
-results.install = await vaultPathB("Vault: vaultSetPQHotSigner", encodeFunctionData({ abi: accountAbi, functionName: "vaultSetPQHotSigner", args: [hotSigner] }));
+// Installing is loosening: the Vault queues it (Path B), anyone executes it after the timelock (1 h here, the minimum).
+const installCalls = [
+  { target: account, value: 0n, data: encodeFunctionData({ abi: accountAbi, functionName: "vaultSetPQHotSigner", args: [hotSigner] }) },
+];
+const direct = await pub
+  .simulateContract({ account: vaultSigner, address: account, abi: accountAbi, functionName: "vaultSetPQHotSigner", args: [hotSigner] })
+  .then(() => "accepted")
+  .catch((e: { shortMessage?: string }) => e.shortMessage ?? "refused");
+const queued = await vaultPathB("Vault: vaultQueue(vaultSetPQHotSigner)", encodeFunctionData({ abi: accountAbi, functionName: "vaultQueue", args: [installCalls, 1] }));
+const queuedReceipt = await pub.getTransactionReceipt({ hash: queued.hash });
+const queuedLog = parseEventLogs({ abi: accountAbi, logs: queuedReceipt.logs, eventName: "Queued" })[0] as unknown as { args: { opId: Hex; eta: bigint } };
+log("queued by the Vault (Path B); a direct call", { ...queued, opId: queuedLog.args.opId, eta: queuedLog.args.eta, directCallWithoutQueue: direct });
+for (;;) {
+  const b = await pub.getBlock({ blockTag: "latest" });
+  if (b.timestamp >= BigInt(queuedLog.args.eta)) break;
+  await sleep(20_000);
+}
+const executed = await legacy(funder, {
+  to: account,
+  data: encodeFunctionData({ abi: accountAbi, functionName: "executeQueued", args: [queuedLog.args.opId, installCalls] }),
+  gas: 1_000_000n,
+});
 const installed = (await pub.readContract({ address: account, abi: accountAbi, functionName: "pqHotSigner" })) as Address;
 if (installed !== hotSigner) throw new Error(`pqHotSigner() = ${installed}`);
-log("installed by the Vault (Path B, public mempool)", results.install);
+results.install = { queued: { ...queued, opId: queuedLog.args.opId, eta: queuedLog.args.eta }, directCallWithoutQueue: direct, executeQueued: executed.hash };
+log("installed after the timelock (executeQueued by anyone)", results.install);
 save();
 
 // ------------------------------------------------------------ 4. a post-quantum everyday payment ---------

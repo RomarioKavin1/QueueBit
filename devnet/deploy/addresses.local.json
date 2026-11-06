@@ -9,20 +9,20 @@
   "stakingRegistry": "0x8464135c8F25Da09e49BC8782676a84730C318bC",
   "contracts": {
     "QueueBitAccountRoles": {
-      "address": "0x59eAbF5f82400CA7F6615Fcfd814b93369d3d970",
+      "address": "0xf67249175A1dDB089B685a8a795923c0c093c88B",
       "artifact": "QueueBitAccountRoles.sol/QueueBitAccountRoles",
       "args": [],
-      "initCodeHash": "0x488befa74b99a51babd2142d7267068632b5b497fb64da3ff3f3c74ac61a5d28"
+      "initCodeHash": "0xaa015adb92cd69d9c1c9b433b560ebd148a5bfbedc26fc518e7fbdf2b56a0d8b"
     },
     "QueueBitAccountImpl": {
-      "address": "0x22EA04Cf20818679B8051ba9A007fF590F0e3eb4",
+      "address": "0xca23b000C0BB233f4bAc79812aC9D33117F8A35B",
       "artifact": "QueueBitAccountImpl.sol/QueueBitAccountImpl",
       "args": [
         0,
         true,
-        "0x59eAbF5f82400CA7F6615Fcfd814b93369d3d970"
+        "0xf67249175A1dDB089B685a8a795923c0c093c88B"
       ],
-      "initCodeHash": "0x179a0cdb1524c0082195086491850fec80dec9b8918439f80824eb2c586487ad"
+      "initCodeHash": "0x2b7756e9c7a3724124f60a04895233b5ab6c04144c380e45e1444e66949f89fa"
     },
     "AccountFactory": {
       "address": "0x602D0b1A46d6fc77A8690691844Fe0F9a7Be7316",

@@ -11,7 +11,12 @@
 #   4. I-2 (slot disjointness): the walker never reads the recipient policy (`recipientsOpen` / `RecipientMode` /
 #      `targets`), the mode lives in an appended execution-only slot, and the Audit I-2 tests (both recipient
 #      modes) pass: VERIFY reads only slots 0-2 and nothing a hot batch or the mode setter writes; likewise nothing
-#      initialize writes for `InitConfig.tokens`, at the same VERIFY gas (InitTokensAndPayers I-2 test, both modes).
+#      initialize writes for `InitConfig.tokens`, at the same VERIFY gas (InitTokensAndPayers I-2 test, both modes);
+#   5. LeanPoolHotSigner (the quantum-safe everyday key's sender): its VERIFY code (from `fallback()` to the execution
+#      section) uses no time/block/gas/balance/transient/log/write constructs, makes exactly one external call (the
+#      registry's `rootAt`, its ring slot: storage keyed by the signer), checks entry 0's SCHEME, MSG and
+#      SIGNATURE_LENGTH before its SIGDATACOPY, never reads RESOLVED_SIGNER; `pqHotSigner` is appended (execution-only);
+#      the FrameSim suite that pins the ring slot as VERIFY's only foreign read passes.
 # Run from anywhere: contracts/script/lint-verify.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -106,6 +111,52 @@ if [ "$(grep -cE 'Suite result: ok\. 1 passed; 0 failed' <<<"$out")" -eq 2 ]; th
 else
   echo "$out" | grep -E 'PASS|FAIL|Suite result' || echo "$out" | tail -20
   echo "lint-verify: InitConfig.tokens I-2 tests did not pass in both recipient modes"
+  fail=1
+fi
+
+echo "== 5. LeanPoolHotSigner VERIFY"
+hs=src/roles/LeanPoolHotSigner.sol
+vcode=$(sed -e 's://.*$::' "$hs" | perl -0pe 's:/\*.*?\*/::gs' | awk '/fallback\(\) external payable/{on=1} /function execute\(/{on=0} on')
+if [ -z "$vcode" ]; then
+  echo "lint-verify: $hs: VERIFY entry (fallback) not found"
+  fail=1
+fi
+hcheck() { # regex description
+  if grep -nE "$1" <<<"$vcode" >/dev/null; then
+    echo "lint-verify: $hs: $2"
+    grep -nE "$1" <<<"$vcode" | sed 's/^/    /'
+    fail=1
+  fi
+}
+hcheck 'block\.|tx\.gasprice|tx\.origin|gasleft\(|blockhash\(' "time/block/gas environment read in VERIFY"
+hcheck '\.balance|selfbalance|balance\(' "BALANCE/SELFBALANCE in VERIFY"
+hcheck 'tload|tstore|\bemit\b|sstore|create2?\(|selfdestruct' "transient storage, logs, writes or creation in VERIFY"
+hcheck '\.call\(|\.call\{|delegatecall\(|staticcall\(' "low-level calls in VERIFY (only the typed registry read is allowed)"
+hcheck 'RESOLVED_SIGNER' "RESOLVED_SIGNER read (entry 0 is ARBITRARY: halts)"
+calls=$(grep -cE '\)\.[a-zA-Z]+\(' <<<"$(grep -vE 'abi\.|LeanPoolMerkle\.|this\.' <<<"$vcode")" || true)
+if [ "$(grep -cE 'IDepsRegistryRing\(reg\)\.rootAt\(' <<<"$vcode")" -ne 1 ] || [ "$calls" -ne 1 ]; then
+  echo "lint-verify: $hs: VERIFY must make exactly one external call, IDepsRegistryRing(reg).rootAt (found $calls)"
+  fail=1
+fi
+sd=$(grep -nE 'sigdatacopy\(' <<<"$vcode" | head -1 | cut -d: -f1 || true)
+for guard in 'SigParam\.SCHEME' 'SigParam\.MSG' 'SigParam\.SIGNATURE_LENGTH'; do
+  gl=$(grep -nE "$guard" <<<"$vcode" | head -1 | cut -d: -f1 || true)
+  if [ -z "$sd" ] || [ -z "$gl" ] || [ "$gl" -ge "$sd" ]; then
+    echo "lint-verify: $hs: SIGDATACOPY without a prior $guard check of entry 0"
+    fail=1
+  fi
+done
+lp=$(grep -nE '^\s*address pqHotSigner;' "$layout" | cut -d: -f1 || true)
+if [ -z "$lp" ] || [ -z "$lr" ] || [ "$lp" -le "$lr" ]; then
+  echo "lint-verify: $layout: pqHotSigner must be appended after recipientsOpen (execution-only slot)"
+  fail=1
+fi
+out=$(forge test --match-path test/leanpool/LeanPoolHotPath.t.sol --match-test 'test_verify_readsOnlyItsOwnRingSlot' 2>&1 || true)
+if grep -qE 'Suite result: ok\. 1 passed; 0 failed' <<<"$out"; then
+  echo "lint-verify: LeanPoolHotSigner OK (source rules; VERIFY's only foreign read is its own ring slot)"
+else
+  echo "$out" | grep -E 'PASS|FAIL|Suite result' || echo "$out" | tail -20
+  echo "lint-verify: LeanPoolHotSigner ring-slot test did not pass"
   fail=1
 fi
 
