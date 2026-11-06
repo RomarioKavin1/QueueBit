@@ -1,42 +1,21 @@
-"use client";
-
 /**
- * Passkey lock: the wallet's encrypted keyring is unlocked with a secret the passkey derives (WebAuthn PRF), instead of
- * a typed password. The passkey never leaves the device's authenticator; what it returns for our fixed salt is turned
- * into the keyring's unlock secret, so the engine's password path is unchanged. Only the credential id is stored here
- * (it is not secret). Needs PRF: Safari / iOS 18+, Chrome and Edge 116+ with a platform or synced passkey.
+ * The page side of a passkey wallet. WebAuthn runs only in a page (not in the engine's worker), so the page asks the
+ * passkey for its PRF output at PASSKEY_PRF_SALT and hands those 32 bytes to the engine
+ * (`keyring:createFromPasskey` / `keyring:unlockWithPasskey`), which reads them as the 24 words' entropy.
  */
+import { PASSKEY_PRF_SALT } from "@queuebit/extension/src/background/keyring";
+import { bytesToHex, type Hex } from "viem";
 
-const STORE = "queuebit:passkey";
-const LOCK = "queuebit:lock";
-const SALT_LABEL = "queuebit.wallet.lock.v1";
-
-export type LockMethod = "passkey" | "password";
-
-interface StoredPasskey {
-  id: string;
-  createdAt: number;
-}
-
-const b64u = (b: ArrayBuffer | Uint8Array) =>
-  btoa(String.fromCharCode(...new Uint8Array(b as ArrayBuffer)))
-    .replace(/\+/gu, "-")
-    .replace(/\//gu, "_")
-    .replace(/=+$/u, "");
-const fromB64u = (s: string) => {
-  const bin = atob(s.replace(/-/gu, "+").replace(/_/gu, "/"));
-  return Uint8Array.from(bin, (c) => c.charCodeAt(0));
-};
-const hex = (b: ArrayBuffer) => [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, "0")).join("");
-const random = (n: number) => crypto.getRandomValues(new Uint8Array(n));
-
-async function salt(): Promise<Uint8Array> {
-  return new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(SALT_LABEL)));
+export interface PasskeySecret {
+  /** The credential id, base64url (what `keyring:passkeyInfo` returns). */
+  credentialId: string;
+  /** The PRF output: the wallet's secret. Hand it to the engine and drop it. */
+  entropy: Hex;
 }
 
 export class PasskeyError extends Error {
   constructor(
-    readonly reason: "unsupported" | "no-prf" | "cancelled" | "missing" | "failed",
+    readonly reason: "unsupported" | "no-prf" | "cancelled",
     message: string,
   ) {
     super(message);
@@ -44,129 +23,120 @@ export class PasskeyError extends Error {
   }
 }
 
-function read(key: string): string | null {
-  try {
-    return localStorage.getItem(key);
-  } catch {
-    return null;
-  }
+const ES256 = -7;
+const RS256 = -257;
+
+const prfEval = () => ({ prf: { eval: { first: PASSKEY_PRF_SALT.slice() } } }) as AuthenticationExtensionsClientInputs;
+
+type PrfOutputs = { prf?: { enabled?: boolean; results?: { first?: BufferSource } } };
+
+function toBase64Url(bytes: Uint8Array): string {
+  let s = "";
+  for (const b of bytes) s += String.fromCharCode(b);
+  return btoa(s).replace(/\+/gu, "-").replace(/\//gu, "_").replace(/=+$/u, "");
 }
-function write(key: string, value: string | null) {
+
+function fromBase64Url(s: string): Uint8Array {
+  const bin = atob(s.replace(/-/gu, "+").replace(/_/gu, "/"));
+  return Uint8Array.from(bin, (c) => c.charCodeAt(0));
+}
+
+const bytesOf = (b: BufferSource): Uint8Array =>
+  b instanceof ArrayBuffer ? new Uint8Array(b) : new Uint8Array(b.buffer, b.byteOffset, b.byteLength);
+
+function prfFirst(ext: PrfOutputs): Uint8Array | undefined {
+  const first = ext.prf?.results?.first;
+  return first ? bytesOf(first) : undefined;
+}
+
+function noPrf(): PasskeyError {
+  return new PasskeyError(
+    "no-prf",
+    "This passkey can't derive a secret (no WebAuthn PRF). Use a passkey manager that supports it: iCloud Keychain, Google Password Manager, or a recent security key.",
+  );
+}
+
+async function ceremony<T>(creds: CredentialsContainer | undefined, run: (c: CredentialsContainer) => Promise<T>) {
+  if (!creds?.create || !creds.get) {
+    throw new PasskeyError(
+      "unsupported",
+      "This browser has no passkeys (WebAuthn). Use a recent browser on https or localhost.",
+    );
+  }
   try {
-    if (value === null) localStorage.removeItem(key);
-    else localStorage.setItem(key, value);
-  } catch {
-    // Storage blocked (private mode): the lock still works this session; unlock falls back to the passkey picker.
+    return await run(creds);
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "NotAllowedError") {
+      throw new PasskeyError("cancelled", "The passkey prompt was cancelled or timed out.");
+    }
+    throw err;
   }
 }
 
-export function lockMethod(): LockMethod | null {
-  const v = read(LOCK);
-  return v === "passkey" || v === "password" ? v : null;
-}
-export function setLockMethod(m: LockMethod) {
-  write(LOCK, m);
-}
-function stored(): StoredPasskey | null {
-  try {
-    return JSON.parse(read(STORE) ?? "null") as StoredPasskey | null;
-  } catch {
-    return null;
-  }
-}
-export function forgetPasskey() {
-  write(STORE, null);
-  write(LOCK, null);
+/** Creates a passkey and returns its PRF output (asking it a second time if create only reports PRF as enabled). */
+export async function createPasskey(
+  creds: CredentialsContainer | undefined,
+  o: { userName: string; rpName?: string },
+): Promise<PasskeySecret> {
+  return ceremony(creds, async (c) => {
+    const cred = (await c.create({
+      publicKey: {
+        rp: { name: o.rpName ?? "QueueBit" },
+        user: { id: crypto.getRandomValues(new Uint8Array(16)), name: o.userName, displayName: o.userName },
+        challenge: crypto.getRandomValues(new Uint8Array(32)),
+        pubKeyCredParams: [
+          { type: "public-key", alg: ES256 },
+          { type: "public-key", alg: RS256 },
+        ],
+        authenticatorSelection: { residentKey: "required", userVerification: "required" },
+        extensions: prfEval(),
+      },
+    })) as PublicKeyCredential | null;
+    if (!cred) throw new PasskeyError("cancelled", "No passkey was created.");
+    const ext = cred.getClientExtensionResults() as PrfOutputs;
+    if (ext.prf?.enabled === false) throw noPrf();
+    const credentialId = toBase64Url(new Uint8Array(cred.rawId));
+    const first = prfFirst(ext);
+    if (first) return { credentialId, entropy: bytesToHex(first) };
+    return read(c, credentialId);
+  });
 }
 
-/** Whether this browser can lock a wallet with a passkey (WebAuthn with PRF). `null`: can't tell until tried. */
+/** Asks an existing passkey (by credential id) for its PRF output. */
+export async function passkeySecret(
+  creds: CredentialsContainer | undefined,
+  credentialId: string,
+): Promise<PasskeySecret> {
+  return ceremony(creds, (c) => read(c, credentialId));
+}
+
+async function read(c: CredentialsContainer, credentialId: string): Promise<PasskeySecret> {
+  const cred = (await c.get({
+    publicKey: {
+      challenge: crypto.getRandomValues(new Uint8Array(32)),
+      allowCredentials: [{ type: "public-key", id: fromBase64Url(credentialId).buffer as ArrayBuffer }],
+      userVerification: "required",
+      extensions: prfEval(),
+    },
+  })) as PublicKeyCredential | null;
+  if (!cred) throw new PasskeyError("cancelled", "The passkey didn't answer.");
+  const first = prfFirst(cred.getClientExtensionResults() as PrfOutputs);
+  if (!first) throw noPrf();
+  return { credentialId, entropy: bytesToHex(first) };
+}
+
+/** Whether this browser's passkeys can derive a secret (WebAuthn PRF): true / false, or null when it can't tell. */
 export async function passkeySupport(): Promise<boolean | null> {
   if (typeof window === "undefined" || !window.PublicKeyCredential || !navigator.credentials) return false;
   const pkc = window.PublicKeyCredential as unknown as {
     getClientCapabilities?: () => Promise<Record<string, boolean>>;
-    isUserVerifyingPlatformAuthenticatorAvailable?: () => Promise<boolean>;
   };
   try {
-    if (pkc.getClientCapabilities) {
-      const caps = await pkc.getClientCapabilities();
-      if (caps["extension:prf"] === false) return false;
-      if (caps["extension:prf"] === true) return true;
-    }
+    const caps = await pkc.getClientCapabilities?.();
+    if (caps?.["extension:prf"] === false) return false;
+    if (caps?.["extension:prf"] === true) return true;
   } catch {
-    // fall through
+    // unknown: the create ceremony will tell
   }
   return null;
-}
-
-function cancelled(e: unknown) {
-  return e instanceof DOMException && (e.name === "NotAllowedError" || e.name === "AbortError");
-}
-
-type PrfResults = { prf?: { enabled?: boolean; results?: { first?: ArrayBuffer } } };
-
-/** Asks the passkey for its PRF output for our salt (a biometric prompt). */
-async function evaluate(id?: string): Promise<string> {
-  const first = await salt();
-  let cred: PublicKeyCredential | null;
-  try {
-    cred = (await navigator.credentials.get({
-      publicKey: {
-        challenge: random(32),
-        userVerification: "required",
-        ...(id ? { allowCredentials: [{ type: "public-key", id: fromB64u(id) }] } : {}),
-        extensions: { prf: { eval: { first } } } as AuthenticationExtensionsClientInputs,
-      },
-    })) as PublicKeyCredential | null;
-  } catch (e) {
-    if (cancelled(e)) throw new PasskeyError("cancelled", "The passkey prompt was closed. Try again when ready.");
-    throw new PasskeyError("failed", "The passkey couldn't be used. Try again.");
-  }
-  if (!cred) throw new PasskeyError("failed", "No passkey was chosen.");
-  const out = (cred.getClientExtensionResults() as PrfResults).prf?.results?.first;
-  if (!out)
-    throw new PasskeyError("no-prf", "This passkey can't lock a wallet on this device. Use a password instead.");
-  if (!id) write(STORE, JSON.stringify({ id: b64u(cred.rawId), createdAt: Date.now() } satisfies StoredPasskey));
-  return `qb-prf:${hex(out)}`;
-}
-
-/**
- * Creates a passkey for this wallet and returns the unlock secret it derives. Some platforms return the PRF output at
- * creation; the rest need one more prompt to read it.
- */
-export async function createPasskey(): Promise<string> {
-  if (!window.PublicKeyCredential) throw new PasskeyError("unsupported", "This browser has no passkeys.");
-  const first = await salt();
-  let cred: PublicKeyCredential | null;
-  try {
-    cred = (await navigator.credentials.create({
-      publicKey: {
-        rp: { name: "QueueBit" },
-        user: { id: random(16), name: "QueueBit wallet", displayName: "QueueBit wallet" },
-        challenge: random(32),
-        pubKeyCredParams: [
-          { type: "public-key", alg: -7 },
-          { type: "public-key", alg: -257 },
-        ],
-        authenticatorSelection: { residentKey: "required", userVerification: "required" },
-        extensions: { prf: { eval: { first } } } as AuthenticationExtensionsClientInputs,
-      },
-    })) as PublicKeyCredential | null;
-  } catch (e) {
-    if (cancelled(e)) throw new PasskeyError("cancelled", "The passkey prompt was closed. Try again when ready.");
-    throw new PasskeyError("failed", "The passkey couldn't be created on this device.");
-  }
-  if (!cred) throw new PasskeyError("failed", "No passkey was created.");
-  const ext = cred.getClientExtensionResults() as PrfResults;
-  if (ext.prf?.enabled === false)
-    throw new PasskeyError("no-prf", "Passkeys here can't lock a wallet yet. Use a password instead.");
-  const id = b64u(cred.rawId);
-  write(STORE, JSON.stringify({ id, createdAt: Date.now() } satisfies StoredPasskey));
-  const out = ext.prf?.results?.first;
-  if (out) return `qb-prf:${hex(out)}`;
-  return evaluate(id);
-}
-
-/** The unlock secret, from the passkey this device saved (or any QueueBit passkey the user picks). */
-export async function unlockSecret(): Promise<string> {
-  return evaluate(stored()?.id);
 }

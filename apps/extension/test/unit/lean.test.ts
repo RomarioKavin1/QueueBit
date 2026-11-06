@@ -539,3 +539,44 @@ describe("migration planning", () => {
     ).toThrow(/already/u);
   });
 });
+
+describe("the first payment creates the account (no separate activation step)", () => {
+  const TO = "0x000000000000000000000000000000000000dEaD" as const;
+
+  it("activates with the setup key, waits for the account, then pays through LeanPool", async () => {
+    const { wallet, chain } = makeWallet();
+    await wallet.keyring.import(MNEMONIC, "password-1");
+    const st = await wallet.handleUi("account:status", { chainId: 1337 });
+    chain.fund(st.setupKey, parseEther("1"));
+    chain.fund(st.address!, parseEther("1"));
+    chain.knobs.deployOnLegacy = st.address!;
+    const e = await wallet.handleUi("send:submit", { chainId: 1337, to: TO, valueWei: "1000" });
+    expect(decodeFunctionData({ abi: factoryAbi, data: parseTransaction(chain.legacy[0]!).data! }).functionName).toBe(
+      "createAccount",
+    );
+    expect(chain.pooled).toHaveLength(1);
+    expect(e).toMatchObject({ signer: "owner" });
+  });
+
+  it("checks the account's own funds before spending anything on creating it", async () => {
+    const { wallet, chain } = makeWallet();
+    await wallet.keyring.import(MNEMONIC, "password-1");
+    const st = await wallet.handleUi("account:status", { chainId: 1337 });
+    chain.fund(st.setupKey, parseEther("1"));
+    await expect(wallet.handleUi("send:submit", { chainId: 1337, to: TO, valueWei: "1000" })).rejects.toMatchObject({
+      reason: "funds",
+    });
+    expect(chain.legacy).toHaveLength(0);
+  });
+
+  it("says the setup key needs funds when it can't create the account", async () => {
+    const { wallet, chain } = makeWallet();
+    await wallet.keyring.import(MNEMONIC, "password-1");
+    const st = await wallet.handleUi("account:status", { chainId: 1337 });
+    chain.fund(st.address!, parseEther("1"));
+    await expect(wallet.handleUi("send:submit", { chainId: 1337, to: TO, valueWei: "1000" })).rejects.toMatchObject({
+      reason: "setup-funds",
+    });
+    expect(chain.pooled).toHaveLength(0);
+  });
+});

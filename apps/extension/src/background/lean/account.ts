@@ -75,6 +75,8 @@ export interface AccountDeps {
   owner: OwnerKey;
   activity: ActivityStore;
   now?: () => number;
+  /** How long a payment waits for the account it just created (default 3 min). */
+  deployTimeoutMs?: number;
 }
 
 /**
@@ -294,6 +296,22 @@ export class AccountService {
     });
   }
 
+  /** Creates the account with the setup key (unless a creation is already on its way) and waits until it exists. */
+  private async createAndWait(chainId: number): Promise<void> {
+    const rec = await this.ensure(chainId);
+    if (!rec.activation) await this.activate(chainId);
+    const end = this.now() + (this.d.deployTimeoutMs ?? 180_000);
+    for (;;) {
+      if (await this.deployed(chainId, rec.address)) return;
+      if (this.now() > end)
+        throw new AccountError(
+          "not-created",
+          "Your account is still being created. Try the payment again in a minute.",
+        );
+      await new Promise((r) => setTimeout(r, 3000));
+    }
+  }
+
   /** Frame fees: twice the base fee plus a 1 gwei tip. */
   async fees(chainId: number): Promise<{ maxFeePerGas: bigint; maxPriorityFeePerGas: bigint }> {
     const client = this.d.io.publicClient(chainId);
@@ -329,12 +347,13 @@ export class AccountService {
   /** An owner payment: signed with the owner key, handed to the LeanPool node. */
   async pay(chainId: number, calls: Call[], o: SendOptions = {}): Promise<ActivityEntry> {
     const q = await this.quote(chainId, calls, o.gas);
-    if (!q.deployed) throw new AccountError("not-created", "Create your account first (Home › Create account).");
     if (!q.enough)
       throw new AccountError(
         "funds",
         `Your account needs ${fmt(q.value + q.maxFee)} ETH for this (including up to ${fmt(q.maxFee)} ETH network fee); it has ${fmt(q.balance)}.`,
       );
+    // The first payment creates the account: the setup key sends createAccount, then the payment follows.
+    if (!q.deployed) await this.createAndWait(chainId);
     await this.assertLaneFree(chainId, q.rec.address, OWNER_NONCE_KEY);
     const vk = q.rec.vk;
     const owner = this.d.owner;

@@ -46,9 +46,12 @@ Build-time flags (`next.config.ts`):
 
 Three ways in, built mobile first (full-screen steps, the action pinned above the home indicator, 48px targets):
 
-- **Passkey:** a new wallet locked by Face ID / fingerprint. WebAuthn PRF derives the keyring's unlock secret on the
-  device (`lib/passkey.ts`), so there is no password; the 24 words wait for the backup checklist.
-- **Secret phrase:** 24 new words (written down, three checked), or restore a QueueBit phrase.
+- **Passkey:** a new wallet opened by Face ID / fingerprint, with no password and nothing secret stored. The passkey's
+  WebAuthn PRF output (`lib/passkey.ts`) *is* the wallet's 24-word entropy: every unlock asks the passkey again and
+  rebuilds the keys in memory, and the same passkey restores the same wallet (and the same quantum-safe owner key) on
+  another device. The words can still be shown for an offline backup (the passkey is asked once more).
+- **Secret phrase:** 24 new words (written down, three checked), or restore a QueueBit phrase. Restored words are
+  locked with a password: a passkey derives its own words, so it can't lock someone else's.
 - **Move from your current wallet:** a new wallet (passkey, else password), then the old wallet's ETH and tokens move
   in and create the account. Either a connected wallet signs the move itself (EIP-6963 / `window.ethereum`, when the
   page is open in a wallet's browser; engine messages `migrate:calls` and `migrate:sweep`), or its secret phrase /

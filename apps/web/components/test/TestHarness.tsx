@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { parseEther, toHex } from "viem";
 import { engine, type EngineEvent } from "@/lib/engine/client";
+import { createPasskey, passkeySecret } from "@/lib/passkey";
 import type { NetworkInfo, UiType } from "@/lib/engine/protocol";
 import { Btn, Check, Field, LogProvider, Panel, Row, Select, json, list, useRunner, type LogEntry } from "./ui";
 
@@ -13,6 +14,7 @@ import { Btn, Check, Field, LogProvider, Panel, Row, Select, json, list, useRunn
 
 const SECTIONS = [
   ["engine", "Engine & network"],
+  ["passkey", "Passkey PQ account"],
   ["keyring", "Keyring"],
   ["account", "Account"],
   ["send", "Send (owner)"],
@@ -35,6 +37,10 @@ const UI_TYPES: UiType[] = [
   "keyring:lock",
   "keyring:changePassword",
   "keyring:reset",
+  "keyring:createFromPasskey",
+  "keyring:unlockWithPasskey",
+  "keyring:revealWordsWithPasskey",
+  "keyring:passkeyInfo",
   "settings:update",
   "setup:update",
   "wallet:balance",
@@ -123,6 +129,7 @@ export function TestHarness() {
 
         <main className="flex min-w-0 flex-col gap-4">
           <EnginePanel network={network} onNetwork={setNetwork} />
+          <PasskeyPanel />
           <KeyringPanel />
           <AccountPanel network={network} />
           <SendPanel />
@@ -240,6 +247,114 @@ function EnginePanel({ network, onNetwork }: { network?: NetworkInfo; onNetwork:
           Wipe storage
         </Btn>
       </Row>
+    </Panel>
+  );
+}
+
+// ---- Passkey PQ account --------------------------------------------------------------------------------------------
+
+/** Asks the faucet (public gateway) for devnet ETH. */
+async function askFaucet(faucetRpc: string, address: string) {
+  const res = await fetch(faucetRpc, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "skandha_explorer_faucet", params: [address] }),
+  });
+  return { address, response: await res.json() };
+}
+
+/** The passkey this wallet needs (unlock / reveal ask for it by id). */
+async function storedPasskey(): Promise<string> {
+  const info = await eth().call("keyring:passkeyInfo");
+  if (!info) throw new Error("This wallet has no passkey: create one with the passkey first (or reset the keyring).");
+  return info.credentialId;
+}
+
+function PasskeyPanel() {
+  const r = useRunner();
+  const [userName, setUserName] = useState("queuebit-test");
+  const [to, setTo] = useState("");
+  const [amount, setAmount] = useState("0.001");
+  const [faucetRpc, setFaucetRpc] = useState(PUBLIC_FAUCET_RPC);
+  const status = () => eth().call("account:status", {});
+  return (
+    <Panel
+      id="passkey"
+      title="Passkey PQ account"
+      runner={r}
+      hint="No password, no words to write down: the passkey's PRF output is the wallet's secret, which derives the quantum-safe owner key (leanSPHINCS). Every unlock asks the passkey. Create → Fund → Transfer: the first transfer creates the account on chain, then pays."
+    >
+      <Row>
+        <Field label="Passkey name" value={userName} onChange={setUserName} />
+        <Btn
+          tone="primary"
+          onClick={() =>
+            void r.run("passkey:create", async () => {
+              const p = await createPasskey(navigator.credentials, { userName: userName.trim() || "queuebit" });
+              await eth().call("keyring:createFromPasskey", p);
+              const s = await status();
+              return { credentialId: p.credentialId, account: s.address, setupKey: s.setupKey };
+            })
+          }
+        >
+          Create with passkey
+        </Btn>
+        <Btn
+          onClick={() =>
+            void r.run("passkey:unlock", async () => {
+              const p = await passkeySecret(navigator.credentials, await storedPasskey());
+              await eth().call("keyring:unlockWithPasskey", { entropy: p.entropy });
+              return { account: (await status()).address };
+            })
+          }
+        >
+          Unlock with passkey
+        </Btn>
+        <Btn onClick={() => void r.run("keyring:lock", () => eth().call("keyring:lock"))}>Lock</Btn>
+        <Btn
+          onClick={() =>
+            void r.run("passkey:revealWords", async () => {
+              const p = await passkeySecret(navigator.credentials, await storedPasskey());
+              return eth().call("keyring:revealWordsWithPasskey", { entropy: p.entropy });
+            })
+          }
+        >
+          Reveal words (backup)
+        </Btn>
+      </Row>
+      <Row>
+        <Btn onClick={() => void r.run("account:status", status)}>Status</Btn>
+        <Btn
+          tone="primary"
+          onClick={() =>
+            void r.run("fund", async () => {
+              const s = await status();
+              if (!s.address) throw new Error(s.error ?? "No account address yet: unlock first.");
+              // The account gets the money; until it exists, its setup key also needs a little to create it.
+              const account = await askFaucet(faucetRpc, s.address);
+              const setupKey = s.deployed ? undefined : await askFaucet(faucetRpc, s.setupKey);
+              return { account, setupKey };
+            })
+          }
+        >
+          Fund (faucet)
+        </Btn>
+      </Row>
+      <Row>
+        <Field label="Transfer to" value={to} onChange={setTo} placeholder="0x…" />
+        <Field label="Amount (ETH)" value={amount} onChange={setAmount} />
+        <Btn
+          tone="primary"
+          onClick={() =>
+            void r.run("transfer", () =>
+              eth().call("send:submit", { to: hex(to), valueWei: parseEther(amount.trim()).toString() }),
+            )
+          }
+        >
+          Transfer (creates the account first if needed)
+        </Btn>
+      </Row>
+      <Field label="Faucet (gateway RPC)" value={faucetRpc} onChange={setFaucetRpc} wide />
     </Panel>
   );
 }

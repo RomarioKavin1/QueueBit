@@ -5,7 +5,7 @@ import {
   revokeSessionCall,
   type Call,
 } from "@queuebit/account";
-import { encodeFunctionData, isAddress, isHex, type Address, type Hex } from "viem";
+import { encodeFunctionData, hexToBytes, isAddress, isHex, type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { LOCAL_DEVNET } from "../shared/build";
 import { NO_DEPLOYMENT, findNetwork, getNetwork, toHexChainId } from "../shared/chains";
@@ -790,6 +790,19 @@ export class Wallet {
       await this.onUnlocked();
       return null;
     },
+    "keyring:createFromPasskey": async ({ entropy, credentialId }) => {
+      await this.keyring.createFromPasskey(hexToBytes(entropy), credentialId);
+      return null;
+    },
+    "keyring:unlockWithPasskey": async ({ entropy }) => {
+      await this.keyring.unlockWithPasskey(hexToBytes(entropy));
+      await this.onUnlocked();
+      return null;
+    },
+    "keyring:revealWordsWithPasskey": async ({ entropy }) => ({
+      mnemonic: await this.keyring.revealWordsWithPasskey(hexToBytes(entropy)),
+    }),
+    "keyring:passkeyInfo": async () => (await this.keyring.passkeyInfo()) ?? null,
     "keyring:lock": async () => {
       await this.keyring.lock();
       this.onLocked();

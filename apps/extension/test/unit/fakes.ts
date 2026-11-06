@@ -33,7 +33,14 @@ export function fakeChain() {
   const receipts = new Map<string, "success" | "reverted">();
   const txCount = new Map<string, number>();
   /** Knobs: the sidecar refuses frame txs with this message; the LeanPool node reports another address or is down. */
-  const knobs: { refuseFrames?: string; nodeId?: Address; leanpoolDown?: boolean; sendDelayMs?: number } = {};
+  const knobs: {
+    refuseFrames?: string;
+    nodeId?: Address;
+    leanpoolDown?: boolean;
+    sendDelayMs?: number;
+    /** A legacy tx (the setup key's createAccount) deploys this address when it is sent. */
+    deployOnLegacy?: Address;
+  } = {};
   const k = (a: string) => a.toLowerCase();
   const publicClient = {
     getCode: async ({ address }: { address: Address }) => code.get(k(address)),
@@ -45,6 +52,7 @@ export function fakeChain() {
     estimateGas: async () => 200_000n,
     sendRawTransaction: async ({ serializedTransaction }: { serializedTransaction: Hex }) => {
       legacy.push(serializedTransaction);
+      if (knobs.deployOnLegacy) code.set(k(knobs.deployOnLegacy), "0x6001");
       return keccak256(serializedTransaction);
     },
     getTransactionReceipt: async ({ hash }: { hash: Hex }) => {
