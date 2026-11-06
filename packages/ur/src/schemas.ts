@@ -25,6 +25,8 @@ export const UR_TYPES = {
   signature: "leaked-signature",
   pqKey: "leaked-pq-key",
   recoveryTest: "leaked-recovery-test",
+  /** Added 2026-11-06: the browser's fresh, single-use request id for a recovery test (browser → phone). */
+  recoveryChallenge: "leaked-recovery-challenge",
 } as const;
 export type UrType = (typeof UR_TYPES)[keyof typeof UR_TYPES];
 
@@ -34,6 +36,16 @@ export const TX_TYPE = {
   userOp4337: 1,
   /** EIP-712 typed data (as ERC-4527 data-type 2): the Privacy Pools `PrivacyPoolNote` envelope, signed by the payer key. */
   typedData: 2,
+  /**
+   * Added 2026-11-06 (pre-Hegotá backend B): a `LeakedRoleExecutor` role call on an ERC-7579 account. Key 4 is the
+   * ABI calldata of the executor function (`vaultExec`, `vaultQueue`, `vaultCancel`, `recoveryCancel`,
+   * `recoveryStartVaultRotation`, `recoveryCancelVaultRotation`) with an EMPTY trailing `pqSig`; key 14 is the
+   * executor (the EIP-712 `verifyingContract`). The witness signs the executor's EIP-712 digest in the domain
+   * `{name "LeakedRoleExecutor", version "1", chainId (key 2), verifyingContract (key 14)}` of the decoded call, e.g.
+   * `VaultExec(address account,uint256 nonce,bytes32 callsHash,uint256 usdValue)` with
+   * `callsHash = keccak256(abi.encode(calls))`. No payer signature: any relayer pays (the check runs in execution).
+   */
+  roleExecutor7579: 3,
   /** EIP-8141 frame transaction. */
   frameTx: 6,
 } as const;
@@ -145,9 +157,11 @@ export interface SignRequest {
   policy?: AdvisoryPolicy;
   /** 13 (LEAKED addition): tx-type 2: the payer address the request expects to sign. */
   payer?: Hex;
+  /** 14 (LEAKED addition, 2026-11-06): tx-type 3 only: the `LeakedRoleExecutor` (EIP-712 `verifyingContract`). */
+  verifyingContract?: Hex;
 }
 
-const SIGN_REQUEST_KEYS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13] as const;
+const SIGN_REQUEST_KEYS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14] as const;
 const INTENT_KEYS = [1, 2, 3, 4, 5, 6] as const;
 const POLICY_KEYS = [1, 2, 3, 4, 5, 6, 7, 8] as const;
 const PRICE_KEYS = [1, 2, 3] as const;
@@ -178,6 +192,24 @@ function checkRequestShape(r: SignRequest): void {
       throw new UrSchemaError("required for tx-type 6", `${path}.10`);
     }
     if (has("payer")) throw new UrSchemaError("only allowed for tx-type 2", `${path}.13`);
+    if (has("verifyingContract")) throw new UrSchemaError("only allowed for tx-type 3", `${path}.14`);
+  } else if (r.txType === TX_TYPE.roleExecutor7579) {
+    for (const [k, n] of [
+      ["schemeId", 6],
+      ["expectedPk", 8],
+      ["verifyingContract", 14],
+    ] as const) {
+      if (!has(k)) throw new UrSchemaError("required for tx-type 3", `${path}.${n}`);
+    }
+    for (const [k, n] of [
+      ["sigIndex", 7],
+      ["profileId", 10],
+      ["payer", 13],
+    ] as const) {
+      if (has(k)) throw new UrSchemaError("not allowed for tx-type 3", `${path}.${n}`);
+    }
+    if (r.role !== ROLE.vault && r.role !== ROLE.recovery)
+      throw new UrSchemaError("role calls are signed by the Vault or the Recovery key", `${path}.5`);
   } else if (r.txType === TX_TYPE.typedData) {
     if (!has("payer")) throw new UrSchemaError("required for tx-type 2", `${path}.13`);
     for (const [k, n] of [
@@ -185,6 +217,7 @@ function checkRequestShape(r: SignRequest): void {
       ["sigIndex", 7],
       ["expectedPk", 8],
       ["profileId", 10],
+      ["verifyingContract", 14],
     ] as const) {
       if (has(k)) throw new UrSchemaError("not allowed for tx-type 2", `${path}.${n}`);
     }
@@ -252,6 +285,7 @@ export function encodeSignRequest(r: SignRequest): Uint8Array {
     m.set(12, p);
   }
   put(m, 13, bytesN(r.payer, 20, "payer"));
+  put(m, 14, bytesN(r.verifyingContract, 20, "verifying-contract"));
   const bytes = encodeCbor(m);
   decodeSignRequest(bytes); // what we emit must pass our own decoder
   return bytes;
@@ -341,6 +375,8 @@ export function decodeSignRequest(cbor: Uint8Array): SignRequest {
 
   const payer = r.bytes(13, false, { size: 20 });
   if (payer) out.payer = lowerAddr(payer);
+  const vc = r.bytes(14, false, { size: 20 });
+  if (vc) out.verifyingContract = lowerAddr(vc);
   r.done();
   checkRequestShape(out);
   if (txType === TX_TYPE.typedData) {
@@ -496,7 +532,10 @@ export function decodePqKey(cbor: Uint8Array): PqKeyAnnouncement {
 // ---------------------------------------------------------------------------------------------------------------
 
 export interface RecoveryTest {
-  /** 1: fresh per test, chosen by the phone; part of the challenge. */
+  /**
+   * 1: fresh per test; part of the challenge. Chosen by the browser and scanned from its
+   * `ur:leaked-recovery-challenge` (since 2026-11-06); older phones chose it themselves.
+   */
   requestId: string;
   /** 2 */
   schemeId: Hex;
@@ -580,12 +619,52 @@ export function decodeRecoveryTest(cbor: Uint8Array): RecoveryTest {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
+// ur:leaked-recovery-challenge (browser → phone: the request id a recovery test must sign; added 2026-11-06)
+// ---------------------------------------------------------------------------------------------------------------
+
+/**
+ * The browser picks the recovery test's request id (fresh, single use) and shows it to the phone, so a test code
+ * recorded earlier (or made for another browser) can never be replayed: the browser accepts only a
+ * `ur:leaked-recovery-test` whose key 1 equals an id it issued and has not consumed. A phone that cannot scan this
+ * yet (older companion) chooses its own id, which such a browser refuses.
+ */
+export interface RecoveryChallenge {
+  /** 1: the request id the test's witness must cover (`recoveryTestChallenge(…, requestId, …)`). */
+  requestId: string;
+  /** 2: the Recovery key's `pk` the browser scanned, so the phone can refuse a test for a different key. */
+  recoveryPk: Hex;
+}
+
+const RECOVERY_CHALLENGE_KEYS = [1, 2] as const;
+
+export function encodeRecoveryChallenge(c: RecoveryChallenge): Uint8Array {
+  const m = new Map<number, unknown>();
+  m.set(1, uuidTag(c.requestId));
+  m.set(2, bytesN(c.recoveryPk, 32, "recovery-pk"));
+  const bytes = encodeCbor(m);
+  decodeRecoveryChallenge(bytes);
+  return bytes;
+}
+
+export function decodeRecoveryChallenge(cbor: Uint8Array): RecoveryChallenge {
+  const path = UR_TYPES.recoveryChallenge;
+  const r = MapReader.of(decodeCbor(cbor, path), path, RECOVERY_CHALLENGE_KEYS);
+  const out: RecoveryChallenge = {
+    requestId: r.uuid(1, true),
+    recoveryPk: toHex(r.bytes(2, true, { size: 32 })),
+  };
+  r.done();
+  return out;
+}
+
+// ---------------------------------------------------------------------------------------------------------------
 
 export type DecodedUr =
   | { type: typeof UR_TYPES.signRequest; value: SignRequest }
   | { type: typeof UR_TYPES.signature; value: SignatureResponse }
   | { type: typeof UR_TYPES.pqKey; value: PqKeyAnnouncement }
-  | { type: typeof UR_TYPES.recoveryTest; value: RecoveryTest };
+  | { type: typeof UR_TYPES.recoveryTest; value: RecoveryTest }
+  | { type: typeof UR_TYPES.recoveryChallenge; value: RecoveryChallenge };
 
 /** Decodes a complete payload by UR type. Throws `UrSchemaError` for an unknown type or a bad payload. */
 export function decodeByType(type: string, cbor: Uint8Array): DecodedUr {
@@ -598,6 +677,8 @@ export function decodeByType(type: string, cbor: Uint8Array): DecodedUr {
       return { type, value: decodePqKey(cbor) };
     case UR_TYPES.recoveryTest:
       return { type, value: decodeRecoveryTest(cbor) };
+    case UR_TYPES.recoveryChallenge:
+      return { type, value: decodeRecoveryChallenge(cbor) };
     default:
       throw new UrSchemaError(`unknown UR type "${type}"`);
   }

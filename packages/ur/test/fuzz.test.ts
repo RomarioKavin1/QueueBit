@@ -9,6 +9,7 @@ import {
   UrSchemaError,
   decodeByType,
   encodePqKey,
+  encodeRecoveryChallenge,
   encodeRecoveryTest,
   encodeSignRequest,
   encodeSignature,
@@ -37,6 +38,10 @@ const valid: Record<UrType, Uint8Array> = {
     recoveryPk: hex(bytes(32, 5)),
     witness: hex(bytes(3688, 6)),
     ok: true,
+  }),
+  [UR_TYPES.recoveryChallenge]: encodeRecoveryChallenge({
+    requestId: "3b241101-e2bb-4255-8caf-4136c566a962",
+    recoveryPk: hex(bytes(32, 5)),
   }),
 };
 
