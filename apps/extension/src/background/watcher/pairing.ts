@@ -76,21 +76,26 @@ export async function readPairedWatcher(
     headers: { authorization: await authHeader(p.keyId, p.hmacKey, "GET", path, nowS) },
   });
   if (!res.ok) throw new Error(res.status === 401 ? "the watcher refused this browser's key" : `HTTP ${res.status}`);
-  const body = (await res.json()) as { alerts?: Array<SignedAlert & { seq: number; type: "alert" | "retract" }> };
+  const body = (await res.json()) as { alerts?: SignedAlert[] };
   const alerts: Alert[] = [];
   const retracted: string[] = [];
   let since = p.since;
   let rejected = 0;
   for (const e of body.alerts ?? []) {
-    // History replays are fine (dedup by id); the signature must still verify under our key. Only a verified
-    // entry moves the cursor: one forged entry with a huge `seq` must not hide every later genuine alert.
-    if (!e || !(await verifyAlert(p.hmacKey, { v: e.v, t: e.t, alert: e.alert, sig: e.sig }))) {
+    // History replays are fine (dedup by id); the signature must still verify under our key. The v2 envelope signs
+    // `t`, `type`, `seq` and the alert together (v1 is refused), so only a verified entry moves the cursor and a
+    // replayed alert cannot be relabelled as a retraction or given a huge `seq` that would hide later alerts.
+    if (
+      !e ||
+      typeof e !== "object" ||
+      !(await verifyAlert(p.hmacKey, { v: e.v, t: e.t, type: e.type, seq: e.seq, alert: e.alert, sig: e.sig }))
+    ) {
       rejected++;
       continue;
     }
-    if (typeof e.seq === "number" && Number.isFinite(e.seq)) since = Math.max(since, e.seq);
-    // `type` is outside the signed envelope (watcher-core signs `t.alert`): a retraction is honoured only for
-    // alerts the watcher itself raised (`AlertStore.retract(ids, "watcher")`), never this browser's own.
+    since = Math.max(since, e.seq);
+    // Even a verified retraction is honoured only for alerts the watcher itself raised
+    // (`AlertStore.retract(ids, "watcher")`), never this browser's own: a paired watcher is trusted for its alerts.
     if (e.type === "retract") retracted.push(e.alert.id);
     else alerts.push(e.alert);
   }

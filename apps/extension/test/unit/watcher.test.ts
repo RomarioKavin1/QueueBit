@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { encodeAbiParameters, encodeEventTopics, type Abi, type Address, type Hex } from "viem";
-import { frameAccountAbi, signAlert, type Alert, type RpcLog } from "@leaked/watcher-core";
+import { frameAccountAbi, hmacHex, signAlert, type Alert, type RpcLog } from "@leaked/watcher-core";
 import type { AccountPlan } from "../../src/background/account";
 import { DeployBlocks, findDeployBlock } from "../../src/background/deployBlock";
 import {
@@ -299,9 +299,22 @@ describe("pairing with a self-hosted watcher", () => {
   it("keeps only alerts whose HMAC verifies under the shared key; follows retractions and the sequence", async () => {
     const store = new PairingStore(new MemoryKV(), () => 1);
     const p = await store.set(readPairingCode(code));
-    const good = await signAlert(p.hmacKey, alert({ id: "w1" }), 1000);
-    const forged = await signAlert("ffeeddccbbaa99887766554433221100", alert({ id: "w2", title: "All clear" }), 1000);
-    const retract = await signAlert(p.hmacKey, alert({ id: "w0" }), 1000);
+    const good = await signAlert(p.hmacKey, { type: "alert", seq: 3, alert: alert({ id: "w1" }) }, 1000);
+    const forged = await signAlert(
+      "ffeeddccbbaa99887766554433221100",
+      { type: "alert", seq: 4, alert: alert({ id: "w2", title: "All clear" }) },
+      1000,
+    );
+    const retract = await signAlert(p.hmacKey, { type: "retract", seq: 5, alert: alert({ id: "w0" }) }, 1000);
+    const replayed = await signAlert(p.hmacKey, { type: "alert", seq: 6, alert: alert({ id: "w6" }) }, 1000);
+    const v1 = {
+      v: 1,
+      t: 1000,
+      seq: 8,
+      type: "alert",
+      alert: alert({ id: "v1" }),
+      sig: await hmacHex(p.hmacKey, `1000.${JSON.stringify(alert({ id: "v1" }))}`),
+    };
     const seen: Array<{ url: string; auth: string }> = [];
     const r = await readPairedWatcher(
       p,
@@ -312,11 +325,16 @@ describe("pairing with a self-hosted watcher", () => {
           status: 200,
           json: async () => ({
             alerts: [
-              { seq: 3, type: "alert", ...good },
-              { seq: 4, type: "alert", ...forged },
-              { seq: 5, type: "retract", ...retract },
+              good,
+              forged,
+              retract,
               // A forged entry cannot move the cursor (it would hide every later genuine alert), nor crash the poll.
-              { seq: 2 ** 52, type: "alert", ...forged },
+              { ...forged, seq: 2 ** 52 },
+              // Signed with our key, but `type` / `seq` tampered with in transit: both are covered by the signature.
+              { ...replayed, type: "retract" },
+              { ...replayed, seq: 2 ** 52 },
+              // A v1 envelope (signed `t.alert` only) is refused outright.
+              v1,
               null,
             ],
           }),
@@ -325,17 +343,17 @@ describe("pairing with a self-hosted watcher", () => {
       1000,
     );
     expect(seen[0]!.url).toBe("https://watcher.example/v1/alerts?since=0");
-    expect(seen[0]!.auth).toMatch(/^LEAKED-HMAC id=laptop,t=1000,sig=[0-9a-f]{64}$/u);
+    expect(seen[0]!.auth).toMatch(/^LEAKED-HMAC id=laptop,t=1000,n=[0-9a-f]{32},sig=[0-9a-f]{64}$/u);
     expect(r.alerts.map((a) => a.id)).toEqual(["w1"]);
     expect(r.retracted).toEqual(["w0"]);
-    expect(r.rejected).toBe(3);
+    expect(r.rejected).toBe(6);
     expect(r.since).toBe(5);
     await expect(
       readPairedWatcher(p, async () => ({ ok: false, status: 401, json: async () => ({}) })),
     ).rejects.toThrow(/refused this browser's key/);
   });
 
-  it("a watcher's retraction cannot hide an alert this browser raised itself (the type is not signed)", async () => {
+  it("a watcher's (verified) retraction cannot hide an alert this browser raised itself", async () => {
     const store = new AlertStore(new MemoryKV(), () => 1);
     await store.add([alert({ id: "mine", severity: "urgent" })], "browser");
     await store.add([alert({ id: "theirs" })], "watcher");

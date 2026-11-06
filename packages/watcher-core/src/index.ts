@@ -38,15 +38,19 @@ export type { CoreState, WatcherCoreOptions } from "./core.js";
 export {
   AUTH_SCHEME,
   DEFAULT_TOLERANCE_S,
+  NonceCache,
   authHeader,
+  envelopeMessage,
   hmacHex,
   keyBytes,
   parsePairing,
+  randomNonce,
   signAlert,
   signWebhook,
   timingSafeEqualStr,
   verifyAlert,
   verifyAuth,
   verifyWebhook,
+  webhookNonce,
 } from "./hmac.js";
-export type { AuthResult, Pairing, SignedAlert } from "./hmac.js";
+export type { AuthResult, EnvelopeType, Pairing, SignedAlert } from "./hmac.js";

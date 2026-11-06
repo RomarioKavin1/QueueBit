@@ -1,4 +1,4 @@
-import { signWebhook, type Severity } from "@leaked/watcher-core";
+import { randomNonce, signWebhook, type Severity } from "@leaked/watcher-core";
 import type { HubEntry, Sink } from "./hub.js";
 
 const RANK: Record<Severity, number> = { info: 0, warning: 1, urgent: 2 };
@@ -25,9 +25,11 @@ async function withRetry(fn: () => Promise<Response>, tries: number, log: Log, w
 }
 
 /**
- * HMAC-signed webhook: `POST url` with body `{"type":"alert"|"retract","seq":n,"alert":{...}}` and
- * `x-leaked-signature: t=<unix s>,v1=<hex HMAC-SHA256(secret, "<t>.<body>")>` (verify with
- * `verifyWebhook` from @leaked/watcher-core).
+ * HMAC-signed webhook: `POST url` with body `{"type":"alert"|"retract","seq":n,"alert":{...}}`,
+ * `x-leaked-signature: t=<unix s>,n=<nonce>,v2=<hex HMAC-SHA256(secret, "<t>.<n>.<body>")>` and
+ * `x-leaked-delivery: <nonce>`. One delivery keeps its nonce (and signature) across retries, so a receiver dedupes
+ * on it; verify with `verifyWebhook` from @leaked/watcher-core, passing a `NonceCache` as `seen` to refuse replays
+ * inside the 5-minute tolerance.
  */
 export function webhookSink(
   cfg: { url: string; secret: string; minSeverity: Severity },
@@ -38,12 +40,18 @@ export function webhookSink(
   return async (e: HubEntry) => {
     if (!atLeast(e.alert.severity, cfg.minSeverity)) return;
     const body = JSON.stringify({ type: e.type, seq: e.seq, alert: e.alert });
-    const sig = await signWebhook(cfg.secret, body);
+    const nonce = randomNonce();
+    const sig = await signWebhook(cfg.secret, body, undefined, nonce);
     await withRetry(
       () =>
         f(cfg.url, {
           method: "POST",
-          headers: { "content-type": "application/json", "x-leaked-signature": sig, "x-leaked-event": e.type },
+          headers: {
+            "content-type": "application/json",
+            "x-leaked-signature": sig,
+            "x-leaked-delivery": nonce,
+            "x-leaked-event": e.type,
+          },
           body,
           // The body carries the account address: never follow a redirect to somewhere the operator did not name.
           redirect: "error",

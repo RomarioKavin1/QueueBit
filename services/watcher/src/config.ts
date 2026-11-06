@@ -25,7 +25,8 @@ export interface WatcherConfig {
   entryPoint?: Address;
   roleSigners: { address: Address; account: Address }[];
   store: { type: "file" | "sqlite"; path: string };
-  http: { host: string; port: number };
+  /** `trustProxy`: number of reverse-proxy hops whose X-Forwarded-For to trust for rate-limit keys (0 = socket). */
+  http: { host: string; port: number; trustProxy: number };
   /** Stream/API keys: id -> HMAC secret (0x-hex, >= 16 bytes). */
   apiKeys: { id: string; secret: string }[];
   rateLimit: { perMinute: number; burst: number; maxStreamsPerKey: number };
@@ -165,7 +166,7 @@ export function parseConfig(j: Record<string, unknown>, env: Record<string, stri
     : undefined;
 
   const rl = o<{ perMinute?: number; burst?: number; maxStreamsPerKey?: number }>("rateLimit") ?? {};
-  const http = o<{ host?: string; port?: number }>("http") ?? {};
+  const http = o<{ host?: string; port?: number; trustProxy?: number }>("http") ?? {};
   const ep = env.WATCHER_ENTRYPOINT ?? o<string>("entryPoint");
 
   return {
@@ -188,6 +189,7 @@ export function parseConfig(j: Record<string, unknown>, env: Record<string, stri
     http: {
       host: env.WATCHER_HOST ?? http.host ?? "127.0.0.1",
       port: int(env.WATCHER_PORT ?? http.port, 8787, "http.port"),
+      trustProxy: int(env.WATCHER_TRUST_PROXY ?? http.trustProxy, 0, "http.trustProxy"),
     },
     apiKeys,
     rateLimit: {

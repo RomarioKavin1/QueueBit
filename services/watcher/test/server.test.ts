@@ -1,10 +1,10 @@
 import type { AddressInfo } from "node:net";
 import { createServer, type Server } from "node:http";
 import { afterEach, describe, expect, it } from "vitest";
-import { authHeader, verifyAlert, verifyWebhook, type Alert, type SignedAlert } from "@leaked/watcher-core";
+import { NonceCache, authHeader, verifyAlert, verifyWebhook, type Alert, type SignedAlert } from "@leaked/watcher-core";
 import { atLeast, ntfySink, webhookSink } from "../src/delivery.js";
 import { Hub } from "../src/hub.js";
-import { RateLimiter, createWatcherServer } from "../src/server.js";
+import { RateLimiter, clientIp, createWatcherServer } from "../src/server.js";
 import { parseConfig } from "../src/config.js";
 
 const KEY = "0x" + "ab".repeat(32);
@@ -33,8 +33,13 @@ afterEach(async () => {
   }
 });
 
-async function start(hub: Hub, rate = { perMinute: 600, burst: 100, maxStreamsPerKey: 2 }) {
+async function start(
+  hub: Hub,
+  rate = { perMinute: 600, burst: 100, maxStreamsPerKey: 2 },
+  extra: { trustProxy?: number; streamTokenTtlS?: number } = {},
+) {
   const s = createWatcherServer({
+    ...extra,
     hub,
     apiKeys: [{ id: "ext", secret: KEY }],
     rateLimit: rate,
@@ -46,11 +51,8 @@ async function start(hub: Hub, rate = { perMinute: 600, burst: 100, maxStreamsPe
 }
 
 /** Reads SSE frames from a fetch body until `n` data frames arrived. */
-async function readSse(
-  res: Response,
-  n: number,
-): Promise<{ event: string; id: string; data: SignedAlert & { seq: number; type: string } }[]> {
-  const out: { event: string; id: string; data: SignedAlert & { seq: number; type: string } }[] = [];
+async function readSse(res: Response, n: number): Promise<{ event: string; id: string; data: SignedAlert }[]> {
+  const out: { event: string; id: string; data: SignedAlert }[] = [];
   const reader = res.body!.getReader();
   const dec = new TextDecoder();
   let buf = "";
@@ -110,10 +112,22 @@ describe("HTTP API auth", () => {
     const r = await fetch(`${url}/v1/alerts?since=1`, {
       headers: { authorization: await authHeader("ext", KEY, "GET", "/v1/alerts") },
     });
-    const { alerts } = (await r.json()) as { alerts: (SignedAlert & { seq: number })[] };
-    expect(alerts.map((a) => [a.seq, a.alert.id])).toEqual([[2, "a2"]]);
+    const { alerts } = (await r.json()) as { alerts: SignedAlert[] };
+    expect(alerts.map((a) => [a.v, a.seq, a.type, a.alert.id])).toEqual([[2, 2, "alert", "a2"]]);
     expect(await verifyAlert(KEY, alerts[0]!)).toBe(true);
     expect(await verifyAlert(WRONG, alerts[0]!)).toBe(false);
+    // type and seq are signed: a relay cannot relabel an alert as a retraction or move its sequence number
+    expect(await verifyAlert(KEY, { ...alerts[0]!, type: "retract" })).toBe(false);
+    expect(await verifyAlert(KEY, { ...alerts[0]!, seq: 99 })).toBe(false);
+  });
+
+  it("refuses a replayed request (same nonce) inside the skew window", async () => {
+    const url = await start(new Hub());
+    const h = await authHeader("ext", KEY, "GET", "/v1/alerts");
+    expect((await fetch(`${url}/v1/alerts`, { headers: { authorization: h } })).status).toBe(200);
+    const again = await fetch(`${url}/v1/alerts`, { headers: { authorization: h } });
+    expect(again.status).toBe(401);
+    expect(await again.json()).toEqual({ error: "replayed" });
   });
 });
 
@@ -139,19 +153,61 @@ describe("SSE stream", () => {
     for (const f of frames) expect(await verifyAlert(KEY, f.data)).toBe(true);
   });
 
-  it("accepts query-string auth (EventSource) and caps concurrent streams per key", async () => {
+  it("EventSource: a single-use stream token from an authenticated POST; no signature in the URL", async () => {
     const url = await start(new Hub(), { perMinute: 600, burst: 100, maxStreamsPerKey: 1 });
-    const q = async () => {
-      const h = await authHeader("ext", KEY, "GET", "/v1/stream");
-      const [, rest] = h.split(" ");
-      return `${url}/v1/stream?${rest!.replaceAll(",", "&")}`;
+    const token = async () => {
+      const r = await fetch(`${url}/v1/stream-token`, {
+        method: "POST",
+        headers: { authorization: await authHeader("ext", KEY, "POST", "/v1/stream-token") },
+      });
+      expect(r.status).toBe(200);
+      const j = (await r.json()) as { token: string; expiresIn: number };
+      expect(j.token).toMatch(/^[0-9a-f]{64}$/u);
+      expect(j.expiresIn).toBe(60);
+      return j.token;
     };
+    // a GET-signed header cannot mint a token; unauthenticated POST is refused
+    expect((await fetch(`${url}/v1/stream-token`, { method: "POST" })).status).toBe(401);
+    const wrongMethod = await fetch(`${url}/v1/stream-token`, {
+      method: "POST",
+      headers: { authorization: await authHeader("ext", KEY, "GET", "/v1/stream-token") },
+    });
+    expect(wrongMethod.status).toBe(401);
+    const tk = await token();
     const ac = new AbortController();
-    const first = await fetch(await q(), { signal: ac.signal });
+    const first = await fetch(`${url}/v1/stream?token=${tk}`, { signal: ac.signal });
     expect(first.status).toBe(200);
-    const second = await fetch(await q());
-    expect(second.status).toBe(429);
     ac.abort();
+    const reuse = await fetch(`${url}/v1/stream?token=${tk}`);
+    expect(reuse.status).toBe(401);
+    // the old query-string signature form is gone
+    const h = await authHeader("ext", KEY, "GET", "/v1/stream");
+    const q = await fetch(`${url}/v1/stream?${h.split(" ")[1]!.replaceAll(",", "&")}`);
+    expect(q.status).toBe(401);
+  });
+
+  it("stream tokens expire", async () => {
+    const url = await start(new Hub(), undefined, { streamTokenTtlS: 0 });
+    const r = await fetch(`${url}/v1/stream-token`, {
+      method: "POST",
+      headers: { authorization: await authHeader("ext", KEY, "POST", "/v1/stream-token") },
+    });
+    const { token } = (await r.json()) as { token: string };
+    await new Promise((res) => setTimeout(res, 1100));
+    const s = await fetch(`${url}/v1/stream?token=${token}`);
+    expect(s.status).toBe(401);
+    expect(await s.json()).toEqual({ error: "stale" });
+  });
+
+  it("caps concurrent streams per key", async () => {
+    const url = await start(new Hub(), { perMinute: 600, burst: 100, maxStreamsPerKey: 1 });
+    const get = async () =>
+      fetch(`${url}/v1/stream`, { headers: { authorization: await authHeader("ext", KEY, "GET", "/v1/stream") } });
+    const first = await get();
+    expect(first.status).toBe(200);
+    const second = await get();
+    expect(second.status).toBe(429);
+    await first.body!.cancel();
   });
 });
 
@@ -163,6 +219,29 @@ describe("rate limiting", () => {
     t += 1000; // one token per second
     expect(rl.take("a")).toBe(true);
     expect(rl.take("b")).toBe(true);
+  });
+
+  it("rate-limit key: socket address by default; with trustProxy, the right-most untrusted X-Forwarded-For hop", () => {
+    expect(clientIp("10.0.0.1", "1.2.3.4")).toBe("10.0.0.1");
+    expect(clientIp("10.0.0.1", "6.6.6.6, 1.2.3.4", 1)).toBe("1.2.3.4");
+    expect(clientIp("10.0.0.1", ["6.6.6.6", "1.2.3.4, 10.0.0.2"], 2)).toBe("1.2.3.4");
+    expect(clientIp("10.0.0.1", undefined, 1)).toBe("10.0.0.1");
+    expect(clientIp("10.0.0.1", "1.2.3.4", 5)).toBe("1.2.3.4");
+  });
+
+  it("trustProxy: clients behind the proxy get separate buckets; a spoofed left-most XFF does not help", async () => {
+    const url = await start(new Hub(), { perMinute: 1, burst: 1, maxStreamsPerKey: 1 }, { trustProxy: 1 });
+    const get = (xff: string) => fetch(`${url}/healthz`, { headers: { "x-forwarded-for": xff } });
+    expect((await get("1.1.1.1")).status).toBe(200);
+    expect((await get("2.2.2.2")).status).toBe(200);
+    expect((await get("9.9.9.9, 1.1.1.1")).status).toBe(429);
+  });
+
+  it("without trustProxy, X-Forwarded-For is ignored", async () => {
+    const url = await start(new Hub(), { perMinute: 1, burst: 1, maxStreamsPerKey: 1 });
+    const get = (xff: string) => fetch(`${url}/healthz`, { headers: { "x-forwarded-for": xff } });
+    expect((await get("1.1.1.1")).status).toBe(200);
+    expect((await get("2.2.2.2")).status).toBe(429);
   });
 
   it("answers 429 once a client exceeds the burst (bad keys count too)", async () => {
@@ -191,8 +270,10 @@ describe("delivery", () => {
   }
 
   it("webhook: the receiver verifies the HMAC; a wrong secret fails; severity filter applies", async () => {
-    const got: { body: string; sig: string }[] = [];
-    const url = await receiver((body, h) => got.push({ body, sig: String(h["x-leaked-signature"]) }));
+    const got: { body: string; sig: string; delivery: string }[] = [];
+    const url = await receiver((body, h) =>
+      got.push({ body, sig: String(h["x-leaked-signature"]), delivery: String(h["x-leaked-delivery"]) }),
+    );
     const sink = webhookSink({ url, secret: KEY, minSeverity: "warning" });
     await sink({ seq: 1, type: "alert", alert: alert("w1") });
     await sink({ seq: 2, type: "alert", alert: alert("w2", "info") });
@@ -200,6 +281,12 @@ describe("delivery", () => {
     expect(await verifyWebhook(KEY, got[0]!.body, got[0]!.sig)).toBe(true);
     expect(await verifyWebhook(WRONG, got[0]!.body, got[0]!.sig)).toBe(false);
     expect(JSON.parse(got[0]!.body)).toMatchObject({ type: "alert", seq: 1, alert: { id: "w1" } });
+    // the delivery id is the signed nonce; a receiver's NonceCache refuses the same delivery twice
+    expect(got[0]!.sig).toContain(`n=${got[0]!.delivery},`);
+    const cache = new NonceCache();
+    const seen = (n: string, t: number) => !cache.use(n, t);
+    expect(await verifyWebhook(KEY, got[0]!.body, got[0]!.sig, { seen })).toBe(true);
+    expect(await verifyWebhook(KEY, got[0]!.body, got[0]!.sig, { seen })).toBe(false);
   });
 
   it("webhook and ntfy never follow a redirect (the signed body stays with the configured host)", async () => {
@@ -274,6 +361,9 @@ describe("config", () => {
       WATCHER_STORE: "sqlite:/data/w.db",
       WATCHER_API_KEYS: `ext:${KEY}`,
     });
+    expect(c.http.trustProxy).toBe(0);
+    expect(parseConfig({ ...base, http: { trustProxy: 1 } }).http.trustProxy).toBe(1);
+    expect(parseConfig(base, { WATCHER_TRUST_PROXY: "2" }).http.trustProxy).toBe(2);
     expect(c).toMatchObject({
       chainId: 1337,
       confirmations: 5,

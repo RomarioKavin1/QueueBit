@@ -86,6 +86,7 @@ export async function createService(
     log: (m) => log("http", { error: m }),
     apiKeys: cfg.apiKeys,
     rateLimit: cfg.rateLimit,
+    trustProxy: cfg.http.trustProxy,
     status: () => ({
       chainId: cfg.chainId,
       lastBlock: poller.cursor?.toString() ?? null,

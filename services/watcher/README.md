@@ -11,7 +11,7 @@ in SQLite (or a JSON file) and delivers alerts three ways:
 | Channel | Auth / integrity | Contents |
 |---|---|---|
 | `GET /v1/stream` (Server-Sent Events) | request: `LEAKED-HMAC` API key; every event: HMAC-signed envelope | full alert (account address, tx hash, opId, eta) |
-| HMAC-signed webhook | `x-leaked-signature: t=…,v1=HMAC(secret, "t.body")` | full alert |
+| HMAC-signed webhook | `x-leaked-signature: t=…,n=…,v2=HMAC(secret, "t.n.body")`, `x-leaked-delivery: <n>` | full alert |
 | ntfy.sh-compatible push (optional) | your topic (+ optional token) | title and body only: **no amounts, no addresses** |
 
 The alert logic is `@leaked/watcher-core` (`packages/watcher-core`), the same code the extension's in-browser light
@@ -86,6 +86,7 @@ variables. Accounts are addresses only; any other field on an account (a label, 
 | `scanFrameTxs` | – | true | over-limit detection for frame accounts |
 | `store` | `WATCHER_STORE` | `file:./watcher-state.json` | `file:<path>` or `sqlite:<path>` (built-in `node:sqlite`) |
 | `http.host`, `http.port` | `WATCHER_HOST`, `WATCHER_PORT` | 127.0.0.1, 8787 | |
+| `http.trustProxy` | `WATCHER_TRUST_PROXY` | 0 | reverse-proxy hops to trust for the per-IP rate limit: with n, the client is the n-th address from the right of `X-Forwarded-For` + socket; 0 ignores the header (set it only when every request comes through your proxy) |
 | `apiKeys[]` `{id, secret}` | `WATCHER_API_KEYS=id:0xsecret,…` | – | 0x-hex, ≥ 16 bytes |
 | `rateLimit` | – | 60/min, burst 20, 4 streams/key | per IP before auth, per key after |
 | `webhook` `{url, secret, minSeverity}` | `WATCHER_WEBHOOK_URL`, `…_SECRET`, `…_MIN_SEVERITY` | – | http(s) only; redirects are never followed |
@@ -93,16 +94,26 @@ variables. Accounts are addresses only; any other field on an account (a label, 
 
 ## API
 
-Auth header: `authorization: LEAKED-HMAC id=<keyId>,t=<unix s>,sig=<hex HMAC-SHA256(secret, "GET\n<path>\n<t>")>`
-(± 5 min). EventSource clients may pass `?id=&t=&sig=` instead. Bad or unknown keys get `401`, excess requests `429`.
+Auth header: `authorization: LEAKED-HMAC id=<keyId>,t=<unix s>,n=<nonce>,sig=<hex HMAC-SHA256(secret,
+"<METHOD>\n<path>\n<t>\n<n>")>` (± 5 min; `n` = 16–64 chars of `[0-9A-Za-z_-]`, e.g. 16 random bytes hex). The
+server remembers each `keyId:n` for the skew window (bounded cache), so a captured request cannot be replayed (`401
+replayed`). Bad or unknown keys get `401`, excess requests `429`. The signature never goes in a URL.
 
 - `GET /healthz`: `{ok, chainId, lastBlock, accounts}` (no addresses).
-- `GET /v1/stream`: SSE. `id: <seq>`, `event: alert | retract`, `data: {seq, type, v, t, alert, sig}` where
-  `sig = HMAC(secret, "<t>.<JSON(alert)>")`. Resume with `Last-Event-ID` (or `?since=`). A `retract` event names an
+- `GET /v1/stream`: SSE. `id: <seq>`, `event: alert | retract`, `data: {v: 2, t, type, seq, alert, sig}` where
+  `sig = HMAC(secret, "leaked-alert-v2\n<t>\n<type>\n<seq>\n<JSON(alert)>")`: the type and sequence number are
+  signed too, so a relay cannot relabel an alert as a retraction or forge `seq` (v1 envelopes, which signed
+  `"<t>.<JSON(alert)>"` only, are refused). Resume with `Last-Event-ID` (or `?since=`). A `retract` event names an
   alert whose transaction disappeared in a reorg.
+- `POST /v1/stream-token` (signed as `POST`): `{token, expiresIn: 60}`. For EventSource, which cannot set headers:
+  open `GET /v1/stream?token=<token>`; the token is single-use and short-lived.
 - `GET /v1/alerts?since=<seq>`: the same envelopes as JSON.
 
-Verify with `verifyAlert` / `verifyWebhook` / `authHeader` from `@leaked/watcher-core`. The extension pairs by
+Webhook receivers: verify with `verifyWebhook(secret, rawBody, header, {seen})`, where `seen = (n, t) =>
+!cache.use(n, t)` with a `NonceCache`; `n` (also in `x-leaked-delivery`) stays the same across retries of one
+delivery, so dedupe on it. Headers without `n`/`v2` (the old `v1` form) are refused.
+
+Verify with `verifyAlert` / `verifyWebhook` / `authHeader` / `NonceCache` from `@leaked/watcher-core`. The extension pairs by
 scanning `{url, topic, keyId, hmacKey}` (`parsePairing`).
 
 ## Reorgs and checkpoints

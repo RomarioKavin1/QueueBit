@@ -271,7 +271,7 @@ describe.skipIf(!LIVE)("watcher on the local devnet", () => {
       startBlock: startBlock.toString(),
       accounts: [{ address: account, backend: "frame" }],
       store: `file:${join(mkdtempSync(join(tmpdir(), "leaked-watcher-")), "state.json")}`,
-      http: { host: "127.0.0.1", port: 0 },
+      http: { host: "127.0.0.1", port: 0, trustProxy: 0 },
       apiKeys: [{ id: "ext", secret: KEY }],
       webhook: {
         url: `http://127.0.0.1:${(receiver.address() as AddressInfo).port}/hook`,
