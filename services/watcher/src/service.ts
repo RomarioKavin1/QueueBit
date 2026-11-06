@@ -55,11 +55,8 @@ export async function createService(
         chainId: cfg.chainId,
         accounts: cfg.accounts,
         modules: cfg.modules,
-        ...(cfg.entryPoint ? { entryPoint: cfg.entryPoint } : {}),
-        roleSigners: cfg.roleSigners,
       },
-      blockedThreshold: cfg.blockedThreshold,
-      blockedWindowSec: cfg.blockedWindowSec,
+      nearLimitPercent: cfg.nearLimitPercent,
       ...(state ? { state } : {}),
     });
 
@@ -74,7 +71,6 @@ export async function createService(
       startBlock: cfg.startBlock,
       maxBlockRange: cfg.maxBlockRange,
       reorgWindow: cfg.reorgWindow,
-      scanFrameTxs: cfg.scanFrameTxs,
       log,
       ...(deps.clock ? { clock: deps.clock } : {}),
     },

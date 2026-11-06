@@ -1,242 +1,230 @@
 import type { Address, Hex } from "viem";
-import { copyFor, FOREVER, type Alert, type AlertKind, type AlertRef, type Severity, type Who } from "./alerts.js";
+import { copyFor, type Alert, type AlertKind, type AlertRef, type Severity } from "./alerts.js";
+import { MODULE_TYPES } from "./generated/abi.js";
 import type { Transition } from "./timelock.js";
-import type { AccountEvent, QueueKind, WatchedEvent } from "./types.js";
+import type { PolicyState, WatchedEvent } from "./types.js";
 
 /**
  * Rules: on-chain facts -> alerts. Only facts the chain records (no device/IP/"new browser" heuristics).
  *
  * Severity:
- *  - urgent: the Vault scheduled a loosening / account update / move the user did not start (or that the watcher
- *    cannot attribute to the user), Lockdown, a Vault replacement started by the Recovery key, a move executed,
- *    repeated blocked payments (someone is trying the everyday key);
- *  - warning: pauses, a replaced everyday key, a blocked payment, a replaced Vault or Recovery key, maturing changes;
- *  - info: what the user did themselves (when `initiated` says so), completions, cancellations, tightening.
+ *  - urgent: a new admin key or a changed key, security lowered (fewer approvals, requirePQ off, another LeanPool
+ *    aggregator), a guardian recovery reaching its threshold or its waiting period's end, keys replaced by recovery,
+ *    an account update (new implementation) — each unless the user started it;
+ *  - warning: a new spending key, a removed key, a module added or removed, a guardian approval, a session crossing
+ *    80% of its daily limit;
+ *  - info: what the user did themselves (when `initiated` says so), new sessions and their limits, cancellations.
  */
 
-/** Who holds which role on an account, when the caller knows (the extension does; the service may read getRoles). */
-export interface AccountRoles {
-  vault?: Address;
-  recovery?: Address;
-  guardians?: Address[];
-}
-
 export interface RuleContext {
-  /** Lower-cased account -> roles. */
-  roles?: (account: Address) => AccountRoles | undefined;
   /**
-   * Did this user start it? The extension knows the Vault requests and hot payments it made (by tx hash or opId);
-   * the service usually does not (undefined = unknown).
+   * Did this user start it? The extension knows the transactions it sent (by tx hash); the service usually does not
+   * (undefined = unknown).
    */
-  initiated?: (account: Address, ref: { txHash?: Hex; opId?: Hex }) => boolean | undefined;
-  /** Repeated-blocked rule: this many blocked payments within `blockedWindowSec` -> one urgent alert. */
-  blockedThreshold?: number;
-  blockedWindowSec?: number;
+  initiated?: (account: Address, ref: { txHash?: Hex }) => boolean | undefined;
+  /** session-near-limit: alert when a session's spending today crosses this share of its daily limit (default 80). */
+  nearLimitPercent?: number;
 }
 
-const eq = (a: string | null | undefined, b: string | null | undefined) =>
-  !!a && !!b && a.toLowerCase() === b.toLowerCase();
+/** What the rules know from earlier transactions (the core keeps it). */
+export interface RuleView {
+  policy(account: Address): PolicyState | undefined;
+  /** The tx that set the account up (keystore installed), once seen: replaying it stays setup. */
+  setupTx(account: Address): Hex | undefined;
+  /** A session's daily limit (`token` undefined = ETH); undefined = unknown, 0 = none. */
+  dailyCap(account: Address, keyId: Hex, token?: Address): bigint | undefined;
+}
 
-function whoIs(by: Address | null, until: number | undefined, roles: AccountRoles | undefined): Who {
-  if (by && roles) {
-    if (eq(by, roles.vault)) return "vault";
-    if (eq(by, roles.recovery)) return "recovery";
-    if (roles.guardians?.some((g) => eq(g, by))) return "guardian";
-  }
-  // A Vault pause has no end; a Guardian pause lasts 72 h.
-  if (until !== undefined) return until >= FOREVER ? "vault" : roles ? "unknown" : "guardian";
-  return "unknown";
+export interface RuleOutput {
+  kind: AlertKind;
+  severity: Severity;
+  left?: number;
+  ref: AlertRef;
 }
 
 /** Raise the severity for "not initiated", lower it for "initiated". */
 const bySource = (init: boolean | undefined, unknown: Severity, notMine: Severity = "urgent"): Severity =>
   init === true ? "info" : init === false ? notMine : unknown;
 
-export interface RuleOutput {
-  kind: AlertKind;
-  severity: Severity;
-  who?: Who;
-  left?: number;
-  ref: AlertRef;
-  count?: number;
-  what?: "staked" | "unlocked" | "withdrawn";
-}
+const ROLE_ADMIN = 1;
+const ROLE_SPEND = 2;
 
-const QUEUE_ALERT: Record<QueueKind, AlertKind> = {
-  spend: "payment-scheduled",
-  loosen: "change-scheduled",
-  upgrade: "update-scheduled",
-  migrate: "move-scheduled",
-  unknown: "change-scheduled",
-};
+/** A key for the per-(account, session, token) daily-limit map. */
+export const capKey = (account: Address, keyId: Hex, token?: Address) =>
+  `${account.toLowerCase()}:${keyId.toLowerCase()}:${(token ?? "eth").toLowerCase()}`;
+
+/** Fewer approvals, requirePQ switched off, or another aggregator (whose roots the account now trusts). */
+export const policyLowered = (prev: PolicyState, next: PolicyState): boolean =>
+  next.adminThreshold < prev.adminThreshold ||
+  next.spendThreshold < prev.spendThreshold ||
+  (prev.requirePQ && !next.requirePQ) ||
+  prev.aggregator.toLowerCase() !== next.aggregator.toLowerCase();
 
 /**
- * Alerts for one transaction's events of one account (grouped so that companion events of one action raise one
- * alert: a Recovery-started pause, the Lockdown's key wipe, the setters run by an executed scheduled change, ...).
+ * Alerts for one transaction's events of one account. Grouped so one action raises one alert: account creation or a
+ * migration into LeanAccount is setup (only an upgrade is reported), a guardian recovery's key reset is reported as
+ * the recovery, not key by key.
  */
-export function rulesForTx(events: readonly WatchedEvent[], ctx: RuleContext): { e: WatchedEvent; out: RuleOutput }[] {
+export function rulesForTx(
+  events: readonly WatchedEvent[],
+  ctx: RuleContext,
+  view: RuleView,
+): { e: WatchedEvent; out: RuleOutput }[] {
+  const first = events[0];
+  if (!first) return [];
+  const account = first.account;
   const types = new Set(events.map((e) => e.event.type));
-  // Account creation (`initialize`: the first everyday key is set from zero): setup, not news.
-  // (Leaving Lockdown also sets a key from zero, but together with BunkerDisabled; a 4337 module reinstall does too,
-  // but only inside an executed scheduled change, which is news: it is reported as that.)
-  const created =
-    !types.has("bunkerDisabled") &&
-    !types.has("queueExecuted") &&
-    events.some((e) => e.event.type === "hotKeyRotated" && /^0x0{40}$/i.test(e.event.oldKey));
-  if (created) return [];
-  const res: { e: WatchedEvent; out: RuleOutput }[] = [];
-  const queuedKinds = new Set(
-    events.flatMap((e) => (e.event.type === "queued" ? [e.event.kind] : ([] as QueueKind[]))),
+  // Setup: the keystore installed on an account the watcher has no policy for (factory creation, or a UUPS account /
+  // a 7702-delegated EOA initialising itself as a LeanAccount).
+  const installsKeystore = events.some(
+    (e) => e.event.type === "moduleInstalled" && e.event.moduleType === MODULE_TYPES.FRAME_VALIDATOR,
   );
+  const setupTx = view.setupTx(account);
+  const setup =
+    installsKeystore &&
+    (setupTx ? setupTx.toLowerCase() === first.txHash.toLowerCase() : view.policy(account) === undefined);
+  const recovery = types.has("recovered");
+  const near = BigInt(ctx.nearLimitPercent ?? 80);
+  // Overlay: what this tx itself sets, for later events of the same tx.
+  let policy = view.policy(account);
+  const caps = new Map<string, bigint>();
+  const cap = (keyId: Hex, token?: Address) =>
+    caps.get(capKey(account, keyId, token)) ?? view.dailyCap(account, keyId, token);
+
+  const res: { e: WatchedEvent; out: RuleOutput }[] = [];
   for (const e of events) {
-    const ev: AccountEvent = e.event;
+    const ev = e.event;
     const at = e.timestamp ?? 0;
-    const roles = ctx.roles?.(e.account);
-    const init = (opId?: Hex) => ctx.initiated?.(e.account, { txHash: e.txHash, ...(opId ? { opId } : {}) });
+    const init = ctx.initiated?.(e.account, { txHash: e.txHash });
     const ref: AlertRef = { txHash: e.txHash, blockNumber: e.blockNumber.toString() };
     const push = (out: RuleOutput) => res.push({ e, out });
+    const quiet = setup || recovery; // setup and a recovery's own reset: no per-key alerts
     switch (ev.type) {
-      case "queued": {
-        const i = init(ev.opId);
-        const severity = ev.kind === "spend" ? bySource(i, "warning") : bySource(i, "urgent");
-        push({
-          kind: QUEUE_ALERT[ev.kind],
-          severity,
-          left: at ? ev.eta - at : undefined,
-          ref: { ...ref, opId: ev.opId, queueKind: ev.kind, eta: ev.eta },
-        });
+      case "keyAdded":
+        if (quiet) break;
+        if (ev.roles & ROLE_ADMIN)
+          push({ kind: "admin-key-added", severity: bySource(init, "urgent"), ref: { ...ref, keyId: ev.keyId } });
+        else if (ev.roles & ROLE_SPEND)
+          push({
+            kind: "spending-key-added",
+            severity: bySource(init, "warning", "urgent"),
+            ref: { ...ref, keyId: ev.keyId },
+          });
+        else
+          push({
+            kind: "session-added",
+            severity: bySource(init, "info", "warning"),
+            ref: { ...ref, keyId: ev.keyId },
+          });
+        break;
+      case "keyRemoved":
+        if (quiet) break;
+        push({ kind: "key-removed", severity: bySource(init, "warning"), ref: { ...ref, keyId: ev.keyId } });
+        break;
+      case "keyUpdated":
+        if (quiet) break;
+        push({ kind: "key-changed", severity: bySource(init, "urgent"), ref: { ...ref, keyId: ev.keyId } });
+        break;
+      case "policySet": {
+        const next: PolicyState = {
+          adminThreshold: ev.adminThreshold,
+          spendThreshold: ev.spendThreshold,
+          requirePQ: ev.requirePQ,
+          aggregator: ev.aggregator,
+        };
+        const prev = policy;
+        policy = next;
+        if (quiet) break;
+        if (prev && policyLowered(prev, next))
+          push({ kind: "security-lowered", severity: bySource(init, "urgent"), ref });
+        else push({ kind: "security-changed", severity: prev ? "info" : bySource(init, "warning"), ref });
         break;
       }
-      case "upgradeQueued":
-      case "migrationQueued": {
-        // The frame account also emits Queued(opId, kind) in the same tx: that one carries the opId.
-        if (queuedKinds.has(ev.type === "upgradeQueued" ? "upgrade" : "migrate")) break;
+      case "sessionTokenSet":
+        if (quiet) break;
         push({
-          kind: ev.type === "upgradeQueued" ? "update-scheduled" : "move-scheduled",
-          severity: bySource(init(), "urgent"),
-          left: at ? ev.eta - at : undefined,
-          ref: { ...ref, eta: ev.eta },
+          kind: "session-limits-changed",
+          severity: bySource(init, "info", "warning"),
+          ref: { ...ref, keyId: ev.keyId, token: ev.token },
         });
+        break;
+      case "dailyCapSet":
+        caps.set(capKey(account, ev.keyId, ev.token), ev.cap);
+        if (quiet) break;
+        push({
+          kind: "session-limits-changed",
+          severity: bySource(init, "info", "warning"),
+          ref: { ...ref, keyId: ev.keyId, ...(ev.token ? { token: ev.token } : {}) },
+        });
+        break;
+      case "sessionSpend": {
+        const c = cap(ev.keyId, ev.token);
+        if (!c) break; // unknown or no daily limit
+        const before = ev.spentToday - ev.amount;
+        // Alert once per day, on the payment that crosses the threshold.
+        if (ev.spentToday * 100n >= c * near && before * 100n < c * near) {
+          push({
+            kind: "session-near-limit",
+            severity: "warning",
+            ref: {
+              ...ref,
+              keyId: ev.keyId,
+              ...(ev.token ? { token: ev.token } : {}),
+              percent: Number((ev.spentToday * 100n) / c),
+            },
+          });
+        }
         break;
       }
-      case "queueExecuted":
-        push({ kind: "scheduled-done", severity: "info", ref: { ...ref, opId: ev.opId } });
+      case "recoveryApproved":
+        if (ev.readyAt === 0)
+          push({
+            kind: "recovery-approved",
+            severity: bySource(init, "warning", "urgent"),
+            ref: { ...ref, recoveryId: ev.id },
+          });
+        else
+          push({
+            kind: "recovery-started",
+            severity: bySource(init, "urgent"),
+            left: at ? ev.readyAt - at : undefined,
+            ref: { ...ref, recoveryId: ev.id, eta: ev.readyAt },
+          });
         break;
-      case "queueCancelled":
+      case "recovered":
+        push({ kind: "recovery-done", severity: bySource(init, "urgent"), ref: { ...ref, recoveryId: ev.id } });
+        break;
+      case "recoveryCancelled":
+        push({ kind: "recovery-cancelled", severity: "info", ref: { ...ref, recoveryId: ev.id } });
+        break;
+      case "moduleInstalled":
+        if (setup) break;
         push({
-          kind: "scheduled-cancelled",
-          severity: "info",
-          who: ev.byRecovery || eq(ev.by, roles?.recovery) ? "recovery" : "vault",
-          ref: { ...ref, opId: ev.opId },
+          kind: "module-added",
+          severity: bySource(init, "warning", "urgent"),
+          ref: { ...ref, module: ev.module, moduleType: ev.moduleType },
         });
         break;
-      case "frozen": {
-        // A Vault replacement pauses everyday spending as part of the same call: one alert, not two.
-        if (types.has("vaultRotationStarted")) break;
-        const who = whoIs(ev.by, ev.until, roles);
-        const timed = ev.until < FOREVER;
+      case "moduleUninstalled":
         push({
-          kind: "paused",
-          severity: who === "vault" ? bySource(init(), "warning", "urgent") : "warning",
-          who,
-          left: timed && at ? ev.until - at : undefined,
-          ref: { ...ref, ...(timed ? { until: ev.until } : {}) },
+          kind: "module-removed",
+          severity: bySource(init, "warning"),
+          ref: { ...ref, module: ev.module, moduleType: ev.moduleType },
         });
-        break;
-      }
-      case "unfrozen":
-        if (types.has("vaultRotationFinalized")) break;
-        push({ kind: "resumed", severity: "info", ref });
-        break;
-      case "bunkerEnabled":
-        push({ kind: "lockdown-on", severity: init() === true ? "warning" : "urgent", ref });
-        break;
-      case "bunkerDisabled":
-        push({ kind: "lockdown-off", severity: "info", ref });
-        break;
-      case "hotKeyRotated":
-        // Key wiped by Lockdown or a move (reported by those), or re-issued while leaving Lockdown.
-        if (/^0x0{40}$/i.test(ev.newKey) || types.has("bunkerDisabled") || types.has("migrated")) break;
-        if (/^0x0{40}$/i.test(ev.oldKey)) break; // initial key at account creation
-        push({ kind: "everyday-key-replaced", severity: bySource(init(), "warning"), ref });
-        break;
-      case "vaultRotationStarted":
-        push({
-          kind: "vault-replacement-started",
-          severity: init() === true ? "warning" : "urgent",
-          left: at ? ev.eta - at : undefined,
-          ref: { ...ref, eta: ev.eta },
-        });
-        break;
-      case "vaultRotationFinalized":
-        push({ kind: "vault-replaced", severity: bySource(init(), "warning"), ref });
-        break;
-      case "vaultRotationCancelled":
-        push({ kind: "vault-replacement-cancelled", severity: "info", ref });
-        break;
-      case "recoverySet":
-        if (types.has("queueExecuted")) break;
-        push({ kind: "recovery-key-changed", severity: bySource(init(), "warning"), ref });
-        break;
-      case "guardianSet":
-        if (types.has("queueExecuted")) break;
-        push({ kind: "guardian-changed", severity: bySource(init(), "info", "warning"), ref });
-        break;
-      case "capUpdated":
-      case "timelockUpdated":
-        if (types.has("queueExecuted")) break; // the scheduled change itself; already announced
-        push({ kind: "limits-changed", severity: "info", ref });
-        break;
-      case "policyChanged":
-        if (types.has("queueExecuted")) break;
-        push({ kind: "settings-changed", severity: "info", ref });
         break;
       case "upgraded":
-        push({ kind: "account-updated", severity: bySource(init(), "warning"), ref });
-        break;
-      case "migrated":
-        push({ kind: "account-moved", severity: bySource(init(), "urgent"), ref });
-        break;
-      case "roleSignerStake":
-        push({
-          kind: "vault-sender-deposit",
-          severity: ev.what === "unlocked" ? bySource(init(), "warning") : "info",
-          what: ev.what,
-          ref,
-        });
-        break;
-      case "hotBlocked":
-        push({
-          kind: "payment-blocked",
-          severity: bySource(init(), "warning", "warning"),
-          ref: { ...ref, reason: ev.reason, ...(ev.errorName ? { errorName: ev.errorName } : {}) },
-        });
-        break;
-      case "vaultSignerSet": // reported as vault-replaced (rotation) or at account creation
-      case "activity":
+        push({ kind: "account-updated", severity: bySource(init, "urgent"), ref: { ...ref, implementation: ev.impl } });
         break;
     }
   }
   return res;
 }
 
-/** Alerts for deadline transitions (eta reached / pause ran out / voided by a Vault replacement). */
+/** Alerts for deadline transitions (a recovery's waiting period is over). */
 export function rulesForTransition(t: Transition): RuleOutput | null {
   const d = t.deadline;
-  if (t.type === "ready") {
-    if (d.kind === "rotation") return { kind: "vault-replacement-ready", severity: "warning", ref: { eta: d.at } };
-    if (d.kind === "op") {
-      return {
-        kind: "scheduled-ready",
-        severity: d.queueKind === "spend" ? "info" : "warning",
-        ref: { opId: d.opId!, queueKind: d.queueKind ?? "unknown", eta: d.at },
-      };
-    }
-    return null;
-  }
-  if (d.kind === "freeze") return { kind: "pause-ended", severity: "info", ref: { until: d.at } };
-  if (d.kind === "op")
-    return { kind: "scheduled-void", severity: "info", ref: { opId: d.opId!, queueKind: d.queueKind } };
+  if (d.kind === "recovery")
+    return { kind: "recovery-ready", severity: "urgent", ref: { recoveryId: d.recoveryId, eta: d.at } };
   return null;
 }
 
@@ -244,18 +232,9 @@ export function toAlert(
   base: { id: string; chainId: number; account: Address; backend: Alert["backend"]; at: number },
   out: RuleOutput,
 ): Alert {
-  const copy = copyFor({
-    kind: out.kind,
-    ref: out.ref,
-    ...(out.ref.queueKind ? { queueKind: out.ref.queueKind } : {}),
-    ...(out.who ? { who: out.who } : {}),
-    ...(out.left !== undefined ? { left: out.left } : {}),
-    ...(out.ref.reason ? { reason: out.ref.reason } : {}),
-    ...(out.count !== undefined ? { count: out.count } : {}),
-    ...(out.what ? { what: out.what } : {}),
-  });
+  const copy = copyFor({ kind: out.kind, ref: out.ref, ...(out.left !== undefined ? { left: out.left } : {}) });
   return {
-    v: 1,
+    v: 2,
     id: base.id,
     chainId: base.chainId,
     account: base.account,

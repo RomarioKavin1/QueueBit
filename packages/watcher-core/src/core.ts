@@ -1,23 +1,37 @@
-import { keccak256, stringToHex, type Hex } from "viem";
+import { keccak256, stringToHex, type Address, type Hex } from "viem";
 import type { Alert } from "./alerts.js";
 import { TargetIndex } from "./decode.js";
 import { Deduper } from "./dedup.js";
-import { rulesForTransition, rulesForTx, toAlert, type RuleContext, type RuleOutput } from "./rules.js";
+import { MODULE_TYPES } from "./generated/abi.js";
+import {
+  capKey,
+  rulesForTransition,
+  rulesForTx,
+  toAlert,
+  type RuleContext,
+  type RuleOutput,
+  type RuleView,
+} from "./rules.js";
 import { DeadlineTracker, type Deadline, type Transition } from "./timelock.js";
-import type { WatchedEvent, WatchTargets } from "./types.js";
+import type { PolicyState, WatchedEvent, WatchTargets } from "./types.js";
 
-/** Serialisable state of a WatcherCore (deadlines, seen alert ids, recent blocked-payment times). */
+/** Serialisable state of a WatcherCore. v2: LeanAccount (v1 was the Vault model and is ignored). */
 export interface CoreState {
-  v: 1;
+  v: 2;
   deadlines: Deadline[];
   seen: string[];
-  /** account (lower-case) -> unix seconds of recent blocked payments. */
-  blocked: Record<string, number[]>;
+  /** account (lower-case) -> the keystore policy last seen. */
+  policies: Record<string, PolicyState>;
+  /** capKey(account, session, token) -> daily limit (decimal string; "0" = none). */
+  caps: Record<string, string>;
+  /** account (lower-case) -> the tx that set it up (account creation or migration). */
+  setupTxs: Record<string, Hex>;
 }
 
 export interface WatcherCoreOptions extends RuleContext {
   targets: WatchTargets;
-  state?: CoreState;
+  /** A saved snapshot; one of another version is ignored (the core starts fresh). */
+  state?: CoreState | { v: number };
   dedupCapacity?: number;
 }
 
@@ -28,28 +42,36 @@ export function alertId(parts: { chainId: number; account: string; kind: string;
   return short(`${parts.chainId}:${parts.account.toLowerCase()}:${parts.kind}:${parts.key}`);
 }
 
+const isV2 = (s: WatcherCoreOptions["state"]): s is CoreState => !!s && s.v === 2;
+
 /**
- * The watcher's pure core, shared by the extension light mode and the self-hosted service:
- * `ingest(events)` (decoded logs + derived `hotBlocked` events, in chain order) and `tick(now)` (deadline
- * transitions) return new, deduplicated alerts. No I/O.
+ * The watcher's pure core, shared by the extension light mode and the self-hosted service: `ingest(events)` (decoded
+ * logs, in chain order) and `tick(now)` (deadline transitions) return new, deduplicated alerts. No I/O.
  */
 export class WatcherCore {
   readonly index: TargetIndex;
   private readonly ctx: RuleContext;
   private readonly tracker: DeadlineTracker;
   private readonly dedup: Deduper;
-  private readonly blocked = new Map<string, number[]>();
-  private readonly threshold: number;
-  private readonly window: number;
+  private readonly policies = new Map<string, PolicyState>();
+  private readonly caps = new Map<string, bigint>();
+  private readonly setupTxs = new Map<string, Hex>();
+  private readonly view: RuleView;
 
   constructor(opts: WatcherCoreOptions) {
+    const s = isV2(opts.state) ? opts.state : undefined;
     this.index = new TargetIndex(opts.targets);
     this.ctx = opts;
-    this.tracker = new DeadlineTracker(opts.state?.deadlines ?? []);
-    this.dedup = new Deduper(opts.state?.seen ?? [], opts.dedupCapacity);
-    for (const [k, v] of Object.entries(opts.state?.blocked ?? {})) this.blocked.set(k, [...v]);
-    this.threshold = opts.blockedThreshold ?? 3;
-    this.window = opts.blockedWindowSec ?? 3600;
+    this.tracker = new DeadlineTracker(s?.deadlines ?? []);
+    this.dedup = new Deduper(s?.seen ?? [], opts.dedupCapacity);
+    for (const [k, v] of Object.entries(s?.policies ?? {})) this.policies.set(k, { ...v });
+    for (const [k, v] of Object.entries(s?.caps ?? {})) this.caps.set(k, BigInt(v));
+    for (const [k, v] of Object.entries(s?.setupTxs ?? {})) this.setupTxs.set(k, v);
+    this.view = {
+      policy: (account: Address) => this.policies.get(account.toLowerCase()),
+      dailyCap: (account: Address, keyId: Hex, token?: Address) => this.caps.get(capKey(account, keyId, token)),
+      setupTx: (account: Address) => this.setupTxs.get(account.toLowerCase()),
+    };
   }
 
   /** New alerts for these events (chain order). `now` (unix s) dates events that carry no block timestamp. */
@@ -66,19 +88,25 @@ export class WatcherCore {
     for (const group of groups.values()) {
       const ordinals = new Map<WatchedEvent, number>();
       group.forEach((e, i) => ordinals.set(e, i));
-      for (const { e, out: r } of rulesForTx(group, this.ctx)) {
-        const at = e.timestamp ?? now;
+      for (const { e, out: r } of rulesForTx(group, this.ctx, this.view)) {
         const id = alertId({
           chainId: e.chainId,
           account: e.account,
           kind: r.kind,
           key: `${e.txHash}:${ordinals.get(e)}`,
         });
-        this.emit(out, { id, chainId: e.chainId, account: e.account, backend: e.backend, at }, r);
-        if (e.event.type === "hotBlocked") this.noteBlocked(out, e, at);
+        this.emit(out, { id, chainId: e.chainId, account: e.account, backend: e.backend, at: e.timestamp ?? now }, r);
       }
+      // The first tx installing the keystore on an account with no known policy is its setup (kept, so a replay of it
+      // stays quiet).
+      const acc = group[0]!.account.toLowerCase();
+      const installs = group.some(
+        (e) => e.event.type === "moduleInstalled" && e.event.moduleType === MODULE_TYPES.FRAME_VALIDATOR,
+      );
+      if (installs && !this.policies.has(acc) && !this.setupTxs.has(acc)) this.setupTxs.set(acc, group[0]!.txHash);
       for (const e of group) {
-        for (const t of this.tracker.apply(e, e.timestamp ?? now)) this.emitTransition(out, t);
+        this.remember(e);
+        this.tracker.apply(e);
       }
     }
     return out;
@@ -105,6 +133,11 @@ export class WatcherCore {
     return this.tracker.snapshot();
   }
 
+  /** The keystore policy last seen for an account (undefined before its creation tx was ingested). */
+  policyOf(account: Address): PolicyState | undefined {
+    return this.view.policy(account);
+  }
+
   /** Forget alert ids (after a reorg retracted them) so a re-inclusion alerts again. */
   forget(ids: Iterable<string>): void {
     for (const id of ids) this.dedup.delete(id);
@@ -112,11 +145,31 @@ export class WatcherCore {
 
   snapshot(): CoreState {
     return {
-      v: 1,
+      v: 2,
       deadlines: this.tracker.snapshot(),
       seen: this.dedup.snapshot(),
-      blocked: Object.fromEntries(this.blocked),
+      policies: Object.fromEntries([...this.policies].map(([k, v]) => [k, { ...v }])),
+      caps: Object.fromEntries([...this.caps].map(([k, v]) => [k, v.toString()])),
+      setupTxs: Object.fromEntries(this.setupTxs),
     };
+  }
+
+  /** Keeps what later rules compare against: the policy and the sessions' daily limits. */
+  private remember(e: WatchedEvent) {
+    const ev = e.event;
+    if (ev.type === "policySet") {
+      this.policies.set(e.account.toLowerCase(), {
+        adminThreshold: ev.adminThreshold,
+        spendThreshold: ev.spendThreshold,
+        requirePQ: ev.requirePQ,
+        aggregator: ev.aggregator,
+      });
+    } else if (ev.type === "dailyCapSet") {
+      this.caps.set(capKey(e.account, ev.keyId, ev.token), ev.cap);
+    } else if (ev.type === "keyRemoved") {
+      const prefix = `${e.account.toLowerCase()}:${ev.keyId.toLowerCase()}:`;
+      for (const k of [...this.caps.keys()]) if (k.startsWith(prefix)) this.caps.delete(k);
+    }
   }
 
   private emit(
@@ -134,21 +187,5 @@ export class WatcherCore {
     const d = t.deadline;
     const id = alertId({ chainId: d.chainId, account: d.account, kind: r.kind, key: `${d.key}:${d.at}` });
     this.emit(out, { id, chainId: d.chainId, account: d.account, backend: d.backend, at: t.now }, r);
-  }
-
-  /** Suspicious pattern: N blocked payments within the window -> one urgent alert per window. */
-  private noteBlocked(out: Alert[], e: WatchedEvent, at: number) {
-    const k = e.account.toLowerCase();
-    const times = (this.blocked.get(k) ?? []).filter((t) => t > at - this.window);
-    times.push(at);
-    this.blocked.set(k, times);
-    if (times.length < this.threshold) return;
-    const bucket = Math.floor(times[0]! / this.window);
-    const id = alertId({ chainId: e.chainId, account: e.account, kind: "repeated-blocked", key: String(bucket) });
-    this.emit(
-      out,
-      { id, chainId: e.chainId, account: e.account, backend: e.backend, at },
-      { kind: "repeated-blocked", severity: "urgent", count: times.length, ref: { txHash: e.txHash as Hex } },
-    );
   }
 }

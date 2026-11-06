@@ -7,9 +7,9 @@ export const fixture = JSON.parse(
 ) as {
   chainId: number;
   account: Address;
+  keystore: Address;
+  hook: Address;
   logs: RpcLog[];
-  hotPayment: { tx: never; receipt: never };
-  overCap: { tx: never; receipt: never };
 };
 
 /** Builds a log for `eventName` of `abi`, as eth_getLogs returns it. */

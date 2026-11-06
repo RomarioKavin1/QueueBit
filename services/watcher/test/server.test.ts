@@ -18,16 +18,16 @@ const KEY = "0x" + "ab".repeat(32);
 const WRONG = "0x" + "cd".repeat(32);
 
 const alert = (id: string, severity: Alert["severity"] = "urgent"): Alert => ({
-  v: 1,
+  v: 2,
   id,
   chainId: 1337,
   account: "0xe8a92798A23A16fe18C343Fc4fa54a4E7aC4ae8c",
   backend: "frame",
-  kind: "lockdown-on",
+  kind: "account-updated",
   severity,
-  title: "Lockdown is on",
-  body: "Everyday spending is off until your phone issues a new everyday key. Didn't do this? Open Security now.",
-  action: { label: "Open Security", deepLink: "#security/lockdown" },
+  title: "Account updated",
+  body: "Your account now runs a new version. Didn't do this? Open Security now.",
+  action: { label: "Open Security", deepLink: "#security" },
   at: 1_800_000_000,
   ref: {},
 });
@@ -344,7 +344,7 @@ describe("delivery", () => {
       alert: alert("n1"),
     });
     expect(got[0]!.path).toBe("/my-random-topic");
-    expect(got[0]!.h.title).toBe("Lockdown is on");
+    expect(got[0]!.h.title).toBe("Account updated");
     expect(got[0]!.h.priority).toBe("5");
     expect(got[0]!.h.authorization).toBe("Bearer tk");
     expect(JSON.stringify(got[0])).not.toMatch(/0x[0-9a-f]{8}/i);
@@ -378,9 +378,20 @@ describe("config", () => {
       apiKeys: [{ id: "ext", secret: KEY }],
       accounts: [{ address: "0xe8a92798A23A16fe18C343Fc4fa54a4E7aC4ae8c", backend: "frame" }],
     });
-    expect(
-      parseConfig(base, { WATCHER_ACCOUNTS: "0xe8a92798a23a16fe18c343fc4fa54a4e7ac4ae8c:4337" }).accounts[0]!.backend,
-    ).toBe("4337");
+    expect(() => parseConfig(base, { WATCHER_ACCOUNTS: "0xe8a92798a23a16fe18c343fc4fa54a4e7ac4ae8c:4337" })).toThrow(
+      /backend must be frame/,
+    );
+    expect(c.nearLimitPercent).toBe(80);
+    const mods = parseConfig(base, {
+      WATCHER_MODULES: "0xe980a01c14471b60d02d03c88ff301c8cc92ef42,0x7bba9117f72d0bd54edf30a65c1cb297b94efe3b",
+      WATCHER_NEAR_LIMIT_PERCENT: "90",
+    });
+    expect(mods.modules).toEqual([
+      "0xE980A01C14471b60d02D03C88ff301c8Cc92ef42",
+      "0x7Bba9117f72d0BD54eDF30A65c1Cb297b94EfE3b",
+    ]);
+    expect(mods.nearLimitPercent).toBe(90);
+    expect(() => parseConfig({ ...base, nearLimitPercent: 0 })).toThrow(/nearLimitPercent/);
   });
 
   it("rejects PII fields, bad addresses, weak secrets", () => {

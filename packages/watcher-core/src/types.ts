@@ -1,10 +1,7 @@
 import type { Address, Hex } from "viem";
 
-/** Which account backend an address uses: the frame-native account (EIP-8141) or ERC-4337 + the ERC-7579 modules. */
-export type Backend = "frame" | "4337";
-
-/** Queue kinds, by name (`QueueBitAccountBase.KIND_*`; the 4337 executor uses the same numbering). */
-export type QueueKind = "spend" | "loosen" | "upgrade" | "migrate" | "unknown";
+/** The account backend. LeanAccount is EIP-8141 frame-native only (kept as a field so stored alerts stay readable). */
+export type Backend = "frame";
 
 /** A log as `eth_getLogs` (or a receipt) returns it. Quantities may be hex strings or already numbers. */
 export interface RpcLog {
@@ -24,21 +21,21 @@ export interface RpcLog {
 /** What one watcher instance watches. Addresses only (no labels, no other PII). */
 export interface WatchTargets {
   chainId: number;
-  accounts: { address: Address; backend: Backend }[];
-  /** 4337 backend: the QueueBitPolicyHook and QueueBitRoleExecutor module addresses (their events carry `account`). */
+  /** LeanAccounts. `backend` is optional and can only be "frame". */
+  accounts: { address: Address; backend?: Backend }[];
+  /**
+   * The account's shared modules (KeystoreValidator, SpendingLimitHook, GuardianRecovery: devnet/deploy's addresses).
+   * Their events carry `account` as the first indexed topic; only watched accounts' events are kept.
+   */
   modules?: Address[];
-  /** 4337 backend: the EntryPoint (a failed hot userOp leaves `UserOperationRevertReason`). */
-  entryPoint?: Address;
-  /** Role signers (PQRoleSigner clones) and the account each one serves. */
-  roleSigners?: { address: Address; account: Address }[];
 }
 
-/** Where a decoded event came from. `ordinal` is the event's position among the watched events of its tx. */
+/** Where a decoded event came from. */
 export interface EventMeta {
   chainId: number;
   account: Address;
   backend: Backend;
-  /** The contract that emitted the log (the account itself, a module, the EntryPoint or a role signer). */
+  /** The contract that emitted the log (the account itself or a shared module). */
   emitter: Address;
   blockNumber: bigint;
   blockHash: Hex;
@@ -48,39 +45,32 @@ export interface EventMeta {
   timestamp?: number;
 }
 
-/** Why a hot (everyday) payment was blocked in execution. */
-export type BlockReason = "over-limit" | "per-payment-limit" | "not-allowed" | "paused" | "other" | "unknown";
+/** A keystore policy (KeystoreValidator.Policy). */
+export interface PolicyState {
+  adminThreshold: number;
+  spendThreshold: number;
+  requirePQ: boolean;
+  aggregator: Address;
+}
 
-/** Events the rules act on, normalised across both backends. */
+/** Events the rules act on (LeanAccount and its modules). */
 export type AccountEvent =
-  | { type: "queued"; opId: Hex; kind: QueueKind; eta: number }
-  | { type: "upgradeQueued"; impl: Address; eta: number }
-  | { type: "migrationQueued"; to: Address; eta: number }
-  | { type: "queueExecuted"; opId: Hex }
-  | { type: "queueCancelled"; opId: Hex; by?: Address; byRecovery?: boolean }
-  | { type: "frozen"; by: Address | null; until: number }
-  | { type: "unfrozen"; by: Address | null }
-  | { type: "bunkerEnabled" }
-  | { type: "bunkerDisabled" }
-  | { type: "hotKeyRotated"; oldKey: Address; newKey: Address }
-  /** `newVault` is the new VaultSigner address (frame) or the new vault public-key hash (4337). */
-  | { type: "vaultRotationStarted"; newVault: Hex; eta: number }
-  | { type: "vaultRotationFinalized"; newVault: Hex }
-  | { type: "vaultRotationCancelled"; newVault: Hex }
-  | { type: "vaultSignerSet"; signer: Address }
-  | { type: "recoverySet" }
-  | { type: "guardianSet"; guardian: Address; enabled: boolean }
-  | { type: "capUpdated" }
-  | { type: "timelockUpdated" }
-  | {
-      type: "policyChanged";
-      what: "token" | "target" | "session" | "value-verifier" | "trusted-verifier" | "fees" | "recipients";
-    }
-  | { type: "upgraded"; impl: Address }
-  | { type: "migrated"; to: Address }
-  | { type: "activity"; what: "hot" | "vault" | "session" | "hash-registered" }
-  | { type: "roleSignerStake"; what: "staked" | "unlocked" | "withdrawn"; roleSigner: Address }
-  /** Derived, not a log: a hot payment whose execution reverted (frame receipt status 0, or a 4337 revert reason). */
-  | { type: "hotBlocked"; reason: BlockReason; errorName?: string };
+  // KeystoreValidator
+  | { type: "keyAdded"; keyId: Hex; kind: number; weight: number; roles: number }
+  | { type: "keyRemoved"; keyId: Hex }
+  | { type: "keyUpdated"; keyId: Hex }
+  | ({ type: "policySet" } & PolicyState)
+  | { type: "sessionTokenSet"; keyId: Hex; token: Address; perTxCap: bigint }
+  // SpendingLimitHook (`token` absent = ETH)
+  | { type: "dailyCapSet"; keyId: Hex; token?: Address; cap: bigint }
+  | { type: "sessionSpend"; keyId: Hex; token?: Address; amount: bigint; spentToday: bigint }
+  // GuardianRecovery (`readyAt` 0 until the guardians' threshold is reached)
+  | { type: "recoveryApproved"; id: Hex; guardian: Address; approvals: number; readyAt: number }
+  | { type: "recovered"; id: Hex }
+  | { type: "recoveryCancelled"; id: Hex }
+  // LeanAccount
+  | { type: "moduleInstalled"; moduleType: number; module: Address }
+  | { type: "moduleUninstalled"; moduleType: number; module: Address }
+  | { type: "upgraded"; impl: Address };
 
 export type WatchedEvent = EventMeta & { event: AccountEvent };

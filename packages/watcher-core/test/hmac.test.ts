@@ -18,15 +18,15 @@ const OTHER = "0x" + "22".repeat(32);
 const T = 1_800_000_000;
 
 const alert: Alert = {
-  v: 1,
+  v: 2,
   id: "0xabc",
   chainId: 1337,
   account: "0x00000000000000000000000000000000000000aa",
   backend: "frame",
-  kind: "resumed",
+  kind: "recovery-cancelled",
   severity: "info",
-  title: "Everyday spending resumed",
-  body: "Everyday spending is on again.",
+  title: "Recovery cancelled",
+  body: "A recovery was cancelled. Your keys stay as they are.",
   action: { label: "Open Security", deepLink: "#security" },
   at: T,
   ref: {},
@@ -45,7 +45,7 @@ describe("HMAC", () => {
     expect(h).toMatch(/^t=1800000000,n=[0-9a-f]{32},v2=[0-9a-f]{64}$/u);
     expect(await verifyWebhook(KEY, body, h, { now: T })).toBe(true);
     expect(await verifyWebhook(OTHER, body, h, { now: T })).toBe(false);
-    expect(await verifyWebhook(KEY, body.replace("resumed", "paused"), h, { now: T })).toBe(false);
+    expect(await verifyWebhook(KEY, body.replace("cancelled", "approved"), h, { now: T })).toBe(false);
     expect(await verifyWebhook(KEY, body, h, { now: T + 301 })).toBe(false);
     expect(await verifyWebhook(KEY, body, null, { now: T })).toBe(false);
     expect(await verifyWebhook(KEY, body, "t=abc,v1=00", { now: T })).toBe(false);

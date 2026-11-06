@@ -23,7 +23,6 @@
     "gen:abi": "node scripts/gen-abi.mjs"
   },
   "dependencies": {
-    "@queuebit/frames": "workspace:*",
     "viem": "2.57.16"
   }
 }

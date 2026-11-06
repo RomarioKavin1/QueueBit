@@ -18,12 +18,15 @@ export interface WatcherConfig {
   maxBlockRange: number;
   /** How many processed blocks to remember for reorg detection / state rewind. */
   reorgWindow: number;
-  /** Scan blocks for the frame accounts' own transactions (over-limit attempts leave no log). */
-  scanFrameTxs: boolean;
+  /** LeanAccounts to watch (their own events: modules, upgrades). */
   accounts: { address: Address; backend: Backend }[];
+  /**
+   * The shared LeanAccount modules whose events concern the accounts: KeystoreValidator, SpendingLimitHook,
+   * GuardianRecovery. Without them only the accounts' own events (modules installed/removed, upgrades) are seen.
+   */
   modules: Address[];
-  entryPoint?: Address;
-  roleSigners: { address: Address; account: Address }[];
+  /** session-near-limit threshold, in percent of a session's daily limit. */
+  nearLimitPercent: number;
   store: { type: "file" | "sqlite"; path: string };
   /** `trustProxy`: number of reverse-proxy hops whose X-Forwarded-For to trust for rate-limit keys (0 = socket). */
   http: { host: string; port: number; trustProxy: number };
@@ -32,9 +35,6 @@ export interface WatcherConfig {
   rateLimit: { perMinute: number; burst: number; maxStreamsPerKey: number };
   webhook?: { url: string; secret: string; minSeverity: Severity };
   ntfy?: { url: string; topic: string; token?: string; minSeverity: Severity };
-  /** Repeated-blocked rule. */
-  blockedThreshold: number;
-  blockedWindowSec: number;
 }
 
 const SEVERITIES: Severity[] = ["info", "warning", "urgent"];
@@ -71,17 +71,19 @@ const secret = (v: unknown, what: string): string => {
   return v;
 };
 
-/** "0xabc:frame,0xdef:4337" */
-function parseAccountsEnv(s: string): { address: Address; backend: Backend }[] {
-  return s
+const list = (s: string) =>
+  s
     .split(",")
     .map((x) => x.trim())
-    .filter(Boolean)
-    .map((x) => {
-      const [a, b = "frame"] = x.split(":");
-      if (b !== "frame" && b !== "4337") fail(`account backend must be frame|4337: ${x}`);
-      return { address: addr(a, "WATCHER_ACCOUNTS"), backend: b };
-    });
+    .filter(Boolean);
+
+/** "0xabc,0xdef" (a ":frame" suffix is accepted; LeanAccount has one backend). */
+function parseAccountsEnv(s: string): { address: Address; backend: Backend }[] {
+  return list(s).map((x) => {
+    const [a, b = "frame"] = x.split(":");
+    if (b !== "frame") fail(`account backend must be frame: ${x}`);
+    return { address: addr(a, "WATCHER_ACCOUNTS"), backend: "frame" };
+  });
 }
 
 /** "id:0xsecret,id2:0xsecret2" */
@@ -122,11 +124,10 @@ export function parseConfig(j: Record<string, unknown>, env: Record<string, stri
   const accounts = env.WATCHER_ACCOUNTS
     ? parseAccountsEnv(env.WATCHER_ACCOUNTS)
     : (o<{ address: string; backend?: string }[]>("accounts") ?? []).map((a) => {
-        const backend = a.backend ?? "frame";
-        if (backend !== "frame" && backend !== "4337") fail(`account backend must be frame|4337`);
+        if ((a.backend ?? "frame") !== "frame") fail(`account backend must be frame`);
         for (const k of Object.keys(a))
           if (k !== "address" && k !== "backend") fail(`accounts[]: unknown field "${k}" (addresses only)`);
-        return { address: addr(a.address, "accounts[]"), backend: backend as Backend };
+        return { address: addr(a.address, "accounts[]"), backend: "frame" as Backend };
       });
   if (accounts.length === 0) fail("at least one account is required");
 
@@ -167,7 +168,11 @@ export function parseConfig(j: Record<string, unknown>, env: Record<string, stri
 
   const rl = o<{ perMinute?: number; burst?: number; maxStreamsPerKey?: number }>("rateLimit") ?? {};
   const http = o<{ host?: string; port?: number; trustProxy?: number }>("http") ?? {};
-  const ep = env.WATCHER_ENTRYPOINT ?? o<string>("entryPoint");
+  const modules = env.WATCHER_MODULES
+    ? list(env.WATCHER_MODULES).map((a) => addr(a, "WATCHER_MODULES"))
+    : (o<string[]>("modules") ?? []).map((a) => addr(a, "modules[]"));
+  const nearLimitPercent = int(env.WATCHER_NEAR_LIMIT_PERCENT ?? o<number>("nearLimitPercent"), 80, "nearLimitPercent");
+  if (nearLimitPercent < 1 || nearLimitPercent > 100) fail("nearLimitPercent must be 1..100");
 
   return {
     rpcUrl,
@@ -177,14 +182,9 @@ export function parseConfig(j: Record<string, unknown>, env: Record<string, stri
     startBlock,
     maxBlockRange: Math.max(1, int(o<number>("maxBlockRange"), 2000, "maxBlockRange")),
     reorgWindow: Math.max(1, int(o<number>("reorgWindow"), 64, "reorgWindow")),
-    scanFrameTxs: o<boolean>("scanFrameTxs") ?? true,
     accounts,
-    modules: (o<string[]>("modules") ?? []).map((a) => addr(a, "modules[]")),
-    ...(ep ? { entryPoint: addr(ep, "entryPoint") } : {}),
-    roleSigners: (o<{ address: string; account: string }[]>("roleSigners") ?? []).map((r) => ({
-      address: addr(r.address, "roleSigners[].address"),
-      account: addr(r.account, "roleSigners[].account"),
-    })),
+    modules,
+    nearLimitPercent,
     store: { type: m[1] as "file" | "sqlite", path: m[2]! },
     http: {
       host: env.WATCHER_HOST ?? http.host ?? "127.0.0.1",
@@ -199,7 +199,5 @@ export function parseConfig(j: Record<string, unknown>, env: Record<string, stri
     },
     ...(webhook ? { webhook } : {}),
     ...(ntfy ? { ntfy } : {}),
-    blockedThreshold: int(o<number>("blockedThreshold"), 3, "blockedThreshold"),
-    blockedWindowSec: int(o<number>("blockedWindowSec"), 3600, "blockedWindowSec"),
   };
 }

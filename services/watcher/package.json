@@ -2,7 +2,7 @@
   "name": "@queuebit/watcher",
   "version": "0.0.0",
   "private": true,
-  "description": "Self-hostable QueueBit watcher: polls logs and frame receipts of registered accounts, raises alerts, delivers them by HMAC-signed webhook, an authenticated SSE stream and ntfy-compatible push. Holds no keys.",
+  "description": "Self-hostable QueueBit watcher: polls the logs of registered LeanAccounts and their shared modules, raises alerts, delivers them by HMAC-signed webhook, an authenticated SSE stream and ntfy-compatible push. Holds no keys.",
   "license": "MIT",
   "type": "module",
   "bin": {
@@ -19,7 +19,6 @@
     "test:live": "LIVE_DEVNET=1 vitest run"
   },
   "dependencies": {
-    "@queuebit/frames": "workspace:*",
     "@queuebit/rpc": "workspace:*",
     "@queuebit/watcher-core": "workspace:*",
     "viem": "2.57.16"
