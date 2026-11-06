@@ -2,6 +2,7 @@ import { SCHEME_ID, keygen, sign as pqSign, verify as pqVerify, type KeyPair } f
 import { encodeRecoveryTest, encodeSignature, recoveryTestChallenge, toHex, type SignatureResponse } from "@leaked/ur";
 import type { Address, Hex } from "viem";
 import { RequestRejected, reviewRequestBytes } from "../core/clearsign.js";
+import { checkChallenge, type ChallengeRefused } from "../core/recoveryChallenge.js";
 import { entropyToWords, payerKeyFromSeed, seedFromEntropy, signDigestVrs, vrsToRsv } from "../core/keys.js";
 import { logPublicKeyOf, newLogKeyPair, openLogEntry, sealLogEntry } from "../core/logCrypto.js";
 import {
@@ -192,6 +193,14 @@ export async function handle(
       if (!recoveryKey) throw new SignRefused("No Recovery key is loaded.");
       const pk = toHex(recoveryKey.publicKey);
       const payer = recoveryKey.payer.toLowerCase() as Hex;
+      if (req.challenge) {
+        try {
+          checkChallenge(req.challenge, pk, Date.now());
+        } catch (e) {
+          const c = e as ChallengeRefused;
+          throw new SignRefused(c.message, c.code, c.title, c.body);
+        }
+      }
       // v2 challenge: the witness also covers the Recovery payer address the browser will put in InitConfig.
       const challenge = recoveryTestChallenge(SCHEME_ID, pk, req.requestId, payer);
       progress("sign");

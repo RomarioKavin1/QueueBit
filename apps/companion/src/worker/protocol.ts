@@ -59,7 +59,13 @@ export type WorkerRequest =
       wantLogKey?: boolean;
     } & Unlock)
   | { op: "recoveryLoad"; entropy: Uint8Array; bip39Passphrase: string }
-  | { op: "recoveryTest"; requestId: string }
+  | {
+      op: "recoveryTest";
+      /** The browser's request id (`ur:leaked-recovery-challenge` key 1); phone-chosen ids are refused by browsers. */
+      requestId: string;
+      /** The scanned challenge: the worker refuses a test for another key, or after it expired. */
+      challenge?: { recoveryPk: Hex; expiresAt: number };
+    }
   | { op: "recoveryWipe" };
 
 export interface NewLogKey {

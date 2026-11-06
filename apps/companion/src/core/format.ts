@@ -61,6 +61,11 @@ export function formatDate(unixSeconds: bigint): string {
   });
 }
 
+/** A local wall-clock time for "answer before …": "2:32 PM". */
+export function formatClock(ms: number): string {
+  return new Date(ms).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+}
+
 export const checksum = (a: string): Address => getAddress(a);
 
 /** "0x1234…abcd" (EIP-55 checksummed). */

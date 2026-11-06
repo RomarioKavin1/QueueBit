@@ -1,16 +1,18 @@
 import { SCHEME_ID } from "@leaked/pq-signer";
-import { ROLE, UR_TYPES, encodePqKey, randomUuid, singlePartUr, type Hex } from "@leaked/ur";
-import { useEffect, useRef, useState } from "react";
+import { ROLE, UR_TYPES, UrReceiver, encodePqKey, singlePartUr, type Hex } from "@leaked/ur";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Address } from "viem";
 import { SIGNATURE_TTL_MS, type Built } from "../app/routes.js";
 import { useNav, useStore } from "../app/state.js";
 import type { Review } from "../core/clearsign.js";
-import { last8, shortAddress } from "../core/format.js";
+import { formatClock, last8, shortAddress } from "../core/format.js";
+import { ChallengeRefused, checkChallenge, readChallenge, type ScannedChallenge } from "../core/recoveryChallenge.js";
 import { entropyToWords, newEntropy, wordsToEntropy } from "../core/keys.js";
-import { call } from "../worker/client.js";
+import { call, type WorkerError } from "../worker/client.js";
 import { CheckIcon, PlaneIcon, RecoveryIcon, WarnIcon } from "../ui/icons.js";
 import { Banner, Button, Card, KeyCheck, NavRow, ProgressBar, Screen } from "../ui/kit.js";
 import { StaticQr } from "../ui/qr.js";
+import { Scanner } from "../ui/Scanner.js";
 import { WordGrid, WordPager, WordQuiz, randomPositions } from "../ui/words.js";
 import { ReviewScreen } from "./Review.js";
 import { RequestScanner, SignedView, deviceContext } from "./Vault.js";
@@ -39,7 +41,7 @@ export function RecoveryHub() {
         <NavRow
           icon={<CheckIcon />}
           label="Test my Recovery key"
-          hint="Type the words; the browser checks the result"
+          hint="Scan the browser's test code, then type the words"
           onClick={() => nav.push({ name: "recoveryTest" })}
           testId="recovery-test"
         />
@@ -85,29 +87,125 @@ export function recoveryPairingUr(pk: Hex, payer: Address): string {
 }
 
 /**
- * Test-ok QR: the recovery-test signature for the browser's conductor (ux-spec PLAN CHANGE 9.3). It carries the
- * Recovery fee-payment address, covered by the signature (v2 challenge), for the browser's `InitConfig`.
+ * Test-ok QR: the recovery-test signature for the browser's conductor (ux-spec PLAN CHANGE 9.3), over the request id
+ * the browser chose (`ur:leaked-recovery-challenge`), so it answers that one test only. It carries the Recovery
+ * fee-payment address, covered by the signature (v2 challenge), for the browser's `InitConfig`.
  */
-async function signTest(): Promise<Built> {
-  const r = await call({ op: "recoveryTest", requestId: randomUuid() });
-  await call({ op: "recoveryWipe" });
-  return {
-    type: UR_TYPES.recoveryTest,
-    cbor: r.cbor,
-    title: "Show this to the browser",
-    summary: "Recovery key test passed. The key and its fee key have been wiped from this phone.",
-    expiresAt: Date.now() + SIGNATURE_TTL_MS,
+async function signTest(ch: ScannedChallenge): Promise<Built> {
+  try {
+    const r = await call({
+      op: "recoveryTest",
+      requestId: ch.requestId,
+      challenge: { recoveryPk: ch.recoveryPk, expiresAt: ch.expiresAt },
+    });
+    return {
+      type: UR_TYPES.recoveryTest,
+      cbor: r.cbor,
+      title: "Show this to the browser",
+      summary: "Recovery key test passed. The key and its fee key have been wiped from this phone.",
+      // The browser stops accepting it when its test code expires.
+      expiresAt: Math.min(Date.now() + SIGNATURE_TTL_MS, ch.expiresAt),
+    };
+  } finally {
+    await call({ op: "recoveryWipe" });
+  }
+}
+
+const errorText = (e: unknown) => {
+  const w = e as WorkerError;
+  return w.title ? `${w.title} ${w.body ?? ""}`.trim() : w.message;
+};
+
+/** A worker refusal as a banner: its title, and its explanation as the body. */
+const errorParts = (e: unknown): { title: string; body?: string } => {
+  const w = e as WorkerError;
+  return w.title ? { title: w.title, ...(w.body ? { body: w.body } : {}) } : { title: w.message };
+};
+
+/** Scans the browser's `ur:leaked-recovery-challenge`; with `expectPk`, refuses one for another Recovery key. */
+function ChallengeScanner({ expectPk, onChallenge }: { expectPk?: Hex; onChallenge: (c: ScannedChallenge) => void }) {
+  const receiver = useMemo(() => new UrReceiver([UR_TYPES.recoveryChallenge]), []);
+  const [progress, setProgress] = useState<string>();
+  const [problem, setProblem] = useState<{ title: string; body: string }>();
+  const onText = (t: string) => {
+    if (problem) return;
+    const r = receiver.receive(t);
+    if (r.status === "progress") setProgress(`Reading… ${r.received} of ${r.total} parts`);
+    else if (r.status === "error")
+      setProblem(
+        r.type && r.type !== UR_TYPES.recoveryChallenge
+          ? {
+              title: "That's not the browser's test code.",
+              body: "In the browser's Recovery setup, scan the Recovery key code first; the browser then shows a test code next to the camera. Scan that one.",
+            }
+          : { title: "This code can't be read.", body: "Show a fresh test code in the browser." },
+      );
+    else if (r.status === "complete") {
+      try {
+        const c = readChallenge(r.cbor, Date.now());
+        if (expectPk) checkChallenge(c, expectPk, Date.now());
+        onChallenge(c);
+      } catch (e) {
+        setProblem(
+          e instanceof ChallengeRefused
+            ? { title: e.title, body: e.body }
+            : { title: "This code can't be read.", body: (e as Error).message },
+        );
+      }
+    }
   };
+  if (problem)
+    return (
+      <div className="flex flex-col gap-3" data-testid="challenge-problem">
+        <Banner level="danger" title={problem.title}>
+          {problem.body}
+        </Banner>
+        <Button
+          variant="secondary"
+          onClick={() => {
+            receiver.reset();
+            setProgress(undefined);
+            setProblem(undefined);
+          }}
+        >
+          Scan another code
+        </Button>
+      </div>
+    );
+  return <Scanner onText={onText} hint="Point the camera at the test code in the browser." progress={progress} />;
+}
+
+/** What the browser asked: which key, and until when the answer is accepted. */
+function ChallengeCard({ ch }: { ch: ScannedChallenge }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const t = window.setInterval(() => setNow(Date.now()), 15_000);
+    return () => window.clearInterval(t);
+  }, []);
+  const left = Math.max(0, Math.ceil((ch.expiresAt - now) / 60_000));
+  return (
+    <div className="flex flex-col gap-1 rounded-md border border-vault bg-vault-bg p-3" data-testid="challenge">
+      <p className="t-body">
+        The browser asks for proof that the Recovery key ending <span className="t-mono">…{last8(ch.recoveryPk)}</span>{" "}
+        works.
+      </p>
+      <p className="t-strong" data-testid="challenge-expiry">
+        {left > 0 ? `Answer before ${formatClock(ch.expiresAt)} (${left} min left)` : "This test code has expired"}
+      </p>
+      <p className="t-small text-muted">The browser accepts one answer to this code.</p>
+    </div>
+  );
 }
 
 export function Ceremony() {
   const nav = useNav();
   const store = useStore();
-  type Step = "check" | "gen" | "words" | "quiz" | "pk" | "recheck" | "signing" | "done";
+  type Step = "check" | "gen" | "words" | "quiz" | "pk" | "challenge" | "recheck" | "signing" | "done";
   const [step, setStep] = useState<Step>("check");
   const [pk, setPk] = useState<Hex>();
   const [payer, setPayer] = useState<Address>();
   const [built, setBuilt] = useState<Built>();
+  const [ch, setCh] = useState<ScannedChallenge>();
   const [error, setError] = useState<string>();
   const words = useRef<string[]>([]);
   const positions = useRef<number[]>([]);
@@ -145,7 +243,7 @@ export function Ceremony() {
   const finish = async () => {
     setStep("signing");
     try {
-      setBuilt(await signTest());
+      setBuilt(await signTest(ch!));
       words.current = [];
       await store.log_({
         at: Date.now(),
@@ -154,8 +252,9 @@ export function Ceremony() {
       });
       setStep("done");
     } catch (err) {
-      setError((err as Error).message);
-      setStep("recheck");
+      // The key is wiped after any attempt; an expired code needs a fresh one and the words again.
+      setError(errorText(err));
+      setStep("challenge");
     }
   };
 
@@ -209,13 +308,7 @@ export function Ceremony() {
       <Screen
         title="Show the Recovery key to the browser"
         footer={
-          <Button
-            onClick={() => {
-              positions.current = randomPositions(24, 6);
-              setStep("recheck");
-            }}
-            data-testid="written-down"
-          >
+          <Button onClick={() => setStep("challenge")} data-testid="written-down">
             I have written it down
           </Button>
         }
@@ -242,10 +335,30 @@ export function Ceremony() {
         </details>
       </Screen>
     );
+  if (step === "challenge")
+    return (
+      <Screen title="Scan the browser's test code" onBack={() => setStep("pk")}>
+        {error && <Banner level="danger" title={error} />}
+        <p className="t-body">
+          Once the browser has the Recovery key, it shows a test code. Scan it: this phone then proves the key works,
+          for this browser only.
+        </p>
+        <ChallengeScanner
+          expectPk={pk!}
+          onChallenge={(c) => {
+            setCh(c);
+            setError(undefined);
+            positions.current = randomPositions(24, 6);
+            setStep("recheck");
+          }}
+        />
+      </Screen>
+    );
   if (step === "recheck")
     return (
-      <Screen title="One last check">
+      <Screen title="Prove your Recovery key works">
         {error && <Banner level="danger" title={error} />}
+        <ChallengeCard ch={ch!} />
         <WordQuiz
           words={words.current}
           positions={positions.current}
@@ -272,33 +385,69 @@ export function Ceremony() {
   );
 }
 
-/** Type all 24 words → the derived key signs a test the browser checks against the registered key. */
+/**
+ * Scan the browser's test code, type all 24 words → the derived key signs the browser's challenge, which the browser
+ * checks against the registered key. Refused for another key or after the code expired (here and in the worker).
+ */
 export function RecoveryTest() {
   const nav = useNav();
   const store = useStore();
-  const [step, setStep] = useState<"words" | "busy" | "done">("words");
+  const [step, setStep] = useState<"scan" | "words" | "busy" | "done">("scan");
+  const [ch, setCh] = useState<ScannedChallenge>();
   const [built, setBuilt] = useState<Built>();
   const [pk, setPk] = useState<Hex>();
   const [payer, setPayer] = useState<Address>();
-  const [error, setError] = useState<string>();
+  const [error, setError] = useState<{ title: string; body?: string }>();
   useEffect(() => () => void call({ op: "recoveryWipe" }), []);
-  if (step === "words")
+  if (step === "scan")
     return (
       <Screen title="Test my Recovery key" onBack={nav.back}>
+        <p className="t-body">
+          In the browser's Recovery setup, a test code appears once it has the Recovery key. Scan it first.
+        </p>
+        {error && (
+          <Banner level="danger" title={error.title}>
+            {error.body}
+          </Banner>
+        )}
+        <ChallengeScanner
+          onChallenge={(c) => {
+            setCh(c);
+            setError(undefined);
+            setStep("words");
+          }}
+        />
+      </Screen>
+    );
+  if (step === "words")
+    return (
+      <Screen title="Prove your Recovery key works" onBack={() => setStep("scan")}>
+        <ChallengeCard ch={ch!} />
         <OfflineCheck />
         <p className="t-body">
-          Type the 24 Recovery words from your paper. This phone signs a test and forgets the key; the browser checks
-          the result.
+          Type the 24 Recovery words from your paper. This phone signs the browser's test and forgets the key.
         </p>
-        {error && <Banner level="danger" title={error} />}
+        {error && (
+          <Banner level="danger" title={error.title} testId="test-error">
+            {error.body}
+          </Banner>
+        )}
         <WordGrid
-          submitLabel="Test"
+          submitLabel="Prove it"
           onComplete={(ws) => {
+            if (Date.now() > ch!.expiresAt) {
+              setError({
+                title: "This test code has expired.",
+                body: "Show a fresh test code in the browser and scan it again.",
+              });
+              setStep("scan");
+              return;
+            }
             let e: Uint8Array;
             try {
               e = wordsToEntropy(ws);
             } catch (err) {
-              setError((err as Error).message);
+              setError({ title: (err as Error).message });
               return;
             }
             setStep("busy");
@@ -306,7 +455,7 @@ export function RecoveryTest() {
               .then(async (r) => {
                 setPk(r.pk);
                 setPayer(r.payerAddress);
-                setBuilt(await signTest());
+                setBuilt(await signTest(ch!));
                 await store.log_({
                   at: Date.now(),
                   kind: "recovery-test",
@@ -314,9 +463,9 @@ export function RecoveryTest() {
                 });
                 setStep("done");
               })
-              .catch((err: Error) => {
-                setError(err.message);
-                setStep("words");
+              .catch((err: unknown) => {
+                setError(errorParts(err));
+                setStep((err as WorkerError).code === "E-61" ? "scan" : "words");
               })
               .finally(() => e.fill(0));
           }}

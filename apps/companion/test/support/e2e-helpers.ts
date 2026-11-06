@@ -1,6 +1,15 @@
 import { getProfile, recoverSecp256k1Signer, setSignature } from "@leaked/frames";
 import { SCHEME_ID, schemeById, verify } from "@leaked/pq-signer";
-import { AnimatedUr, UR_TYPES, UrReceiver, fromHex, recoveryTestChallengeOf, type DecodedUr } from "@leaked/ur";
+import {
+  AnimatedUr,
+  UR_TYPES,
+  UrReceiver,
+  encodeRecoveryChallenge,
+  fromHex,
+  recoveryTestChallengeOf,
+  singlePartUr,
+  type DecodedUr,
+} from "@leaked/ur";
 import { PROFILE_ID, type Built } from "../fixtures/requests.js";
 
 /**
@@ -9,6 +18,24 @@ import { PROFILE_ID, type Built } from "../fixtures/requests.js";
  */
 
 export * from "../fixtures/requests.js";
+export * from "../fixtures/aa.js";
+
+/** The browser's recovery test code (`ur:leaked-recovery-challenge`), as its "test code as text" box shows it. */
+export function challengeText(requestId: string, recoveryPk: `0x${string}`): string {
+  return singlePartUr(UR_TYPES.recoveryChallenge, encodeRecoveryChallenge({ requestId, recoveryPk }));
+}
+
+/** A tx-type 3 answer, checked like the extension's `AaVault.signed`: the witness over the executor digest, no fee step. */
+export function checkAaSignature(text: string, built: { digest: `0x${string}` }, pk: `0x${string}`) {
+  const d = decodeParts(text, UR_TYPES.signature);
+  if (d.type !== UR_TYPES.signature) throw new Error("not a signature");
+  const s = d.value;
+  return {
+    requestId: s.requestId,
+    witnessOk: !!s.witness && verify(fromHex(pk), fromHex(built.digest), fromHex(s.witness)),
+    payerSig: !!s.payerSig,
+  };
+}
 
 /** The request as the extension's "Copy as text": every pure part, one per line. */
 export function requestText(cbor: Uint8Array, maxFragmentLength = 400): string {
@@ -60,6 +87,7 @@ export function checkRecoveryTest(text: string) {
   if (d.type !== UR_TYPES.recoveryTest) throw new Error("not a recovery test");
   const t = d.value;
   return {
+    requestId: t.requestId,
     pk: t.recoveryPk,
     payer: t.payer,
     ok: verify(fromHex(t.recoveryPk), fromHex(recoveryTestChallengeOf(t)), fromHex(t.witness)),

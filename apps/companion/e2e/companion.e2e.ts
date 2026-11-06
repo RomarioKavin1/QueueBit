@@ -173,13 +173,36 @@ test("recovery: test the Recovery key and sign a Vault replacement in recovery m
   await page.getByRole("button", { name: "Recovery key tools" }).click();
   await shot(page, "14-recovery-hub");
   await page.getByTestId("recovery-test").click();
+  // The browser's test code first: the answer is bound to its request id (no phone-chosen id).
+  const requestId = "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
+  await page.getByRole("tab", { name: "Paste code" }).click();
+  await page.getByTestId("paste-input").fill(H.challengeText(requestId, H.recovery.pk));
+  await page.getByTestId("paste-submit").click();
+  await expect(page.getByRole("heading", { name: "Prove your Recovery key works" })).toBeVisible();
+  await expect(page.getByTestId("challenge")).toContainText(`…${H.recovery.pk.slice(-8)}`);
+  await expect(page.getByTestId("challenge-expiry")).toHaveText(/^Answer before .+ \(30 min left\)$/);
+  await shot(page, "14b-recovery-challenge");
   await page.getByTestId("word-1").fill(H.RECOVERY_WORDS.join(" "));
   await page.getByTestId("words-submit").click();
   await expect(page.getByTestId("signed-banner")).toBeVisible({ timeout: 60_000 });
   const t = H.checkRecoveryTest(await page.getByTestId("ur-text").inputValue());
   // v2: the code also carries the Recovery fee-payment address, covered by the signature.
-  expect(t).toEqual({ pk: H.recovery.pk, payer: H.recovery.payer.toLowerCase(), ok: true });
+  expect(t).toEqual({ requestId, pk: H.recovery.pk, payer: H.recovery.payer.toLowerCase(), ok: true });
   await page.getByTestId("signed-done").click();
+
+  // A test code for another Recovery key: the words don't match it, nothing is signed.
+  await page.getByRole("button", { name: "Recovery key tools" }).click();
+  await page.getByTestId("recovery-test").click();
+  await page.getByRole("tab", { name: "Paste code" }).click();
+  await page.getByTestId("paste-input").fill(H.challengeText(requestId, H.vault.pk));
+  await page.getByTestId("paste-submit").click();
+  await page.getByTestId("word-1").fill(H.RECOVERY_WORDS.join(" "));
+  await page.getByTestId("words-submit").click();
+  await expect(page.getByTestId("test-error")).toContainText("These words make a different Recovery key.", {
+    timeout: 30_000,
+  });
+  await shot(page, "14c-recovery-challenge-wrong-key");
+  await page.goto("./");
 
   await page.getByRole("button", { name: "Recovery key tools" }).click();
   await page.getByTestId("recovery-use").click();
@@ -200,6 +223,50 @@ test("recovery: test the Recovery key and sign a Vault replacement in recovery m
   const r = await H.checkSignature(await page.getByTestId("ur-text").inputValue(), built, H.recovery.pk);
   expect(r.witnessOk).toBe(true);
   expect(r.payerOk).toBeUndefined();
+});
+
+test("compatible account (tx-type 3): clear-signed hook settings, a payment, unknown calls, and a valid signature", async ({
+  page,
+}) => {
+  const H = await h();
+  await restoreVault(page, H.VAULT_WORDS, H.PASSPHRASE);
+
+  const built = H.aaQueueOpenMode();
+  await pasteRequest(page, H.requestText(built.cbor));
+  await expect(page.getByTestId("chain")).toHaveText("Local 4337 test chain");
+  await expect(page.getByTestId("admin-banner")).toContainText("ADMIN ACTION");
+  await expect(page.getByTestId("headline")).toHaveText(
+    "Let your everyday key pay any address: takes effect after a 48-hour waiting period",
+  );
+  await page.getByTestId("structure").click();
+  await expect(page.getByTestId("structure")).toContainText("Compatible account");
+  await expect(page.getByTestId("structure")).toContainText("LEAKED module");
+  await expect(page.getByTestId("structure")).toContainText("#5");
+  await shot(page, "22-review-4337-setting");
+  await page.getByTestId("approve").click();
+  await page.getByTestId("approve-pass").fill(H.PASSPHRASE);
+  await page.getByTestId("approve-sign").click();
+  await expect(page.getByTestId("signed-banner")).toBeVisible({ timeout: 60_000 });
+  const r = H.checkAaSignature(await page.getByTestId("ur-text").inputValue(), built, H.vault.pk);
+  expect(r).toEqual({ requestId: built.request.requestId, witnessOk: true, payerSig: false });
+  await page.getByTestId("signed-done").click();
+
+  await pasteRequest(page, H.requestText(H.aaSend().cbor));
+  await expect(page.getByTestId("headline")).toHaveText("Send 250 USDC to 0xAb58…eC9B");
+  await expect(page.getByTestId("amount")).toHaveText("250 USDC");
+  await shot(page, "23-review-4337-payment");
+  await page.getByTestId("reject").click();
+
+  await pasteRequest(page, H.requestText(H.aaUnknownCall().cbor));
+  await expect(page.getByTestId("unknown-banner")).toContainText("UNKNOWN STEP");
+  await expect(page.getByTestId("raw-hex")).toContainText("0xdeadbeef01");
+  await expect(page.getByTestId("approve")).toHaveCount(0);
+  await shot(page, "24-review-4337-unknown");
+  await page.getByTestId("reject").click();
+
+  // A request that already carries a signature is refused outright.
+  await pasteRequest(page, H.requestText(H.aaPresigned().cbor));
+  await expect(page.getByTestId("scan-problem")).toContainText("It already carries a signature.");
 });
 
 test("offline: once loaded, the app installs, reloads and signs with the network off", async ({ page, context }) => {
