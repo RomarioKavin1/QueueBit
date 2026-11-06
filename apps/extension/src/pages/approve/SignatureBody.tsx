@@ -34,7 +34,17 @@ export function SignatureBody({ view }: { view: ApprovalView }) {
   };
 
   const p = sig.permit;
-  const amount = p ? (p.decimals !== undefined ? formatAmount(p.value, p.decimals) : `${p.value} units`) : "";
+  // 2^255 and above: an "infinite approval" as dapps send it; a 60-digit number would hide what it means.
+  const unlimited = p ? BigInt(p.value) >= 1n << 255n : false;
+  const amount = p
+    ? unlimited
+      ? "an unlimited amount of"
+      : p.decimals !== undefined
+        ? formatAmount(p.value, p.decimals)
+        : `${p.value} units`
+    : "";
+  const typed = sig.method === "eth_signTypedData_v4";
+  const isSiweLike = !typed || /sign.?in|login|auth|siwe/iu.test(sig.primaryType ?? "");
   const until = p
     ? new Date(Number(p.deadline) * 1000).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })
     : "";
@@ -50,8 +60,13 @@ export function SignatureBody({ view }: { view: ApprovalView }) {
                 title="Don't sign this"
                 body={`This sign-in message says it's for ${sig.siwe!.domain}, but you're on ${host}.`}
               />
-            ) : (
+            ) : isSiweLike ? (
               <p className="t-body">Signing in proves you own this address. It can't move money.</p>
+            ) : (
+              <p className="t-body">
+                {host} asks you to sign a message{sig.primaryType ? ` (${sig.primaryType})` : ""}. It can't move money:
+                only this site can check it, not contracts.
+              </p>
             )}
             {sig.firstSignIn && !blocked && (
               <RiskBanner
@@ -83,6 +98,12 @@ export function SignatureBody({ view }: { view: ApprovalView }) {
                 <>
                   <dt className="text-muted">App</dt>
                   <dd>{sig.appDomain.name}</dd>
+                </>
+              )}
+              {typed && sig.primaryType && (
+                <>
+                  <dt className="text-muted">Message type</dt>
+                  <dd data-testid="signin-type">{sig.primaryType}</dd>
                 </>
               )}
             </dl>
@@ -151,7 +172,7 @@ export function SignatureBody({ view }: { view: ApprovalView }) {
             disabled={!armed}
             onClick={() => void approve()}
           >
-            {a.kind === "permit" ? "Pre-approve" : "Sign in"}
+            {a.kind === "permit" ? "Pre-approve" : isSiweLike ? "Sign in" : "Sign"}
           </Button>
         )}
       </footer>

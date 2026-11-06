@@ -85,13 +85,19 @@ export function Security({ state }: { state: WalletState }) {
           value={
             hasRecovery
               ? `Set · key …${recoverySigner?.pkLast8 ?? state.setup.recovery?.pk.slice(-8)}${state.setup.recovery?.testedAt ? " · tested" : ""}`
-              : state.setup.recovery
-                ? "Scanned, not linked to the account yet"
-                : "Not set"
+              : state.setup.recovery?.testedAt
+                ? "Tested, not linked to the account yet"
+                : state.setup.recovery
+                  ? "Scanned, not tested yet (not part of your account)"
+                  : "Not set"
           }
           {...(recoverySigner ? { detail: recoverySigner.lane.text } : {})}
           action={
-            !hasRecovery && state.setup.recovery && s.deployed ? (
+            !hasRecovery && state.setup.recovery && !state.setup.recovery.testedAt ? (
+              <Button size="sm" variant="secondary" onClick={() => (location.hash = "#onboarding/recovery")}>
+                Finish the test
+              </Button>
+            ) : !hasRecovery && state.setup.recovery && s.deployed ? (
               <Button
                 size="sm"
                 variant="vault"

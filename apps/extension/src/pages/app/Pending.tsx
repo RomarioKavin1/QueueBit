@@ -132,7 +132,10 @@ function QueuedCard({
         <div className="min-w-0 flex-1">
           <p className="t-strong">{op.title}</p>
           {op.queuedAt && (
-            <p className="t-small text-muted">Approved by your phone {new Date(op.queuedAt).toLocaleString("en-GB")}</p>
+            <p className="t-small text-muted">
+              Approved by your phone{" "}
+              {new Date(op.queuedAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}
+            </p>
           )}
           <p className="t-body mt-1" aria-live="polite" aria-atomic="true" data-testid="countdown">
             {countdown(left)} <span className="t-small text-muted">({when})</span>

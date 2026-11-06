@@ -146,8 +146,14 @@ export function VaultHandoff({ id, onDone }: { id: string; onDone: (to: string) 
                 <Button variant="vault" onClick={() => setPhase("scan")} data-testid="scan-back">
                   Phone has signed: scan it back
                 </Button>
-                <p className="t-small text-muted" aria-live="polite">
-                  Expires in {mins}:{String(secs).padStart(2, "0")}
+                {/* The visible clock ticks every second; the announced one only when a minute passes (or in the last minute). */}
+                <p className="t-small text-muted">
+                  <span aria-hidden="true">
+                    Expires in {mins}:{String(secs).padStart(2, "0")}
+                  </span>
+                  <span className="sr-only" aria-live="polite">
+                    {mins > 0 ? `Expires in ${mins} minute${mins === 1 ? "" : "s"}` : "Expires in less than a minute"}
+                  </span>
                 </p>
               </div>
             </div>
@@ -202,7 +208,11 @@ function Outcome({ rec, onDone }: { rec: VaultRequestRecord; onDone: (to: string
       title: "This request expired. Nothing was sent.",
       body: "Start again for a fresh code.",
     },
-    cancelled: { level: "info", title: "Cancelled. Nothing was sent." },
+    cancelled: {
+      level: "info",
+      title: "Cancelled. Nothing was sent.",
+      ...(rec.error?.code === "superseded" ? { body: rec.error.message } : {}),
+    },
   };
   const o = map[rec.status] ?? map.failed!;
   return (
