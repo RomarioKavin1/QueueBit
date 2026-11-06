@@ -1982,6 +1982,25 @@ export const moduleAbi = [
   },
   {
     type: "event",
+    name: "RecipientModeSet",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "mode",
+        type: "uint8",
+        indexed: false,
+        internalType: "enum ILeakedModules.RecipientMode",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
     name: "RecoveryKeySet",
     inputs: [
       {
@@ -2219,6 +2238,37 @@ export const moduleAbi = [
         type: "bool",
         indexed: false,
         internalType: "bool",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "VaultBound",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "vaultPk",
+        type: "bytes32",
+        indexed: false,
+        internalType: "bytes32",
+      },
+      {
+        name: "verifier",
+        type: "address",
+        indexed: false,
+        internalType: "address",
+      },
+      {
+        name: "sigLength",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
       },
     ],
     anonymous: false,
