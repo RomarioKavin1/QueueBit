@@ -1,5 +1,5 @@
 {
-  "date": "2026-11-06T00:17:44.260Z",
+  "date": "2026-11-06T01:28:12.617Z",
   "rpc": "http://127.0.0.1:8547",
   "chainId": 31337,
   "entryPoint": {
@@ -14,22 +14,22 @@
     "msaImpl": "0x5fc8d32690cc91d4c39d9d3abcbd16989f875707",
     "account": "0x9cD5021e49192E8D9a547B4B8d3554cf496F8c76"
   },
-  "accountCreationGas": "676372",
+  "accountCreationGas": "676547",
   "hotWithinCap": {
     "submitted": true,
-    "txHash": "0x8452783329b1f0aab4b3a3dda639201712772627058a8c4640c95f41b830fba2",
-    "txGasUsed": "224037",
+    "txHash": "0x34d7f0981eb490a8027c800dedd3999a496bbe303ee87cc5162165c7118f428a",
+    "txGasUsed": "224002",
     "success": true,
-    "actualGasUsed": "334378",
+    "actualGasUsed": "334345",
     "recipientBalance": "100000000000000000",
     "bucketAvailable": "700000000"
   },
   "openModeToNeverAllowlisted": {
     "submitted": true,
-    "txHash": "0xad0690a53b44e3d378c7898790a0418f3a58fc2dfcef90eeb1de6425402356c7",
-    "txGasUsed": "189937",
+    "txHash": "0xd724a7ab44af7015ecd179a65eabe0012d25131b261650ebe187a4f4a8323bba",
+    "txGasUsed": "199124",
     "success": true,
-    "actualGasUsed": "300262",
+    "actualGasUsed": "308770",
     "recipient": "0x00000000000000000000000000000000000f2e55",
     "recipientMode": "Open",
     "recipientBalance": "10000000000000000",
@@ -42,20 +42,20 @@
   },
   "overCapRejected": {
     "submitted": true,
-    "txHash": "0xe6aedcc80f61ffe55d1f1de8fa4afa5651917e4dab66628a6bcb380a5981e262",
-    "txGasUsed": "163087",
+    "txHash": "0xedefab58de86021528803d95ba035f2c0db0313d6cec435394b7faf458cd02e8",
+    "txGasUsed": "163052",
     "success": false,
-    "actualGasUsed": "276106",
+    "actualGasUsed": "276072",
     "revertReason": "OverCap(300000000,220000000)",
     "recipientUnchanged": true
   },
   "vaultExecRelayed": {
     "submitted": true,
-    "txHash": "0x2e26955ffe6609fac00a26ae297eea73a66b09b5ba5be40ce417b4b1b6968a7d",
-    "txGasUsed": "408994",
+    "txHash": "0x92db7a9cd5ec35865e1c1795f681681e6918913d9decbc032adcda90eea019e6",
+    "txGasUsed": "408910",
     "success": true,
     "actualGasUsed": "460932",
-    "pqSignMs": 9297,
+    "pqSignMs": 4057,
     "sigBytes": 3688,
     "callDataBytes": 4260,
     "destBalance": "1000000000000000000"

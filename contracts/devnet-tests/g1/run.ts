@@ -211,6 +211,7 @@ const initCfg = {
   timelockThresholdUsd: 100n * USD,
   ethUsdPrice: ETH_PRICE,
   recipientMode: 0, // Open (the default)
+  tokens: [] as { token: Address; decimals: number; usdPerToken: bigint }[], // InitConfig.tokens (none here)
 };
 const initData = encodeFunctionData({ abi: implArt.abi, functionName: "initialize", args: [initCfg] });
 const accSalt = keccak256(stringToHex(`leaked/devnet-tests/g1/account/${runSalt}`));
@@ -727,12 +728,48 @@ const bal = (a: Address) => rpc.node.getBalance(a);
   }
   if (!opId) throw new Error("(e) no Queued event");
   const pending = await readAcc<{ eta: number; kind: number; state: number }>("getQueued", [opId]);
+  // Path B for the recovery (2026-11-06 recovery fee path): the RecoverySigner was derived at initialize with its own
+  // payer key (entry 1, SECP256K1, held on the recovery device; never the hot key, the tank or the vault's payer)
+  // and is NOT staked, so it pays its own fee on the canonical public mempool: no Path A, no stake, no privileged or
+  // private submission (`sendPublic` = ethrex eth_sendRawTransaction after a valid simulation).
+  const recPayerOnChain = await readSigner<Address>(recoverySigner, "payerKey");
+  if (recPayerOnChain !== recoveryPayer.address) throw new Error(`(e) recovery payerKey ${recPayerOnChain}`);
+  if ([hot.address, tank.address, vaultPayer.address].includes(recPayerOnChain)) throw new Error("(e) payer key reused");
+  const regAbi = [
+    {
+      type: "function",
+      name: "getDepositInfo",
+      stateMutability: "view",
+      inputs: [{ name: "account", type: "address" }],
+      outputs: [
+        { name: "stake", type: "uint256" },
+        { name: "unstakeDelaySec", type: "uint32" },
+        { name: "withdrawTime", type: "uint64" },
+      ],
+    },
+  ] as const;
+  const recStake = await pub.readContract({ address: STAKING_REGISTRY, abi: regAbi, functionName: "getDepositInfo", args: [recoverySigner] });
+  if (recStake[0] !== 0n) throw new Error("(e) the RecoverySigner is staked; Path B must not need it");
+  const recBal0 = await bal(recoverySigner);
   const c = await pathB("(e2) RecoverySigner cancels the queued loosening", RECOVERY, account, enc("recoveryCancel", [opId]));
+  const recBal1 = await bal(recoverySigner);
+  if (c.r.payer && c.r.payer.toLowerCase() !== recoverySigner.toLowerCase()) throw new Error(`(e) payer ${c.r.payer}`);
+  if (!(recBal1 < recBal0)) throw new Error("(e) the RecoverySigner did not pay its own fee");
   const op = await readAcc<{ eta: number; kind: number; state: number }>("getQueued", [opId]);
   if (op.state !== OP_CANCELLED) throw new Error(`(e) op state ${op.state}`);
   if ((await bucket()).cap !== 6n * USD) throw new Error("(e) cap changed");
-  results.e_recoveryPriority = { queue: { ...q.out, opId, pending }, cancel: { ...c.out, op } };
-  checklist.e = `PASS: loosening queued by the vault (${q.out.hash}, op ${opId}), cancelled by the RecoverySigner (${c.out.hash}), state CANCELLED`;
+  results.e_recoveryPriority = {
+    queue: { ...q.out, opId, pending },
+    cancel: {
+      ...c.out,
+      op,
+      path: "B (2 signatures: C13 witness + SECP256K1 recovery payer)",
+      recoveryPayerKey: recPayerOnChain,
+      recoveryStake: recStake[0],
+      recoverySignerPaid: recBal0 - recBal1,
+    },
+  };
+  checklist.e = `PASS: loosening queued by the vault (${q.out.hash}, op ${opId}), cancelled by the RecoverySigner on Path B (public mempool, own payer key ${recPayerOnChain}, unstaked, paid ${recBal0 - recBal1} wei) (${c.out.hash}), state CANCELLED`;
 }
 
 // ------------------------------------------------------------------------------------ (f) freezes ----------
