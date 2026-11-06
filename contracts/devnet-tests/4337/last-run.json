@@ -1,5 +1,5 @@
 {
-  "date": "2026-11-05T23:25:02.269Z",
+  "date": "2026-11-06T00:00:49.124Z",
   "rpc": "http://127.0.0.1:8547",
   "chainId": 31337,
   "entryPoint": {
@@ -12,38 +12,50 @@
     "hook": "0xcf7ed3acca5a467e9e704c703e8d87f634fb0fc9",
     "validator": "0xdc64a140aa3e981100a9beca4e685f962f0cf6c9",
     "msaImpl": "0x5fc8d32690cc91d4c39d9d3abcbd16989f875707",
-    "account": "0x1330De3cb3a013A86fD394aE15F38f5DA01A87Bb"
+    "account": "0x9cD5021e49192E8D9a547B4B8d3554cf496F8c76"
   },
-  "accountCreationGas": "649136",
+  "accountCreationGas": "676372",
   "hotWithinCap": {
     "submitted": true,
-    "txHash": "0x26ec0d78885ce8acd69b818cb0889a08c34d1c77fe64158152a7e3514c62670a",
-    "txGasUsed": "223532",
+    "txHash": "0x33a1762128d396f5e53126126ca65380dcfeb2453c08892f731e007ab262ee8c",
+    "txGasUsed": "224037",
     "success": true,
-    "actualGasUsed": "333897",
+    "actualGasUsed": "334378",
     "recipientBalance": "100000000000000000",
     "bucketAvailable": "700000000"
   },
+  "openModeToNeverAllowlisted": {
+    "submitted": true,
+    "txHash": "0x8dbb75f6200fd4681c383f32f2131095e17466fe7615b7ee49e1b0a05969109c",
+    "txGasUsed": "189937",
+    "success": true,
+    "actualGasUsed": "300262",
+    "recipient": "0x00000000000000000000000000000000000f2e55",
+    "recipientMode": "Open",
+    "recipientBalance": "10000000000000000",
+    "bucketAvailable": "670000000"
+  },
+  "vaultSigLength": "3688",
   "overPerTxRejected": {
     "submitted": false,
     "reason": "FailedOpWithRevert(AA23 reverted) PerTxMaxExceeded(600000000,500000000)"
   },
   "overCapRejected": {
     "submitted": true,
-    "txHash": "0x04864b42433ed1c6b0794ab937e5de6a28e047e9f1932d77c3caf82ad3123bec",
-    "txGasUsed": "162582",
+    "txHash": "0x286ac9b0cfa4656468c7d3e279d3e4f315a517ce000cf784dd1f1a20063aab97",
+    "txGasUsed": "163087",
     "success": false,
-    "actualGasUsed": "275625",
-    "revertReason": "OverCap(300000000,250000000)",
+    "actualGasUsed": "276106",
+    "revertReason": "OverCap(300000000,220000000)",
     "recipientUnchanged": true
   },
   "vaultExecRelayed": {
     "submitted": true,
-    "txHash": "0x210bcc4a556a4943106d8f33fa041c002f021cb57e4e63772d583712390c487a",
-    "txGasUsed": "408636",
+    "txHash": "0x05ff7c733809e52310e4d05d8ea17e2d53a526b940670ade9cca6771e6202f5a",
+    "txGasUsed": "408874",
     "success": true,
-    "actualGasUsed": "460642",
-    "pqSignMs": 4538,
+    "actualGasUsed": "460932",
+    "pqSignMs": 4082,
     "sigBytes": 3688,
     "callDataBytes": 4260,
     "destBalance": "1000000000000000000"

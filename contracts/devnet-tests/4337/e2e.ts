@@ -8,6 +8,7 @@
 //   3. runs a minimal bundler (eth_call simulation of handleOps, then a handleOps tx from a bundler EOA; no alt
 //      mempool, no ERC-7562 tracing: anvil has no bundler collector tracer):
 //      - a hot userOp within the cap (mined, ETH moves, bucket debited);
+//      - an Open-mode (install default) hot userOp to an address the vault never allowlisted (mined, debited);
 //      - an over-perTx userOp, rejected in simulation (AA23 PerTxMaxExceeded): never submitted;
 //      - an over-cap userOp after the bucket is drained: included, execution reverts (OverCap), nothing moves;
 //      - a vault exec through LeakedRoleExecutor with a fresh C13 signature (@leaked/pq-signer), relayed by a
@@ -55,6 +56,7 @@ const HOT = privateKeyToAccount("0x7c852118294e51e653712a81e05800f419141751be58f
 const RELAYER_OWNER = privateKeyToAccount("0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a");
 const RECIPIENT: Address = "0x000000000000000000000000000000000000beef";
 const VAULT_DEST: Address = "0x000000000000000000000000000000000000cafe";
+const NEVER_LISTED: Address = "0x00000000000000000000000000000000000f2e55"; // never in the hook's target allowlist
 
 const epAbi = parseAbi([
   "struct PackedUserOperation { address sender; uint256 nonce; bytes initCode; bytes callData; bytes32 accountGasLimits; uint256 preVerificationGas; bytes32 gasFees; bytes paymasterAndData; bytes signature; }",
@@ -220,9 +222,9 @@ async function main() {
         { name: "hotKey", type: "address" }, { name: "capUsdPerDay", type: "uint256" }, { name: "perTxMaxUsd", type: "uint256" },
         { name: "maxFeeWei", type: "uint256" }, { name: "maxPriorityFeePerGas", type: "uint256" }, { name: "ethUsdPrice", type: "uint256" },
         { name: "tokens", type: "tuple[]", components: [{ name: "token", type: "address" }, { name: "decimals", type: "uint8" }, { name: "usdPerToken", type: "uint256" }] },
-        { name: "targets", type: "address[]" },
+        { name: "targets", type: "address[]" }, { name: "recipientMode", type: "uint8" },
       ] }],
-      [{ hotKey: HOT.address, capUsdPerDay: 1000_000000n, perTxMaxUsd: 500_000000n, maxFeeWei: parseEther("0.05"), maxPriorityFeePerGas: 10_000_000_000n, ethUsdPrice: 3000_000000n, tokens: [], targets: [RECIPIENT] }],
+      [{ hotKey: HOT.address, capUsdPerDay: 1000_000000n, perTxMaxUsd: 500_000000n, maxFeeWei: parseEther("0.05"), maxPriorityFeePerGas: 10_000_000_000n, ethUsdPrice: 3000_000000n, tokens: [], targets: [RECIPIENT], recipientMode: 0 /* Open */ }],
     );
     const execInit = encodeAbiParameters(
       [{ type: "tuple", components: [
@@ -256,12 +258,22 @@ async function main() {
     const bucket = (await pub.readContract({ address: hook.address, abi: hook.abi, functionName: "getBucket", args: [account] })) as readonly bigint[];
     out.hotWithinCap = { ...r1, recipientBalance: (await pub.getBalance({ address: RECIPIENT })).toString(), bucketAvailable: bucket[0].toString() };
 
+    // 3a'. Open recipient mode (the install default): $30 to an address the vault never allowlisted is a hot payment.
+    const mode = (await pub.readContract({ address: hook.address, abi: hook.abi, functionName: "recipientMode", args: [account] })) as number;
+    const listed = (await pub.readContract({ address: hook.address, abi: hook.abi, functionName: "isTarget", args: [account, NEVER_LISTED] })) as boolean;
+    if (mode !== 0 || listed) throw new Error(`expected Open mode and an unlisted recipient (mode ${mode}, listed ${listed})`);
+    const r1b = await bundle(await buildOp(account, key, executeSingle(NEVER_LISTED, parseEther("0.01"), "0x"), HOT), errAbis);
+    if (!r1b.submitted || !r1b.success) throw new Error(`open-mode op failed: ${JSON.stringify(r1b, (_, v) => (typeof v === "bigint" ? v.toString() : v))}`);
+    const bucket1b = (await pub.readContract({ address: hook.address, abi: hook.abi, functionName: "getBucket", args: [account] })) as readonly bigint[];
+    out.openModeToNeverAllowlisted = { ...r1b, recipient: NEVER_LISTED, recipientMode: "Open", recipientBalance: (await pub.getBalance({ address: NEVER_LISTED })).toString(), bucketAvailable: bucket1b[0].toString() };
+    out.vaultSigLength = ((await pub.readContract({ address: executor.address, abi: executor.abi, functionName: "sigLengthOf", args: [account] })) as bigint).toString();
+
     // 3b. Over the per-tx max: rejected by the bundler's simulation (validation), never submitted.
     const r2 = await bundle(await buildOp(account, key, executeSingle(RECIPIENT, parseEther("0.2"), "0x"), HOT), errAbis);
     if (r2.submitted) throw new Error("over-perTx op was not rejected in validation");
     out.overPerTxRejected = r2;
 
-    // 3c. Over the rolling cap: $300 + $450 spent, $300 more passes validation and reverts in postCheck.
+    // 3c. Over the rolling cap: $300 + $30 + $450 spent, $300 more passes validation and reverts in postCheck.
     await bundle(await buildOp(account, key, executeSingle(RECIPIENT, parseEther("0.15"), "0x"), HOT), errAbis);
     const before = await pub.getBalance({ address: RECIPIENT });
     const r3 = await bundle(await buildOp(account, key, executeSingle(RECIPIENT, parseEther("0.1"), "0x"), HOT), errAbis);
