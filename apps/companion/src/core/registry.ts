@@ -59,7 +59,10 @@ export interface FormatSpec {
   /** `equals` / `notEquals`: a decoded bool, a small integer, or a hex string (a `bytes32` such as the zero key). */
   derived?: Record<
     string,
-    { when: { field: string; equals?: boolean | number | string; notEquals?: boolean | number | string }; template: string }
+    {
+      when: { field: string; equals?: boolean | number | string; notEquals?: boolean | number | string };
+      template: string;
+    }
   >;
   compare?: { recipient?: string; amount?: string; token?: string };
 }

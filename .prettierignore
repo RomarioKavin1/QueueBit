@@ -16,3 +16,13 @@ coverage/
 
 # tool caches
 **/.cache/
+
+# Standalone bun projects outside the pnpm workspace (eslint skips contracts/** too) and their run records
+contracts/devnet-tests/
+# Generated results and upstream checkouts (upstream/*/sidecar is a git-ignored clone made by apply.sh)
+bench/results/
+upstream/
+# Release output (scripts/release)
+/release/
+/audit/
+/sbom/

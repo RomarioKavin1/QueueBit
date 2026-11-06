@@ -221,12 +221,18 @@ describe("delivery", () => {
     const base = `http://127.0.0.1:${(s.address() as AddressInfo).port}`;
     const logged: string[] = [];
     const log = (m: string) => void logged.push(m);
-    await webhookSink({ url: `${base}/hook`, secret: KEY, minSeverity: "info" }, { log, tries: 1 })({
+    await webhookSink(
+      { url: `${base}/hook`, secret: KEY, minSeverity: "info" },
+      { log, tries: 1 },
+    )({
       seq: 1,
       type: "alert",
       alert: alert("r1"),
     });
-    await ntfySink({ url: base, topic: "topic", minSeverity: "info" }, { log, tries: 1 })({
+    await ntfySink(
+      { url: base, topic: "topic", minSeverity: "info" },
+      { log, tries: 1 },
+    )({
       seq: 2,
       type: "alert",
       alert: alert("r2"),

@@ -141,8 +141,7 @@ function zeroOf(p: AbiParam): unknown {
 /** `initialize`'s `InitConfig` from the artifact, with `known` fields set and every other field at its zero value. */
 function initConfig(abi: Abi, known: Record<string, unknown>): Record<string, unknown> {
   const fn = abi.find((x) => x.type === "function" && x.name === "initialize") as
-    | { inputs: readonly AbiParam[] }
-    | undefined;
+    { inputs: readonly AbiParam[] } | undefined;
   const cfg = fn?.inputs[0];
   if (!cfg || cfg.type !== "tuple") throw new Error("initialize(InitConfig) not in the artifact");
   const out = zeroOf(cfg) as Record<string, unknown>;

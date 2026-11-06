@@ -56,7 +56,10 @@ describe("recovery challenge", () => {
     await handle({ op: "recoveryLoad", entropy: wordsToEntropy(RECOVERY_WORDS), bip39Passphrase: "" }, noop);
     await expect(
       handle(
-        { op: "recoveryTest", challenge: { requestId: REQUEST_ID, recoveryPk: recovery.pk, expiresAt: Date.now() - 1 } },
+        {
+          op: "recoveryTest",
+          challenge: { requestId: REQUEST_ID, recoveryPk: recovery.pk, expiresAt: Date.now() - 1 },
+        },
         noop,
       ),
     ).rejects.toMatchObject({ code: "E-61" });
