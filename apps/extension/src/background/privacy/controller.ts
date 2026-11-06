@@ -665,7 +665,10 @@ export class PrivacyController {
       sidecarUrl: ctx.cfg.sidecarUrl,
       timeoutMs: 60_000,
     });
-    const gasPrice = await ctx.provider.getGasPrice().catch(() => parseGwei("1"));
+    // Every read from here on (gas price, PoolPayer's rules, the recipient's balance) runs on the withdrawal's own
+    // circuit: on the account's, its timing and the fresh recipient's address would link the two.
+    const wp = withdrawalProvider(clients);
+    const gasPrice = await wp.getGasPrice().catch(() => parseGwei("1"));
     const maxFeePerGas = gasPrice * 2n > parseGwei("2") ? gasPrice * 2n : parseGwei("2");
     const broadcaster = new FramePaymasterBroadcaster({
       ...clients,
@@ -673,7 +676,7 @@ export class PrivacyController {
       profile: getProfile(net.profileId ?? "ethrex-eip8141-tracer"),
       chainId: BigInt(chainId),
       payer: ctx.cfg.poolPayer,
-      rules: await readPoolPayerRules(ctx.provider, ctx.cfg.poolPayer),
+      rules: await readPoolPayerRules(wp, ctx.cfg.poolPayer),
       fees: { maxFeePerGas, maxPriorityFeePerGas: parseGwei("1") },
       timeoutMs: 240_000,
     });
@@ -701,7 +704,7 @@ export class PrivacyController {
         void this.apply(chainId, { type: "mempool", status: s }).catch(() => undefined);
       },
     });
-    await this.finishWithdrawal(chainId, ctx, out.sender, {
+    await this.finishWithdrawal(chainId, ctx, wp, out.sender, {
       depositIndex: note.depositIndex,
       secretIndex: note.secretIndex + 1,
       precommitment: change.precommitment,
@@ -731,7 +734,7 @@ export class PrivacyController {
         throw e;
       }
       const receipt = await clients.node.getTransactionReceipt(w.hash!).catch(() => null);
-      if (receipt) return this.finishWithdrawal(chainId, ctx, w.recipient!);
+      if (receipt) return this.finishWithdrawal(chainId, ctx, withdrawalProvider(clients), w.recipient!);
       await sleep(1500);
     }
     const e = new Error("timed out") as Error & { status?: string };
@@ -744,13 +747,18 @@ export class PrivacyController {
    * `change`: the change note's public data when this run proved the withdrawal (its secrets were in memory). After a
    * restart the sync still finds the change note from the `Withdrawn` event, keyless until its next spend re-keys it.
    */
-  private async finishWithdrawal(chainId: number, ctx: Ctx, recipient: Address, change?: PublicNote) {
+  private async finishWithdrawal(chainId: number, ctx: Ctx, wp: HostProvider, recipient: Address, change?: PublicNote) {
     if (change) await this.recordNote(ctx, change).catch(() => undefined);
-    const received = await ctx.provider.getBalance(recipient).catch(() => 0n);
+    const received = await wp.getBalance(recipient).catch(() => 0n);
     await this.apply(chainId, { type: "withdrawn", receivedWei: received.toString() });
     await ctx.answers.clear().catch(() => undefined); // the spend keys of this withdrawal leave memory
     await this.syncWith(chainId, ctx).catch(() => undefined);
   }
+}
+
+/** A host provider over a withdrawal's node client (`withdrawalClients`): the withdrawal's circuit, not the account's. */
+export function withdrawalProvider(clients: { node: { transport: Parameters<typeof eip1193FromTransport>[0] } }) {
+  return createHostProvider({ rpc: eip1193FromTransport(clients.node.transport) });
 }
 
 function archive(rec: PrivacyRecord): PrivacyOp[] {

@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   encodeFunctionResult,
@@ -53,6 +54,7 @@ import {
   phoneSigner,
 } from "../../src/background/privacy/phoneSigner";
 import { poolOrderAsp, validatePrivacyConfig } from "../../src/background/privacy/config";
+import { withdrawalProvider } from "../../src/background/privacy/controller";
 import type { PrivacyOp } from "../../src/shared/privacy";
 
 /**
@@ -526,5 +528,29 @@ describe("privacy network config", () => {
     await expect(validatePrivacyConfig({ ...base, deployBlock: "ten" }, p, 1)).rejects.toThrow(/must be a number/u);
     await expect(validatePrivacyConfig({ ...base, sidecarUrl: "ftp://x" }, p, 1)).rejects.toThrow(/http\(s\)/u);
     await expect(validatePrivacyConfig({ ...base, deployBlock: "1000" }, p, 1)).rejects.toThrow(/in the future/u);
+  });
+});
+
+describe("withdrawal reads stay on the withdrawal's circuit (M6 review)", () => {
+  it("withdrawalProvider reads over the withdrawal's node transport only", async () => {
+    const seen: string[] = [];
+    const transport = {
+      request: async <T>(method: string) => {
+        seen.push(method);
+        return (method === "eth_gasPrice" ? "0x3b9aca00" : "0x2a") as T;
+      },
+    };
+    const wp = withdrawalProvider({ node: { transport } });
+    expect(await wp.getGasPrice()).toBe(1_000_000_000n);
+    expect(await wp.getBalance("0x000000000000000000000000000000000000dEaD")).toBe(42n);
+    expect(seen).toEqual(["eth_gasPrice", "eth_getBalance"]);
+  });
+
+  it("no account-circuit read (ctx.provider) once the withdrawal's clients exist", () => {
+    const src = readFileSync(new URL("../../src/background/privacy/controller.ts", import.meta.url), "utf8");
+    const from = src.indexOf("const clients = withdrawalClients({");
+    const to = src.indexOf("function archive(");
+    expect(from).toBeGreaterThan(0);
+    expect(src.slice(from, to)).not.toMatch(/ctx\.provider/u);
   });
 });
