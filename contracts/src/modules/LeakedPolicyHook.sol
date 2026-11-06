@@ -628,12 +628,16 @@ contract LeakedPolicyHook is IERC7579Hook, ILeakedModules {
             if (tc.allowed && sel == ERC20_TRANSFER) {
                 // ERC-20 transfer of an allowlisted (priced) token to an allowlisted recipient, or (Open) to any
                 // non-zero recipient (H2: nothing else on a token: approve / permit / transferFrom need a session).
+                // Never to the account itself, the token or a LEAKED module, in either mode (the account's
+                // `ForbiddenRecipient`): such a transfer moves nothing (or strands it), and a self-transfer's static
+                // debit would absorb the measured residual a session in the same batch is charged.
                 if (value != 0 || d.length != 68) revert NotAllowed(t, sel);
                 bytes32 toWord = LeakedExecDecoder.argWord(d, 0);
                 address to = address(uint160(uint256(toWord)));
-                if (uint256(toWord) >> 160 != 0 || (!_targets[to][account] && (to == address(0) || !open))) {
-                    revert NotAllowed(to, sel);
-                }
+                if (
+                    uint256(toWord) >> 160 != 0 || to == account || to == t || to == address(this) || to == EXECUTOR
+                        || (!_targets[to][account] && (to == address(0) || !open))
+                ) revert NotAllowed(to, sel);
                 staticDebit += _quote(tc, uint256(LeakedExecDecoder.argWord(d, 1)));
                 continue;
             }

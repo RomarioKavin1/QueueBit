@@ -217,6 +217,38 @@ abstract contract LeakedModulesHostsTest is LeakedModulesBase {
         executor.executeQueued(account, opId, up); // still runnable afterwards, outside the batch
     }
 
+    /// Both modes: an allowlisted token's `transfer` to the account itself, the token, the hook or the executor is
+    /// never a payment (the account's `ForbiddenRecipient`), even when the vault allowlisted the token as a
+    /// recipient. Before the fix, Open admitted them: a self-transfer moves nothing but its static debit absorbed a
+    /// session's measured residual, so `[usdc.transfer(account, 300), approve(router, 300), router.pull(300)]`
+    /// charged the router's session nothing (the bucket was still debited $300).
+    function test_recipientMode_selfTransferNotAPayment() public {
+        _openSessions();
+        address[4] memory bad = [account, address(usdc), address(hook), address(executor)];
+        for (uint256 i; i < 4; ++i) {
+            _expectValidationRevert(
+                _op(_single(address(usdc), 0, abi.encodeCall(IERC20.transfer, (bad[i], 1e6)))),
+                abi.encodeWithSelector(NotAllowed.selector, bad[i], IERC20.transfer.selector)
+            );
+        }
+        Execution[] memory e = new Execution[](3);
+        e[0] = Execution(address(usdc), 0, abi.encodeCall(IERC20.transfer, (account, 300e6)));
+        e[1] = Execution(address(usdc), 0, abi.encodeCall(IERC20.approve, (address(router), 300e6)));
+        e[2] = Execution(address(router), 0, abi.encodeCall(router.pull, (IERC20(address(usdc)), 300e6, stranger)));
+        _expectValidationRevert(
+            _op(_batch(e)), abi.encodeWithSelector(NotAllowed.selector, account, IERC20.transfer.selector)
+        );
+        assertEq(usdc.balanceOf(stranger), 0, "nothing moved");
+        assertEq(hook.getSession(account, address(router), router.pull.selector).allowanceUsd, 400e6);
+        // The token allowlisted as a recipient (H2 allows it) still cannot receive its own transfer.
+        _queueAndRun(_hookCall(abi.encodeCall(LeakedPolicyHook.setTarget, (account, address(usdc), true))), 1);
+        assertTrue(hook.isTarget(account, address(usdc)));
+        _expectValidationRevert(
+            _op(_single(address(usdc), 0, abi.encodeCall(IERC20.transfer, (address(usdc), 1e6)))),
+            abi.encodeWithSelector(NotAllowed.selector, address(usdc), IERC20.transfer.selector)
+        );
+    }
+
     function _setModeCall(RecipientMode m) internal view returns (Call[] memory) {
         return _hookCall(abi.encodeCall(LeakedPolicyHook.setRecipientMode, (account, m)));
     }

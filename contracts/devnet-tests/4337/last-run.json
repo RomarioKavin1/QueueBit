@@ -1,5 +1,5 @@
 {
-  "date": "2026-11-06T00:00:49.124Z",
+  "date": "2026-11-06T00:17:44.260Z",
   "rpc": "http://127.0.0.1:8547",
   "chainId": 31337,
   "entryPoint": {
@@ -17,7 +17,7 @@
   "accountCreationGas": "676372",
   "hotWithinCap": {
     "submitted": true,
-    "txHash": "0x33a1762128d396f5e53126126ca65380dcfeb2453c08892f731e007ab262ee8c",
+    "txHash": "0x8452783329b1f0aab4b3a3dda639201712772627058a8c4640c95f41b830fba2",
     "txGasUsed": "224037",
     "success": true,
     "actualGasUsed": "334378",
@@ -26,7 +26,7 @@
   },
   "openModeToNeverAllowlisted": {
     "submitted": true,
-    "txHash": "0x8dbb75f6200fd4681c383f32f2131095e17466fe7615b7ee49e1b0a05969109c",
+    "txHash": "0xad0690a53b44e3d378c7898790a0418f3a58fc2dfcef90eeb1de6425402356c7",
     "txGasUsed": "189937",
     "success": true,
     "actualGasUsed": "300262",
@@ -42,7 +42,7 @@
   },
   "overCapRejected": {
     "submitted": true,
-    "txHash": "0x286ac9b0cfa4656468c7d3e279d3e4f315a517ce000cf784dd1f1a20063aab97",
+    "txHash": "0xe6aedcc80f61ffe55d1f1de8fa4afa5651917e4dab66628a6bcb380a5981e262",
     "txGasUsed": "163087",
     "success": false,
     "actualGasUsed": "276106",
@@ -51,11 +51,11 @@
   },
   "vaultExecRelayed": {
     "submitted": true,
-    "txHash": "0x05ff7c733809e52310e4d05d8ea17e2d53a526b940670ade9cca6771e6202f5a",
-    "txGasUsed": "408874",
+    "txHash": "0x2e26955ffe6609fac00a26ae297eea73a66b09b5ba5be40ce417b4b1b6968a7d",
+    "txGasUsed": "408994",
     "success": true,
     "actualGasUsed": "460932",
-    "pqSignMs": 4082,
+    "pqSignMs": 9297,
     "sigBytes": 3688,
     "callDataBytes": 4260,
     "destBalance": "1000000000000000000"
