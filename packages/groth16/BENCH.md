@@ -15,6 +15,8 @@ npm `@fatsolutions/privacy-pools-core-circuits@1.0.5` (zkey sha256 `2a893b42…d
 zkey parse (17.8 MB, every point checked on-curve): 12–23 ms native. The WASM core is 663 KB (inlined as base64).
 
 Notes
+- Since the zeroing allocator (every freed block wiped, see README "Secrets"): WASM prove 2,482 ms on the same machine
+  in a run where snarkjs measured 1,533 ms, i.e. within the run-to-run spread; no measurable cost.
 - The shipped engine is single-threaded: ~1.45× snarkjs' multi-threaded time on this machine. Multi-threading the
   WASM core (wasm-bindgen-rayon) needs SharedArrayBuffer, i.e. a cross-origin-isolated offscreen document; left for
   later. Native rayon shows the headroom (4×).

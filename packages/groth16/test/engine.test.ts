@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as snarkjs from "snarkjs";
 import {
+  WITHDRAW_ARTIFACT_PINS,
   loadPinnedArtifacts,
   toSolProof,
   type Groth16Proof,
@@ -17,7 +18,9 @@ import {
   WitnessError,
   createArkworksGroth16,
   type ArkworksGroth16,
+  type SnarkjsVkey,
 } from "../src/index.js";
+import coreInit from "../wasm/leaked_groth16.js";
 import { buildWithdrawal, fsLoader, toJson, type Withdrawal } from "./fixture.js";
 
 type Proved = { proof: Groth16Proof; publicSignals: string[] };
@@ -58,6 +61,20 @@ describe("cross-check against snarkjs (test-only oracle)", () => {
     expect(await engine.verify(a.vkey, ours.publicSignals, ours.proof)).toBe(true);
   });
 
+  it("two proofs of the same witness with the default CSPRNG entropy differ in A, B and C, and both verify", async () => {
+    const witness = await engine.witness(toJson(w.inputs), a.wasm);
+    const p1 = await engine.proveWitness(witness, a.zkey);
+    const p2 = await engine.proveWitness(witness, a.zkey);
+    expect(p1.publicSignals).toEqual(p2.publicSignals);
+    expect(p1.proof.pi_a).not.toEqual(p2.proof.pi_a);
+    expect(p1.proof.pi_b).not.toEqual(p2.proof.pi_b);
+    expect(p1.proof.pi_c).not.toEqual(p2.proof.pi_c);
+    expect(p1.proof.pi_a).not.toEqual(ours.proof.pi_a);
+    expect(await engine.verify(a.vkey, p1.publicSignals, p1.proof)).toBe(true);
+    expect(await engine.verify(a.vkey, p2.publicSignals, p2.proof)).toBe(true);
+    expect(await snarkjs.groth16.verify(a.vkey, p2.publicSignals, p2.proof)).toBe(true);
+  });
+
   it("proofs are randomized; fixed entropy reproduces the same proof", async () => {
     const fixed = () => new Uint8Array(128).fill(7);
     const e = createArkworksGroth16({ entropy: fixed });
@@ -76,6 +93,61 @@ describe("cross-check against snarkjs (test-only oracle)", () => {
 // ---------------------------------------------------------------------------------------------------------------
 
 const CONTRACTS = new URL("../../../contracts/test/privacy/", import.meta.url).pathname;
+
+describe("verification key consistency", () => {
+  it("the on-chain verifier's constants (WithdrawVkey.sol) are the pinned vkey, in EIP-197 G2 order", () => {
+    const sol = readFileSync(CONTRACTS + "WithdrawVkey.sol", "utf8");
+    expect(sol).toContain(`sha256 ${WITHDRAW_ARTIFACT_PINS["withdraw.vkey"]}`);
+    const c = new Map<string, bigint>();
+    for (const m of sol.matchAll(/uint256 internal constant (\w+) = (\d+);/g)) c.set(m[1]!, BigInt(m[2]!));
+    const vk = a.vkey as SnarkjsVkey;
+    const g1 = (name: string, p: string[]) => {
+      expect(c.get(`${name}_X`)).toBe(BigInt(p[0]!));
+      expect(c.get(`${name}_Y`)).toBe(BigInt(p[1]!));
+    };
+    const g2 = (name: string, p: string[][]) => {
+      expect(c.get(`${name}_X_RE`)).toBe(BigInt(p[0]![0]!));
+      expect(c.get(`${name}_X_IM`)).toBe(BigInt(p[0]![1]!));
+      expect(c.get(`${name}_Y_RE`)).toBe(BigInt(p[1]![0]!));
+      expect(c.get(`${name}_Y_IM`)).toBe(BigInt(p[1]![1]!));
+    };
+    g1("ALPHA", vk.vk_alpha_1);
+    g2("BETA", vk.vk_beta_2);
+    g2("GAMMA", vk.vk_gamma_2);
+    g2("DELTA", vk.vk_delta_2);
+    expect(vk.IC).toHaveLength(9);
+    vk.IC.forEach((p, i) => g1(`IC${i}`, p));
+    expect(c.size).toBe(2 + 3 * 4 + 2 * 9);
+  });
+});
+
+describe("secrets do not outlive the proof in the core's memory", () => {
+  const find = (mem: WebAssembly.Memory, needle: Uint8Array) =>
+    Buffer.from(mem.buffer).indexOf(Buffer.from(needle.buffer, needle.byteOffset, needle.byteLength));
+
+  it("no witness element and no entropy byte string remains in linear memory after prove()", async () => {
+    const witness = await engine.witness(toJson(w.inputs), a.wasm);
+    // A private wire with a full-size value (not a public signal, not a small constant), canonical little-endian:
+    // the form the witness is handed over in and the form arkworks' MSM scalars take.
+    let pick = -1;
+    for (let i = 9; i < 400 && pick < 0; i++) {
+      const el = witness.subarray(i * 32, i * 32 + 32);
+      if (el.filter((b) => b !== 0).length >= 28) pick = i;
+    }
+    expect(pick).toBeGreaterThan(8);
+    const needle = witness.slice(pick * 32, pick * 32 + 32);
+    const entropy = crypto.getRandomValues(new Uint8Array(128));
+    const r = entropy.slice(0, 64);
+    const e = createArkworksGroth16({ entropy: () => entropy.slice() });
+    const p = await e.proveWitness(witness, a.zkey);
+    expect(await engine.verify(a.vkey, p.publicSignals, p.proof)).toBe(true);
+    const { memory } = await coreInit(); // the already-initialized core (a singleton per module instance)
+    expect(memory.buffer.byteLength).toBeGreaterThan(32 << 20);
+    expect(find(memory, needle)).toBe(-1);
+    expect(find(memory, r)).toBe(-1);
+    e.dispose();
+  });
+});
 const hasForge = (() => {
   try {
     execFileSync("forge", ["--version"], { stdio: "ignore" });

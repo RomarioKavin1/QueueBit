@@ -9,6 +9,15 @@
  * Proving is CPU-bound and synchronous inside WASM (seconds; see BENCH.md): run the engine in a Worker (e.g. with
  * `serveDefaultProver` in the extension's offscreen document), not on a UI thread. The core is inlined as base64
  * and instantiated lazily with `WebAssembly.instantiate` (CSP `'wasm-unsafe-eval'`; no fetch, no eval).
+ *
+ * Secrets. The witness (and the inputs it was computed from) exist in: the circuit instance's memory (zeroed by
+ * `calculateWitness` before it returns), the witness buffer (`fullProve` zeroes it after proving; `witness()`
+ * hands it to the caller to wipe), the 128 entropy bytes (zeroed here after the call), and the core's linear memory,
+ * where the Rust side's allocator zeroes every freed block (the argument copies, the assignment, the QAP
+ * evaluations, r and s), so nothing outlives the `prove` call there. The proof and public signals are the only
+ * outputs. The `input` object itself belongs to the caller. Nothing here is constant-time: arkworks' MSMs and FFTs
+ * are variable-time in the witness, as in every Groth16 prover; run it in a dedicated Worker, not next to
+ * attacker-controlled code.
  */
 import type { Groth16Backend, Groth16Proof } from "@leaked/privacy";
 import init, { ProvingKey, verify as wasmVerify } from "../wasm/leaked_groth16.js";
@@ -228,7 +237,11 @@ export function createArkworksGroth16(o: ArkworksGroth16Options = {}): ArkworksG
     },
     async fullProve(input, wasm, zkey) {
       const witness = await calculateWitness(await compiled(wasm), input);
-      return proveWitness(witness, zkey);
+      try {
+        return await proveWitness(witness, zkey);
+      } finally {
+        witness.fill(0);
+      }
     },
     proveWitness,
     async verify(vkey, publicSignals, proof) {

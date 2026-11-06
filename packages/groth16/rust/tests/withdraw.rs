@@ -60,7 +60,9 @@ fn be32(s: &str) -> Vec<u8> {
 fn header_matches_the_circuit() {
     let z = &ctx().z;
     assert_eq!((z.n_vars, z.n_public, z.domain_size), (36901, 8, 65536));
-    assert!(z.num_constraints + z.n_public + 1 <= z.domain_size);
+    // The reduction's domain (next power of two) is the zkey's.
+    assert_eq!((z.num_constraints + z.n_public + 1).next_power_of_two(), z.domain_size);
+    assert!(z.num_constraints + z.n_public + 1 > z.domain_size / 2);
 }
 
 #[test]
@@ -149,4 +151,82 @@ fn corrupt_zkeys_are_rejected() {
     let mut bad = z.clone();
     bad[a_off + 64 * 10 + 3] ^= 1;
     assert!(matches!(zkey::parse(&bad), Err(Error::Zkey(_))));
+}
+
+/// The file with every section's bytes passed through `f(type, bytes)` (the header's domainSize is patched by the
+/// caller through the same hook).
+fn rewrite_sections(z: &[u8], mut f: impl FnMut(u32, &[u8]) -> Vec<u8>) -> Vec<u8> {
+    let n = u32::from_le_bytes(z[8..12].try_into().unwrap()) as usize;
+    let mut out = z[..12].to_vec();
+    let mut p = 12usize;
+    for _ in 0..n {
+        let t = u32::from_le_bytes(z[p..p + 4].try_into().unwrap());
+        let s = u64::from_le_bytes(z[p + 4..p + 12].try_into().unwrap()) as usize;
+        let data = f(t, &z[p + 12..p + 12 + s]);
+        out.extend(t.to_le_bytes());
+        out.extend((data.len() as u64).to_le_bytes());
+        out.extend(data);
+        p += 12 + s;
+    }
+    out
+}
+
+/// Offset of domainSize inside section 2: n8q(4) + q(32) + n8r(4) + r(32) + nVars(4) + nPublic(4).
+const DOMAIN_OFF: usize = 4 + 32 + 4 + 32 + 4 + 4;
+
+#[test]
+fn zkey_with_a_larger_domain_than_the_constraints_need_is_rejected() {
+    // A consistent file over a 2^17 domain (header patched, H query doubled): the reduction would run on the 2^16
+    // domain and pair its evaluations with the wrong basis, so the parser refuses it up front.
+    let z = read(&format!("{ART}withdraw.zkey"));
+    let bad = rewrite_sections(&z, |t, d| match t {
+        2 => {
+            let mut d = d.to_vec();
+            assert_eq!(u32::from_le_bytes(d[DOMAIN_OFF..DOMAIN_OFF + 4].try_into().unwrap()), 65536);
+            d[DOMAIN_OFF..DOMAIN_OFF + 4].copy_from_slice(&131072u32.to_le_bytes());
+            d
+        }
+        9 => [d, d].concat(),
+        _ => d.to_vec(),
+    });
+    match zkey::parse(&bad) {
+        Err(Error::Zkey(m)) => assert!(m.contains("domain size"), "{m}"),
+        other => panic!("expected a domain rejection, got {:?}", other.map(|_| ())),
+    }
+}
+
+#[test]
+fn zkey_with_an_off_subgroup_g2_in_the_verifying_key_is_rejected() {
+    use ark_bn254::{Fq2, G2Affine};
+    use ark_ff::{BigInteger, One};
+    // An on-curve G2 point outside the prime-order subgroup (the twist has a large cofactor, so almost every
+    // on-curve point is one): walk x from beta's until the curve equation has a solution.
+    let mut x = ctx().z.pk.vk.beta_g2.x;
+    let c = loop {
+        x += Fq2::one();
+        if let Some(c) = G2Affine::get_point_from_x_unchecked(x, false) {
+            if !c.is_in_correct_subgroup_assuming_on_curve() {
+                break c;
+            }
+        }
+    };
+    assert!(c.is_on_curve());
+    // beta_g2 sits after alpha_g1 and beta_g1 (64 bytes each) in section 2; the file holds the raw Montgomery limbs.
+    let off = DOMAIN_OFF + 4 + 64 + 64;
+    let mut w = Vec::new();
+    for f in [c.x.c0, c.x.c1, c.y.c0, c.y.c1] {
+        w.extend(f.0.to_bytes_le());
+    }
+    let z = read(&format!("{ART}withdraw.zkey"));
+    let bad = rewrite_sections(&z, |t, d| {
+        let mut d = d.to_vec();
+        if t == 2 {
+            d[off..off + 128].copy_from_slice(&w);
+        }
+        d
+    });
+    match zkey::parse(&bad) {
+        Err(Error::Zkey(m)) => assert!(m.contains("subgroup"), "{m}"),
+        other => panic!("expected a subgroup rejection, got {:?}", other.map(|_| ())),
+    }
 }

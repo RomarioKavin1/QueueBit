@@ -33,6 +33,24 @@ a witness that slips past them is caught because the core verifies every proof a
 before returning it (`ConstraintUnsatisfiedError`). `@leaked/privacy` then self-verifies again against the pinned
 vkey through the engine's `verify`.
 
+**Randomness.** The blinding scalars r, s come from 128 bytes of `crypto.getRandomValues` on the JS side (reduced
+mod r from 64 uniform bytes each; zero is refused); the core has no RNG of its own and nothing in it is
+deterministic. `engineOptions.entropy` overrides the source for tests only: two proofs of one witness must differ,
+and `test/engine.test.ts` checks that they do with the default source.
+
+**Secrets.** The witness is wiped where it was held: the circuit instance's memory is zeroed after extraction, the
+witness buffer after proving, the entropy after the call, and the core's allocator zeroes every freed block (the
+argument copies, the assignment, the QAP evaluations, r and s), so `test/engine.test.ts` finds no witness element
+and no entropy in the core's linear memory after `prove()`. What remains is the caller's `input` object and the
+proof. Nothing is constant-time (arkworks' MSMs and FFTs branch on the scalars, as in every Groth16 prover): run it
+in a Worker of its own.
+
+**The zkey is trusted after its pin.** Every point is checked on the curve (G1 has cofactor 1, so that is also the
+subgroup check); the verifying key's three G2 points are subgroup-checked; the nVars B2 query points are not (tens
+of seconds in WASM). The key reaches the engine only through `loadPinnedArtifacts` (sha256 pin), and a malicious
+key could at worst make proofs that fail verification, since each one is verified against the key's own vkey. The
+domain size is required to be the next power of two above constraints + public + 1, the domain the reduction uses.
+
 **Why not circom's `witness_calculator.js`.** It lives in `iden3/circom` (GPL-3.0, no separate license). Our glue
 is written from the module's import/export interface (FNV-1a signal hashes, shared-RW-memory words), and is
 cross-checked element by element against snarkjs' calculator in `test/witness.test.ts`.

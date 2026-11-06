@@ -12,9 +12,11 @@
 //! | 9 | H: domainSize G1 points (circom's reduction: evaluations at the odd 2n-th roots of unity) |
 //!
 //! Base-field coordinates are little-endian Montgomery form; (0, 0) is the point at infinity. Matrix coefficients are
-//! Montgomery form *twice* (snarkjs multiplies by R² before writing them). Every point is checked to be on the curve.
-//! Subgroup membership is not checked: the zkey is pinned by sha256 before it reaches the prover, and the proof is
-//! verified against the key's own verifying key before it is returned.
+//! Montgomery form *twice* (snarkjs multiplies by R² before writing them). Every point is checked to be on the curve,
+//! which for bn254 G1 (cofactor 1) is also the subgroup check. The verifying key's G2 points (beta, gamma, delta) are
+//! subgroup-checked too; the nVars B2 query points are not (tens of seconds in WASM): the zkey is pinned by sha256
+//! before it reaches the prover (`@leaked/privacy`'s `loadPinnedArtifacts`), and every proof is verified against the
+//! key's own verifying key before it is returned.
 
 use ark_bn254::{Bn254, Fq, Fq2, Fr, G1Affine, G2Affine};
 use ark_ec::AffineRepr;
@@ -99,6 +101,14 @@ impl<'a> Cursor<'a> {
         }
         Ok(p)
     }
+    /// A G2 point that must also lie in the prime-order subgroup (the verifying key's).
+    fn g2_in_subgroup(&mut self) -> Result<G2Affine, Error> {
+        let p = self.g2()?;
+        if !p.is_in_correct_subgroup_assuming_on_curve() {
+            return Err(zerr("G2 point not in the subgroup"));
+        }
+        Ok(p)
+    }
 }
 
 fn zerr(m: &str) -> Error {
@@ -156,10 +166,10 @@ pub fn parse(bytes: &[u8]) -> Result<Zkey, Error> {
     }
     let alpha_g1 = h.g1()?;
     let beta_g1 = h.g1()?;
-    let beta_g2 = h.g2()?;
-    let gamma_g2 = h.g2()?;
+    let beta_g2 = h.g2_in_subgroup()?;
+    let gamma_g2 = h.g2_in_subgroup()?;
     let delta_g1 = h.g1()?;
-    let delta_g2 = h.g2()?;
+    let delta_g2 = h.g2_in_subgroup()?;
 
     let g1s = |t: usize, n: usize| -> Result<Vec<G1Affine>, Error> {
         let mut s = sec(t)?;
@@ -218,8 +228,10 @@ pub fn parse(bytes: &[u8]) -> Result<Zkey, Error> {
     }
     a.truncate(num_constraints);
     b.truncate(num_constraints);
-    if num_constraints + n_public + 1 > domain_size {
-        return Err(zerr("domain too small"));
+    // The reduction evaluates on the radix-2 domain of size next_pow2(constraints + public + 1), and the H query
+    // must be that same domain's basis: a zkey over any other size would prove on the wrong coset.
+    if domain_size != (num_constraints + n_public + 1).next_power_of_two() {
+        return Err(zerr("domain size does not match the constraint count"));
     }
 
     let vk = VerifyingKey { alpha_g1, beta_g2, gamma_g2, delta_g2, gamma_abc_g1 };

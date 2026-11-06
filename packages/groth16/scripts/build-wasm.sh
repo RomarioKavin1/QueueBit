@@ -17,7 +17,7 @@ cd "$here/rust"
 # Panic locations embed source paths; remap them so the binary does not depend on the build machine's home or checkout.
 cargo_home="${CARGO_HOME:-$HOME/.cargo}"
 export RUSTFLAGS="--remap-path-prefix=$cargo_home=/cargo --remap-path-prefix=$here=/groth16"
-cargo build --release --lib --target wasm32-unknown-unknown --features wasm
+cargo build --release --locked --lib --target wasm32-unknown-unknown --features wasm
 rm -rf "$here/wasm"
 wasm-bindgen --target web --out-dir "$here/wasm" --out-name leaked_groth16 \
   target/wasm32-unknown-unknown/release/leaked_groth16.wasm

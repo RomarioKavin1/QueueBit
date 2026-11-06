@@ -105,7 +105,8 @@ export async function compileCircuit(wasm: Uint8Array): Promise<WebAssembly.Modu
 
 /**
  * Computes the full witness: `getWitnessSize()` field elements, 32 bytes little-endian each (witness[0] = 1, then
- * the public signals). Throws `WitnessError` when the circuit rejects the inputs.
+ * the public signals). Throws `WitnessError` when the circuit rejects the inputs. The circuit instance's memory is
+ * zeroed before returning; the returned buffer is the caller's to wipe (`fill(0)`) once it has been proved.
  */
 export async function calculateWitness(module: WebAssembly.Module, input: CircuitInput): Promise<Uint8Array> {
   // Set right after instantiation; the runtime imports only run once the module executes.
@@ -138,7 +139,16 @@ export async function calculateWitness(module: WebAssembly.Module, input: Circui
   };
   const inst = await WebAssembly.instantiate(module, { runtime });
   const x = (ref.x = inst.exports as unknown as CircomExports);
+  try {
+    return run(x, input);
+  } finally {
+    // The instance's linear memory holds the inputs and the whole witness (the note's secrets among them) and would
+    // otherwise sit there until the GC collects it. Wipe it whether the circuit accepted the inputs or not.
+    new Uint8Array(x.memory.buffer).fill(0);
+  }
+}
 
+function run(x: CircomExports, input: CircuitInput): Uint8Array {
   x.init(1);
   const n32 = x.getFieldNumLen32();
   if (n32 !== 8) throw new WitnessError(`circuit field is ${n32 * 32} bits, expected 256`);
