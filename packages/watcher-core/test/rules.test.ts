@@ -172,6 +172,31 @@ describe("rules", () => {
     ).toEqual(["scheduled-done"]);
   });
 
+  it("a module reinstall (first everyday key inside an executed scheduled change) is not account creation", () => {
+    const core = new WatcherCore({ targets });
+    const tx = txh(0x50);
+    const a = core.ingest([
+      ev("HotKeyRotated", { oldKey: `0x${"0".repeat(40)}`, newKey: VAULT }, { tx, logIndex: 0 }),
+      ev("CapUpdated", { capUsdPerDay: 1n, perTxMaxUsd: 1n, maxFeeWeiPerTx: 1n, maxHotFrames: 4 }, { tx, logIndex: 1 }),
+      ev("QueueExecuted", { opId: txh(0x51) }, { tx, logIndex: 2 }),
+    ]);
+    expect(a.map((x) => x.kind)).toEqual(["scheduled-done"]);
+  });
+
+  it("copy: a ready change is not promised during a Vault replacement; Vault-side reverts are not everyday payments", () => {
+    const ready = copyFor({ kind: "scheduled-ready", queueKind: "loosen", ref: {} });
+    expect(ready.body).not.toContain("Anyone can now finish it");
+    expect(ready.body).toContain("unless your Vault is being replaced");
+    const vault = copyFor({ kind: "payment-blocked", reason: "other", ref: { errorName: "VaultOverDailyThreshold" } });
+    expect(vault.title).toBe("Vault request didn't go through");
+    expect(vault.body).not.toMatch(/everyday/i);
+    const hot = copyFor({ kind: "payment-blocked", reason: "over-limit", ref: { errorName: "OverCap" } });
+    expect(hot.title).toBe("Over the limit: payment blocked");
+    for (const what of ["staked", "unlocked", "withdrawn"] as const) {
+      expect(copyFor({ kind: "vault-sender-deposit", what, ref: {} }).body).not.toMatch(/staked|lane/i);
+    }
+  });
+
   it("repeated blocked payments -> one urgent alert per window", () => {
     const core = new WatcherCore({ targets, blockedThreshold: 3, blockedWindowSec: 3600 });
     const blocked = (i: number, t: number): WatchedEvent => ({

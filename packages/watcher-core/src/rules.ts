@@ -77,9 +77,11 @@ const QUEUE_ALERT: Record<QueueKind, AlertKind> = {
 export function rulesForTx(events: readonly WatchedEvent[], ctx: RuleContext): { e: WatchedEvent; out: RuleOutput }[] {
   const types = new Set(events.map((e) => e.event.type));
   // Account creation (`initialize`: the first everyday key is set from zero): setup, not news.
-  // (Leaving Lockdown also sets a key from zero, but together with BunkerDisabled.)
+  // (Leaving Lockdown also sets a key from zero, but together with BunkerDisabled; a 4337 module reinstall does too,
+  // but only inside an executed scheduled change, which is news: it is reported as that.)
   const created =
     !types.has("bunkerDisabled") &&
+    !types.has("queueExecuted") &&
     events.some((e) => e.event.type === "hotKeyRotated" && /^0x0{40}$/i.test(e.event.oldKey));
   if (created) return [];
   const res: { e: WatchedEvent; out: RuleOutput }[] = [];

@@ -111,6 +111,22 @@ export interface CopyInput {
   ref: AlertRef;
 }
 
+/** Revert reasons of the Vault / Recovery / waiting-period rules (`ILeakedModules` "roles and timelock"). */
+const VAULT_SIDE_ERRORS = new Set([
+  "MustQueue",
+  "BadSignature",
+  "BadNonce",
+  "VaultOverDailyThreshold",
+  "RotationPending",
+  "NoRotationPending",
+  "RotationNotReady",
+  "BadOp",
+  "OpNotReady",
+  "PayloadMismatch",
+  "BadKind",
+  "GuardianCooldown",
+]);
+
 const DIDNT = "Didn't ask for this? Cancel it with your Vault or your Recovery key.";
 
 const scheduledNoun = (k: QueueKind | undefined) =>
@@ -153,7 +169,8 @@ export function copyFor(c: CopyInput): { title: string; body: string; action: Al
     case "scheduled-ready":
       return {
         title: "Waiting period over",
-        body: `The scheduled ${scheduledNoun(c.queueKind)} is ready. Anyone can now finish it. Didn't ask for this? Cancel it now.`,
+        // A scheduled change cannot run while the Vault is being replaced (and is void once it is): don't promise it.
+        body: `The scheduled ${scheduledNoun(c.queueKind)} is ready. Anyone can now carry it out, unless your Vault is being replaced. Didn't ask for this? Cancel it now.`,
         action: { label: "Open Pending", deepLink: deepLinks.pending(c.ref.opId) },
       };
     case "scheduled-done":
@@ -290,6 +307,15 @@ export function copyFor(c: CopyInput): { title: string; body: string; action: Al
       };
     case "payment-blocked": {
       const link = c.ref.txHash ? deepLinks.activity(c.ref.txHash) : "#activity";
+      // 4337: a reverted request whose reason is a Vault/Recovery rule (bad approval, nonce, waiting period, daily
+      // Vault allowance, a Vault replacement in progress) is not an everyday payment, and no everyday key is at fault.
+      if (c.ref.errorName && VAULT_SIDE_ERRORS.has(c.ref.errorName)) {
+        return {
+          title: "Vault request didn't go through",
+          body: "A Vault request was refused by your account's rules, so nothing changed. Only the network fee was charged. Didn't ask for this? Open Security.",
+          action: { label: "Open Activity", deepLink: link },
+        };
+      }
       const tail = "Only the network fee was charged to your fee tank. If this wasn't you, replace your everyday key.";
       const title =
         c.reason === "over-limit"
@@ -319,12 +345,12 @@ export function copyFor(c: CopyInput): { title: string; body: string; action: Al
       return c.what === "unlocked"
         ? {
             title: "Vault sender deposit unlocking",
-            body: "The deposit that lets your Vault use the staked lane is unlocking. Didn't do this? Open Security.",
+            body: "The deposit that lets your Vault send its own approvals is unlocking. Didn't do this? Open Security.",
             action: { label: "Open Security", deepLink: deepLinks.security() },
           }
         : {
             title: c.what === "withdrawn" ? "Vault sender deposit withdrawn" : "Vault sender deposit added",
-            body: "The deposit that lets your Vault use the staked lane changed.",
+            body: "The deposit that lets your Vault send its own approvals changed.",
             action: { label: "Open Settings", deepLink: "#settings" },
           };
   }
