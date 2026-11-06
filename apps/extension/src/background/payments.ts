@@ -104,7 +104,11 @@ export class PaymentsError extends Error {
       | "no-plan"
       | "bad-token"
       | "payer-conflict"
-      | "frozen",
+      | "frozen"
+      | "no-account"
+      | "no-recovery"
+      | "bad-amount"
+      | "top-up-failed",
     message: string,
   ) {
     super(message);

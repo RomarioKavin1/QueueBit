@@ -403,7 +403,7 @@ function decodeMessage(hex: string): string {
 function signatureError(cls: Extract<SignatureClass, { kind: "needs-vault" }>): ProviderRpcError {
   const remedy =
     cls.rule === "SIG-PERMIT2"
-      ? "Your Vault can't sign it either (its quantum-safe key never signs for sites). Approve the token for this app with a payment instead, or use a site that accepts on-chain approvals."
+      ? "LEAKED can pre-approve a single Permit2 allowance or transfer for an app you allowed. Ask the site for one of those, or approve the token with a payment instead."
       : "LEAKED never signs what can move money without a payment you approve. Ask the site for a regular transaction instead.";
   return new ProviderRpcError(RpcErrorCode.unauthorized, cls.reason, {
     leakedRule: cls.rule,

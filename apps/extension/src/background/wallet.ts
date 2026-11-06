@@ -23,7 +23,16 @@ import type { SidecarClient } from "@leaked/rpc";
 import { accountAbi, policyHookAbi, roleSignerFactoryAbi } from "../generated/contracts";
 import { ROLE_ID, type AccountPlan } from "./account";
 import { choosePath } from "./lanes";
-import { permitMismatch, registerPermitCall, type SignatureClass } from "./signing";
+import {
+  isPermitClass,
+  PERMIT2,
+  PERMIT2_VIEWS,
+  permit2Problem,
+  permitMismatch,
+  registerPermit2Call,
+  registerPermitCall,
+  type SignatureClass,
+} from "./signing";
 import {
   messageText,
   parseSiwe,
@@ -598,10 +607,14 @@ export class Wallet {
         ...(td.domain?.chainId !== undefined ? { chainId: Number(td.domain.chainId) } : {}),
       };
       if (typeof td.primaryType === "string") sig.primaryType = td.primaryType.slice(0, 64);
-      if (req.cls.kind === "register-permit") {
+      if (isPermitClass(req.cls)) {
         // Before any window: a permit the account could never record as asked (another owner or chain) is refused
         // outright, else the pre-approval would be mined, count against the limit, and still be "not registered".
-        const why = permitMismatch(td, account, chainId);
+        const cls = req.cls;
+        const why =
+          cls.kind === "register-permit"
+            ? permitMismatch(td, account, chainId)
+            : await this.permit2Check(chainId, account, cls, td.domain?.chainId);
         if (why) {
           throw new ProviderRpcError(RpcErrorCode.unauthorized, why, {
             leakedRule: "SIG-PERMIT-MISMATCH",
@@ -615,20 +628,37 @@ export class Wallet {
         try {
           const c = this.env.io!.publicClient(chainId);
           [symbol, decimals] = await Promise.all([
-            c.readContract({ address: req.cls.token, abi: erc20Abi, functionName: "symbol" }) as Promise<string>,
-            c.readContract({ address: req.cls.token, abi: erc20Abi, functionName: "decimals" }).then(Number),
+            c.readContract({ address: cls.token, abi: erc20Abi, functionName: "symbol" }) as Promise<string>,
+            c.readContract({ address: cls.token, abi: erc20Abi, functionName: "decimals" }).then(Number),
           ]);
         } catch {
           // unknown token metadata: raw units
         }
-        sig.permit = {
-          token: req.cls.token,
-          spender: req.cls.spender,
-          value: req.cls.value.toString(),
-          deadline: req.cls.deadline.toString(),
-          ...(symbol ? { symbol } : {}),
-          ...(decimals !== undefined ? { decimals } : {}),
-        };
+        const meta = { ...(symbol ? { symbol } : {}), ...(decimals !== undefined ? { decimals } : {}) };
+        sig.permit =
+          cls.kind === "register-permit"
+            ? {
+                token: cls.token,
+                spender: cls.spender,
+                value: cls.value.toString(),
+                deadline: cls.deadline.toString(),
+                ...meta,
+              }
+            : {
+                token: cls.token,
+                spender: cls.spender,
+                value: cls.amount.toString(),
+                nonce: cls.nonce.toString(),
+                sessionSelector: await this.permit2Selector(chainId, cls.spender),
+                ...meta,
+                ...(cls.kind === "register-permit2"
+                  ? {
+                      standard: "permit2" as const,
+                      deadline: cls.sigDeadline.toString(),
+                      expiration: cls.expiration.toString(),
+                    }
+                  : { standard: "permit2-transfer" as const, deadline: cls.deadline.toString() }),
+              };
       }
     }
     if (kind === "sign-in") sig.firstSignIn = !(await this.signInSites()).includes(ctx.origin);
@@ -654,6 +684,56 @@ export class Wallet {
     const denial = record.denial ?? record.routeDenial;
     if (denial) throw new ProviderRpcError(RpcErrorCode.unauthorized, denial.explanation, denial);
     throw userRejected("The user rejected the signature request.");
+  }
+
+  /** Pre-checks of a Permit2 pre-approval against chain (Permit2's nonce state), before any window opens. */
+  private async permit2Check(
+    chainId: number,
+    account: Address,
+    c: Extract<SignatureClass, { kind: "register-permit2" | "register-permit2-transfer" }>,
+    domainChainId: unknown,
+  ): Promise<string | undefined> {
+    const client = this.env.io!.publicClient(chainId);
+    const code = await client.getCode({ address: PERMIT2 });
+    if (!code || code === "0x") return "Permit2 isn't deployed on this network, so this permit can't be used.";
+    const now = Number((await client.getBlock({ blockTag: "latest" })).timestamp);
+    let allowanceNonce: bigint | undefined;
+    let nonceUsed: boolean | undefined;
+    if (c.kind === "register-permit2") {
+      const r = (await client.readContract({
+        address: PERMIT2,
+        abi: PERMIT2_VIEWS,
+        functionName: "allowance",
+        args: [account, c.token, c.spender],
+      })) as readonly [bigint, number, number];
+      allowanceNonce = BigInt(r[2]);
+    } else {
+      const word = (await client.readContract({
+        address: PERMIT2,
+        abi: PERMIT2_VIEWS,
+        functionName: "nonceBitmap",
+        args: [account, c.nonce >> 8n],
+      })) as bigint;
+      nonceUsed = ((word >> (c.nonce & 0xffn)) & 1n) === 1n;
+    }
+    return permit2Problem(c, {
+      chainId,
+      domainChainId,
+      now,
+      ...(allowanceNonce !== undefined ? { allowanceNonce } : {}),
+      ...(nonceUsed !== undefined ? { nonceUsed } : {}),
+    });
+  }
+
+  /** The live allowance selector that admits `spender` for a Permit2 pre-approval, or `0x00000000` (an allowed app). */
+  private async permit2Selector(chainId: number, spender: Address): Promise<Hex> {
+    try {
+      const view = await this.policyView(chainId);
+      const s = view.sessions.find((x) => x.target.toLowerCase() === spender.toLowerCase());
+      return (s?.selector ?? "0x00000000") as Hex;
+    } catch {
+      return "0x00000000";
+    }
   }
 
   private async signInSites(): Promise<string[]> {
@@ -722,14 +802,45 @@ export class Wallet {
     // for it to be mined, then hand the site the registered-hash marker.
     const p = sig.permit!;
     const aaNet = aaNetwork(approval.chainId);
-    const call = registerPermitCall(aaNet ? aaNet.aa.hook : account, {
-      kind: "register-permit",
-      rule: "SIG-PERMIT-2612",
-      token: p.token,
-      spender: p.spender,
-      value: BigInt(p.value),
-      deadline: BigInt(p.deadline),
-    });
+    const target = aaNet ? aaNet.aa.hook : account;
+    const call =
+      p.standard === "permit2"
+        ? registerPermit2Call(
+            target,
+            {
+              kind: "register-permit2",
+              rule: "SIG-PERMIT2-SINGLE",
+              token: p.token,
+              amount: BigInt(p.value),
+              expiration: BigInt(p.expiration!),
+              nonce: BigInt(p.nonce!),
+              spender: p.spender,
+              sigDeadline: BigInt(p.deadline),
+            },
+            p.sessionSelector,
+          )
+        : p.standard === "permit2-transfer"
+          ? registerPermit2Call(
+              target,
+              {
+                kind: "register-permit2-transfer",
+                rule: "SIG-PERMIT2-TRANSFER",
+                token: p.token,
+                amount: BigInt(p.value),
+                spender: p.spender,
+                nonce: BigInt(p.nonce!),
+                deadline: BigInt(p.deadline),
+              },
+              p.sessionSelector,
+            )
+          : registerPermitCall(target, {
+              kind: "register-permit",
+              rule: "SIG-PERMIT-2612",
+              token: p.token,
+              spender: p.spender,
+              value: BigInt(p.value),
+              deadline: BigInt(p.deadline),
+            });
     let entry: ActivityEntry;
     try {
       entry = await this.pay().send(approval.chainId, [call], { origin: approval.origin });
@@ -1133,6 +1244,48 @@ export class Wallet {
     return out;
   }
 
+  // ---- role-signer fee balance (Security › Vault › Fee balance) ----
+
+  /** Where a top-up's money goes: the role signer (native backend) or, on 4337, the fee tank that relays approvals. */
+  private async topUpTarget(chainId: number, role: "vault" | "recovery") {
+    const plan = await this.plans.get(chainId);
+    if (!plan) throw new PaymentsError("no-account", "Finish setting up your account first.");
+    const tank = (await this.keyring.accounts())!.feeTank;
+    if (plan.backend === "4337") return { tank, signer: tank, direct: false };
+    const signer = role === "vault" ? plan.vaultSigner : plan.recoverySigner;
+    if (!signer) throw new PaymentsError("no-recovery", "No Recovery key is linked to this account yet.");
+    return { tank, signer, direct: true };
+  }
+
+  private async topUpPreview(chainId: number, role: "vault" | "recovery", amount: bigint) {
+    if (amount <= 0n) throw new PaymentsError("bad-amount", "Enter an amount above zero.");
+    const { tank, signer } = await this.topUpTarget(chainId, role);
+    const preview = await this.pay().preview(chainId, [{ target: tank, value: amount, data: "0x" }]);
+    return { ...preview, tank, signer };
+  }
+
+  /**
+   * Tops up a role signer's fee balance as an everyday payment: the account pays the fee tank (allowlisted at
+   * creation, so it is a normal everyday payment within the limit), then the tank forwards the same amount to the
+   * signer. The account can't pay a role signer itself (the hot tier refuses it), and a Vault approval to fund the
+   * Vault's own fees would be paid by the balance that is running low.
+   */
+  private async topUpSigner(chainId: number, role: "vault" | "recovery", amount: bigint) {
+    if (amount <= 0n) throw new PaymentsError("bad-amount", "Enter an amount above zero.");
+    const { tank, signer, direct } = await this.topUpTarget(chainId, role);
+    let entry = await this.pay().send(chainId, [{ target: tank, value: amount, data: "0x" }]);
+    for (let i = 0; i < 90 && (entry.status === "confirming" || entry.status === "sending"); i++) {
+      await new Promise((r) => setTimeout(r, 2000));
+      await this.pay().refreshPending();
+      entry = (await this.activity.get(entry.id)) ?? entry;
+    }
+    if (entry.status !== "confirmed")
+      throw new PaymentsError("top-up-failed", "The payment to your fee tank didn't go through, so nothing was moved.");
+    const hash = direct ? await this.vf().fundSigner(chainId, role, amount) : undefined;
+    const balanceWei = (await this.env.io!.publicClient(chainId).getBalance({ address: signer })).toString();
+    return { paymentHash: entry.hash, ...(hash ? { hash } : {}), balanceWei };
+  }
+
   /** Effects of a confirmed Vault approval that the extension must mirror (the new everyday key, a linked Recovery key). */
   private async afterVault(): Promise<void> {
     if (!this.vault) return;
@@ -1380,6 +1533,10 @@ export class Wallet {
     }),
     "vault:policy": async ({ chainId }) => this.policyView(chainId ?? (await this.settings.get()).selectedChainId),
     "vault:signers": async ({ chainId }) => this.signerViews(chainId ?? (await this.settings.get()).selectedChainId),
+    "vault:topUpPreview": async ({ chainId, role, amountWei }) =>
+      this.topUpPreview(await this.chainOr(chainId), role, BigInt(amountWei)),
+    "vault:topUp": async ({ chainId, role, amountWei }) =>
+      this.topUpSigner(await this.chainOr(chainId), role, BigInt(amountWei)),
     "security:nextEverydayKey": async () => {
       const index = (await this.keyring.everydayIndex()) + 1;
       return { index, address: await this.keyring.everydayAt(index) };

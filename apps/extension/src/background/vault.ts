@@ -408,6 +408,48 @@ export class VaultFlow {
     return hash;
   }
 
+  /**
+   * Moves `value` from the fee tank to a deployed role signer's fee balance (a plain transfer: the tank is an
+   * everyday key, so no Vault approval is involved). The account can't pay a role signer directly (the hot tier
+   * refuses it: `ForbiddenRecipient`), which is why a top-up goes account → tank → signer. Waits for the receipt.
+   */
+  async fundSigner(chainId: number, role: VaultRole, value: bigint): Promise<Hex> {
+    const plan = await this.plan(chainId);
+    const client = this.d.io.publicClient(chainId);
+    const address = this.signerAddress(plan, role);
+    const code = await client.getCode({ address });
+    if (!code || code === "0x")
+      throw new VaultError(
+        "not-deployed",
+        "This key isn't on the network yet; it gets its first fees when it's set up.",
+      );
+    const accounts = await this.d.keyring.accounts();
+    if (!accounts) throw new VaultError("locked", "Unlock LEAKED first.");
+    const gasPrice = await this.gasPrice(chainId);
+    const est = await client.estimateGas({ account: accounts.feeTank, to: address, value });
+    const gas = (est * 5n) / 4n + 10_000n;
+    const tank = await client.getBalance({ address: accounts.feeTank });
+    if (tank < value + gas * gasPrice)
+      throw new VaultError("tank-low", "Your fee tank doesn't have enough ETH for this top-up and its network fee.");
+    const nonce = await client.getTransactionCount({ address: accounts.feeTank, blockTag: "pending" });
+    const raw = await this.d.keyring.withHotKeys((k) =>
+      privateKeyToAccount(k.feeTank).signTransaction({
+        type: "legacy",
+        chainId,
+        nonce,
+        gasPrice,
+        gas,
+        to: address,
+        value,
+      }),
+    );
+    const hash = await this.d.io.node(chainId).sendRawTransaction(raw);
+    const r = await client.waitForTransactionReceipt({ hash, timeout: 180_000 });
+    if (r.status !== "success")
+      throw new VaultError("top-up-failed", "The top-up didn't go through; your fee tank paid the network fee.");
+    return hash;
+  }
+
   private async gasPrice(chainId: number): Promise<bigint> {
     const gp = await this.d.io.publicClient(chainId).getGasPrice();
     return gp * 2n > GWEI ? gp * 2n : GWEI;

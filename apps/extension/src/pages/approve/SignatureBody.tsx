@@ -46,7 +46,10 @@ export function SignatureBody({ view }: { view: ApprovalView }) {
   const typed = sig.method === "eth_signTypedData_v4";
   const isSiweLike = !typed || /sign.?in|login|auth|siwe/iu.test(sig.primaryType ?? "");
   const until = p
-    ? new Date(Number(p.deadline) * 1000).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })
+    ? new Date(Number(p.expiration ?? p.deadline) * 1000).toLocaleString("en-GB", {
+        dateStyle: "medium",
+        timeStyle: "short",
+      })
     : "";
   return (
     <>
@@ -139,6 +142,14 @@ export function SignatureBody({ view }: { view: ApprovalView }) {
             <p className="t-body">
               This is recorded on the network so the site can use it later. It counts against your daily limit now.
             </p>
+            {p!.standard && (
+              <p className="t-small text-muted" data-testid="permit-permit2">
+                {p!.standard === "permit2"
+                  ? "Through Permit2: the spender gets an allowance it can use until the date above."
+                  : "Through Permit2: the spender can take this amount once, before the date above."}{" "}
+                Your Vault must have let Permit2 use this token for the spender to actually take it.
+              </p>
+            )}
             <dl className="t-body grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5">
               <dt className="text-muted">Spender</dt>
               <dd>
@@ -155,7 +166,13 @@ export function SignatureBody({ view }: { view: ApprovalView }) {
             </dl>
             <p className="t-small text-muted">
               Some sites can't use pre-approvals from smart accounts. If the site shows an error after this, it's on
-              their side. Reason code SIG-PERMIT-2612.
+              their side. Reason code{" "}
+              {p!.standard === "permit2"
+                ? "SIG-PERMIT2-SINGLE"
+                : p!.standard === "permit2-transfer"
+                  ? "SIG-PERMIT2-TRANSFER"
+                  : "SIG-PERMIT-2612"}
+              .
             </p>
           </>
         )}

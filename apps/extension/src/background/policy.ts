@@ -11,6 +11,10 @@ import { callShape, type Call, type ClassifiedCall, type PolicySnapshot } from "
 
 const ETH: Address = "0x0000000000000000000000000000000000000000";
 const REGISTER_PERMIT = toFunctionSelector("registerPermit(address,address,uint256,uint256)");
+const REGISTER_PERMIT2 = toFunctionSelector("registerPermit2(address,uint160,uint48,address,uint256,bytes4)");
+const REGISTER_PERMIT2_TRANSFER = toFunctionSelector(
+  "registerPermit2Transfer(address,uint256,address,uint256,uint256,bytes4)",
+);
 
 export interface AccountChainState {
   deployed: boolean;
@@ -204,6 +208,35 @@ export async function classifyCalls(src: PolicySource, calls: Call[]): Promise<C
         recipientAllowed: true,
         sessionMatch: false,
         usd: t.allowed ? quote(value, t.usdPerToken, Number(t.decimals)) : 0n,
+      });
+    } else if (
+      call.target.toLowerCase() === src.permitTarget.toLowerCase() &&
+      (call.data.toLowerCase().startsWith(REGISTER_PERMIT2) ||
+        call.data.toLowerCase().startsWith(REGISTER_PERMIT2_TRANSFER))
+    ) {
+      // A Permit2 pre-approval (PermitSingle or PermitTransferFrom): the typed amount is debited once, and the
+      // spender must be an allowed app (`targets`) or hold a live allowance for the named selector.
+      const { args } = decodeFunctionData({ abi: accountAbi, data: call.data });
+      const single = call.data.toLowerCase().startsWith(REGISTER_PERMIT2);
+      const a = args as unknown as readonly unknown[];
+      const tokenAddr = a[0] as Address;
+      const amount = a[1] as bigint;
+      const spender = (single ? a[3] : a[2]) as Address;
+      const selector = a[5] as Hex;
+      const t = await src.token(tokenAddr);
+      const spenderOk =
+        (await src.isTarget(spender)) ||
+        (state.deployed && !/^0x0{8}$/u.test(selector) && (await src.sessionLive(spender, selector)));
+      out.push({
+        call,
+        kind: "permit-registration",
+        recipient: spender,
+        amount,
+        token: tokenAddr,
+        assetAllowed: t.allowed,
+        recipientAllowed: spenderOk,
+        sessionMatch: false,
+        usd: t.allowed ? quote(amount, t.usdPerToken, Number(t.decimals)) : 0n,
       });
     } else {
       const sessionMatch =

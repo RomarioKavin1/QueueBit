@@ -129,7 +129,21 @@ export interface ApprovalSignature {
   /** Typed data: `primaryType`, so a sign-in screen can say what kind of message it is (a vote, a login, …). */
   primaryType?: string;
   /** ERC-2612 permit: the pre-approval the account will register (bigints as decimal strings). */
-  permit?: { token: Address; spender: Address; value: string; deadline: string; symbol?: string; decimals?: number };
+  permit?: {
+    token: Address;
+    spender: Address;
+    value: string;
+    deadline: string;
+    symbol?: string;
+    decimals?: number;
+    /** Absent: ERC-2612. Permit2 `PermitSingle` ("permit2") or `PermitTransferFrom` ("permit2-transfer"). */
+    standard?: "permit2" | "permit2-transfer";
+    /** Permit2: the signed nonce; PermitSingle: `expiration` (the allowance's end; `deadline` is `sigDeadline`). */
+    nonce?: string;
+    expiration?: string;
+    /** Permit2: the live allowance selector that admits the spender (`0x00000000` for an allowed app). */
+    sessionSelector?: `0x${string}`;
+  };
 }
 export type ApprovalStatus = "pending" | "approved" | "rejected";
 

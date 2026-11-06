@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { buildPlan, initConfigFor, accountSalt, roleSalt, USD } from "../../src/background/account";
 import { PolicyReader } from "../../src/background/policy";
 import { decideRoute } from "../../src/background/routing";
-import { registerPermitCall } from "../../src/background/signing";
+import { registerPermit2Call, registerPermitCall } from "../../src/background/signing";
 import { accountAbi } from "../../src/generated/contracts";
 
 /**
@@ -136,5 +136,38 @@ describe("recipient mode in routing", () => {
     const other = "0x00000000000000000000000000000000000000d0" as Address;
     expect((await route(0, [call(other, 1n)])).rules).toContain("TOKEN-NOT-ALLOWED");
     void accountAbi;
+  });
+
+  it("a Permit2 pre-approval debits its amount; the spender must be an allowed app or hold a live allowance", async () => {
+    const single = (spender: Address, amount: bigint) =>
+      registerPermit2Call(plan.address, {
+        kind: "register-permit2",
+        rule: "SIG-PERMIT2-SINGLE",
+        token: USDC,
+        amount,
+        expiration: 9n,
+        nonce: 0n,
+        spender,
+        sigDeadline: 9n,
+      });
+    const transfer = (spender: Address, amount: bigint) =>
+      registerPermit2Call(plan.address, {
+        kind: "register-permit2-transfer",
+        rule: "SIG-PERMIT2-TRANSFER",
+        token: USDC,
+        amount,
+        spender,
+        nonce: 7n,
+        deadline: 9n,
+      });
+    for (const mode of [0, 1] as const) {
+      expect(await route(mode, [single(TANK, 120n * USD)])).toMatchObject({ route: "hot", amountUsd: 120n * USD });
+      expect(await route(mode, [transfer(TANK, 50n * USD)])).toMatchObject({ route: "hot", amountUsd: 50n * USD });
+      // Open mode does not widen spenders: a fresh spender is not allowed in either mode.
+      const fresh = await route(mode, [single(FRESH, 1n * USD)]);
+      expect(fresh.rules).toContain("TARGET-NOT-ALLOWED");
+      expect(fresh).toMatchObject({ notAllowed: { what: "recipient", address: FRESH } });
+    }
+    expect((await route(0, [single(TANK, 900n * USD)])).rules).toContain("CAP-EXCEEDED");
   });
 });

@@ -96,6 +96,16 @@ export interface UiApi {
   "vault:executeQueued": { req: { chainId?: number; opId: `0x${string}` }; res: { hash: `0x${string}` } };
   "vault:policy": { req: { chainId?: number }; res: PolicyView };
   "vault:signers": { req: { chainId?: number }; res: SignerView[] };
+  /** "Fee balance › Top up": what moving `amountWei` from the account to a role signer's fee balance would do. */
+  "vault:topUpPreview": {
+    req: { chainId?: number; role: "vault" | "recovery"; amountWei: string };
+    res: SendPreview & { tank: `0x${string}`; signer: `0x${string}` };
+  };
+  /** Everyday payment account → fee tank (counts against the limit), then tank → signer. Waits for both. */
+  "vault:topUp": {
+    req: { chainId?: number; role: "vault" | "recovery"; amountWei: string };
+    res: { paymentHash: `0x${string}`; hash?: `0x${string}`; balanceWei: string };
+  };
   /** The next everyday key's address (for "Replace everyday key"). */
   "security:nextEverydayKey": { req: undefined; res: { index: number; address: `0x${string}` } };
 

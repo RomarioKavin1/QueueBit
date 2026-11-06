@@ -18,10 +18,10 @@ import { cx } from "../../ui/cx";
 import { formatUsd } from "../../ui/format";
 import { call, UiCallError } from "../lib/api";
 import { useAsync } from "../lib/hooks";
-import { eth } from "../lib/money";
+import { eth, parseEth } from "../lib/money";
 import { startVault } from "./vaultStart";
 
-type SheetKind = "pause" | "rotate" | "lockdown" | "guardian" | "watcher" | null;
+type SheetKind = "pause" | "rotate" | "lockdown" | "guardian" | "watcher" | "topup" | null;
 
 /**
  * Security center (ux-spec §3.10): status of the three tiers and the Guardian, and the protective actions, each a
@@ -36,6 +36,7 @@ export function Security({ state }: { state: WalletState }) {
   const [busy, setBusy] = useState(false);
   const [guardian, setGuardian] = useState(state.setup.guardian?.address ?? "");
   const [guardianName, setGuardianName] = useState(state.setup.guardian?.name ?? "");
+  const [topUpRole, setTopUpRole] = useState<"vault" | "recovery">("vault");
   const s = status.data;
   const vaultSigner = signers.data?.find((x) => x.role === "vault");
   const recoverySigner = signers.data?.find((x) => x.role === "recovery");
@@ -91,6 +92,30 @@ export function Security({ state }: { state: WalletState }) {
           }
           {...(vaultSigner ? { detail: vaultSigner.lane.text } : {})}
         />
+        {signers.data
+          ?.filter((x) => x.deployed)
+          .map((x) => (
+            <Row
+              key={x.role}
+              icon={<span aria-hidden="true">⛽</span>}
+              tone="vault"
+              name={x.role === "vault" ? "Fee balance" : "Recovery fee balance"}
+              value={`${eth(x.balanceWei, 4)} · pays the network fee of each ${x.role === "vault" ? "Vault" : "Recovery"} approval`}
+              action={
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={busy || s.frozen || s.bunker}
+                  onClick={() => {
+                    setTopUpRole(x.role);
+                    setSheet("topup");
+                  }}
+                >
+                  Top up
+                </Button>
+              }
+            />
+          ))}
         <Row
           icon={<RecoveryIcon size={20} />}
           tone="brand"
@@ -252,6 +277,12 @@ export function Security({ state }: { state: WalletState }) {
           </Button>
         </SheetButtons>
       </Sheet>
+      <TopUpSheet
+        open={sheet === "topup"}
+        role={topUpRole}
+        onClose={() => setSheet(null)}
+        onDone={() => void signers.reload()}
+      />
       <Sheet open={sheet === "rotate"} title="Replace the everyday key?" onClose={() => setSheet(null)}>
         <p className="t-body">
           Use this if you think this browser might be compromised. The old key stops working immediately. Your address
@@ -369,6 +400,90 @@ export function GuardianForm({
         <li>You can remove them any time (Vault approval)</li>
       </ul>
     </div>
+  );
+}
+
+/**
+ * Top up a role signer's fee balance. It is an everyday payment (no phone): the account pays the fee tank, which is
+ * allowlisted at creation, and the tank forwards the ETH to the signer.
+ */
+function TopUpSheet({
+  open,
+  role,
+  onClose,
+  onDone,
+}: {
+  open: boolean;
+  role: "vault" | "recovery";
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [amount, setAmount] = useState("0.01");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState<string | null>(null);
+  const wei = parseEth(amount);
+  const preview = useAsync(
+    () => (open && wei ? call("vault:topUpPreview", { role, amountWei: wei.toString() }) : Promise.resolve(undefined)),
+    [open, role, wei?.toString()],
+  );
+  const p = preview.data;
+  const hot = p?.route.route === "hot";
+  const who = role === "vault" ? "Vault" : "Recovery key";
+  return (
+    <Sheet open={open} title={`Top up the ${who}'s fee balance`} onClose={onClose}>
+      <div className="flex flex-col gap-3" data-testid="topup-sheet">
+        <p className="t-body">
+          Your {who} pays a small network fee each time it approves something (about 0.001 ETH). This moves ETH from
+          your account to that fee balance.
+        </p>
+        <p className="t-small text-muted">
+          It's an everyday payment: it counts against your daily limit and needs no phone. The ETH goes through your fee
+          tank first, because your account never pays its own {who} directly.
+        </p>
+        <TextField
+          label="Amount (ETH)"
+          inputMode="decimal"
+          value={amount}
+          onChange={(e) => {
+            setAmount(e.target.value.trim());
+            setDone(null);
+            setError(null);
+          }}
+          error={amount && !wei ? "Enter an amount like 0.01." : undefined}
+        />
+        {p && !hot && <RiskBanner level="limit" title={`${p.route.copy.headline}. ${p.route.copy.detail}`} />}
+        {p?.tankTooLow && <RiskBanner level="limit" title="Your fee tank is empty; fund it first." />}
+        {error && <RiskBanner level="danger" title={error} />}
+        {done && (
+          <p className="t-small text-safe" data-testid="topup-done">
+            {done}
+          </p>
+        )}
+        <SheetButtons onBack={onClose}>
+          <Button
+            block
+            loading={busy}
+            disabled={!wei || !hot || !!p?.tankTooLow || busy}
+            onClick={async () => {
+              setBusy(true);
+              setError(null);
+              try {
+                const r = await call("vault:topUp", { role, amountWei: wei!.toString() });
+                setDone(`Done. Fee balance now ${eth(r.balanceWei, 4)}.`);
+                onDone();
+              } catch (e) {
+                setError(e instanceof UiCallError ? e.message : "Something went wrong.");
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            Top up {wei ? eth(wei, 6) : ""}
+          </Button>
+        </SheetButtons>
+      </div>
+    </Sheet>
   );
 }
 
