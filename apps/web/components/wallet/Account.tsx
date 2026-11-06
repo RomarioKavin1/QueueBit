@@ -1,0 +1,83 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { Address, Choices, Notice, Title } from "@/components/onboarding/ui";
+import { engine } from "@/lib/engine/client";
+import { Row, Section } from "./bits";
+import { errText, useWallet } from "./state";
+
+/** The account at a glance, plus the few things a person does rarely: back up, lock. */
+export function AccountTab() {
+  const router = useRouter();
+  const { status, net, lockedWith, backedUp, budget } = useWallet();
+  const [err, setErr] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const lock = async () => {
+    try {
+      await engine().call("keyring:lock");
+      router.replace("/start");
+    } catch (e) {
+      setErr(errText(e));
+    }
+  };
+
+  return (
+    <>
+      <Title sub="Owned by a quantum-safe key. Test network.">Account</Title>
+      {status?.address && (
+        <div className="plate-grid relative px-5 pt-7 pb-5">
+          <span aria-hidden className="fig-tag absolute top-3 right-2">
+            [ ADDRESS ]
+          </span>
+          <Address value={status.address} className="block pr-6 text-[1.08rem] leading-[1.7]" />
+          <button
+            type="button"
+            onClick={() =>
+              void navigator.clipboard?.writeText(status.address!).then(() => {
+                setCopied(true);
+                setTimeout(() => setCopied(false), 1600);
+              })
+            }
+            className="mono-label mt-4 h-10 border border-ink bg-paper px-3 active:bg-paper-3"
+          >
+            {copied ? "Copied" : "Copy address"}
+          </button>
+        </div>
+      )}
+      <dl className="mt-6 border-t border-ink">
+        <Row k="Status">{status ? (status.deployed ? "Created" : "Not created yet") : "…"}</Row>
+        <Row k="Locked with">{lockedWith === "password" ? "Password" : lockedWith === "passkey" ? "Passkey" : "…"}</Row>
+        <Row k="Backup">{backedUp === null ? "…" : backedUp ? "Words confirmed" : "Not backed up"}</Row>
+        {status && (
+          <Row k="Signatures left">
+            {status.ownerSignaturesLeft.toLocaleString("en-US")}
+            {budget ? ` of ${budget.toLocaleString("en-US")}` : ""}
+          </Row>
+        )}
+        <Row k="Network">{net ? `${net.name} · ${net.chainId}` : "…"}</Row>
+      </dl>
+
+      <Section title="Do">
+        <Choices
+          items={[
+            {
+              key: "backup",
+              title: backedUp ? "Show your 24 words" : "Back up your 24 words",
+              body: "They rebuild this wallet on any device.",
+              onSelect: () => router.push("/start#backup"),
+            },
+            {
+              key: "lock",
+              title: "Lock now",
+              body: lockedWith === "password" ? "Your password opens it again." : "Your passkey opens it again.",
+              onSelect: () => void lock(),
+            },
+          ]}
+        />
+      </Section>
+      {err && <Notice tone="error">{err}</Notice>}
+    </>
+  );
+}

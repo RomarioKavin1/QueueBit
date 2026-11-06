@@ -13,8 +13,8 @@ const T2 = "var(--blue-t2)";
 const T3 = "var(--blue-t3)";
 const INK = "var(--ink-3)";
 
-const delay = (ms: number): CSSProperties => ({ animationDelay: `${ms}ms` });
-const travel = (dx: number, dy: number, ms = 0): CSSProperties =>
+export const delay = (ms: number): CSSProperties => ({ animationDelay: `${ms}ms` });
+export const travel = (dx: number, dy: number, ms = 0): CSSProperties =>
   ({ "--dx": `${dx}px`, "--dy": `${dy}px`, animationDelay: `${ms}ms` }) as CSSProperties;
 
 export function Vignette({ children, label }: { children: ReactNode; label: string }) {
@@ -28,7 +28,7 @@ export function Vignette({ children, label }: { children: ReactNode; label: stri
 }
 
 /** The seal (the QueueBit mark), centred at (cx, cy) with diameter d. */
-function Seal({
+export function Seal({
   cx,
   cy,
   d,
@@ -71,7 +71,7 @@ function Seal({
   );
 }
 
-function Check({
+export function Check({
   x,
   y,
   className = "vg-draw",
@@ -331,6 +331,70 @@ export function VUnlock() {
       <rect x={96} y={50} width={48} height={40} fill={T1} stroke={B} strokeWidth={1.4} />
       <circle cx={120} cy={66} r={4} fill={B} />
       <path d="M118 68h4l1.5 10h-7Z" fill={B} />
+    </Vignette>
+  );
+}
+
+/** A payment: the quantum-safe seal signs, the signature joins a batch, the batch lands on the chain. */
+export function VSend({ done = false }: { done?: boolean }) {
+  return (
+    <Vignette
+      label={
+        done
+          ? "The payment sits in a block on the chain, with a check mark."
+          : "A signature leaves the QueueBit seal, joins a batch, and the batch moves onto the chain."
+      }
+    >
+      <Seal cx={36} cy={58} d={44} />
+      <line x1={62} y1={58} x2={98} y2={58} stroke={T3} strokeWidth={1.2} strokeDasharray="2 3" />
+      {!done && <circle cx={64} cy={58} r={3.2} fill={B} className="vg-dot" style={travel(36, 0)} />}
+      {[0, 1, 2].map((i) => (
+        <rect
+          key={i}
+          x={102}
+          y={44 + i * 10}
+          width={34}
+          height={7}
+          fill={i === 1 ? T3 : T1}
+          stroke={B}
+          strokeWidth={0.8}
+        />
+      ))}
+      <line x1={140} y1={58} x2={162} y2={58} stroke={T3} strokeWidth={1.2} strokeDasharray="2 3" />
+      {[0, 1, 2].map((i) => (
+        <rect
+          key={i}
+          x={166 + i * 22}
+          y={47}
+          width={18}
+          height={22}
+          fill={done || i < 2 ? T2 : "var(--paper)"}
+          stroke={done || i < 2 ? B : INK}
+          strokeWidth={1}
+          className={!done && i === 2 ? "vg-fill" : undefined}
+        />
+      ))}
+      {[0, 1].map((i) => (
+        <line key={i} x1={184 + i * 22} y1={58} x2={188 + i * 22} y2={58} stroke={B} strokeWidth={1} />
+      ))}
+      {done && <Check x={222} y={30} className="vg-draw" />}
+    </Vignette>
+  );
+}
+
+/** Receiving: dots arrive into the seal from either side. */
+export function VReceive() {
+  return (
+    <Vignette label="Payments arrive from both sides into the QueueBit seal.">
+      {[
+        [40, 30],
+        [40, 86],
+        [200, 30],
+        [200, 86],
+      ].map(([x, y], i) => (
+        <circle key={i} cx={x} cy={y} r={3.2} fill={B} className="vg-dot" style={travel(120 - x!, 56 - y!, i * 500)} />
+      ))}
+      <Seal cx={120} cy={56} d={52} />
     </Vignette>
   );
 }

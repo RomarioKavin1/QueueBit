@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatEther, formatUnits, isHex } from "viem";
 import { english, mnemonicToAccount, privateKeyToAccount } from "viem/accounts";
@@ -49,7 +50,9 @@ type Screen =
   | { id: "preview"; source: Source }
   | { id: "moving"; source: Source }
   | { id: "backup-auth" }
-  | { id: "ready" };
+  | { id: "ready" }
+  /** Hand over to the wallet (/wallet). */
+  | { id: "wallet" };
 
 type Source =
   | { kind: "key"; key: `0x${string}`; address: `0x${string}`; via: "phrase" | "key" }
@@ -84,7 +87,6 @@ const errText = (e: unknown) =>
   e instanceof EngineCallError || e instanceof PasskeyError || e instanceof Error ? e.message : "Something went wrong.";
 
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
-const PUBLIC_FAUCET = "https://altmempoolgateway.forshtat.com/rpc";
 
 export function Onboarding() {
   const [stack, setStack] = useState<Screen[]>([{ id: "loading" }]);
@@ -111,6 +113,8 @@ export function Onboarding() {
   const [prf, setPrf] = useState<boolean | null>(null);
   /** The unlock secret of this session (passkey-derived or typed), held only in memory for the backup step. */
   const secret = useRef<string | null>(null);
+  /** Opened from the wallet to back up (/start#backup): finishing goes back there. */
+  const fromWallet = useRef(false);
 
   useEffect(() => {
     void passkeySupport().then(setPrf);
@@ -119,7 +123,16 @@ export function Onboarding() {
       if (s === "other-tab") return commit({ id: "other-tab" });
       setNet(await e.getNetwork());
       const st = await e.call("state:get");
-      commit(!st.initialized ? { id: "choose" } : st.unlocked ? { id: "ready" } : { id: "unlock" });
+      fromWallet.current = st.initialized && location.hash === "#backup";
+      commit(
+        !st.initialized
+          ? { id: "choose" }
+          : !st.unlocked
+            ? { id: "unlock" }
+            : fromWallet.current
+              ? { id: "backup-auth" }
+              : { id: "wallet" },
+      );
     });
   }, [commit]);
 
@@ -194,7 +207,14 @@ export function Onboarding() {
       );
 
     case "unlock":
-      return <Unlock onDone={(pw) => ((secret.current = pw), commit({ id: "ready" }))} />;
+      return (
+        <Unlock
+          onDone={(pw) => (
+            (secret.current = pw),
+            commit(fromWallet.current ? { id: "backup-auth" } : { id: "wallet" })
+          )}
+        />
+      );
 
     case "passkey":
       return (
@@ -340,14 +360,18 @@ export function Onboarding() {
     case "backup-auth":
       return (
         <BackupAuth
-          onBack={back}
+          onBack={canBack ? back : () => commit({ id: "wallet" })}
           secret={secret.current}
           onWords={(words) => go({ id: "words", words, mode: "backup" })}
         />
       );
 
     case "ready":
-      return <Ready net={net} onBackup={() => go({ id: "backup-auth" })} />;
+      if (fromWallet.current) return <ToWallet />;
+      return <Ready onBackup={() => go({ id: "backup-auth" })} onOpen={() => commit({ id: "wallet" })} />;
+
+    case "wallet":
+      return <ToWallet />;
   }
 }
 
@@ -1148,72 +1172,38 @@ function Moving({ source, onDone, onBack }: { source: Source; onDone: () => void
 
 // ---- ready ----------------------------------------------------------------------------------------------------------
 
-function Ready({ net, onBackup }: { net?: NetworkInfo; onBackup: () => void }) {
+/** Hands over to the wallet, keeping this tab's engine (and its unlocked keys) alive: a client-side route change. */
+function ToWallet() {
+  const router = useRouter();
+  useEffect(() => {
+    router.replace("/wallet");
+  }, [router]);
+  return (
+    <Screen>
+      <div className="flex h-[50dvh] items-center justify-center gap-3 mono-label text-ink-3">
+        <Working /> Opening your wallet
+      </div>
+    </Screen>
+  );
+}
+
+function Ready({ onBackup, onOpen }: { onBackup: () => void; onOpen: () => void }) {
   const [status, setStatus] = useState<Awaited<ReturnType<typeof readStatus>> | null>(null);
   const [backedUp, setBackedUp] = useState<boolean | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
 
-  const load = useCallback(async () => {
-    const [s, st] = await Promise.all([readStatus(), engine().call("state:get")]);
-    setStatus(s);
-    setBackedUp(Boolean(st.setup.backupConfirmedAt));
-    return s;
-  }, []);
   useEffect(() => {
-    void load().catch((e) => setErr(errText(e)));
-  }, [load]);
-
-  const create = async () => {
-    if (!status) return;
-    setBusy(true);
-    setErr(null);
-    try {
-      let s = status;
-      const need = BigInt(s.activationCostWei ?? "0");
-      if (BigInt(s.setupWei ?? "0") < need) {
-        if (net?.localDevnet) throw new Error("Fund the setup key from a devnet key first (see the README).");
-        setNote("Asking the test faucet for ETH");
-        await fetch(PUBLIC_FAUCET, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "skandha_explorer_faucet", params: [s.setupKey] }),
-        });
-        for (let i = 0; i < 30 && BigInt(s.setupWei ?? "0") < need; i++) {
-          await new Promise((r) => setTimeout(r, 2000));
-          s = await readStatus();
-        }
-        if (BigInt(s.setupWei ?? "0") < need) throw new Error("The faucet hasn't paid yet. Try again in a minute.");
-      }
-      setNote("Creating your account on the test network");
-      await engine().call("account:activate", {});
-      for (let i = 0; i < 60 && !s.deployed; i++) {
-        await new Promise((r) => setTimeout(r, 2500));
-        s = await readStatus();
-      }
-      setStatus(s);
-      setNote(s.deployed ? null : "Still confirming. It will show as created shortly.");
-    } catch (e) {
-      setErr(errText(e));
-      setNote(null);
-    } finally {
-      setBusy(false);
-    }
-  };
+    void Promise.all([readStatus(), engine().call("state:get")])
+      .then(([s, st]) => {
+        setStatus(s);
+        setBackedUp(Boolean(st.setup.backupConfirmedAt));
+      })
+      .catch((e) => setErr(errText(e)));
+  }, []);
 
   const method = useLockMethod();
   return (
-    <Screen
-      actions={
-        status && !status.deployed ? (
-          <Primary busy={busy} busyLabel={note ?? "Working"} onClick={() => void create()}>
-            Create my account
-          </Primary>
-        ) : undefined
-      }
-    >
+    <Screen actions={<Primary onClick={onOpen}>Open my wallet</Primary>}>
       <VReady />
       <Title sub="Owned by a quantum-safe key. Test network.">Your account</Title>
       {!status && !err && (
@@ -1227,23 +1217,11 @@ function Ready({ net, onBackup }: { net?: NetworkInfo; onBackup: () => void }) {
             [ ADDRESS ]
           </span>
           <Address value={status.address} className="block pr-5 text-[1.12rem] leading-[1.7]" />
-          <button
-            type="button"
-            onClick={() => {
-              void navigator.clipboard?.writeText(status.address!).then(() => {
-                setCopied(true);
-                setTimeout(() => setCopied(false), 1600);
-              });
-            }}
-            className="mono-label mt-4 h-10 border border-ink bg-paper px-3 active:bg-paper-3"
-          >
-            {copied ? "Copied" : "Copy address"}
-          </button>
         </div>
       )}
       {status && (
         <dl className="mt-7 border-t border-ink">
-          <Row k="Status" v={status.deployed ? "Created" : "Not created yet"} />
+          <Row k="Status" v={status.deployed ? "Created" : "Created with your first payment"} />
           <Row k="Balance" v={`${Number(formatEther(BigInt(status.accountWei ?? "0"))).toFixed(5)} ETH`} />
           <Row k="Locked with" v={method === "password" ? "Password" : "Passkey"} />
           <Row k="Signatures left" v={status.ownerSignaturesLeft.toLocaleString("en-US")} />
@@ -1263,7 +1241,6 @@ function Ready({ net, onBackup }: { net?: NetworkInfo; onBackup: () => void }) {
           />
         </div>
       )}
-      {note && !busy && <Notice>{note}</Notice>}
       {err && <Notice tone="error">{err}</Notice>}
     </Screen>
   );

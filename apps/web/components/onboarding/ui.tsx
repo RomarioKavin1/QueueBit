@@ -201,6 +201,7 @@ export function Field({
   label,
   hint,
   error,
+  className = "",
   ...rest
 }: InputHTMLAttributes<HTMLInputElement> & { label: string; hint?: string; error?: string | null }) {
   return (
@@ -210,7 +211,7 @@ export function Field({
         {...rest}
         className={`mt-2 block h-12 w-full border bg-paper px-3 text-[16px] outline-none focus:border-blue ${
           error ? "border-red" : "border-ink"
-        }`}
+        } ${className}`}
       />
       {error ? (
         <span className="mt-1.5 block text-[0.9rem] text-red">{error}</span>

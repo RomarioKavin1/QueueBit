@@ -57,9 +57,27 @@ Three ways in, built mobile first (full-screen steps, the action pinned above th
   page is open in a wallet's browser; engine messages `migrate:calls` and `migrate:sweep`), or its secret phrase /
   private key is used once in the tab and never stored.
 
-After setup, the account screen shows the address, status and the backup item; on the test network "Create my
-account" funds the setup key from the gateway faucet and creates it. Reloading locks the wallet; it reopens with the
-passkey or password.
+After setup, the account screen shows the address and the backup item, and **Open my wallet** goes to `/wallet`.
+Reloading locks the wallet; `/start` reopens it with the passkey or password and goes straight back to `/wallet`.
+
+## The wallet (`/wallet`)
+
+Three tabs and the screens on top of them, all in one page so the engine worker (and the keys it holds unlocked)
+lives as long as the tab:
+
+- **Home**: balance, Send and Receive, the account's state (an address until the first payment creates it), the
+  quantum-safe signatures left, the backup reminder and the last three entries. On the public devnet an empty account
+  gets **Get test ETH** (the gateway faucet).
+- **Send**: who and how much (paste, send all), a receipt to check (fee, total, what's left, the signature it uses,
+  and the account creation on the first payment), then the payment's steps live: account created, signed, checked by
+  LeanPool, batched on chain, confirmed. The first payment asks the faucet for the setup key's fee when it needs it.
+- **Receive**: the address as a QR code and in groups of four; copy and share.
+- **Activity**: everything this wallet sent; each entry shows its status, amount, fee, signer, steps and explorer link.
+- **Account**: address, lock method, backup state, signatures, network; back up (`/start#backup`, which returns here)
+  and lock.
+
+Owner-signed payments need a LeanPool node (see below). Without one, Send stops at the signing step with the node's
+error and nothing is sent.
 
 ## Testing with /test
 
