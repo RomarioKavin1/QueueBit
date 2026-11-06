@@ -50,7 +50,8 @@ import {
 } from "./router";
 import type { Call } from "./routing";
 import { SettingsStore } from "./settings";
-import { BUILD } from "../shared/build";
+import { LOCAL_DEVNET } from "../shared/build";
+import { siteWarning } from "../shared/sites";
 import { anonStatusFor } from "../shared/offscreen";
 import type { OffscreenClient } from "./offscreen";
 import { PrivacyController } from "./privacy/controller";
@@ -154,7 +155,7 @@ export class Wallet {
               return env.offscreen.prover();
             },
             anonStatus: async (chainId) => anonStatusFor(chainId, { harnessBundled: false }),
-            localDevnet: BUILD.localDevnet,
+            localDevnet: LOCAL_DEVNET,
             now: this.now,
           })
         : undefined;
@@ -533,9 +534,11 @@ export class Wallet {
     if (!approval) return null;
     const knownSite = await this.permissions.knownSite(approval.origin);
     const account = (await this.keyring.accounts()) ? await this.accountFor(approval.chainId) : undefined;
+    const warn = siteWarning(approval.origin) ?? (approval.topOrigin ? siteWarning(approval.topOrigin) : null);
     return {
       approval,
       ...(knownSite ? { knownSite } : {}),
+      ...(warn ? { siteWarning: warn } : {}),
       alreadyConnected: await this.permissions.isPermitted(approval.origin),
       ...(account ? { account } : {}),
     };
@@ -1400,8 +1403,7 @@ export class Wallet {
     },
     "privacy:saveConfig": async (req) => {
       const chainId = await this.chainOr(req.chainId);
-      if (!BUILD.localDevnet || chainId !== 1337)
-        throw new Error("Private-balance contracts are fixed on this network.");
+      if (!LOCAL_DEVNET || chainId !== 1337) throw new Error("Private-balance contracts are fixed on this network.");
       return this.priv().saveConfig({ ...req, chainId });
     },
     "privacy:connection": async ({ chainId }) => {

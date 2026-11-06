@@ -4,6 +4,7 @@ import type { SerializedRpcError } from "./errors";
 import type { AccountStatus, SendPreview, PairPreview, PolicyView, SignerView } from "./views";
 import type { QueuedView, VaultRequestRecord } from "../background/vault";
 import type { VaultActionRequest } from "../background/vaultActions";
+import type { SiteWarning } from "./sites";
 import type { Approval, BalanceResult, KnownSite, OriginPermission, Settings, SetupState, WalletState } from "./types";
 import type { AlertRecord } from "../background/watcher/alerts";
 import type { PairingView } from "../background/watcher/pairing";
@@ -26,6 +27,8 @@ export const CONTENT_TARGET = "leaked-content";
 export interface ApprovalView {
   approval: Approval;
   knownSite?: KnownSite;
+  /** The request's site (or the page embedding it) is on a bundled scam-site list, or has a lookalike name. */
+  siteWarning?: SiteWarning;
   alreadyConnected: boolean;
   /** The address the site sees on the approval's chain. */
   account?: `0x${string}`;

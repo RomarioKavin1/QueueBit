@@ -87,6 +87,23 @@ export function ApproveApp() {
           </p>
         </div>
       </header>
+      {view.siteWarning && (
+        <div className="px-4 pt-3" data-testid="site-warning">
+          {view.siteWarning.kind === "listed" ? (
+            <RiskBanner
+              level="danger"
+              title={`${view.siteWarning.host} is on ${view.siteWarning.list}`}
+              body="Sites on this list have tried to steal from people. Close this window unless you are certain."
+            />
+          ) : (
+            <RiskBanner
+              level="limit"
+              title={`${view.siteWarning.host} uses lookalike letters`}
+              body="Its name is written with international characters and can imitate another site. Check the address carefully."
+            />
+          )}
+        </div>
+      )}
 
       {!state.initialized ? (
         <div className="flex flex-1 flex-col gap-4 p-4">
