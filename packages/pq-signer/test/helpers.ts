@@ -82,4 +82,4 @@ export const benchLean = readJson<{ publicKey: string; digests: string[]; sigs: 
   "../../../bench/vectors/leansphincs-s.json",
 );
 /** keccak256("queuebit-bench/v1/leansphincs-s/seed"): the bench's lssk seed (bench/src/signers.ts). */
-export const BENCH_LEAN_SEED = "0x8530e25021c78261824410eb99d6e860bff14e918fcb4fcd44ef4da4583e1450";
+export const BENCH_LEAN_SEED = "0x6515b9ea8962981e9f5b3d3457854dfead0809ba04e5d32882bf260e02801bbe";
