@@ -15,6 +15,21 @@ Sources:
 
 The target is the QueueBit repo. The product stays a browser extension.
 
+## 0. Status (2026-11-06)
+
+| Phase | State | Verified by |
+|---|---|---|
+| P1 spike: leanSPHINCS in WASM | done | byte-identical keys/signatures vs native lean-pq 0.7.0; reproducible WASM (CI job) |
+| P2 shared code (`lean-sphincs`, `frames` shape, `rpc` client) | done | vitest |
+| P3 contracts (`DepsRegistry`, `LeanPoolHotSigner` + factory, `hotExecuteFrom`, `vaultSetPQHotSigner`) | done | forge: 1,026 pass (32 new + the 44-case parity suite); lint-verify OK |
+| P4 node service (`services/leanpool-node`) | done | vitest 55 incl. real STARK proving; Dockerfile written (not built here: no docker) |
+| P5 extension (Security, payments lane, activity, previews) | done | vitest 253; public-devnet test through the extension's own code (`test/devnet/leanpool.public.test.ts`) |
+| P6 companion (clear-sign `vaultSetPQHotSigner`) | done | interop test with the extension's own request |
+| P7 live + docs | done | `contracts/devnet-tests/leanpool` PASS on chain 1337 (VERIFY 61,449 gas, STARK VALID); THREAT-MODEL §8.1, ARCHITECTURE, research page |
+| Local devnet compose service + Playwright UI case | open | BACKLOG (no docker on the build machine) |
+
+The task tables below are the plan as written; option H's tasks are the ones built.
+
 ## 1. What each project is
 
 Both answer one question: how does an EIP-8141 account use a post-quantum key when a PQ signature doesn't fit the
