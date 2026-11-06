@@ -65,12 +65,14 @@ Reloading locks the wallet; `/start` reopens it with the passkey or password and
 Three tabs and the screens on top of them, all in one page so the engine worker (and the keys it holds unlocked)
 lives as long as the tab:
 
-- **Home**: balance, Send and Receive, the account's state (an address until the first payment creates it), the
+- **Home**: the account (avatar, address, tap to copy), balance, Send / Receive / Test ETH, assets, the account's state (an address until the first payment creates it), the
   quantum-safe signatures left, the backup reminder and the last three entries. On the public devnet an empty account
   gets **Get test ETH** (the gateway faucet).
-- **Send**: who and how much (paste, send all), a receipt to check (fee, total, what's left, the signature it uses,
-  and the account creation on the first payment), then the payment's steps live: account created, signed, checked by
-  LeanPool, batched on chain, confirmed. The first payment asks the faucet for the setup key's fee when it needs it.
+- **Send**, as MetaMask, Rainbow and Phantom do it: pick who (paste, scan a QR where the browser can, or someone you
+  paid before; a new address is flagged), type how much on a keypad (25%, 50%, Max; the fee shown live), confirm a
+  "you → them" receipt (fee, total, the signature it uses, account creation on the first payment), then watch the
+  steps: account created, signed, checked by LeanPool, batched on chain, confirmed. The first payment asks the faucet
+  for the setup key's fee when it needs it. Addresses carry a dot-pattern avatar drawn from the address itself.
 - **Receive**: the address as a QR code and in groups of four; copy and share.
 - **Activity**: everything this wallet sent; each entry shows its status, amount, fee, signer, steps and explorer link.
 - **Account**: address, lock method, backup state, signatures, network; back up (`/start#backup`, which returns here)

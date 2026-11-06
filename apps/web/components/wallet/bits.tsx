@@ -3,6 +3,8 @@
 import type { ReactNode } from "react";
 import { LineArrow, Working } from "@/components/onboarding/ui";
 import { ago, eth } from "@/lib/format";
+import { Mark } from "@/components/paper/Logo";
+import { Identicon } from "./Identicon";
 import type { ActivityEntry } from "./state";
 
 /** A label/value line in a ruled list. */
@@ -90,8 +92,13 @@ export function EntryRow({ e, onOpen }: { e: ActivityEntry; onOpen: () => void }
       <button
         type="button"
         onClick={onOpen}
-        className="grid min-h-[68px] w-full grid-cols-[1fr_auto_auto] items-center gap-3 py-3 text-left active:bg-blue-wash"
+        className="grid min-h-[68px] w-full grid-cols-[auto_1fr_auto_auto] items-center gap-3 py-3 text-left active:bg-blue-wash"
       >
+        {e.kind === "payment" && e.calls.length === 1 ? (
+          <Identicon address={e.calls[0]!.target} size={34} />
+        ) : (
+          <Mark size={34} variant="line" />
+        )}
         <span className="min-w-0">
           <span className="block truncate text-[1.02rem] leading-snug">{entryTitle(e)}</span>
           <span className="mt-1 flex items-center gap-2 mono-label text-[11px] text-ink-3">
@@ -129,4 +136,27 @@ export function GhostSeal({ size = 44 }: { size?: number }) {
       <circle cx="50" cy="50" r="34" fill="none" stroke="var(--blue-t3)" strokeWidth="1.6" strokeDasharray="4 4" />
     </svg>
   );
+}
+
+export interface Recipient {
+  address: `0x${string}`;
+  count: number;
+  last: number;
+}
+
+/** Everyone this wallet paid (plain one-call payments that didn't fail), most recent first. */
+export function recipients(activity: ActivityEntry[]): Recipient[] {
+  const by = new Map<string, Recipient>();
+  for (const e of activity) {
+    if (e.kind !== "payment" || e.status === "failed" || e.calls.length !== 1) continue;
+    const c = e.calls[0]!;
+    if (BigInt(c.value) === 0n || c.data !== "0x") continue;
+    const k = c.target.toLowerCase();
+    const r = by.get(k);
+    if (r) {
+      r.count++;
+      r.last = Math.max(r.last, e.createdAt);
+    } else by.set(k, { address: c.target, count: 1, last: e.createdAt });
+  }
+  return [...by.values()].sort((a, b) => b.last - a.last);
 }
