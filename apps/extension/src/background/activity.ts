@@ -57,6 +57,8 @@ export interface ActivityEntry {
   poolId?: Hex;
   pqNodeUrl?: string;
   pqSigner?: Address;
+  /** Its LeanPool batch: the root posted on-chain, its post tx, and the STARK proof hash once attached. */
+  pqBatch?: { root: Hex; postTx: Hex; block: string; ring: number; proofHash?: Hex };
   /** Why a payment that would have used the quantum-safe key went out with the everyday key instead. */
   fallbackNote?: string;
   /** Block number when the transaction was sent (for "stuck after 3 blocks", plan §30 §4.7). */

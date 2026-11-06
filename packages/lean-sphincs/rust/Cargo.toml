@@ -19,7 +19,7 @@ wasm = ["dep:wasm-bindgen", "getrandom/wasm_js"]
 # set (7,740-byte signatures): moving means moving the node, this crate and the scheme id together.
 signatures = { git = "https://github.com/leanEthereum/leanVM.git", rev = "a39758de10f35c7b34023d061cc05dfc0b36d43a" }
 # Pulled in by leanVM's `rand` 0.9; on wasm32 it needs the `wasm_js` backend (selected in .cargo/config.toml).
-getrandom = "0.3"
+getrandom = "=0.3.4"
 wasm-bindgen = { version = "=0.2.117", optional = true }
 
 [profile.release]

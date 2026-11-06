@@ -16,11 +16,13 @@ import {
   leanPoolHotTx,
   sigHash,
   toWire,
+  txHash,
   type FrameTxReceipt,
   type WireFrameTx,
 } from "@queuebit/frames";
-import { LeanSphincsKey, verify as leanVerify } from "@queuebit/lean-sphincs";
+import { LeanSphincsKey, SCHEME_LABEL, SIGNATURE_BUDGET, verify as leanVerify } from "@queuebit/lean-sphincs";
 import {
+  RpcError,
   createLeanPoolClient,
   httpTransport,
   isFinalLeanPoolStage,
@@ -43,7 +45,7 @@ import type { Call } from "./routing";
  *
  * What the user trusts beyond the chain: the LeanPool node they use (its aggregator could approve a payment the key
  * did not sign). The account's everyday limits bound that, exactly as they bound a leaked everyday key, and every
- * batch carries a recursive STARK anyone can check ("Audit").
+ * batch carries a recursive STARK whose hash is on-chain (`queuebit-leanpool-verify-batch <root>` checks it).
  */
 
 /** The VERIFY frame's execution limit: inclusion check ~50k (measured on the devnet), + ARBITRARY 100 ≤ 100k. */
@@ -55,7 +57,8 @@ export const PQ_SIGNER_INITIAL_FLOAT = 30_000_000_000_000_000n; // 0.03 ETH
 /** EIP-8250 nonce lanes the PQ key rotates through, so several payments can wait for their batches at once. */
 export const PQ_LANES = 8;
 
-const HKDF_LABEL = "leanSPHINCS/leanVM/a39758d/v1";
+/** The checked everyday twin's body frame: `[VERIFY, pay(tank), SENDER body]` (`hotSpendTx`). */
+const TWIN_BODY_FRAME = 2;
 
 export interface PqEverydayRecord {
   chainId: number;
@@ -70,6 +73,8 @@ export interface PqEverydayRecord {
   createTx?: Hex;
   /** The user's choice: pay with the quantum-safe key when it is installed and the node answers. */
   preferred: boolean;
+  /** Signatures made with this key (leanSPHINCS at kept height 12 is proven for about 120,000). */
+  signatures?: number;
   createdAt: number;
 }
 
@@ -105,9 +110,30 @@ export interface PqDeps {
   leanpool?: (url: string) => LeanPoolClient;
 }
 
+/** Failures before the node got the payment: the checked everyday payment may go out instead. */
+export const PQ_FALLBACK_REASONS: ReadonlySet<PqEverydayError["reason"]> = new Set([
+  "node-down",
+  "fee-balance-low",
+  "lanes-full",
+  "budget",
+]);
+
 export class PqEverydayError extends Error {
   constructor(
-    readonly reason: "unavailable" | "node-down" | "fee-balance-low" | "not-installed" | "locked" | "refused",
+    /**
+     * Before the payment reached the node (`node-down`, `fee-balance-low`, `lanes-full`, `budget`): nothing was handed
+     * over, so the checked everyday payment may go out instead. `refused`: the node or the key refused it; never retry
+     * it with another key.
+     */
+    readonly reason:
+      | "unavailable"
+      | "node-down"
+      | "fee-balance-low"
+      | "lanes-full"
+      | "budget"
+      | "not-installed"
+      | "locked"
+      | "refused",
     message: string,
   ) {
     super(message);
@@ -126,6 +152,8 @@ export interface PqNetwork {
 export class PqEveryday {
   private key: { vk: Hex; key: LeanSphincsKey } | null = null;
   private building: Promise<{ vk: Hex; key: LeanSphincsKey }> | null = null;
+  /** Bumped by `lock()`: a key whose build started before a lock is disposed, never kept. */
+  private generation = 0;
   private readonly clients = new Map<string, LeanPoolClient>();
 
   constructor(private readonly d: PqDeps) {}
@@ -142,12 +170,18 @@ export class PqEveryday {
   /** Builds the key once per unlock (~1 s in WASM); later payments sign in ~0.1 s. */
   async signingKey(): Promise<{ vk: Hex; key: LeanSphincsKey }> {
     if (this.key) return this.key;
+    const gen = this.generation;
     this.building ??= (async () => {
-      const seed = await this.d.deriveSeed(HKDF_LABEL);
+      const seed = await this.d.deriveSeed(SCHEME_LABEL);
       try {
         const key = LeanSphincsKey.fromSeed(seed);
-        this.key = { vk: bytesToHex(key.publicKey), key };
-        return this.key;
+        const built = { vk: bytesToHex(key.publicKey), key };
+        if (gen !== this.generation) {
+          key.dispose();
+          throw new PqEverydayError("locked", "QueueBit locked while the quantum-safe key was being prepared.");
+        }
+        this.key = built;
+        return built;
       } finally {
         seed.fill(0);
         this.building = null;
@@ -156,8 +190,9 @@ export class PqEveryday {
     return this.building;
   }
 
-  /** On lock: the key leaves memory. */
+  /** On lock: the WASM instance holding the key is released and the key is no longer usable from here. */
   lock(): void {
+    this.generation++;
     this.key?.key.dispose();
     this.key = null;
   }
@@ -176,8 +211,8 @@ export class PqEveryday {
   private async nodeAggregator(net: PqNetwork): Promise<Address | undefined> {
     try {
       const s = await this.node(net.leanpoolUrl!).status();
-      if (!s.aggregating || !s.nodeId) return undefined;
-      if (s.registry && s.registry.toLowerCase() !== net.deployment!.depsRegistry!.toLowerCase()) return undefined;
+      if (!s.aggregating || !s.nodeId || !s.registry) return undefined;
+      if (s.registry.toLowerCase() !== net.deployment!.depsRegistry!.toLowerCase()) return undefined;
       return s.nodeId;
     } catch {
       return undefined;
@@ -265,26 +300,27 @@ export class PqEveryday {
     await this.d.putRecord({ ...r, preferred });
   }
 
-  /** The signer's next sequence number on nonce lane `key` (EIP-8250 NONCE_MANAGER storage). */
-  async laneNonce(chainId: number, signer: Address, key: bigint): Promise<bigint> {
-    const nm = getProfile("ethrex-eip8141-tracer").predeploys!.NONCE_MANAGER as Address;
+  /** The signer's next sequence number on nonce lane `key` (EIP-8250 NONCE_MANAGER storage of `net`'s profile). */
+  async laneNonce(net: PqNetwork, signer: Address, key: bigint): Promise<bigint> {
+    const nm = getProfile(net.profileId!).predeploys?.NONCE_MANAGER as Address | undefined;
+    if (!nm) throw new PqEverydayError("unavailable", "This network has no keyed nonces.");
     const slot = keccak256(concat([pad(signer), toHex(key, { size: 32 })]));
-    return BigInt((await this.d.client(chainId).getStorageAt({ address: nm, slot })) ?? "0x0");
+    return BigInt((await this.d.client(net.chainId).getStorageAt({ address: nm, slot })) ?? "0x0");
   }
 
   /** The next free nonce lane and its sequence number (lanes held by pending payments are skipped). */
   async nextLane(
-    chainId: number,
+    net: PqNetwork,
     signer: Address,
     busy: ReadonlySet<string>,
   ): Promise<{ nonceKey: bigint; nonceSeq: bigint }> {
     for (let k = 1n; k <= BigInt(PQ_LANES); k++) {
       if (busy.has(k.toString())) continue;
-      return { nonceKey: k, nonceSeq: await this.laneNonce(chainId, signer, k) };
+      return { nonceKey: k, nonceSeq: await this.laneNonce(net, signer, k) };
     }
     throw new PqEverydayError(
-      "refused",
-      `All ${PQ_LANES} quantum-safe payment lanes are waiting for batches. Try again shortly.`,
+      "lanes-full",
+      `${PQ_LANES} quantum-safe payments are still waiting for LeanPool, so this one used your regular everyday key.`,
     );
   }
 
@@ -301,16 +337,30 @@ export class PqEveryday {
     twin: WireFrameTx;
     fees: { maxFeePerGas: bigint; maxPriorityFeePerGas: bigint };
     busyLanes: ReadonlySet<string>;
-  }): Promise<{ poolId: Hex; wire: WireFrameTx; nonceKey: bigint; nonceSeq: bigint; maxCostWei: bigint }> {
+  }): Promise<{
+    poolId: Hex;
+    wire: WireFrameTx;
+    nonceKey: bigint;
+    nonceSeq: bigint;
+    maxCostWei: bigint;
+    /** The node didn't answer the hand-over: it may have the payment. Follow it; never send another copy. */
+    unconfirmed?: boolean;
+  }> {
     const profile = getProfile(a.net.profileId!);
-    const body = fromWire(a.twin).frames[2];
+    if ((a.record.signatures ?? 0) >= SIGNATURE_BUDGET) {
+      throw new PqEverydayError(
+        "budget",
+        "Your quantum-safe key has made all the signatures it is proven safe for. Set up a new one in Security; this payment used your regular everyday key.",
+      );
+    }
+    const body = fromWire(a.twin).frames[TWIN_BODY_FRAME];
     if (!body) throw new PqEverydayError("refused", "The checked payment has no body.");
     const limits = { execution: body.limits.execution, state: body.limits.state };
     const maxCostWei = (PQ_VERIFY_GAS + limits.execution + limits.state) * a.fees.maxFeePerGas;
     if (maxCostWei > BigInt(a.record.maxFee)) {
       throw new PqEverydayError(
         "refused",
-        "The network fee is above what your quantum-safe key may spend on one payment right now.",
+        "The network fee is above what your quantum-safe key may spend on one payment, so this one used your regular everyday key.",
       );
     }
     const balance = await this.d.client(a.net.chainId).getBalance({ address: a.record.signer });
@@ -324,7 +374,7 @@ export class PqEveryday {
     if (vk.toLowerCase() !== a.record.vk.toLowerCase()) {
       throw new PqEverydayError("refused", "This browser's quantum-safe key isn't the one installed on the account.");
     }
-    const lane = await this.nextLane(a.net.chainId, a.record.signer, a.busyLanes);
+    const lane = await this.nextLane(a.net, a.record.signer, a.busyLanes);
     const tx = leanPoolHotTx(profile, {
       chainId: a.net.chainId,
       nonceSeq: lane.nonceSeq,
@@ -346,13 +396,23 @@ export class PqEveryday {
     const sig = key.sign(hexToBytes(sh));
     if (!leanVerify(key.publicKey, hexToBytes(sh), sig))
       throw new PqEverydayError("refused", "The quantum-safe signature did not verify.");
-    let poolId: Hex;
+    await this.d.putRecord({ ...a.record, signatures: (a.record.signatures ?? 0) + 1 });
+    // The LeanPool id is the tx hash before the witness: known before the node answers.
+    const ownId = txHash(profile, tx).toLowerCase() as Hex;
+    const out = { wire: toWire(tx), nonceKey: lane.nonceKey, nonceSeq: lane.nonceSeq, maxCostWei };
     try {
-      poolId = (await this.node(a.record.nodeUrl).sendTransaction(encodeTx(profile, tx), [bytesToHex(sig)])).txHash;
+      const { txHash: poolId } = await this.node(a.record.nodeUrl).sendTransaction(encodeTx(profile, tx), [
+        bytesToHex(sig),
+      ]);
+      return { ...out, poolId };
     } catch (e) {
-      throw new PqEverydayError("node-down", `LeanPool refused the payment: ${(e as Error).message}`);
+      if (e instanceof RpcError && typeof e.code === "number") {
+        throw new PqEverydayError("refused", `LeanPool refused the payment: ${e.reason}`);
+      }
+      // No answer (timeout, connection dropped): the node may have taken it. Sending the everyday copy too could pay
+      // twice, so follow this one by its id instead.
+      return { ...out, poolId: ownId, unconfirmed: true };
     }
-    return { poolId, wire: toWire(tx), nonceKey: lane.nonceKey, nonceSeq: lane.nonceSeq, maxCostWei };
   }
 
   track(nodeUrl: string, poolId: Hex): Promise<LeanPoolTxStatus | null> {

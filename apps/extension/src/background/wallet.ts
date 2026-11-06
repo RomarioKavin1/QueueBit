@@ -1383,19 +1383,12 @@ export class Wallet {
     const st = await this.pqView(chainId);
     if (!st.signer) throw new PqEverydayError("not-installed", "Set up the quantum-safe key first.");
     const tank = (await this.keyring.accounts())!.feeTank;
-    // The top-up's own payment must not use the key whose fee balance is empty: send it with the everyday key.
-    const preferred = st.preferred;
-    if (preferred) await this.pqOr().setPreferred(chainId, false);
-    let entry: ActivityEntry;
-    try {
-      entry = await this.pay().send(chainId, [{ target: tank, value: amount, data: "0x" }]);
-      for (let i = 0; i < 90 && (entry.status === "confirming" || entry.status === "sending"); i++) {
-        await new Promise((r) => setTimeout(r, 2000));
-        await this.pay().refreshPending();
-        entry = (await this.activity.get(entry.id)) ?? entry;
-      }
-    } finally {
-      if (preferred) await this.pqOr().setPreferred(chainId, true);
+    // The top-up's own payment must not use the key whose fee balance is low: it goes with the everyday key.
+    let entry = await this.pay().send(chainId, [{ target: tank, value: amount, data: "0x" }], { forceEveryday: true });
+    for (let i = 0; i < 90 && (entry.status === "confirming" || entry.status === "sending"); i++) {
+      await new Promise((r) => setTimeout(r, 2000));
+      await this.pay().refreshPending();
+      entry = (await this.activity.get(entry.id)) ?? entry;
     }
     if (entry.status !== "confirmed")
       throw new PaymentsError("top-up-failed", "The payment to your fee tank didn't go through, so nothing was moved.");

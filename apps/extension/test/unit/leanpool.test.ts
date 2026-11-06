@@ -1,11 +1,27 @@
 import { decodeFunctionData, hexToBytes, keccak256, parseEther, type Address, type Hex, type PublicClient } from "viem";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { decodeTx, getProfile, leanPoolTriple, sigHash, txHash, type FrameTxReceipt } from "@queuebit/frames";
+import {
+  decodeTx,
+  encodeTx,
+  fromWire,
+  getProfile,
+  leanPoolTriple,
+  sigHash,
+  txHash,
+  type FrameTxReceipt,
+} from "@queuebit/frames";
 import { verify as leanVerify } from "@queuebit/lean-sphincs";
-import type { LeanPoolClient, LeanPoolTxStatus, NodeClient, SimulationResult } from "@queuebit/rpc";
+import {
+  RpcError,
+  type LeanPoolClient,
+  type LeanPoolTxStatus,
+  type NodeClient,
+  type SimulationResult,
+} from "@queuebit/rpc";
 import { leanPoolHotSignerAbi, leanPoolHotSignerFactoryAbi } from "../../src/generated/contracts";
 import type * as Contracts from "../../src/generated/contracts";
 import {
+  PQ_FALLBACK_REASONS,
   PQ_LANES,
   PQ_MIN_BALANCE,
   PQ_SIGNER_INITIAL_FLOAT,
@@ -290,7 +306,7 @@ describe("the post-quantum everyday key (background/leanpool)", () => {
       pq.submit({ ...base, fees: { maxFeePerGas: parseEther("0.0001"), maxPriorityFeePerGas: 1n } }),
     ).rejects.toBeInstanceOf(PqEverydayError);
     const all = new Set(Array.from({ length: PQ_LANES }, (_, i) => String(i + 1)));
-    await expect(pq.submit({ ...base, fees, busyLanes: all })).rejects.toThrow(/lanes/u);
+    await expect(pq.submit({ ...base, fees, busyLanes: all })).rejects.toMatchObject({ reason: "lanes-full" });
   });
 
   it("describes each stage in plain steps; a mined body failure is a failure", () => {
@@ -314,20 +330,78 @@ describe("the post-quantum everyday key (background/leanpool)", () => {
     });
   });
 
-  it("the Vault action installs or removes the signer, instantly", () => {
-    const cur = {} as Parameters<typeof buildVaultAction>[2];
+  it("the Vault action queues the install (loosening) and removes it instantly", () => {
+    const cur = { timelockDelay: 172_800 } as Parameters<typeof buildVaultAction>[2];
     const on = buildVaultAction(ACCOUNT, { type: "setPQHotSigner", signer: SIGNER }, cur);
     expect(on).toMatchObject({
       action: "vaultSetPQHotSigner",
-      timing: "now",
+      timing: "queued",
       title: "Use a quantum-safe everyday key",
     });
+    expect(on.effect).toMatch(/Waits 48 h/u);
+    expect(on.queued?.calls).toHaveLength(1);
     const off = buildVaultAction(
       ACCOUNT,
       { type: "setPQHotSigner", signer: "0x0000000000000000000000000000000000000000" },
       cur,
     );
-    expect(off.title).toMatch(/Turn off/u);
+    expect(off).toMatchObject({ timing: "now", title: expect.stringMatching(/Turn off/u) });
+  });
+
+  it("a node that doesn't answer the hand-over: the payment is followed by its own id, never re-sent", async () => {
+    const pq = new PqEveryday(deps({ node }));
+    const record = await pq.prepare(NET, ACCOUNT);
+    node.sendTransaction = async () => {
+      throw new Error("timeout");
+    };
+    const sent = await pq.submit({
+      net: NET,
+      record,
+      declaredUsd: 1n,
+      calls: [],
+      twin: twinFor([]).from as never,
+      fees: { maxFeePerGas: 2_000_000_000n, maxPriorityFeePerGas: 1n },
+      busyLanes: new Set<string>(),
+    });
+    expect(sent.unconfirmed).toBe(true);
+    expect(sent.poolId).toBe(txHash(profile, decodeTx(profile, encodeTx(profile, fromWire(sent.wire)))).toLowerCase());
+  });
+
+  it("a node refusal is a refusal (no fallback); full lanes and a spent budget fall back", async () => {
+    const d = deps({ node });
+    const pq = new PqEveryday(d);
+    const record = await pq.prepare(NET, ACCOUNT);
+    const base = {
+      net: NET,
+      record,
+      declaredUsd: 1n,
+      calls: [],
+      twin: twinFor([]).from as never,
+      fees: { maxFeePerGas: 2_000_000_000n, maxPriorityFeePerGas: 1n },
+    };
+    node.sendTransaction = async () => {
+      throw new RpcError(-32000, "leanSPHINCS signature 0 does not verify", LEANPOOL, "leanpool_sendTransaction");
+    };
+    await expect(pq.submit({ ...base, busyLanes: new Set<string>() })).rejects.toMatchObject({ reason: "refused" });
+    const all = new Set(Array.from({ length: PQ_LANES }, (_, i) => String(i + 1)));
+    await expect(pq.submit({ ...base, busyLanes: all })).rejects.toMatchObject({ reason: "lanes-full" });
+    await expect(
+      pq.submit({ ...base, record: { ...record, signatures: 120_000 }, busyLanes: new Set<string>() }),
+    ).rejects.toMatchObject({ reason: "budget" });
+    expect(
+      ["lanes-full", "budget", "node-down", "fee-balance-low"].every((r) => PQ_FALLBACK_REASONS.has(r as never)),
+    ).toBe(true);
+    expect(PQ_FALLBACK_REASONS.has("refused")).toBe(false);
+    // Each signature is counted.
+    expect(d.records.get(CHAIN)!.signatures).toBe(1);
+  });
+
+  it("a lock while the key is being built leaves no key behind", async () => {
+    const pq = new PqEveryday(deps({ node }));
+    const building = pq.signingKey();
+    pq.lock();
+    await expect(building).rejects.toMatchObject({ reason: "locked" });
+    expect((await pq.signingKey()).vk).toMatch(/^0x/u);
   });
 });
 
@@ -492,6 +566,27 @@ describe("everyday payments with the quantum-safe key (Payments)", () => {
     expect(changed!.detail).toMatch(/Quantum-safe/u);
 
     await expect(h.wallet.payments!.replace(entry.id, "speed-up")).rejects.toThrow(/batched by LeanPool/u);
+  });
+
+  it("never pays twice: a hand-over that times out is followed, and no everyday copy is sent", async () => {
+    const h = await harness();
+    await h.wallet.pq!.prepare(
+      {
+        chainId: CHAIN,
+        profileId: "ethrex-eip8141-tracer",
+        leanpoolUrl: LEANPOOL,
+        deployment: { depsRegistry: REGISTRY, leanPoolHotSignerFactory: HOT_FACTORY },
+      },
+      h.plan.address,
+    );
+    h.state.installed = SIGNER;
+    h.node.sendTransaction = async () => {
+      throw new Error("The operation was aborted due to timeout");
+    };
+    const entry = await h.wallet.payments!.send(CHAIN, pay(h));
+    expect(entry.lane).toBe("leanpool");
+    expect(entry.detail).toMatch(/won't be sent twice/u);
+    expect(h.ethrexSent).toHaveLength(0);
   });
 
   it("falls back to the everyday key when LeanPool is down, and says so", async () => {

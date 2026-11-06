@@ -5,13 +5,13 @@
 //
 // Onboarding (a phone stand-in made with the companion's own worker), activation, Security › Quantum-safe › Set up (the
 // fee tank creates the signer), the Vault approval (the companion's reviewer and signer answer the extension's
-// request), then an everyday payment that goes through LeanPool, followed to mined in the activity. Then the node
-// "goes down" and the next payment falls back to the everyday key, saying so.
+// request), which queues the install behind the account's 48 h timelock. The payment through LeanPool after the
+// timelock is covered by contracts/devnet-tests/leanpool (1 h timelock) and the unit suite.
 import { createWalletClient, http, parseEther, type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { describe, expect, it, vi } from "vitest";
 import { SCHEME_ID } from "@queuebit/pq-signer";
-import { createFrameRpc, createLeanPoolClient, httpTransport } from "@queuebit/rpc";
+import { createLeanPoolClient, httpTransport } from "@queuebit/rpc";
 import { publicClient, nodeClient } from "../../src/background/rpc";
 import { Wallet } from "../../src/background/wallet";
 import { MemoryKV } from "../../src/shared/kv";
@@ -41,7 +41,14 @@ const PASS = "phone-passphrase-1";
 
 async function fund(to: Address, value: bigint) {
   const w = createWalletClient({ transport: http(RPC), account: privateKeyToAccount(process.env.DEPLOYER_KEY as Hex) });
-  const hash = await w.sendTransaction({ to, value, gas: 250_000n, gasPrice: 2_000_000_000n, type: "legacy", chain: null });
+  const hash = await w.sendTransaction({
+    to,
+    value,
+    gas: 250_000n,
+    gasPrice: 2_000_000_000n,
+    type: "legacy",
+    chain: null,
+  });
   await publicClient(CHAIN).waitForTransactionReceipt({ hash, timeout: 180_000 });
 }
 
@@ -59,7 +66,14 @@ async function until<T>(fn: () => Promise<T | undefined>, ms = 300_000): Promise
 async function phone() {
   const words = entropyToWords(crypto.getRandomValues(new Uint8Array(32)));
   const created = await handle(
-    { op: "create", entropy: wordsToEntropy(words), bip39Passphrase: "", passphrase: PASS, kdf: { N: 2 ** 10, r: 8, p: 1 }, restored: false },
+    {
+      op: "create",
+      entropy: wordsToEntropy(words),
+      bip39Passphrase: "",
+      passphrase: PASS,
+      kdf: { N: 2 ** 10, r: 8, p: 1 },
+      restored: false,
+    },
     () => undefined,
   );
   if (created.op !== "create") throw new Error("create");
@@ -77,7 +91,16 @@ async function phone() {
         snapshots: [],
       });
       const r = await handle(
-        { op: "sign", mode: "vault", sealed: created.sealed, vaultPk: created.vaultPk, passphrase: PASS, requestCbor: cbor, expectDigest: review.digest, allowUnknown: false },
+        {
+          op: "sign",
+          mode: "vault",
+          sealed: created.sealed,
+          vaultPk: created.vaultPk,
+          passphrase: PASS,
+          requestCbor: cbor,
+          expectDigest: review.digest,
+          allowUnknown: false,
+        },
         () => undefined,
       );
       if (r.op !== "sign") throw new Error("sign");
@@ -87,8 +110,7 @@ async function phone() {
 }
 
 describe.runIf(RUN)("the quantum-safe everyday key on the public devnet (extension code end to end)", () => {
-  it("set up → Vault approves → payment through LeanPool mined → node down → falls back to the everyday key", async () => {
-    let nodeUp = true;
+  it("set up → the Vault approves → the install is queued behind the timelock (extension code end to end)", async () => {
     const real = createLeanPoolClient(httpTransport(NODE, { timeoutMs: 15_000 }));
     const wallet = new Wallet({
       local: new MemoryKV(),
@@ -103,14 +125,6 @@ describe.runIf(RUN)("the quantum-safe everyday key on the public devnet (extensi
         node: nodeClient,
         leanpool: () => ({
           ...real,
-          status: async () => {
-            if (!nodeUp) throw new Error("unreachable");
-            return real.status();
-          },
-          sendTransaction: async (raw, sigs) => {
-            if (!nodeUp) throw new Error("unreachable");
-            return real.sendTransaction(raw, sigs);
-          },
         }),
       },
     });
@@ -146,44 +160,22 @@ describe.runIf(RUN)("the quantum-safe everyday key on the public devnet (extensi
     expect(answer.review.mismatch).toEqual([]);
     expect(answer.review.headline).toMatch(/quantum-safe everyday key/u);
     await wallet.handleUi("vault:submit", { id: rec.id, signature: answer.signatureCbor });
-    const on = await until(async () => {
+    // Installing a spender is loosening: the Vault's approval queues it behind the account's timelock (48 h for an
+    // extension-made account). The Security row shows it approved, with its ETA; nothing is installed before then.
+    const queued = await until(async () => {
       await wallet.vault!.refresh();
-      const v = await wallet.handleUi("pq:status", {});
-      return v.state === "on" ? v : undefined;
+      const q = await wallet.handleUi("vault:queue", {});
+      return q.find((x) => x.state === "pending" && x.title.startsWith("Use a quantum-safe everyday key"));
     });
-    expect(on).toMatchObject({ state: "on", active: true });
-
-    // An everyday payment ($3 to the fee tank): previewed as quantum-safe, sent through LeanPool, mined.
+    expect(queued.eta - queued.chainNow).toBeGreaterThan(47 * 3600);
+    expect(queued.executable).toBe(true); // this wallet holds the calls to execute it after the ETA
+    expect(queued.chainNow).toBeLessThan(queued.eta);
+    expect(await wallet.handleUi("pq:status", {})).toMatchObject({ state: "awaiting-vault" });
+    // Meanwhile everyday payments use the regular key, with no quantum-safe note (it isn't on yet).
     const pay = [{ target: before.tank, value: parseEther("0.001"), data: "0x" as Hex }];
     const preview = await payments.preview(CHAIN, pay);
     expect(preview.route.route).toBe("hot");
-    expect(preview.signingKey?.kind).toBe("quantum-safe");
-    const entry = await payments.send(CHAIN, pay);
-    expect(entry.lane).toBe("leanpool");
-    const done = await until(async () => {
-      await payments.refreshPending();
-      const e = await wallet.activity.get(entry.id);
-      return e?.status === "confirmed" || e?.status === "failed" ? e : undefined;
-    });
-    expect(done.status).toBe("confirmed");
-    expect(done.steps.map((s) => s.status)).toEqual(["done", "done", "done", "done"]);
-    const receipt = await createFrameRpc(RPC).node.getTransactionReceipt(done.hash);
-    expect(receipt?.frameReceipts.map((f) => f.status)).toEqual(["success", "success"]);
-    expect(receipt!.frameReceipts[0]!.gasUsed.execution).toBeLessThan(100_000n);
-    console.log(`PQ everyday payment mined: ${done.hash} (block ${done.blockNumber}, VERIFY ${receipt!.frameReceipts[0]!.gasUsed.execution} gas)`);
-
-    // LeanPool goes down: the next payment uses the everyday key and says so.
-    nodeUp = false;
-    const fb = await payments.preview(CHAIN, pay);
-    expect(fb.signingKey).toMatchObject({ kind: "everyday" });
-    const e2 = await payments.send(CHAIN, pay);
-    expect(e2.lane).toBeUndefined();
-    expect(e2.fallbackNote).toMatch(/LeanPool/u);
-    const done2 = await until(async () => {
-      await payments.refreshPending();
-      const e = await wallet.activity.get(e2.id);
-      return e?.status === "confirmed" || e?.status === "failed" ? e : undefined;
-    });
-    expect(done2.status).toBe("confirmed");
+    expect(preview.signingKey).toBeUndefined();
+    console.log(`queued: op ${queued.opId}, takes effect at ${new Date(queued.eta * 1000).toISOString()}`);
   }, 1_200_000);
 });

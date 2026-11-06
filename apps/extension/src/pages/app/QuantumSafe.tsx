@@ -16,6 +16,13 @@ const ZERO = "0x0000000000000000000000000000000000000000" as const;
  */
 export function QuantumSafeRow({ disabled }: { disabled: boolean }) {
   const view = useAsync(() => call("pq:status", {}), []);
+  // The install waits for the timelock: the Vault's queued op for it, if any.
+  const queue = useAsync(() => call("vault:queue", {}), []);
+  const queued = queue.data?.find(
+    (q) => q.state === "pending" && q.title.startsWith("Use a quantum-safe everyday key"),
+  );
+  // `executable`: this wallet holds the calls; ready once the chain's time passed the op's ETA.
+  const ready = !!queued && queued.executable && queued.chainNow >= queued.eta;
   const [sheet, setSheet] = useState<"setup" | "topup" | "off" | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -34,12 +41,36 @@ export function QuantumSafeRow({ disabled }: { disabled: boolean }) {
   };
 
   if (!v) return null;
-  const { value, detail } = describe(v);
+  const { value, detail } =
+    v.state === "awaiting-vault" && queued
+      ? {
+          value: `Approved · key …${v.vkLast8} · takes effect ${ready ? "now" : new Date(queued.eta * 1000).toLocaleString("en-GB")}`,
+          detail: ready
+            ? "The timelock has passed: finish it to start using it."
+            : "Your phone approved it. Like every loosening it waits for your timelock; you can cancel it in Pending.",
+        }
+      : describe(v);
   const action =
     v.state === "off" ? (
       <Button size="sm" variant="secondary" disabled={disabled || busy || !v.nodeOk} onClick={() => setSheet("setup")}>
         Turn on
       </Button>
+    ) : v.state === "awaiting-vault" && queued ? (
+      ready ? (
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={busy}
+          onClick={() =>
+            run(async () => {
+              await call("vault:executeQueued", { opId: queued.opId });
+              await Promise.all([view.reload(), queue.reload()]);
+            })
+          }
+        >
+          Finish
+        </Button>
+      ) : undefined
     ) : v.state === "awaiting-vault" ? (
       <Button
         size="sm"
@@ -143,8 +174,9 @@ export function describe(v: PqEverydayView): { value: string; detail?: string } 
       };
     case "awaiting-vault":
       return {
-        value: `Ready · key …${v.vkLast8} · waiting for your phone`,
-        detail: "Your phone approves adding it to your account. Until then, payments use your regular everyday key.",
+        value: `Ready · key …${v.vkLast8} · waiting for your phone and the timelock`,
+        detail:
+          "Your phone approves adding it; it takes effect after your timelock (see Pending). Until then, payments use your regular everyday key.",
       };
     case "on": {
       const bal = v.balanceWei ? ` · fee balance ${eth(v.balanceWei, 4)}` : "";

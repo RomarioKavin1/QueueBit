@@ -39,6 +39,7 @@ import type { KeyringController } from "./keyring";
 import { PolicyReader, type AccountChainState } from "./policy";
 import { decideRoute, routeCopy, usdNumber, type Call, type RouteDecision } from "./routing";
 import {
+  PQ_FALLBACK_REASONS,
   PQ_MIN_BALANCE,
   PqEverydayError,
   describePq,
@@ -608,7 +609,11 @@ export class Payments {
   }
 
   /** Sends an everyday payment. Refuses anything the router does not clear (RouteError) and never sends unsimulated. */
-  send(chainId: number, calls: Call[], meta: { origin?: string; batchId?: string } = {}): Promise<ActivityEntry> {
+  send(
+    chainId: number,
+    calls: Call[],
+    meta: { origin?: string; batchId?: string; forceEveryday?: boolean } = {},
+  ): Promise<ActivityEntry> {
     if (findNetwork(chainId)?.backend === "4337") {
       return this.serialized(() =>
         this.aaCall(async () => {
@@ -626,18 +631,20 @@ export class Payments {
       // payment was just checked as an everyday transaction (same body, same limits: `_hotExecute`); only the key and
       // the lane differ. If the node can't take it, the checked everyday transaction goes out instead, and says so.
       let fallbackNote: string | undefined;
-      const pq = await this.pqLane(chainId, plan);
+      const pq = meta.forceEveryday ? undefined : await this.pqLane(chainId, plan);
       if (pq?.record) {
         try {
           return await this.sendPq(chainId, plan.address, state.tank, calls, decision, prepared, pq.record, meta);
         } catch (e) {
-          if (!(e instanceof PqEverydayError) || e.reason !== "node-down") {
-            throw new PaymentsError(
-              e instanceof PqEverydayError && e.reason === "fee-balance-low" ? "pq-fee-low" : "pq-refused",
-              (e as Error).message,
-            );
+          // Only what failed before the node got the payment may go out with the everyday key (nothing to pay twice);
+          // a refusal is the user's to see.
+          if (!(e instanceof PqEverydayError) || !PQ_FALLBACK_REASONS.has(e.reason)) {
+            throw new PaymentsError("pq-refused", (e as Error).message);
           }
-          fallbackNote = "LeanPool didn't answer, so this payment used your regular everyday key.";
+          fallbackNote =
+            e.reason === "node-down"
+              ? "LeanPool isn't answering, so this payment used your regular everyday key."
+              : e.message;
         }
       } else if (pq?.view.kind === "everyday") {
         fallbackNote = pq.view.fallback;
@@ -776,6 +783,12 @@ export class Payments {
       ...describePq({ calls: acalls, declaredUsd: decision.amountUsd.toString() }, { stage: "pooled" }, null, {
         labels: this.labels(tank),
       }),
+      ...(sent.unconfirmed
+        ? {
+            detail:
+              "LeanPool didn't confirm it received this payment. QueueBit is following it; it won't be sent twice.",
+          }
+        : {}),
       createdAt: now,
       updatedAt: now,
     };
@@ -792,7 +805,7 @@ export class Payments {
       // The node no longer knows it (a restart): the signer's nonce lane tells whether it was included.
       const [lane, seq] = e.nonce.split(":");
       if (!lane || !seq || !e.pqSigner || this.d.now() - e.createdAt < 10 * 60_000) return undefined;
-      const next = await this.d.pq.laneNonce(e.chainId, e.pqSigner, BigInt(lane));
+      const next = await this.d.pq.laneNonce(findNetwork(e.chainId)!, e.pqSigner, BigInt(lane));
       return this.d.activity.update(e.id, {
         ...(next > BigInt(seq)
           ? {
@@ -824,9 +837,17 @@ export class Payments {
     }
     const next = describePq(e, st, receipt, { ...(feeWei !== undefined ? { feeWei } : {}), labels });
     const final = next.status !== "confirming";
-    if (!final && next.detail === e.detail) return undefined;
+    // Waiting for more than ~6 blocks: say so (the node may be slow, censoring, or down).
+    let stuck = false;
+    if (!final && e.sentAtBlock) {
+      stuck = (await this.d.io.publicClient(e.chainId).getBlockNumber()) - BigInt(e.sentAtBlock) >= 6n;
+    }
+    const batch = st.batch ? { pqBatch: st.batch } : {};
+    if (!final && next.detail === e.detail && stuck === Boolean(e.stuck) && !st.batch?.proofHash) return undefined;
     return this.d.activity.update(e.id, {
       ...next,
+      ...batch,
+      stuck,
       ...(st.txHash && final ? { hash: st.txHash } : {}),
       ...(feeWei !== undefined ? { feeWei: feeWei.toString() } : {}),
       ...(receipt?.blockNumber !== undefined ? { blockNumber: receipt.blockNumber.toString() } : {}),

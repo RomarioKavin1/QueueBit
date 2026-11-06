@@ -175,6 +175,19 @@ function ActivityRow({ e, onChanged }: { e: ActivityEntry; onChanged: () => void
               <p>Network: {net?.name ?? e.chainId}</p>
               <p className="t-mono break-all">Id: {e.hash}</p>
               {pq && e.poolId && minedHash && <p className="t-mono break-all">LeanPool id: {e.poolId}</p>}
+              {pq && e.pqBatch && (
+                <>
+                  <p className="t-mono break-all">
+                    Batch root: {e.pqBatch.root} (block {e.pqBatch.block})
+                  </p>
+                  <p>
+                    {e.pqBatch.proofHash
+                      ? `Batch proof attached: ${e.pqBatch.proofHash.slice(0, 10)}…`
+                      : "Batch proof: being made (about a minute after the batch)"}
+                    . Anyone can audit the batch: queuebit-leanpool-verify-batch {e.pqBatch.root.slice(0, 10)}…
+                  </p>
+                </>
+              )}
               {/* The devnet explorers index frame transactions; activation is a plain transaction from the fee tank. */}
               {net?.backend === "frame" && e.kind !== "activation" && minedHash && explorerTxLink(net, e.hash) && (
                 <a

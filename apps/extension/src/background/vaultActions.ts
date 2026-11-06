@@ -246,6 +246,8 @@ export function buildVaultAction(account: Address, req: VaultActionRequest, cur:
         [req.hotKey],
       );
     case "setPQHotSigner":
+      // Removing it is tightening (instant). Installing or replacing it adds a spender that trusts a new LeanPool
+      // aggregator: loosening, so it waits for the timelock (the account refuses it otherwise: MustQueue).
       return BigInt(req.signer) === 0n
         ? now(
             "vaultSetPQHotSigner",
@@ -253,12 +255,12 @@ export function buildVaultAction(account: Address, req: VaultActionRequest, cur:
             "Instant. Everyday payments go back to your regular everyday key.",
             [req.signer],
           )
-        : now(
-            "vaultSetPQHotSigner",
-            "Use a quantum-safe everyday key",
-            "Instant. Everyday payments can then be signed with a post-quantum key, under the same daily limit and allowed lists.",
-            [req.signer],
-          );
+        : {
+            role: "vault",
+            action: "vaultSetPQHotSigner",
+            title: "Use a quantum-safe everyday key",
+            ...queuedLoosen(account, enc("vaultSetPQHotSigner", [req.signer]), cur.timelockDelay),
+          };
     case "setGuardian":
       return now(
         "vaultSetGuardian",

@@ -70,6 +70,22 @@ describe("LeanPool PQ everyday tx", () => {
     expect(proof).toHaveLength(2);
   });
 
+  it("refuses a profile that commits to signature lengths (the witness is filled after signing)", () => {
+    const current = getProfile("eip8141-current");
+    expect(() =>
+      leanPoolHotTx(current, {
+        chainId: 1,
+        nonceSeq: 0n,
+        nonceKey: 1n,
+        fees: { maxFee: 1n, maxPriorityFeePerGas: 1n },
+        signer: SIGNER,
+        vk: VK,
+        verifyGas: 90_000n,
+        body,
+      }),
+    ).toThrow(/empty/u);
+  });
+
   it("signs a different hash per nonce lane", () => {
     expect(sigHash(tracer, build(1n))).not.toBe(sigHash(tracer, build(2n)));
   });

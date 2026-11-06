@@ -5,7 +5,7 @@ import type { AddressInfo } from "node:net";
 import { encodeRaw, sigHash, txHash, type FrameTx } from "../src/frameTx.js";
 import * as pq from "../src/leanpq.js";
 import { buildTx8288 } from "../src/tx.js";
-import { AdmittedButPending, Node8288 } from "../src/node.js";
+import { AdmittedButPending, MAX_POOL, Node8288 } from "../src/node.js";
 import type { Chain8288, TxStatus } from "../src/node.js";
 import { createRpcServer, handle } from "../src/server.js";
 import { REGISTRY_ABI, jsonRpc, ringOf } from "../src/chain.js";
@@ -175,3 +175,18 @@ test("ringOf reads the ring position from DepsRegistry's RootPosted event", () =
 
 // Keep the tx type import used (FrameTx is part of the public surface the server hands out).
 export type _Unused = FrameTx;
+
+test("bounded memory: older STARKs are read back through loadStark; a full pool refuses intake", async () => {
+  const onDisk = new Map<string, Hex>([[keccak256("0xbeef"), "0xbeef"]]);
+  const node = new Node8288({
+    chain: chain(),
+    aggregate: true,
+    name: "bounded",
+    loadStark: (h) => onDisk.get(h) ?? null,
+  });
+  expect(await handle(node, "leanpool_getStark", [keccak256("0xbeef")])).toBe("0xbeef");
+  expect(await handle(node, "leanpool_getStark", [keccak256("0x01")])).toBeNull();
+  const t = await signed(9);
+  for (let i = 0; i < MAX_POOL; i++) node.pool.set(`0x${i.toString(16).padStart(64, "0")}` as Hex, {} as never);
+  await expect(node.intake(t.raw, [t.sig])).rejects.toThrow(/pool is full/u);
+});

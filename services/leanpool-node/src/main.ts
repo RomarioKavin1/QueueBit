@@ -22,14 +22,16 @@ const { chain, keyedNonce, ensureBond, address } = makeChain(cfg, log);
 const starkDir = path.join(cfg.dataDir, "starks");
 fs.mkdirSync(starkDir, { recursive: true });
 const persist = (h: Hex, bytes: Hex) => fs.writeFileSync(path.join(starkDir, `${h}.bin`), hexToBytes(bytes));
-const stored = fs
-  .readdirSync(starkDir)
-  .filter((f) => f.endsWith(".bin"))
-  .map((f) => [f.slice(0, -4) as Hex, bytesToHex(fs.readFileSync(path.join(starkDir, f)))] as [Hex, Hex])
-  .filter(([h, b]) => keccak256(b) === h);
+/** A STARK from disk, checked against its hash (a damaged file is not served). */
+const loadStark = (h: Hex): Hex | null => {
+  const f = path.join(starkDir, `${h}.bin`);
+  if (!/^0x[0-9a-f]{64}$/u.test(h) || !fs.existsSync(f)) return null;
+  const b = bytesToHex(fs.readFileSync(f));
+  return keccak256(b) === h ? b : null;
+};
+const storedCount = fs.readdirSync(starkDir).filter((f) => f.endsWith(".bin")).length;
 
-const node = new Node8288({ chain, aggregate: cfg.aggregate, rolling: cfg.rolling, name, log, persist });
-node.loadStarks(stored);
+const node = new Node8288({ chain, aggregate: cfg.aggregate, rolling: cfg.rolling, name, log, persist, loadStark });
 node.peers = cfg.peers.map((p) => (wrapper: Hex) => jsonRpc(p, "leanpool_wrapper", [wrapper]));
 
 let bond: { bonded: bigint; min: bigint } | null = null;
@@ -83,6 +85,6 @@ const server = createRpcServer({
 });
 server.listen(cfg.port, cfg.host, () =>
   log(
-    `listening on ${cfg.host}:${cfg.port} as ${address}; registry ${cfg.registry}; sidecar ${cfg.sidecarUrl}; peers: ${cfg.peers.join(", ") || "none"}; ${stored.length} STARK(s) loaded`,
+    `listening on ${cfg.host}:${cfg.port} as ${address}; registry ${cfg.registry}; sidecar ${cfg.sidecarUrl}; peers: ${cfg.peers.join(", ") || "none"}; ${storedCount} STARK(s) on disk`,
   ),
 );

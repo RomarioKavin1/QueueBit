@@ -52,7 +52,7 @@ export async function handle(
       return node.receiveWrapper(params[0]);
     case "leanpool_getStark":
       if (!isHex(params[0])) throw new BadRequest("params: [proofHash]");
-      return node.starks.get(params[0].toLowerCase() as Hex) ?? null;
+      return node.getStark(params[0]);
     case "leanpool_status":
       return { ...node.status(), ...(extra?.() ?? {}) };
     default:

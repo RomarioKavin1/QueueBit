@@ -43,6 +43,10 @@ export class AdmittedButPending extends Error {}
 const ROOT_EXISTS = /RootExists|0x3293a2cf/;
 /** Status lists keep this many recent entries. */
 const KEEP = 200;
+/** Bounds on what a node holds in memory (a public node must not grow without limit). */
+export const MAX_POOL = 1024;
+const MAX_KNOWN = 4096;
+const MAX_STARKS_IN_MEMORY = 64;
 
 export interface Chain8288 {
   /** True when `sender` holds the leanSPHINCS key `vk`: a LeanWallet8288's `vk()` (validator null), or a live PQ key
@@ -134,12 +138,33 @@ export class Node8288 {
       log?: (...a: unknown[]) => void;
       /** Called with every STARK the node makes or receives, so it survives a restart (server.ts writes it to disk). */
       persist?: (proofHash: Hex, bytes: Hex) => void;
+      /** Reads a STARK saved by this or an earlier run (main.ts reads the data directory): older STARKs stay servable
+       * without being held in memory. */
+      loadStark?: (proofHash: Hex) => Hex | null;
     },
   ) {}
 
   /** STARKs saved by an earlier run, served again by leanpool_getStark. */
   loadStarks(stored: Iterable<[Hex, Hex]>) {
-    for (const [h, b] of stored) this.starks.set(h.toLowerCase() as Hex, b);
+    for (const [h, b] of stored) this.keepStark(h.toLowerCase() as Hex, b);
+  }
+
+  /** A STARK by its hash: the recent ones from memory, older ones from `loadStark`. */
+  getStark(proofHash: Hex): Hex | null {
+    const h = proofHash.toLowerCase() as Hex;
+    return this.starks.get(h) ?? this.opts.loadStark?.(h) ?? null;
+  }
+
+  private keepStark(h: Hex, bytes: Hex) {
+    this.starks.delete(h);
+    this.starks.set(h, bytes);
+    while (this.starks.size > MAX_STARKS_IN_MEMORY) this.starks.delete(this.starks.keys().next().value!);
+  }
+
+  private remember(hash: Hex, tx: FrameTx) {
+    this.known.delete(hash);
+    this.known.set(hash, tx);
+    while (this.known.size > MAX_KNOWN) this.known.delete(this.known.keys().next().value!);
   }
 
   private log(...a: unknown[]) {
@@ -165,7 +190,7 @@ export class Node8288 {
   }
 
   private add(p: PoolTx) {
-    this.known.set(p.hash, p.tx);
+    this.remember(p.hash, p.tx);
     this.pool.set(p.hash, p);
     this.prover.users.set(p.hash, { hash: p.hash, fee: p.fee, sigs: claimsOf(p) });
   }
@@ -174,7 +199,7 @@ export class Node8288 {
 
   private recordStark(bytes: Hex, rec: Omit<AggregateRecord, "bytes" | "proofHash">): Hex {
     const proofHash = keccak256(bytes);
-    this.starks.set(proofHash, bytes);
+    this.keepStark(proofHash, bytes);
     try {
       this.opts.persist?.(proofHash, bytes);
     } catch (e) {
@@ -187,6 +212,7 @@ export class Node8288 {
   // ------------------------------------------------------------------------------------------------- intake ----
   /** `sigs`: one leanSPHINCS signature per dependency triple, in the order the triples appear in the tx. */
   async intake(raw: Hex, sigs: Hex[]): Promise<PoolTx> {
+    if (this.pool.size >= MAX_POOL) throw new Error("the node's pool is full; try again shortly");
     const tx = decodeRaw(raw);
     if (tx.signatures[0]?.scheme !== 0) throw new Error("signature entry 0 must be ARBITRARY");
     const raws = rawDependencies(tx);
@@ -274,9 +300,9 @@ export class Node8288 {
       const sigOf = new Map(v.deps.map((d, i) => [depKey(d), v.proofs![i]!]));
       v.txs.forEach((tx, i) => {
         const hash = hashes[i]!;
-        this.known.set(hash, tx);
+        this.remember(hash, tx);
         const deps = dependencies(tx);
-        if (deps.length === 0 || this.isBatched(hash) || this.pool.has(hash)) return;
+        if (deps.length === 0 || this.isBatched(hash) || this.pool.has(hash) || this.pool.size >= MAX_POOL) return;
         this.add({
           tx,
           hash,
@@ -287,7 +313,7 @@ export class Node8288 {
         });
       });
     } else {
-      v.txs.forEach((tx, i) => this.known.set(hashes[i]!, tx));
+      v.txs.forEach((tx, i) => this.remember(hashes[i]!, tx));
       this.prover.peers.push({ agg: v.aggregate!, txs: hashes });
       this.recordStark(v.aggregate!.bytes, { txs: hashes, kind: "peer" });
       this.log(`mode 1 STARK from a peer verified: ${hashes.length} txs, ${hexBytes(v.aggregate!.bytes)} bytes`);

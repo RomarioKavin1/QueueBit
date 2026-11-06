@@ -39,7 +39,7 @@ export const KEPT_HEIGHT = 12;
 export const SIGNATURE_BUDGET = 120_000;
 /** EIP-8288 `LEANSPHINCS_SCHEME`. */
 export const LEANSPHINCS_SCHEME = 0x10;
-/** keccak256("leanSPHINCS/leanVM/a39758d/v1"): QueueBit's id for this scheme and parameter set. */
+/** QueueBit's label for this scheme and parameter set (the key-derivation label; its keccak256 is the scheme id). */
 export const SCHEME_LABEL = "leanSPHINCS/leanVM/a39758d/v1";
 /** sha256 of the embedded WASM binary. */
 export const WASM_HASH = WASM_SHA256;

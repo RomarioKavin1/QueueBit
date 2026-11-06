@@ -180,6 +180,13 @@ export interface LeanPoolHotInit extends Common {
  * witness entry is empty (its bytes are elided from the hash); the LeanPool node fills it after posting the batch.
  */
 export function leanPoolHotTx(profile: Profile, init: LeanPoolHotInit): FrameTx {
+  // The key signs before the witness exists: only a profile that elides an empty-msg entry's bytes entirely keeps the
+  // signature hash (and so the on-chain leaf) independent of the witness the node fills in later.
+  if (profile.sigHashElision !== "empty") {
+    throw new Error(
+      `leanPoolHotTx: profile "${profile.id}" commits to signature lengths; LeanPool needs "empty" elision`,
+    );
+  }
   return newTx({
     chainId: init.chainId,
     sender: init.signer,
