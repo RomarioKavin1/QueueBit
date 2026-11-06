@@ -70,10 +70,8 @@ test("onboarding: create an account, then the popup shows Home", async ({ contex
 
   const popup = await openPopup(context, extensionId);
   await expect(popup.getByRole("heading", { name: /Balance on Local devnet/u })).toBeVisible();
-  // Not activated yet: the amber "No daily limit yet" card instead of the meter (ux-spec §3.2 states).
-  await expect(popup.getByText("No daily limit yet")).toBeVisible({ timeout: 30_000 });
-  await expect(popup.getByText(/Your \$500 limit \(up to \$200 per payment\) starts when you activate/u)).toBeVisible();
-  await expect(popup.getByRole("button", { name: "Activate account" })).toBeVisible();
+  // Not created yet: the setup key creates it from Home.
+  await expect(popup.getByRole("button", { name: "Create account" })).toBeVisible({ timeout: 30_000 });
   // The balance is a live read from the devnet RPC; offline runs show the E-21 message instead.
   await expect(popup.getByTestId("balance").or(popup.getByText("Can't reach the network right now."))).toBeVisible({
     timeout: 30_000,
@@ -99,9 +97,9 @@ test("lock and unlock", async ({ context, extensionId }) => {
   const more = popup.getByRole("button", { name: "More" });
   await more.focus();
   await popup.keyboard.press("Enter");
-  await expect(popup.getByRole("menuitem", { name: "Security" })).toBeFocused();
+  await expect(popup.getByRole("menuitem", { name: "Sessions" })).toBeFocused();
   await popup.keyboard.press("ArrowDown");
-  await expect(popup.getByRole("menuitem", { name: "Limits" })).toBeFocused();
+  await expect(popup.getByRole("menuitem", { name: "Keys & recovery" })).toBeFocused();
   await popup.keyboard.press("Escape");
   await expect(more).toBeFocused();
 });
@@ -141,23 +139,16 @@ test("a dapp discovers QueueBit via EIP-6963, connects, and gets the account", a
   expect((await rpc(dapp, "eth_sendTransaction", [{}])).error?.code).toBe(-32602);
   const unsupported = await rpc(dapp, "eth_sign", [account, `0x${"11".repeat(32)}`]);
   expect(unsupported.error?.code).toBe(4200);
-  expect((await rpc(dapp, "wallet_switchEthereumChain", [{ chainId: "0x2a" }])).error?.code).toBe(4902);
-  expect(await rpc(dapp, "wallet_switchEthereumChain", [{ chainId: "0xaa36a7" }])).toEqual({ result: null });
-  await expect
-    .poll(() =>
-      dapp.evaluate(() =>
-        (window as unknown as Win).__events.filter((e) => e.ev === "chainChanged").map((e) => e.data),
-      ),
-    )
-    .toEqual(["0xaa36a7"]);
-  expect(await rpc(dapp, "eth_chainId")).toEqual({ result: "0xaa36a7" });
+  // Frame devnets only: any other chain is 4902; message signatures are 4200 (no ERC-1271 check yet).
+  expect((await rpc(dapp, "wallet_switchEthereumChain", [{ chainId: "0xaa36a7" }])).error?.code).toBe(4902);
+  expect(await rpc(dapp, "wallet_switchEthereumChain", [{ chainId: "0x539" }])).toEqual({ result: null });
+  expect((await rpc(dapp, "personal_sign", ["0x68656c6c6f", account])).error?.code).toBe(4200);
   expect((await rpc(dapp, "queuebit_unlock")).error?.code).toBe(-32601);
 
   // The popup's Apps tab lists the site; disconnecting it empties eth_accounts.
   const popup = await openPopup(context, extensionId);
   await popup.getByRole("button", { name: "Apps" }).click();
-  // "site · chain": the site moved itself to Sepolia; the wallet's own network did not change.
-  await expect(popup.getByTestId("app-row")).toHaveText(`${new URL(dappUrl).host} · Sepolia`);
+  await expect(popup.getByTestId("app-row")).toContainText(new URL(dappUrl).host);
   await expect(popup.getByLabel("Network")).toHaveValue("1337");
   await popup.getByRole("button", { name: `Disconnect ${new URL(dappUrl).host}` }).click();
   await expect(popup.getByText("No sites connected")).toBeVisible();

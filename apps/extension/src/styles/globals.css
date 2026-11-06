@@ -26,9 +26,9 @@
   --color-limit: var(--limit);
   --color-limit-fill: var(--limit-fill);
   --color-limit-bg: var(--limit-bg);
-  --color-vault: var(--vault);
-  --color-vault-bg: var(--vault-bg);
-  --color-on-vault: var(--on-vault);
+  --color-owner: var(--owner);
+  --color-owner-bg: var(--owner-bg);
+  --color-on-owner: var(--on-owner);
   --color-danger: var(--danger);
   --color-danger-bg: var(--danger-bg);
   --color-on-danger: var(--on-danger);
@@ -81,7 +81,7 @@
     -webkit-tap-highlight-color: transparent;
   }
   ::selection {
-    background: var(--vault-bg);
+    background: var(--owner-bg);
   }
 }
 

@@ -78,7 +78,7 @@ export function useTheme(theme: Theme | undefined) {
 /**
  * Re-run `reload` every `ms` while `active` (e.g. while a payment is confirming). The latest `reload` is kept in a
  * ref, so an inline callback on a page that re-renders often (a countdown) does not restart the interval forever
- * (found by the M4 e2e: the Vault hand-off page re-renders every second and never polled).
+ * (a page that re-renders every second, such as a countdown, would otherwise never poll).
  */
 export function usePoll(reload: () => unknown, ms: number, active: boolean) {
   const latest = useRef(reload);

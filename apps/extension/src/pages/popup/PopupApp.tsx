@@ -5,12 +5,10 @@ import type { WalletState } from "../../shared/types";
 import {
   ActivityIcon,
   AppsIcon,
-  BellIcon,
   Button,
   ChevronDownIcon,
   ExternalIcon,
   HomeIcon,
-  HourglassIcon,
   LockIcon,
   LogoMark,
   MoreIcon,
@@ -18,7 +16,7 @@ import {
   SettingsIcon,
   ShieldIcon,
   Spinner,
-  VaultIcon,
+  RecoveryIcon,
 } from "../../ui";
 import { cx } from "../../ui/cx";
 import { call } from "../lib/api";
@@ -62,7 +60,7 @@ export function PopupApp({ inTab = false, initialTab = "home" }: { inTab?: boole
           <LogoMark size={64} />
           <div>
             <h1 className="t-title">Welcome to QueueBit</h1>
-            <p className="t-body mt-1 text-muted">Small payments are instant. Your phone approves the rest.</p>
+            <p className="t-body mt-1 text-muted">A quantum-safe account, with sessions for the sites you use.</p>
           </div>
           <Button
             block
@@ -92,7 +90,6 @@ export function PopupApp({ inTab = false, initialTab = "home" }: { inTab?: boole
 function Unlocked({ state, close, initialTab }: { state: WalletState; close: () => void; initialTab: Tab }) {
   const [tab, setTab] = useState<Tab>(initialTab);
   const [screen, setScreen] = useState<"tabs" | "settings" | "activate">("tabs");
-  const [sendPrefill, setSendPrefill] = useState<{ to: string } | undefined>(undefined);
 
   if (screen !== "tabs") {
     return (
@@ -118,10 +115,17 @@ function Unlocked({ state, close, initialTab }: { state: WalletState; close: () 
           label="More"
           icon={<MoreIcon />}
           items={[
-            { label: "Security", icon: <LockIcon size={18} />, onSelect: () => (openFullApp("#security"), close()) },
-            { label: "Limits", icon: <VaultIcon size={18} />, onSelect: () => (openFullApp("#limits"), close()) },
-            { label: "Pending", icon: <HourglassIcon size={18} />, onSelect: () => (openFullApp("#pending"), close()) },
-            { label: "Alerts", icon: <BellIcon size={18} />, onSelect: () => (openFullApp("#alerts"), close()) },
+            { label: "Sessions", icon: <AppsIcon size={18} />, onSelect: () => (openFullApp("#sessions"), close()) },
+            {
+              label: "Keys & recovery",
+              icon: <RecoveryIcon size={18} />,
+              onSelect: () => (openFullApp("#keys"), close()),
+            },
+            {
+              label: "Move to quantum-safe",
+              icon: <SendIcon size={18} />,
+              onSelect: () => (openFullApp("#migrate"), close()),
+            },
             {
               label: "Private balance",
               icon: <ShieldIcon size={18} />,
@@ -144,24 +148,18 @@ function Unlocked({ state, close, initialTab }: { state: WalletState; close: () 
         {tab === "home" && (
           <Home
             state={state}
-            onSend={(prefill) => (setSendPrefill(prefill), setTab("send"))}
+            onSend={() => setTab("send")}
             onActivate={() => setScreen("activate")}
-            onOpenApp={() => (openFullApp("#onboarding"), close())}
+            onOpenApp={(hash) => (openFullApp(hash), close())}
           />
         )}
         {tab === "send" && (
-          <SendScreen
-            key={sendPrefill?.to ?? "send"}
-            state={state}
-            {...(sendPrefill ? { prefill: sendPrefill } : {})}
-            onExit={() => (setSendPrefill(undefined), setTab("home"))}
-            onActivity={() => (setSendPrefill(undefined), setTab("activity"))}
-          />
+          <SendScreen state={state} onExit={() => setTab("home")} onActivity={() => setTab("activity")} />
         )}
         {tab === "activity" && <ActivityTab />}
         {tab === "apps" && <AppsTab />}
       </main>
-      <TabBar tab={tab} onChange={(t) => (setSendPrefill(undefined), setTab(t))} />
+      <TabBar tab={tab} onChange={setTab} />
     </Frame>
   );
 }
@@ -181,7 +179,6 @@ function NetworkSwitcher({ chainId }: { chainId: number }) {
         {NETWORKS.map((n) => (
           <option key={n.chainId} value={n.chainId}>
             {n.shortName}
-            {n.enabled ? "" : " (not yet)"}
           </option>
         ))}
       </select>

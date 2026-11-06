@@ -2,15 +2,11 @@ import { browser, type Browser } from "wxt/browser";
 import { defineBackground } from "wxt/utils/define-background";
 import { chromeApprovalWindows, chromeKV } from "../background/chrome";
 import { KeyringError } from "../background/keyring";
-import { getBalance, nodeClient, publicClient, readRpc, sidecarClient } from "../background/rpc";
-import { PaymentsError, Wallet } from "../background/wallet";
+import { OwnerKeyError } from "../background/lean/owner";
+import { getBalance, leanIo, readRpc } from "../background/rpc";
+import { AccountError, Wallet } from "../background/wallet";
 import { OffscreenClient, chromeOffscreen } from "../background/offscreen";
-import { alertUrl, notificationFor } from "../background/watcher/alerts";
-import { EngineError } from "../background/engine";
 import { ProviderRpcError, serializeError } from "../shared/errors";
-import { LOCAL_DEVNET, SHARED_DEVNET } from "../shared/build";
-import { ensureSharedDevnet } from "../shared/sharedDevnetRuntime";
-import { schemes } from "@queuebit/pq-signer";
 import {
   PROVIDER_PORT,
   isUiMessage,
@@ -20,11 +16,6 @@ import {
 } from "../shared/messages";
 
 const AUTOLOCK_ALARM = "queuebit:autolock";
-/** The watcher light mode's poll (plan §40 §5: every 60 s while the browser runs). */
-const WATCHER_ALARM = "queuebit:watcher";
-/** A timelock / pause deadline the watcher knows about (`WatcherCore.alarms()`): woken exactly then. */
-const DEADLINE_ALARM = "queuebit:watcher:deadline";
-const NOTIFICATION_PREFIX = "queuebit-alert:";
 
 export default defineBackground({
   type: "module",
@@ -32,18 +23,6 @@ export default defineBackground({
     // Every listener is registered synchronously at top level, so events that woke a terminated service worker are
     // delivered (MV3). State is read from storage on demand: nothing important lives only in this instance's memory.
     const ports = new Map<Browser.runtime.Port, string>();
-    // @queuebit/pq-signer instantiated its WASM (initSync from the embedded bytes, no fetch) when this module loaded.
-    // A local-devnet build exposes that fact for the e2e, which also checks no .wasm was ever fetched.
-    if (LOCAL_DEVNET) {
-      (globalThis as { __queuebitPq?: unknown }).__queuebitPq = {
-        schemes: Object.values(schemes).map((x) => x.name),
-        rejectsGarbage: !schemes.c13.verify(new Uint8Array(32), new Uint8Array(32), new Uint8Array(3688)),
-      };
-    }
-
-    // Shared-devnet flavour: the network table gets its checked addresses before any request is handled.
-    const ready: () => Promise<void> = SHARED_DEVNET ? ensureSharedDevnet : () => Promise.resolve();
-    if (SHARED_DEVNET) void ready();
 
     const wallet = new Wallet({
       local: chromeKV(browser.storage.local),
@@ -51,34 +30,11 @@ export default defineBackground({
       windows: chromeApprovalWindows,
       readRpc,
       getBalance,
-      io: { publicClient, node: nodeClient, sidecar: sidecarClient },
+      io: leanIo,
       async openApp(hash) {
         await browser.tabs.create({ url: browser.runtime.getURL(`/app.html${hash}`) });
       },
       offscreen: new OffscreenClient(chromeOffscreen()),
-      alertsUi: {
-        async notify(r) {
-          const n = notificationFor(r.alert);
-          await browser.notifications.create(`${NOTIFICATION_PREFIX}${r.alert.id}`, {
-            type: "basic",
-            iconUrl: browser.runtime.getURL("/icon/128.png"),
-            title: n.title,
-            message: n.message,
-            priority: n.priority,
-            requireInteraction: n.requireInteraction,
-            silent: n.silent,
-            buttons: [{ title: n.buttonTitle }],
-          });
-        },
-        async badge(b) {
-          await browser.action.setBadgeText({ text: b.text });
-          if (b.text) await browser.action.setBadgeBackgroundColor({ color: b.color });
-        },
-        async wakeAt(when) {
-          if (when > Date.now()) await browser.alarms.create(DEADLINE_ALARM, { when });
-        },
-      },
-      watcherFetch: (url, init) => fetch(url, { ...init, cache: "no-store", credentials: "omit" }),
       emit(event, data, origin) {
         for (const [port, portOrigin] of ports) {
           if (origin !== undefined && portOrigin !== origin) continue;
@@ -106,7 +62,7 @@ export default defineBackground({
       port.onDisconnect.addListener(() => ports.delete(port));
       port.onMessage.addListener((msg: PortRequest) => {
         if (typeof msg?.id !== "string" || typeof msg.method !== "string") return;
-        ready()
+        Promise.resolve()
           .then(() =>
             wallet.handleProvider(
               {
@@ -141,7 +97,7 @@ export default defineBackground({
         // Content scripts share runtime messaging; they never get the UI API.
         return false;
       }
-      ready()
+      Promise.resolve()
         .then(() => wallet.handleUi(msg.type, msg.payload))
         .then(
           (result) => sendResponse({ ok: true, result }),
@@ -150,7 +106,7 @@ export default defineBackground({
               ok: false,
               error: {
                 message: err instanceof Error ? err.message : "Something went wrong.",
-                ...(err instanceof KeyringError || err instanceof PaymentsError || err instanceof EngineError
+                ...(err instanceof KeyringError || err instanceof AccountError || err instanceof OwnerKeyError
                   ? { reason: err.reason }
                   : {}),
               },
@@ -162,41 +118,21 @@ export default defineBackground({
     // ---- approval windows, auto-lock, first run ----
     browser.windows.onRemoved.addListener((windowId) => void wallet.approvals.onWindowRemoved(windowId));
 
-    browser.alarms.onAlarm.addListener((alarm) => void ready().then(() => onAlarm(alarm)));
-    const onAlarm = (alarm: Browser.alarms.Alarm) => {
-      if (alarm.name === AUTOLOCK_ALARM) {
-        void wallet.autoLockCheck();
-        // Pending payments are also polled here, so a status survives the popup closing and SW restarts.
-        void wallet.payments?.refreshPending().catch(() => undefined);
-        void resumePrivacy();
-      } else if (alarm.name === WATCHER_ALARM || alarm.name === DEADLINE_ALARM) {
-        void wallet.pollAlerts().catch(() => undefined);
-      }
-    };
+    browser.alarms.onAlarm.addListener((alarm) => {
+      if (alarm.name !== AUTOLOCK_ALARM) return;
+      void wallet.autoLockCheck();
+      // Pending transactions are also polled here, so a status survives the popup closing and SW restarts.
+      void wallet.refreshActivity().catch(() => undefined);
+      void resumePrivacy();
+    });
     void browser.alarms.get(AUTOLOCK_ALARM).then((a) => {
       // Chrome 120+: 30 s is the minimum period (plan §30 §2.4).
       if (!a) void browser.alarms.create(AUTOLOCK_ALARM, { periodInMinutes: 0.5 });
     });
-    void browser.alarms.get(WATCHER_ALARM).then((a) => {
-      if (!a) void browser.alarms.create(WATCHER_ALARM, { periodInMinutes: 1, delayInMinutes: 0.5 });
-    });
-
-    // An alert's notification (or its button) opens the full app at the alert's deep link (ux-spec §2.3).
-    const openAlert = async (notificationId: string) => {
-      if (!notificationId.startsWith(NOTIFICATION_PREFIX)) return;
-      const id = notificationId.slice(NOTIFICATION_PREFIX.length);
-      const rec = (await wallet.alerts.list()).find((r) => r.alert.id === id);
-      const url = (rec ? alertUrl(rec.alert) : "/app.html#alerts") as `/app.html${string}`;
-      await browser.tabs.create({ url: browser.runtime.getURL(url) });
-      await browser.notifications.clear(notificationId);
-      await wallet.handleUi("alerts:read", { ids: [id] }).catch(() => undefined);
-    };
-    browser.notifications.onClicked.addListener((nid) => void openAlert(nid));
-    browser.notifications.onButtonClicked.addListener((nid) => void openAlert(nid));
 
     const resumePrivacy = async () => {
-      if (!wallet.privacy) return;
-      await wallet.privacy.rehydrate(Object.keys(await wallet.plans.all()).map(Number)).catch(() => undefined);
+      if (!wallet.privacy || !wallet.account) return;
+      await wallet.privacy.rehydrate(Object.keys(await wallet.account.all()).map(Number)).catch(() => undefined);
     };
 
     browser.runtime.onInstalled.addListener(({ reason }) => {
@@ -205,10 +141,7 @@ export default defineBackground({
 
     // A pending approval in storage.session at startup means the previous SW instance died mid-approval.
     void wallet.approvals.resumeAfterRestart();
-    void ready().then(() => {
-      void wallet.payments?.rehydrate().catch(() => undefined);
-      void resumePrivacy();
-    });
+    void resumePrivacy();
   },
 });
 

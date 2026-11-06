@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { approvalId, reject, useArmed } from "./shared";
 import { TransactionBody } from "./TransactionBody";
-import { SignatureBody } from "./SignatureBody";
 import { browser, type Browser } from "wxt/browser";
 import { getNetwork } from "../../shared/chains";
 import { StorageKeys } from "../../shared/kv";
@@ -69,13 +68,7 @@ export function ApproveApp() {
           <h1 className="t-title break-words">
             <span data-testid="approval-origin">{host}</span>{" "}
             <span className="font-normal text-muted">
-              {view.approval.kind === "transaction"
-                ? "wants to make a payment"
-                : view.approval.kind === "sign-in"
-                  ? "· Sign in"
-                  : view.approval.kind === "permit"
-                    ? "· Pre-approve"
-                    : "wants to connect"}
+              {view.approval.kind === "transaction" ? "wants to make a payment" : "wants to connect"}
             </span>
           </h1>
           <p className="t-small text-muted">
@@ -131,16 +124,14 @@ export function ApproveApp() {
         </div>
       ) : view.approval.kind === "transaction" ? (
         <TransactionBody view={view} />
-      ) : view.approval.kind === "sign-in" || view.approval.kind === "permit" ? (
-        <SignatureBody view={view} />
       ) : (
-        <ConnectBody view={view} account={view.account ?? state.accounts!.everyday} />
+        <ConnectBody view={view} {...(view.account ? { account: view.account } : {})} />
       )}
     </Frame>
   );
 }
 
-function ConnectBody({ view, account }: { view: ApprovalView; account: string }) {
+function ConnectBody({ view, account }: { view: ApprovalView; account?: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const armed = useArmed();
@@ -190,13 +181,22 @@ function ConnectBody({ view, account }: { view: ApprovalView; account: string })
           title="They will see"
           items={[
             <>
-              your address <AddressChip address={account} copyable={false} /> on {net.name}
+              your address{" "}
+              {account ? (
+                <AddressChip address={account} copyable={false} />
+              ) : (
+                "(not available: is the LeanPool node running?)"
+              )}{" "}
+              on {net.name}
             </>,
             "your balances and activity",
           ]}
         />
-        <List title="They can ask you to" items={["make payments (you approve each one)", "sign in"]} />
-        <List title="They can't" negative items={["spend anything without asking", "change your limits"]} />
+        <List
+          title="They can ask you to"
+          items={["make payments (you approve each one, unless you give them a session)"]}
+        />
+        <List title="They can't" negative items={["spend anything without asking", "change your keys or sessions"]} />
       </div>
       <footer className="flex gap-2 border-t border-line p-4">
         <Button variant="secondary" block onClick={() => void reject()}>
@@ -206,7 +206,7 @@ function ConnectBody({ view, account }: { view: ApprovalView; account: string })
           block
           loading={busy}
           loadingLabel="Connecting…"
-          disabled={!armed}
+          disabled={!armed || !account}
           onClick={async () => {
             setBusy(true);
             setError(null);

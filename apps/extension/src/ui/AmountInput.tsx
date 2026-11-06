@@ -19,7 +19,7 @@ const DECIMAL = /^\d*(?:\.\d*)?$/u;
 
 /**
  * Amount entry (ux-spec §3.3.1, §6.4): `inputmode="decimal"`, live fiat line in aria-describedby, MAX, inline
- * validation. Going over the per-payment limit is a Vault hint, not an error.
+ * validation. Going over the per-payment limit is a hint (the owner key signs it), not an error.
  */
 export function AmountInput({
   label = "Amount",
@@ -81,8 +81,8 @@ export function AmountInput({
         </p>
       )}
       {!insufficient && overPerPayment && (
-        <p className="t-small text-vault">
-          Above your {formatUsd(perTxMaxUsd)} per-payment limit: your phone approves it.
+        <p className="t-small text-owner">
+          Above your {formatUsd(perTxMaxUsd)} per-payment limit: your owner key signs it.
         </p>
       )}
     </div>

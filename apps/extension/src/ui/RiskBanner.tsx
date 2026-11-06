@@ -4,11 +4,11 @@ import { CloseIcon } from "./icons";
 import { FAMILY_TEXT, StatusGlyph } from "./StatusGlyph";
 
 export interface RiskBannerProps {
-  level: "info" | "limit" | "vault" | "danger";
+  level: "info" | "limit" | "owner" | "danger";
   title: ReactNode;
   body?: ReactNode;
   action?: { label: string; onClick: () => void };
-  /** `alert` only for Lockdown / Replacing the Vault / scam warnings (ux-spec §3.2 A11y). */
+  /** `alert` only for urgent warnings: a recovery in progress, scam sites (ux-spec §3.2 A11y). */
   role?: "status" | "alert";
   dismissible?: boolean;
   onDismiss?: () => void;
@@ -18,7 +18,7 @@ export interface RiskBannerProps {
 const bg = {
   info: "bg-surface",
   limit: "bg-limit-bg",
-  vault: "bg-vault-bg",
+  owner: "bg-owner-bg",
   danger: "bg-danger-bg",
 } as const;
 

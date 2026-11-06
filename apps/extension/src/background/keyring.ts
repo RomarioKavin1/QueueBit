@@ -19,21 +19,34 @@ import {
 } from "./encryption";
 
 /**
- * The extension keyring (plan §30 §2.4). One BIP-39 seed (24 words) holds:
- *   - the everyday key  m/44'/60'/0'/0/0  (signs everyday payments; bounded by the on-chain daily limit)
- *   - the fee-tank key  m/44'/60'/1'/0/k  (pays network fees for everyday payments; separate branch so a rotation of
- *     the everyday key never moves the tank and exporting the tank never reveals the everyday key)
- * No Vault or Recovery key material ever enters the extension.
+ * The extension keyring (plan §70). One BIP-39 seed (24 words) holds every key the wallet uses:
+ *   - the owner key: leanSPHINCS (leanVM), seeded with
+ *       HKDF-SHA256(ikm = BIP-39 seed, salt = "queuebit.leanaccount.owner.v1", info = "leanSPHINCS/0", 32 bytes)
+ *     It is the account's ADMIN|SPEND key; its payments are approved through a LeanPool node. Quantum-safe.
+ *   - the setup key       m/44'/60'/1'/0/0  secp256k1: sends the ordinary transactions an account can't send for
+ *     itself (creating it, a move's last step, a Safe's execTransaction). It holds only what those cost.
+ *   - session keys        m/44'/60'/2'/0/i  secp256k1: one per session; the account lets each one call only its
+ *     sites' contracts within its limits, until it ends.
+ *   - the privacy payer   m/44'/60'/4'/0/0  secp256k1: signs Privacy Pools note envelopes (its signatures are the
+ *     notes' spend keys), never transactions.
+ *   - the identity key    m/44'/60'/0'/0/0  secp256k1: signs nothing; its address binds the encrypted blob (AAD).
+ * Paths and labels are fixed: the same words restore the same keys and the same account address.
  */
-export const EVERYDAY_PATH = (index = 0) => `m/44'/60'/0'/0/${index}`;
-export const FEE_TANK_PATH = (index = 0) => `m/44'/60'/1'/0/${index}`;
+export const IDENTITY_PATH = (index = 0) => `m/44'/60'/0'/0/${index}`;
+export const SETUP_PATH = `m/44'/60'/1'/0/0`;
+export const SESSION_PATH = (index: number) => `m/44'/60'/2'/0/${index}`;
+export const PRIVACY_PAYER_PATH = `m/44'/60'/4'/0/0`;
+export const OWNER_SEED_SALT = "queuebit.leanaccount.owner.v1";
+export const OWNER_SEED_INFO = (index = 0) => `leanSPHINCS/${index}`;
 
 export const MIN_PASSWORD_LENGTH = 8;
 export const MNEMONIC_STRENGTH_BITS = 256; // 24 words
 
 export interface KeyringAccounts {
+  /** The identity key's address (binds the encrypted blob). */
   everyday: Address;
-  feeTank: Address;
+  /** The setup key's address (pays for account creation and moves). */
+  setup: Address;
 }
 
 export interface KeyringRecord {
@@ -42,11 +55,6 @@ export interface KeyringRecord {
   accounts: KeyringAccounts;
   createdAt: number;
   source: "created" | "imported";
-  /**
-   * After "Replace everyday key" (`vaultSetHotKey`): the index and address of the everyday key in use. `accounts`
-   * keeps the original (it binds the encrypted blob), so this is separate.
-   */
-  hot?: { index: number; address: Address };
 }
 
 /** Lives in chrome.storage.session: in memory only, cleared on browser restart, hidden from content scripts. */
@@ -80,21 +88,27 @@ function derivePrivateKey(seed: Uint8Array, path: string): Uint8Array {
   return key;
 }
 
+const addressAt = (seed: Uint8Array, path: string): Address => {
+  const k = derivePrivateKey(seed, path);
+  try {
+    return privateKeyToAccount(`0x${bytesToHex(k)}`).address;
+  } finally {
+    k.fill(0);
+  }
+};
+
 export function deriveAccounts(mnemonic: string): KeyringAccounts {
   const seed = mnemonicToSeedSync(mnemonic);
   try {
-    const everydayKey = derivePrivateKey(seed, EVERYDAY_PATH(0));
-    const tankKey = derivePrivateKey(seed, FEE_TANK_PATH(0));
-    const accounts = {
-      everyday: privateKeyToAccount(`0x${bytesToHex(everydayKey)}`).address,
-      feeTank: privateKeyToAccount(`0x${bytesToHex(tankKey)}`).address,
-    };
-    everydayKey.fill(0);
-    tankKey.fill(0);
-    return accounts;
+    return { everyday: addressAt(seed, IDENTITY_PATH(0)), setup: addressAt(seed, SETUP_PATH) };
   } finally {
     seed.fill(0);
   }
+}
+
+/** The owner key's 32-byte leanSPHINCS seed (see the keyring comment). The caller zeroes it. */
+export function ownerSeedFrom(seed: Uint8Array, index = 0): Uint8Array {
+  return hkdf(sha256, seed, utf8ToBytes(OWNER_SEED_SALT), utf8ToBytes(OWNER_SEED_INFO(index)), 32);
 }
 
 export interface KeyringOptions {
@@ -128,36 +142,7 @@ export class KeyringController {
   }
 
   async accounts(): Promise<KeyringAccounts | undefined> {
-    const r = await this.record();
-    if (!r) return undefined;
-    return r.hot ? { ...r.accounts, everyday: r.hot.address } : r.accounts;
-  }
-
-  /** The everyday key index in use (0 until a "Replace everyday key"). */
-  async everydayIndex(): Promise<number> {
-    return (await this.record())?.hot?.index ?? 0;
-  }
-
-  /** The address of the everyday key at `index` (needs the wallet unlocked). */
-  async everydayAt(index: number): Promise<Address> {
-    return this.withMnemonic((mnemonic) => {
-      const seed = mnemonicToSeedSync(mnemonic);
-      try {
-        const k = derivePrivateKey(seed, EVERYDAY_PATH(index));
-        const a = privateKeyToAccount(`0x${bytesToHex(k)}`).address;
-        k.fill(0);
-        return a;
-      } finally {
-        seed.fill(0);
-      }
-    });
-  }
-
-  /** Switch to the everyday key at `index` once the account accepted it on-chain. */
-  async useEverydayIndex(index: number): Promise<void> {
-    const record = await this.requireRecord();
-    const address = await this.everydayAt(index);
-    await this.local.set(StorageKeys.keyring, { ...record, hot: { index, address } } satisfies KeyringRecord);
+    return (await this.record())?.accounts;
   }
 
   /** Create a new 24-word seed. Returns the words once so onboarding can offer to show them. */
@@ -201,7 +186,7 @@ export class KeyringController {
     return record.accounts;
   }
 
-  /** The everyday backup words, for the "Back up your everyday words" checklist item. Needs the password again. */
+  /** The backup words, for "Back up your words". Needs the password again. */
   async revealWords(password: string): Promise<string> {
     const record = await this.requireRecord();
     let plaintext: Uint8Array;
@@ -274,29 +259,40 @@ export class KeyringController {
     return fn(secret.mnemonic);
   }
 
-  /**
-   * Run `fn` with the everyday and fee-tank private keys (signing, plan §30 §4.2). Both are derived for the call and
-   * zeroed afterwards; they never leave the service worker.
-   */
-  async withHotKeys<T>(fn: (keys: { everyday: `0x${string}`; feeTank: `0x${string}` }) => T | Promise<T>): Promise<T> {
-    const index = await this.everydayIndex();
+  /** Run `fn` with the secp256k1 private key at `path` (zeroed afterwards; it never leaves the service worker). */
+  async withKey<T>(path: string, fn: (privateKey: `0x${string}`) => T | Promise<T>): Promise<T> {
     return this.withMnemonic(async (mnemonic) => {
       const seed = mnemonicToSeedSync(mnemonic);
-      const everyday = derivePrivateKey(seed, EVERYDAY_PATH(index));
-      const feeTank = derivePrivateKey(seed, FEE_TANK_PATH(0));
+      const key = derivePrivateKey(seed, path);
       seed.fill(0);
       try {
-        return await fn({ everyday: `0x${bytesToHex(everyday)}`, feeTank: `0x${bytesToHex(feeTank)}` });
+        return await fn(`0x${bytesToHex(key)}`);
       } finally {
-        everyday.fill(0);
-        feeTank.fill(0);
+        key.fill(0);
+      }
+    });
+  }
+
+  /** The address of the secp256k1 key at `path` (needs the wallet unlocked). */
+  async addressOf(path: string): Promise<Address> {
+    return this.withKey(path, (k) => privateKeyToAccount(k).address);
+  }
+
+  /** The owner key's leanSPHINCS seed (needs the wallet unlocked). The caller zeroes it. */
+  async ownerSeed(index = 0): Promise<Uint8Array> {
+    return this.withMnemonic((mnemonic) => {
+      const seed = mnemonicToSeedSync(mnemonic);
+      try {
+        return ownerSeedFrom(seed, index);
+      } finally {
+        seed.fill(0);
       }
     });
   }
 
   /**
    * A 32-byte storage key for one purpose (`label`), derived from the seed with HKDF-SHA256 (unlocked only). It is
-   * not any signing key: exporting the everyday or fee-tank key does not reveal it (the private balance's encrypted
+   * not any signing key: exporting a signing key does not reveal it (the private balance's encrypted
    * store, plan §40 §1.2 "a separate key"). Stable across password changes; the caller zeroes it after import.
    */
   async deriveStorageKey(label: string): Promise<Uint8Array> {
@@ -310,7 +306,7 @@ export class KeyringController {
     });
   }
 
-  /** Danger zone: remove the everyday key from this browser. Money stays in the account. */
+  /** Danger zone: remove the keys from this browser. Money stays in the account. */
   async reset(): Promise<void> {
     await this.lock();
     await this.local.remove(StorageKeys.keyring);

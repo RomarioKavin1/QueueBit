@@ -31,8 +31,8 @@ export const WalletIcon = (p: IconProps) => (
     <path d="M19 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0 0 4h14a2 2 0 0 1 2 2v3h-4a2 2 0 0 0 0 4h4v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5" />
   </Icon>
 );
-/** Vault: phone with a shield. */
-export const VaultIcon = (p: IconProps) => (
+/** The owner key: a shield. */
+export const OwnerIcon = (p: IconProps) => (
   <Icon {...p}>
     <rect x="5" y="2" width="14" height="20" rx="2.5" />
     <path d="M12 7.5l3 1.2v2.3c0 1.9-1.3 3.4-3 4-1.7-.6-3-2.1-3-4V8.7Z" />

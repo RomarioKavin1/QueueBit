@@ -1,5 +1,5 @@
 /**
- * The QueueBit mark: a drop (the everyday key is allowed to "leak") with a keyhole cut out of it, on the brand blue.
+ * The QueueBit mark: a drop with a keyhole cut out of it, on the brand blue.
  * Used for the EIP-6963 announcement (as a data: URI, rendered by dapps via <img> only) and rasterised into the
  * toolbar icons by `scripts/render-icons.mjs`.
  */

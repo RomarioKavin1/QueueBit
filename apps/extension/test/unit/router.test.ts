@@ -2,7 +2,7 @@ import type { Address } from "viem";
 import { describe, expect, it, vi } from "vitest";
 import type { ApprovalOutcome } from "../../src/background/approvals";
 import { PermissionsStore } from "../../src/background/permissions";
-import { READ_METHODS, routeProviderRequest, type RouterDeps } from "../../src/background/router";
+import { MAX_CALLS, READ_METHODS, routeProviderRequest, type RouterDeps } from "../../src/background/router";
 import { ProviderRpcError } from "../../src/shared/errors";
 import { MemoryKV } from "../../src/shared/kv";
 
@@ -27,7 +27,6 @@ function deps(over: Partial<RouterDeps> & { outcome?: ApprovalOutcome } = {}) {
       activityId: "a1",
       ...(tx.batchId ? { batchId: tx.batchId } : {}),
     })),
-    requestSignature: vi.fn(async () => "0x1234" as `0x${string}`),
     callsStatus: vi.fn(async (_o: string, id: string) =>
       id === HASH ? { version: "2.0.0", id, chainId: "0x539" as const, status: 200, atomic: true } : null,
     ),
@@ -112,33 +111,22 @@ describe("provider router", () => {
     expect(d.requestConnect).toHaveBeenCalledTimes(1);
   });
 
-  it("wallet_switchEthereumChain: known chain switches, unknown is 4902, bad params -32602, unconnected 4100", async () => {
+  it("wallet_switchEthereumChain: only the frame devnet is known (4902 otherwise), bad params -32602, unconnected 4100", async () => {
     const d = deps();
-    expect((await rpcError(call(d, "wallet_switchEthereumChain", [{ chainId: "0xaa36a7" }]))).code).toBe(4100);
-    await d.permissions.grant(ORIGIN, [ACCOUNT]);
-    expect(await call(d, "wallet_switchEthereumChain", [{ chainId: "0xaa36a7" }])).toBeNull();
-    expect(await call(d, "eth_chainId")).toBe("0xaa36a7");
-    expect((await rpcError(call(d, "wallet_switchEthereumChain", [{ chainId: "0x2a" }]))).code).toBe(4902);
+    expect((await rpcError(call(d, "wallet_switchEthereumChain", [{ chainId: "0x539" }]))).code).toBe(4100);
+    await d.permissions.grant(ORIGIN, [ACCOUNT], 1337);
+    // Switching to the current chain is a no-op.
+    expect(await call(d, "wallet_switchEthereumChain", [{ chainId: "0x539" }])).toBeNull();
+    expect(d.setOriginChain).not.toHaveBeenCalled();
+    expect(await call(d, "eth_chainId")).toBe("0x539");
+    for (const other of ["0xaa36a7", "0x1", "0x7a69"])
+      expect((await rpcError(call(d, "wallet_switchEthereumChain", [{ chainId: other }]))).code).toBe(4902);
     for (const bad of [[], [{}], [{ chainId: 1 }], [{ chainId: "0x01" }], [{ chainId: "zz" }]]) {
       expect((await rpcError(call(d, "wallet_switchEthereumChain", bad))).code).toBe(-32602);
     }
-    // Switching to the current chain is a no-op.
-    (d.setOriginChain as ReturnType<typeof vi.fn>).mockClear();
-    await call(d, "wallet_switchEthereumChain", [{ chainId: "0xaa36a7" }]);
-    expect(d.setOriginChain).not.toHaveBeenCalled();
-  });
-
-  it("binds each site to its own chain (per-origin chain)", async () => {
-    const d = deps();
-    await d.permissions.grant(ORIGIN, [ACCOUNT], 1337);
-    await d.permissions.grant("https://other.example", [ACCOUNT], 1337);
-    await call(d, "wallet_switchEthereumChain", [{ chainId: "0xaa36a7" }]);
-    expect(await call(d, "eth_chainId")).toBe("0xaa36a7");
-    const other = { origin: "https://other.example", requestId: "o" };
-    expect(await routeProviderRequest(other, { method: "eth_chainId" }, d)).toBe("0x539");
     // Reads go to the site's chain.
     await call(d, "eth_getBalance", [ACCOUNT, "latest"]);
-    expect(d.readRpc).toHaveBeenLastCalledWith(11155111, "eth_getBalance", [ACCOUNT, "latest"]);
+    expect(d.readRpc).toHaveBeenLastCalledWith(1337, "eth_getBalance", [ACCOUNT, "latest"]);
   });
 
   it("eth_sendTransaction needs a connection, checks from/to, and returns the tx hash", async () => {
@@ -175,7 +163,7 @@ describe("provider router", () => {
     ).toEqual({
       id: HASH,
     });
-    const nine = Array.from({ length: 9 }, () => ({ to: TO }));
+    const nine = Array.from({ length: MAX_CALLS + 1 }, () => ({ to: TO }));
     expect((await rpcError(call(d, "wallet_sendCalls", batch({ calls: nine })))).code).toBe(5740);
     expect((await rpcError(call(d, "wallet_sendCalls", batch({ calls: [] })))).code).toBe(-32602);
   });
@@ -201,59 +189,16 @@ describe("provider router", () => {
     expect(d.readRpc).toHaveBeenCalledWith(1337, method, params);
   });
 
-  it("signatures: sign-in and ERC-2612 go to the approval window; Permit2 and orders are refused (4100 + queuebitRule)", async () => {
-    const d = deps();
-    expect((await rpcError(call(d, "personal_sign", ["0x68656c6c6f", ACCOUNT]))).code).toBe(4100); // not connected
-    await d.permissions.grant(ORIGIN, [ACCOUNT], 1337);
-    expect(await call(d, "personal_sign", ["0x68656c6c6f", ACCOUNT])).toBe("0x1234");
-    expect(d.requestSignature).toHaveBeenLastCalledWith(ctx, 1337, {
-      method: "personal_sign",
-      raw: "0x68656c6c6f",
-      cls: { kind: "sign-in", rule: "SIG-SIGN-IN" },
-    });
-    // Another address than the connected account is refused.
-    expect((await rpcError(call(d, "personal_sign", ["0x68656c6c6f", HASH.slice(0, 42)]))).code).toBe(4100);
-    const permit = {
-      primaryType: "Permit",
-      types: {
-        Permit: ["owner", "spender", "value", "nonce", "deadline"].map((name) => ({
-          name,
-          type: name === "owner" || name === "spender" ? "address" : "uint256",
-        })),
-      },
-      domain: {
-        name: "T",
-        version: "1",
-        chainId: 1337,
-        verifyingContract: "0x00000000000000000000000000000000000000aa",
-      },
-      message: {
-        owner: ACCOUNT,
-        spender: "0x00000000000000000000000000000000000000bb",
-        value: "5",
-        nonce: "0",
-        deadline: "99",
-      },
-    };
-    await call(d, "eth_signTypedData_v4", [ACCOUNT, JSON.stringify(permit)]);
-    expect(d.requestSignature).toHaveBeenLastCalledWith(
-      ctx,
-      1337,
-      expect.objectContaining({
-        method: "eth_signTypedData_v4",
-        cls: expect.objectContaining({ kind: "register-permit", value: 5n }),
-      }),
-    );
-    const p2 = {
-      primaryType: "PermitSingle",
-      types: { PermitSingle: [{ name: "spender", type: "address" }] },
-      domain: {},
-    };
-    const e = await rpcError(call(d, "eth_signTypedData_v4", [ACCOUNT, JSON.stringify(p2)]));
-    expect(e.code).toBe(4100);
-    expect(e.data).toMatchObject({ queuebitRule: "SIG-PERMIT2" });
-    expect(e.message).toMatch(/Permit2/u);
-  });
+  it.each(["personal_sign", "eth_signTypedData_v4"])(
+    "%s is 4200: a LeanAccount has no ERC-1271 check yet, so nothing is signed",
+    async (method) => {
+      const d = deps();
+      await d.permissions.grant(ORIGIN, [ACCOUNT], 1337);
+      const e = await rpcError(call(d, method, ["0x68656c6c6f", ACCOUNT]));
+      expect(e.code).toBe(4200);
+      expect(e.message).toMatch(/can't sign messages/u);
+    },
+  );
 
   it.each(["eth_subscribe", "foo_bar"])("%s is 4200 unsupported with a clear message", async (method) => {
     const e = await rpcError(call(deps(), method, []));

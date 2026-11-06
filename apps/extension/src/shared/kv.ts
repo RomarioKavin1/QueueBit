@@ -39,7 +39,13 @@ export const StorageKeys = {
   session: "queuebit:session",
   /** storage.session */
   approvals: "queuebit:approvals",
-  accountPlans: "queuebit:accountPlans",
+  /** The LeanAccount per chain (address, creation options, activation). */
+  accounts: "queuebit:leanAccounts",
+  /** The owner key's public key and how many signatures it has made (leanSPHINCS is stateful-budgeted). */
+  owner: "queuebit:ownerKey",
+  /** Sessions per chain. */
+  sessions: "queuebit:sessions",
+  /** Moves into the account (EOA, Safe, smart account), for Activity and resuming. */
+  migrations: "queuebit:migrations",
   activity: "queuebit:activity",
-  vaultRequests: "queuebit:vaultRequests",
 } as const;

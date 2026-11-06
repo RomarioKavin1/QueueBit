@@ -1,10 +1,8 @@
-import { useEffect, useState } from "react";
-import { SHARED_DEVNET } from "../../shared/build";
+import { useState } from "react";
 import { NETWORKS } from "../../shared/chains";
-import { sharedUi } from "../lib/boot";
 import { AUTO_LOCK_CHOICES, type Theme, type WalletState } from "../../shared/types";
 import { AddressChip, ArrowLeftIcon, Button, Card, LockIcon, PasswordField, SelectField } from "../../ui";
-import { formatMinutes, formatUsd } from "../../ui/format";
+import { formatMinutes } from "../../ui/format";
 import { call, UiCallError } from "../lib/api";
 import { useAsync } from "../lib/hooks";
 import { eth } from "../lib/money";
@@ -40,7 +38,7 @@ export function SettingsScreen({ state, onBack }: { state: WalletState; onBack: 
             value={String(s.selectedChainId)}
             options={NETWORKS.map((n) => ({
               value: String(n.chainId),
-              label: `${n.name} · ${n.accountKind}${n.enabled ? "" : " (not available yet)"}`,
+              label: `${n.name}${n.deployment ? "" : " (no account contracts yet)"}`,
             }))}
             onChange={(e) => void call("settings:update", { selectedChainId: Number(e.target.value) })}
             description={`${net?.note ?? ""} QueueBit uses a fixed list so a site can't point you at a fake network.`}
@@ -67,39 +65,19 @@ export function SettingsScreen({ state, onBack }: { state: WalletState; onBack: 
           </Button>
         </section>
 
-        {SHARED_DEVNET && sharedUi && <sharedUi.SharedDevnetSection />}
-
         <PrivateConnectionSection chainId={s.selectedChainId} enabled={s.anonRpc} />
         <PrivacyNetworkSection chainId={s.selectedChainId} />
 
-        <section className="flex flex-col gap-2" aria-labelledby="vault-h" data-testid="settings-vault">
-          <h2 id="vault-h" className="t-small font-semibold tracking-wide text-muted uppercase">
-            Vault
-          </h2>
-          <AirGappedToggle on={Boolean(s.airGapped)} />
-        </section>
-
-        <section className="flex flex-col gap-2" aria-labelledby="alerts-h">
-          <h2 id="alerts-h" className="t-small font-semibold tracking-wide text-muted uppercase">
-            Alerts
-          </h2>
-          <p className="t-small text-muted">
-            In-browser alerts are always on while the browser is open. Pair a self-hosted watcher in Security to get
-            them when it is closed. Alerts never include amounts or addresses.
-          </p>
-        </section>
-
-        <section className="flex flex-col gap-2" aria-labelledby="tank-h">
-          <h2 id="tank-h" className="t-small font-semibold tracking-wide text-muted uppercase">
-            Fee tank
+        <section className="flex flex-col gap-2" aria-labelledby="setup-h">
+          <h2 id="setup-h" className="t-small font-semibold tracking-wide text-muted uppercase">
+            Setup key
           </h2>
           <Card>
             <p className="t-small text-muted">
-              Pays network fees for everyday payments; a thief can only burn this. Topping it up counts as an everyday
-              payment.
+              Pays for creating your account and for moves into it. Keep only a little ETH on it.
             </p>
             <div className="mt-2">
-              {state.accounts && <AddressChip address={state.accounts.feeTank} name="Fee tank" />}
+              {state.accounts && <AddressChip address={state.accounts.setup} name="Setup key" />}
             </div>
           </Card>
         </section>
@@ -125,10 +103,13 @@ export function SettingsScreen({ state, onBack }: { state: WalletState; onBack: 
 function AccountSection({ chainId }: { chainId: number }) {
   const status = useAsync(() => call("account:status", { chainId }), [chainId]);
   const st = status.data;
-  const net = NETWORKS.find((n) => n.chainId === chainId);
   const rows: Array<[string, React.ReactNode]> = st
     ? [
-        ["Address", <AddressChip key="a" address={st.address} chain={net?.accountKind} />],
+        ...(st.address
+          ? ([["Address", <AddressChip key="a" address={st.address} chain="Quantum-safe account" />]] as Array<
+              [string, React.ReactNode]
+            >)
+          : []),
         [
           "Status",
           !st.supported ? (
@@ -138,26 +119,17 @@ function AccountSection({ chainId }: { chainId: number }) {
               Active
             </span>
           ) : st.activation ? (
-            "Activating…"
+            "Creating…"
           ) : (
-            "Not activated yet"
+            "Not created yet"
           ),
         ],
         ...(st.supported
           ? ([
-              [
-                "Daily limit",
-                `${formatUsd(st.limits.capUsd)} in any 24 hours · ${formatUsd(st.limits.perTxMaxUsd)} per payment${st.deployed ? ` · ${formatUsd(st.limits.availableUsd)} left` : " (set at activation)"}`,
-              ],
-              ["Allowed recipients", "Your fee tank. Adding others needs the Vault."],
-              [
-                "Vault",
-                st.vault === "paired"
-                  ? `Paired${st.vaultSigner ? ` · signer ${st.vaultSigner.slice(0, 6)}…` : ""}`
-                  : "Not paired",
-              ],
-              ["Recovery key", st.recoverySigner ? "Set" : "Not set"],
-              ["Fee tank", eth(st.tankWei, 6)],
+              ["Owner key", `Quantum-safe · ${st.ownerSignaturesLeft.toLocaleString()} signatures left`],
+              ["LeanPool node", st.leanpoolUrl],
+              ["Guardians", st.guardians?.length ? `${st.guardians.length}` : "None"],
+              ["Setup key", eth(st.setupWei ?? "0", 6)],
             ] as Array<[string, React.ReactNode]>)
           : []),
       ]
@@ -270,32 +242,5 @@ function ChangePassword() {
         </form>
       )}
     </section>
-  );
-}
-
-/** Settings › Vault › Offline phone (no relay). Optimistic: the box follows the click at once. */
-function AirGappedToggle({ on }: { on: boolean }) {
-  const [checked, setChecked] = useState(on);
-  useEffect(() => setChecked(on), [on]);
-  return (
-    <label className="flex cursor-pointer items-start gap-3">
-      <input
-        type="checkbox"
-        className="mt-1 size-4 accent-[var(--brand)]"
-        checked={checked}
-        onChange={(e) => {
-          setChecked(e.target.checked);
-          void call("settings:update", { airGapped: e.target.checked }).catch(() => setChecked(on));
-        }}
-        data-testid="air-gapped-toggle"
-      />
-      <span>
-        <span className="t-strong block">Offline phone (no relay)</span>
-        <span className="t-small text-muted">
-          Your phone stays offline: approvals go both ways by QR code (this computer&apos;s camera reads the
-          phone&apos;s answer). Off: the phone sends its signature back on its own, end-to-end encrypted.
-        </span>
-      </span>
-    </label>
   );
 }

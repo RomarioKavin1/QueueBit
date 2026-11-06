@@ -4,14 +4,11 @@ import { ProviderRpcError, RpcErrorCode, unauthorized, userRejected } from "../s
 import type { ApprovalTx } from "../shared/types";
 import type { ApprovalOutcome } from "./approvals";
 import type { PermissionsStore } from "./permissions";
-import { MAX_HOT_CALLS } from "./routing";
-import { classifyPersonalSign, classifyTypedData, type SignatureClass } from "./signing";
 
 /**
- * The dapp-facing JSON-RPC method table (plan §30 §3.2), M1 subset: accounts, chains (per origin), reads, and on the
- * frame backend `eth_sendTransaction` and the EIP-5792 methods for everyday payments. Everything else answers
- * EIP-1193 `4200 unsupported method` with a message saying which milestone brings it; `queuebit_*` is internal and
- * never served to pages (`-32601`).
+ * The dapp-facing JSON-RPC method table (plan §30 §3.2): accounts, chains (per origin), reads, `eth_sendTransaction`
+ * and the EIP-5792 methods. Everything else (message signatures included: a LeanAccount has no ERC-1271 check yet)
+ * answers EIP-1193 `4200 unsupported method` with the reason; `queuebit_*` is internal and never served (`-32601`).
  */
 export interface ProviderRequest {
   method: string;
@@ -46,21 +43,18 @@ export interface RouterDeps {
   setOriginChain(origin: string, chainId: number): Promise<void>;
   hasKeyring(): Promise<boolean>;
   isUnlocked(): Promise<boolean>;
-  /** The account a site sees on `chainId`: the smart account where QueueBit has one, else the everyday key. */
+  /** The account a site sees on `chainId` (undefined until the wallet has computed it). */
   getAccount(chainId: number): Promise<Address | undefined>;
   requestConnect(ctx: RequestContext, chainId: number): Promise<ApprovalOutcome>;
-  /** Opens the transaction approval; resolves once sent, or throws 4001 / 4100 (+ queuebitRule). */
+  /**
+   * Sends what a site asked: on its own when one of the site's sessions covers it (the session key signs), else after
+   * the user approves it in the approval window (the owner key signs). Resolves once sent, or throws 4001 / 4100.
+   */
   requestTransaction(
     ctx: RequestContext,
     chainId: number,
     tx: ApprovalTx,
   ): Promise<{ hash: `0x${string}`; activityId: string; batchId?: string }>;
-  /** Opens the sign-in / pre-approval window; resolves with the signature bytes, or throws 4001 / 4100. */
-  requestSignature(
-    ctx: RequestContext,
-    chainId: number,
-    req: { method: "personal_sign" | "eth_signTypedData_v4"; raw: unknown; cls: SignatureClass },
-  ): Promise<`0x${string}`>;
   callsStatus(origin: string, id: string): Promise<CallsStatus | null>;
   batchIdTaken(origin: string, id: string): Promise<boolean>;
   capabilities(chainId: number, account: Address): Promise<Record<string, unknown>>;
@@ -87,6 +81,9 @@ export const READ_METHODS = new Set([
   "eth_maxPriorityFeePerGas",
 ]);
 
+/** The most calls one request may carry (one frame, all or nothing). */
+export const MAX_CALLS = 8;
+
 /** Which later milestone fills in a method (plan §30 §10.2), for the 4200 message. */
 const LATER: Record<string, string> = {
   wallet_requestExecutionPermissions: "M5",
@@ -102,6 +99,9 @@ const LATER: Record<string, string> = {
 /** Methods QueueBit will never offer (plan §30 §3.2, ux-spec E-41/E-53). */
 const NEVER: Record<string, string> = {
   eth_sign: "QueueBit never signs raw hashes.",
+  personal_sign: "A QueueBit account can't sign messages yet (it has no ERC-1271 check). Use a transaction instead.",
+  eth_signTypedData_v4:
+    "A QueueBit account can't sign messages yet (it has no ERC-1271 check). Use a transaction instead.",
   eth_signTransaction: "A smart account has no raw transaction to hand back.",
   eth_signTypedData: "Use eth_signTypedData_v4.",
   eth_signTypedData_v1: "Use eth_signTypedData_v4.",
@@ -174,7 +174,7 @@ function parseQuantity(v: unknown, what: string): bigint {
 function parseCall(c: unknown, i: number): ApprovalTx["calls"][number] {
   const o = (c ?? {}) as { to?: unknown; value?: unknown; data?: unknown; input?: unknown };
   if (o.to === undefined || o.to === null) {
-    throw invalid(`Call ${i}: QueueBit doesn't deploy contracts from the everyday key (missing "to").`);
+    throw invalid(`Call ${i}: QueueBit doesn't deploy contracts from the account (missing "to").`);
   }
   if (typeof o.to !== "string" || !isAddress(o.to, { strict: false }))
     throw invalid(`Call ${i}: "to" is not an address.`);
@@ -297,10 +297,10 @@ export async function routeProviderRequest(
         }
       }
       if (!Array.isArray(p.calls) || p.calls.length === 0) throw invalid("calls must be a non-empty array.");
-      if (p.calls.length > MAX_HOT_CALLS) {
+      if (p.calls.length > MAX_CALLS) {
         throw new ProviderRpcError(
           RpcErrorCode.bundleTooLarge,
-          `This request has too many steps for one payment (${p.calls.length} > ${MAX_HOT_CALLS}).`,
+          `This request has too many steps for one payment (${p.calls.length} > ${MAX_CALLS}).`,
         );
       }
       let batchId: string | undefined;
@@ -313,7 +313,7 @@ export async function routeProviderRequest(
         }
         batchId = p.id;
       }
-      // Everything inside one hotExecute is atomic by construction, so atomicRequired true or false is honoured.
+      // Every call runs in one frame, all or nothing, so atomicRequired true or false is honoured.
       const calls = p.calls.map((c, i) => parseCall(c, i));
       const r = await deps.requestTransaction(ctx, chainId, {
         source: "wallet_sendCalls",
@@ -359,55 +359,8 @@ export async function routeProviderRequest(
       return out;
     }
 
-    case "personal_sign":
-    case "eth_signTypedData_v4": {
-      const account = await requireConnected(ctx, deps);
-      // personal_sign: [message, address]; eth_signTypedData_v4: [address, typedData].
-      const [msgParam, addrParam] = method === "personal_sign" ? [params[0], params[1]] : [params[1], params[0]];
-      if (typeof addrParam === "string" && addrParam.toLowerCase() !== account.toLowerCase()) {
-        throw unauthorized(`QueueBit only signs for the connected account ${account}.`);
-      }
-      if (method === "personal_sign" && typeof msgParam !== "string") throw invalid("Expected [message, address].");
-      if (method === "eth_signTypedData_v4" && typeof msgParam !== "string" && typeof msgParam !== "object") {
-        throw invalid("Expected [address, typedData].");
-      }
-      const cls =
-        method === "personal_sign"
-          ? classifyPersonalSign(decodeMessage(msgParam as string))
-          : classifyTypedData(msgParam);
-      if (cls.kind === "needs-vault") throw signatureError(cls);
-      return deps.requestSignature(ctx, await chainFor(ctx.origin, deps), { method, raw: msgParam, cls });
-    }
-
     default:
       if (READ_METHODS.has(method)) return deps.readRpc(await chainFor(ctx.origin, deps), method, params);
       throw unsupported(method);
   }
-}
-
-function decodeMessage(hex: string): string {
-  if (!isHex(hex)) return hex;
-  try {
-    return new TextDecoder("utf-8", { fatal: true }).decode(
-      Uint8Array.from(hex.slice(2).match(/../gu) ?? [], (b) => Number.parseInt(b, 16)),
-    );
-  } catch {
-    return "";
-  }
-}
-
-/**
- * Value-bearing typed data the everyday key may never sign (classifier per the 2026-11-06 account audit,
- * `signing.ts`): `4100` + queuebitRule with the reason and what the user can do instead (ux-spec E-52).
- */
-function signatureError(cls: Extract<SignatureClass, { kind: "needs-vault" }>): ProviderRpcError {
-  const remedy =
-    cls.rule === "SIG-PERMIT2"
-      ? "QueueBit can pre-approve a single Permit2 allowance or transfer for an app you allowed. Ask the site for one of those, or approve the token with a payment instead."
-      : "QueueBit never signs what can move money without a payment you approve. Ask the site for a regular transaction instead.";
-  return new ProviderRpcError(RpcErrorCode.unauthorized, cls.reason, {
-    queuebitRule: cls.rule,
-    explanation: cls.reason,
-    remedy,
-  });
 }

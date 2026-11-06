@@ -7,7 +7,6 @@ import {
   type Settings,
   type SetupState,
   type Theme,
-  type TokenChoice,
 } from "../shared/types";
 
 /** Settings and the onboarding choices, write-through to storage.local (plan §30 §2.2 SettingsController). */
@@ -39,10 +38,6 @@ export class SettingsStore {
       if (typeof patch.anonRpc !== "boolean") throw new Error("Unknown private-connection setting");
       next.anonRpc = patch.anonRpc;
     }
-    if (patch.airGapped !== undefined) {
-      if (typeof patch.airGapped !== "boolean") throw new Error("Unknown offline-phone setting");
-      next.airGapped = patch.airGapped;
-    }
     await this.kv.set(StorageKeys.settings, next);
     return next;
   }
@@ -53,29 +48,7 @@ export class SettingsStore {
 
   async updateSetup(patch: Partial<SetupState>): Promise<SetupState> {
     const next = { ...(await this.getSetup()) };
-    if (patch.dailyLimitUsd !== undefined || patch.perPaymentUsd !== undefined) {
-      const daily = patch.dailyLimitUsd ?? next.dailyLimitUsd;
-      const perPayment = patch.perPaymentUsd ?? next.perPaymentUsd;
-      const err = validateLimits(daily, perPayment);
-      if (err) throw new Error(err);
-      next.dailyLimitUsd = daily;
-      next.perPaymentUsd = perPayment;
-    }
-    if (patch.completedAt !== undefined) next.completedAt = patch.completedAt;
-    if (patch.recoverySkippedAt !== undefined) next.recoverySkippedAt = patch.recoverySkippedAt;
-    if (patch.guardianSkippedAt !== undefined) next.guardianSkippedAt = patch.guardianSkippedAt;
-    if (patch.recipientMode !== undefined) {
-      if (patch.recipientMode !== "open" && patch.recipientMode !== "strict") throw new Error("Unknown recipient mode");
-      next.recipientMode = patch.recipientMode;
-    }
-    if (patch.guardian !== undefined) next.guardian = patch.guardian;
-    if (patch.relayLink !== undefined) {
-      const l = patch.relayLink;
-      if (!l || typeof l.secret !== "string" || !/^[A-Za-z0-9_-]{43}$/u.test(l.secret) || !Number.isFinite(l.at))
-        throw new Error("Bad relay link");
-      next.relayLink = { secret: l.secret, at: l.at };
-    }
-    for (const k of ["defaultsAppliedAt", "backupConfirmedAt", "limitReviewedAt"] as const) {
+    for (const k of ["completedAt", "backupConfirmedAt"] as const) {
       const v = patch[k];
       if (v !== undefined) {
         if (!Number.isFinite(v)) throw new Error(`Bad ${k}`);
@@ -86,51 +59,7 @@ export class SettingsStore {
     return next;
   }
 
-  /** The tokens chosen for `chainId` (validated by the service worker: `setTokens`). */
-  async tokens(chainId: number): Promise<TokenChoice[]> {
-    return (await this.getSetup()).tokens?.[String(chainId)] ?? [];
-  }
-
-  async setTokens(chainId: number, list: TokenChoice[]): Promise<SetupState> {
-    const next = { ...(await this.getSetup()) };
-    next.tokens = { ...next.tokens, [String(chainId)]: list };
-    await this.kv.set(StorageKeys.setup, next);
-    return next;
-  }
-
-  async setRecoveryChallenge(c: SetupState["recoveryChallenge"]): Promise<void> {
-    const next = { ...(await this.getSetup()) };
-    if (c) next.recoveryChallenge = c;
-    else delete next.recoveryChallenge;
-    await this.kv.set(StorageKeys.setup, next);
-  }
-
-  /** Pairing results are written only by the service worker after it decoded and checked the code itself. */
-  async setPaired(
-    role: "vault" | "recovery",
-    rec: SetupState["vault"] | undefined,
-    testedAt?: number,
-  ): Promise<SetupState> {
-    const next = { ...(await this.getSetup()) };
-    if (role === "vault") {
-      if (rec) next.vault = rec;
-      else delete next.vault;
-    } else if (rec) next.recovery = { ...rec, ...(testedAt ? { testedAt } : {}) };
-    else delete next.recovery;
-    await this.kv.set(StorageKeys.setup, next);
-    return next;
-  }
-
   async clearSetup(): Promise<void> {
     await this.kv.remove(StorageKeys.setup);
   }
-}
-
-/** ux-spec §3.1.3 validation. Returns user-facing copy, or undefined if valid. */
-export function validateLimits(dailyUsd: number, perPaymentUsd: number): string | undefined {
-  if (!Number.isFinite(dailyUsd) || dailyUsd < 10) return "The daily limit must be at least $10.";
-  if (!Number.isFinite(perPaymentUsd) || perPaymentUsd <= 0) return "The per-payment limit must be more than $0.";
-  if (perPaymentUsd > dailyUsd) return "The per-payment limit can't be more than the daily limit.";
-  if (dailyUsd > 1_000_000) return "That limit is too high.";
-  return undefined;
 }

@@ -1,21 +1,14 @@
 import { formatEther, type Address, type Hex } from "viem";
-import type { FrameStatus, FrameTxReceipt, WireFrameTx } from "@queuebit/frames";
+import type { LeanPoolTxStatus } from "@queuebit/rpc";
 import { StorageKeys, type KV } from "../shared/kv";
-import type { SerializedOp } from "./aa/userop";
-import type { RuleId } from "./routing";
 
 /**
- * Activity (ux-spec §3.12): one entry per payment the wallet sent, with per-step status from `frameReceipts`
- * (plan §30 §4.6) and a plain-language headline. Persisted in storage.local so it survives restarts; pending
- * entries keep the signed transaction so a replacement or a status poll can resume after a service-worker restart.
+ * Activity (ux-spec §3.12): one entry per transaction the wallet sent, persisted in storage.local so it survives
+ * restarts. Owner-signed payments are followed through the LeanPool node's stages (approved by the pool → recorded on
+ * the network → waiting to be included → done); session payments and setup-key transactions by their receipt.
  */
 
-export type ActivityStatus = "sending" | "confirming" | "confirmed" | "failed" | "cancelled" | "replaced";
-
-export interface ActivityStep {
-  label: string;
-  status: "done" | "failed" | "skipped" | "pending";
-}
+export type ActivityStatus = "sending" | "confirming" | "confirmed" | "failed";
 
 export interface ActivityCall {
   target: Address;
@@ -27,34 +20,35 @@ export interface ActivityCall {
 export interface ActivityEntry {
   id: string;
   chainId: number;
-  kind: "payment" | "cancel" | "activation" | "vault";
+  /** payment: the account paid; admin: the account changed its keys or sessions; activation / migration: setup. */
+  kind: "payment" | "admin" | "activation" | "migration";
+  /** Who signed: the owner key (quantum-safe), a session key, the setup key, or a key imported for a move. */
+  signer: "owner" | "session" | "setup" | "imported";
+  /** leanpool: owner-signed, through the LeanPool node; alt-mempool: a session payment; legacy: an ordinary tx. */
+  via: "leanpool" | "alt-mempool" | "legacy";
   /** The site that asked, for dapp requests. */
   origin?: string;
   /** EIP-5792 batch id (wallet_sendCalls) when the dapp supplied or was given one. */
   batchId?: string;
+  /** The session that signed (its key id). */
+  sessionId?: Hex;
+  /** The account (or, for a migration step, the address that sent it). */
   account: Address;
-  tank: Address;
   calls: ActivityCall[];
-  /** USD-6, decimal string. */
-  declaredUsd: string;
-  rules: RuleId[];
   status: ActivityStatus;
+  /** The id the wallet knows the transaction by: the LeanPool id, or the transaction hash. */
   hash: Hex;
-  /** Earlier hashes this entry replaced (speed-up), oldest first. */
-  replaced: Hex[];
-  nonce: string;
-  wire?: WireFrameTx;
-  /** "4337": `hash` is the userOpHash; `txHash` the bundle transaction once mined. */
-  backend?: "4337";
-  userOp?: SerializedOp;
+  /** The mined transaction's hash (LeanPool fills the witness, which changes it from the LeanPool id). */
   txHash?: Hex;
-  fees?: { maxFeePerGas: string; maxPriorityFeePerGas: string };
-  /** Block number when the transaction was sent (for "stuck after 3 blocks", plan §30 §4.7). */
-  sentAtBlock?: string;
-  stuck?: boolean;
+  /** LeanPool's stage, for owner-signed payments. */
+  stage?: LeanPoolTxStatus["stage"];
+  /** EIP-8250 nonce lane (frame transactions; one pending transaction per lane). */
+  nonceKey?: string;
+  nonceSeq?: string;
   headline: string;
+  /** The headline once it succeeded (default: "Paid …" for payments, else the headline). */
+  doneHeadline?: string;
   detail?: string;
-  steps: ActivityStep[];
   feeWei?: string;
   blockNumber?: string;
   createdAt: number;
@@ -79,7 +73,7 @@ export class ActivityStore {
 
   async findByHash(hash: Hex): Promise<ActivityEntry | undefined> {
     const h = hash.toLowerCase();
-    return (await this.list()).find((e) => e.hash.toLowerCase() === h || e.replaced.some((r) => r.toLowerCase() === h));
+    return (await this.list()).find((e) => e.hash.toLowerCase() === h || e.txHash?.toLowerCase() === h);
   }
 
   async findByBatchId(batchId: string, origin?: string): Promise<ActivityEntry | undefined> {
@@ -129,105 +123,46 @@ export function feeAmount(wei: bigint): string {
   return `~${eth.toPrecision(2).replace(/\.?0+$/u, "")} ETH`;
 }
 
-export interface Labels {
-  /** A friendly name for an address (e.g. "your fee tank"), if any. */
-  name?(address: Address): string | undefined;
-}
-
-function recipientLabel(a: Address, labels: Labels): string {
-  return labels.name?.(a) ?? shortAddr(a);
-}
-
-/** What the payment does, as the headline of a successful payment ("Paid 0.05 ETH to 0xab…cd"). */
-export function intentTitle(calls: ActivityCall[], labels: Labels = {}): string {
+/** What the payment does ("0.05 ETH to 0xab…cd"). */
+export function intentTitle(calls: ActivityCall[]): string {
   const total = calls.reduce((s, c) => s + BigInt(c.value), 0n);
   if (calls.length === 1) {
     const c = calls[0]!;
-    if (c.data === "0x") return `${ethAmount(total)} to ${recipientLabel(c.target, labels)}`;
-    return `Call to ${recipientLabel(c.target, labels)}${total > 0n ? ` with ${ethAmount(total)}` : ""}`;
+    if (c.data === "0x") return `${ethAmount(total)} to ${shortAddr(c.target)}`;
+    return `Call to ${shortAddr(c.target)}${total > 0n ? ` with ${ethAmount(total)}` : ""}`;
   }
   const to = new Set(calls.map((c) => c.target.toLowerCase()));
-  const where = to.size === 1 ? ` to ${recipientLabel(calls[0]!.target, labels)}` : "";
-  return `${calls.length} payments${total > 0n ? ` of ${ethAmount(total)} in total` : ""}${where}`;
+  const where = to.size === 1 ? ` to ${shortAddr(calls[0]!.target)}` : "";
+  return `${calls.length} steps${total > 0n ? ` moving ${ethAmount(total)} in total` : ""}${where}`;
 }
 
-const STEP_LABELS = ["Check approval", "Pay network fee"];
-
-export function pendingSteps(calls: ActivityCall[]): ActivityStep[] {
-  return [
-    ...STEP_LABELS.map((label) => ({ label, status: "pending" as const })),
-    { label: calls.length > 1 ? `Payment (${calls.length} steps, all or nothing)` : "Payment", status: "pending" },
-  ];
-}
-
-const stepStatus = (s: FrameStatus | undefined): ActivityStep["status"] =>
-  s === "success" ? "done" : s === "reverted" ? "failed" : s === "skipped" ? "skipped" : "pending";
-
-export interface OutcomeContext {
-  /** Fee actually paid by the tank (gas used × effective price), in wei. */
-  feeWei: bigint;
-  /** The bucket after the failure (USD-6), to tell an over-limit failure from other refusals. */
-  availableUsdAfter?: bigint;
-  labels?: Labels;
-}
-
-/**
- * Maps a mined receipt to the activity copy (ux-spec §3.12, E-06/E-08): per-step words from the frame statuses
- * (`0x1` done, `0x0` failed, `0x2` skipped) and one plain-language headline.
- */
-export function describeReceipt(
-  entry: Pick<ActivityEntry, "calls" | "declaredUsd" | "kind">,
-  receipt: FrameTxReceipt,
-  ctx: OutcomeContext,
-): Pick<ActivityEntry, "status" | "headline" | "detail" | "steps"> {
-  const fr = receipt.frameReceipts;
-  const steps = pendingSteps(entry.calls).map((s, i) => ({ ...s, status: stepStatus(fr[i]?.status) }));
-  const body = fr.slice(2);
-  const ok = body.length > 0 && body.every((f) => f.status === "success");
-  const fee = feeAmount(ctx.feeWei);
-  if (entry.kind === "cancel") {
-    return ok
-      ? { status: "cancelled", headline: "Cancelled: nothing was sent", detail: `Fee tank paid ${fee}.`, steps }
-      : { status: "failed", headline: `Cancel failed; fee tank paid ${fee}`, steps };
+/** The plain words for a LeanPool stage (ux-spec: no "mempool", no "hash"). */
+export function stageCopy(stage: LeanPoolTxStatus["stage"]): { status: ActivityStatus; text: string } {
+  switch (stage) {
+    case "pooled":
+      return { status: "confirming", text: "Signature checked; waiting for the next batch" };
+    case "posted":
+      return { status: "confirming", text: "Batch recorded on the network; sending" };
+    case "submitted":
+      return { status: "confirming", text: "Sent; waiting to be included" };
+    case "mined":
+      return { status: "confirmed", text: "Done" };
+    case "reverted":
+      return { status: "failed", text: "The network included it, but it failed: nothing moved except the network fee" };
+    case "refused":
+      return { status: "failed", text: "The network refused it: nothing was sent" };
   }
-  if (ok) {
-    return {
-      status: "confirmed",
-      headline: `Paid ${intentTitle(entry.calls, ctx.labels ?? {})}`,
-      detail: `Fee tank paid ${fee}.`,
-      steps,
-    };
-  }
-  const overLimit = ctx.availableUsdAfter !== undefined && ctx.availableUsdAfter < BigInt(entry.declaredUsd);
-  return overLimit
-    ? {
-        status: "failed",
-        headline: `Blocked: over your daily limit, nothing was sent; fee tank paid ${fee}`,
-        detail: "Your daily limit changed before this payment was included. Your limit was refreshed.",
-        steps,
-      }
-    : {
-        status: "failed",
-        headline: `Failed: your account refused this payment, nothing was sent; fee tank paid ${fee}`,
-        detail: "The recipient or token may not be on your allowed list any more.",
-        steps,
-      };
 }
 
 /** EIP-5792 `wallet_getCallsStatus` status code (plan §30 §3.5). */
-export function callsStatusCode(e: Pick<ActivityEntry, "status" | "steps">): 100 | 200 | 400 | 500 | 600 {
+export function callsStatusCode(e: Pick<ActivityEntry, "status">): 100 | 200 | 400 | 500 {
   switch (e.status) {
     case "sending":
     case "confirming":
       return 100;
     case "confirmed":
       return 200;
-    case "cancelled":
-    case "replaced":
-      return 400;
-    case "failed": {
-      const body = e.steps.slice(2);
-      return body.some((s) => s.status === "done") ? 600 : 500;
-    }
+    case "failed":
+      return 500;
   }
 }

@@ -24,10 +24,10 @@
   --limit: #9a5b00;
   --limit-fill: #ffb020;
   --limit-bg: #fff4de;
-  /* status: vault (purple) */
-  --vault: #6b3fd6;
-  --vault-bg: #efe9fb;
-  --on-vault: #ffffff;
+  /* status: owner (purple) */
+  --owner: #6b3fd6;
+  --owner-bg: #efe9fb;
+  --on-owner: #ffffff;
   /* status: danger */
   --danger: #c8102e;
   --danger-bg: #fde8ec;
@@ -85,9 +85,9 @@
     --limit: #ffb020;
     --limit-fill: #ffb020;
     --limit-bg: #2e2410;
-    --vault: #b39dff;
-    --vault-bg: #221b38;
-    --on-vault: #0f1115;
+    --owner: #b39dff;
+    --owner-bg: #221b38;
+    --on-owner: #0f1115;
     --danger: #ff6b6b;
     --danger-bg: #351517;
     --on-danger: #0f1115;
@@ -119,9 +119,9 @@
   --limit: #ffb020;
   --limit-fill: #ffb020;
   --limit-bg: #2e2410;
-  --vault: #b39dff;
-  --vault-bg: #221b38;
-  --on-vault: #0f1115;
+  --owner: #b39dff;
+  --owner-bg: #221b38;
+  --on-owner: #0f1115;
   --danger: #ff6b6b;
   --danger-bg: #351517;
   --on-danger: #0f1115;

@@ -101,7 +101,8 @@ describe("production extension build (apps/extension/scripts/release-build.mjs)"
       permissions: string[];
     };
     expect(mf.host_permissions.some((h) => h.includes("localhost"))).toBe(false);
-    expect(mf.permissions).toEqual(["storage", "alarms", "offscreen", "notifications"]);
+    expect(mf.permissions).toEqual(["storage", "alarms", "offscreen"]);
+    expect(mf.host_permissions).toContain("http://127.0.0.1/*"); // the LeanPool node on this computer
   }, 120_000);
 
   it("the checker refuses a local-devnet + design build (the markers are real)", async () => {
@@ -130,7 +131,7 @@ describe("production extension build (apps/extension/scripts/release-build.mjs)"
     } catch (e) {
       msg = (e as Error).message;
     }
-    for (const what of ["design gallery", "local devnet RPC", "local devnet network", "e2e probe", "host_permissions"])
+    for (const what of ["design gallery", "local devnet RPC", "local devnet network", "host_permissions"])
       expect(msg).toContain(what);
   }, 120_000);
 
@@ -139,7 +140,7 @@ describe("production extension build (apps/extension/scripts/release-build.mjs)"
     const m = await rb.releaseBuild(out);
     const { submission } = sp.checkStorePackage(out);
     expect(submission.zipSha256).toBe(m.zipSha256);
-    expect(Object.keys(submission.permissions)).toContain("notifications");
+    expect(Object.keys(submission.permissions)).toContain("offscreen");
     const base = join(out, "base.json");
     writeFileSync(
       base,

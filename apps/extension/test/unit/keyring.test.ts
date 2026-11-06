@@ -1,4 +1,7 @@
-import { hexToBytes } from "@noble/hashes/utils.js";
+import { hkdf } from "@noble/hashes/hkdf.js";
+import { sha256 } from "@noble/hashes/sha2.js";
+import { bytesToHex, hexToBytes, utf8ToBytes } from "@noble/hashes/utils.js";
+import { mnemonicToSeedSync } from "@scure/bip39";
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_SCRYPT,
@@ -10,7 +13,17 @@ import {
   encryptWithPassword,
   type EncryptedBlob,
 } from "../../src/background/encryption";
-import { KeyringController, KeyringError, deriveAccounts, type SessionRecord } from "../../src/background/keyring";
+import {
+  KeyringController,
+  KeyringError,
+  OWNER_SEED_INFO,
+  OWNER_SEED_SALT,
+  PRIVACY_PAYER_PATH,
+  SESSION_PATH,
+  SETUP_PATH,
+  deriveAccounts,
+  type SessionRecord,
+} from "../../src/background/keyring";
 import { MemoryKV, StorageKeys } from "../../src/shared/kv";
 
 // Fast KDF for tests; the production parameters are asserted separately below.
@@ -85,11 +98,38 @@ describe("encryption (scrypt → AES-256-GCM)", () => {
 });
 
 describe("key derivation", () => {
-  it("derives the everyday key at m/44'/60'/0'/0/0 and the fee tank on its own branch", () => {
+  it("derives the identity key at m/44'/60'/0'/0/0 and the setup key on its own branch", () => {
     const a = deriveAccounts(TEST_MNEMONIC);
     expect(a.everyday).toBe("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266");
-    expect(a.feeTank).not.toBe(a.everyday);
-    expect(a.feeTank).toMatch(/^0x[0-9a-fA-F]{40}$/u);
+    expect(a.setup).not.toBe(a.everyday);
+    expect(a.setup).toMatch(/^0x[0-9a-fA-F]{40}$/u);
+  });
+
+  it("every key has its own path, and the owner seed is a documented HKDF of the seed", async () => {
+    const { k } = setup();
+    await k.import(TEST_MNEMONIC, "pw-123456");
+    const setupKey = await k.addressOf(SETUP_PATH);
+    const s0 = await k.addressOf(SESSION_PATH(0));
+    const s1 = await k.addressOf(SESSION_PATH(1));
+    const payer = await k.addressOf(PRIVACY_PAYER_PATH);
+    expect(setupKey).toBe(deriveAccounts(TEST_MNEMONIC).setup);
+    expect(new Set([setupKey, s0, s1, payer, deriveAccounts(TEST_MNEMONIC).everyday]).size).toBe(5);
+    const seed = await k.ownerSeed();
+    expect(seed).toHaveLength(32);
+    expect(bytesToHex(seed)).toBe(
+      bytesToHex(
+        hkdf(
+          sha256,
+          mnemonicToSeedSync(TEST_MNEMONIC),
+          utf8ToBytes(OWNER_SEED_SALT),
+          utf8ToBytes(OWNER_SEED_INFO(0)),
+          32,
+        ),
+      ),
+    );
+    expect(bytesToHex(await k.ownerSeed())).toBe(bytesToHex(seed)); // stable
+    await k.lock();
+    await expect(k.ownerSeed()).rejects.toMatchObject({ reason: "locked" });
   });
 });
 

@@ -17,6 +17,7 @@ import {
   readPoolPayerRules,
   refreshPublicNotes,
   withdrawalClients,
+  type EnvelopeSigner,
   type HostProvider,
   type Note,
   type Prover,
@@ -28,15 +29,9 @@ import { findNetwork, getNetwork } from "../../shared/chains";
 import type { KV } from "../../shared/kv";
 import type { AnonStatus } from "../../shared/offscreen";
 import type { NoteView, PrivacyNetworkConfig, PrivacyOp, PrivacyView, SyncProgress } from "../../shared/privacy";
-import type { ActivityStore } from "../activity";
-import type { AccountPlans } from "../account";
 import type { KeyringController } from "../keyring";
-import type { Payments } from "../payments";
-import type { SettingsStore } from "../settings";
-import type { VaultFlow } from "../vault";
 import { PrivacyConfigStore, poolOrderAsp, validatePrivacyConfig, type PrivacyConfigInput } from "./config";
-import { failureFor, isFinal, newOp, proofEstimate, transition, type PrivacyEvent } from "./machine";
-import { NeedsPhoneError, NoteAnswers, acceptPhoneAnswer, phoneAsk, phoneSigner } from "./phoneSigner";
+import { failureFor, isFinal, newOp, proofEstimate, transition, upgradeOp, type PrivacyEvent } from "./machine";
 
 export const PRIVACY_STATE_KEY = (chainId: number) => `queuebit:privacy:${chainId}`;
 const HISTORY = 20;
@@ -44,34 +39,48 @@ const HISTORY = 20;
 /**
  * Persisted per chain in storage.local (public data only: amounts, indices, hashes). The note LEDGER (public note
  * data: precommitments, commitments, labels, values, nullifier hashes; never a nullifier, secret or signature) and the
- * pool state live in the seed-keyed encrypted store; the phone's signatures (the spend keys) only in the session
- * answers (`NoteAnswers`).
+ * pool state live in the seed-keyed encrypted store; the note signatures (the spend keys) are made again when needed
+ * and never stored.
  */
 export interface PrivacyRecord {
   account?: Address;
-  /** Deposits this browser knows it made: discovery stops there, so a refresh never asks the phone. */
+  /** Deposits this browser knows it made: discovery stops there, so a refresh never signs note keys. */
   depositsMade: number;
   sync: SyncProgress;
   balance?: { approvedWei: string; pendingWei: string; notes: NoteView[]; syncedTo: string; at: number };
   op?: PrivacyOp;
   history: PrivacyOp[];
   proofMs: number[];
-  /** The Vault payer whose note signatures were checked to be deterministic (one extra scan, once). */
+  /** The note signer whose signatures were checked to be deterministic (once). */
   deterministicPayer?: Address;
 }
 
 const EMPTY: PrivacyRecord = { depositsMade: 0, sync: { status: "idle" }, history: [], proofMs: [] };
 
+/** A payment the private balance asked the account to make, as Activity sees it. */
+export interface PaymentState {
+  status: "sending" | "confirming" | "confirmed" | "failed";
+  txHash?: Hex;
+  headline: string;
+  detail?: string;
+}
+
 export interface PrivacyDeps {
   kv: KV;
-  /** chrome.storage.session: the phone's note signatures of the operation in progress live here and nowhere else. */
   session: KV;
   keyring: KeyringController;
-  plans: AccountPlans;
-  payments: Payments;
-  vault: VaultFlow;
-  activity: ActivityStore;
-  settings: SettingsStore;
+  /** The account's address on `chainId` (undefined until it exists). */
+  account(chainId: number): Promise<Address | undefined>;
+  /** An owner payment from the account (signed with the owner key, sent through LeanPool). Returns its activity id. */
+  pay(
+    chainId: number,
+    call: { target: Address; value: bigint; data: Hex },
+    o: { label: string; gas?: { execution: bigint; state: bigint } },
+  ): Promise<{ id: string }>;
+  /** A payment's state, polled from the network first. */
+  payment(activityId: string): Promise<PaymentState | undefined>;
+  /** The note signer: the privacy payer key (keyring PRIVACY_PAYER_PATH), which signs the note envelopes. */
+  noteSigner(): Promise<{ address: Address; signer: EnvelopeSigner }>;
   /** The offscreen document's prover (withdrawals, and the commitment circuit for the public exit). */
   prover: () => Prover & RagequitProver;
   anonStatus: (chainId: number) => Promise<AnonStatus>;
@@ -94,14 +103,10 @@ type Ctx = Awaited<ReturnType<PrivacyController["context"]>>;
  * everything from storage and the chain, and resumes a withdrawal that was already sent by its hash.
  *
  * Rules kept here:
- *  - the browser holds no pool spend key (plan §00 "private spends are vault-approved only"): note secrets come from
- *    the paired phone's signatures over clear-signed note envelopes (QR, tx-type 2). A signature is the note's spend
- *    key, so it is kept only in `chrome.storage.session` for the operation that needs it (dropped on lock, when the
- *    operation ends, and when the browser closes), and the secret manager has no persistent cache. The balance is
- *    shown from a PUBLIC ledger (`PublicNote`: no preimages) in the seed-keyed encrypted store, refreshed against
- *    the synced pool with no phone; a withdrawal re-asks the phone for the note being spent and for its change note.
- *    Someone with the everyday seed and a copy of storage.local can read the balance, not move it;
- *  - a withdrawal always needs a phone approval (its change note is new) and goes to a fresh address through PoolPayer
+ *  - note secrets come from the privacy payer key's signatures over note envelopes (a seed-derived secp256k1 key that
+ *    signs nothing else). A signature is the note's spend key, so it is made again for each operation and never
+ *    stored; the balance is shown from a PUBLIC ledger (`PublicNote`: no preimages) in the seed-keyed encrypted store;
+ *  - deposits and public exits are owner payments from the account; a withdrawal goes to a fresh address through PoolPayer
  *    at cost: no fee choice exists anywhere (plan §40 §7);
  *  - the withdrawal's node calls run on their own circuit (`withdrawalClients`: a fresh Anon-RPC isolation key, or
  *    direct and labelled where no Anon-RPC worker exists), never the account's (BACKLOG).
@@ -110,7 +115,6 @@ export class PrivacyController {
   readonly config: PrivacyConfigStore;
   private readonly now: () => number;
   private readonly stores = new Map<number, EncryptedStorage>();
-  private readonly answers = new Map<number, NoteAnswers>();
   private readonly running = new Map<number, Promise<void>>();
 
   constructor(private readonly d: PrivacyDeps) {
@@ -121,7 +125,8 @@ export class PrivacyController {
   // ---------------------------------------------------------------------------------------------- storage ----
 
   async record(chainId: number): Promise<PrivacyRecord> {
-    return { ...EMPTY, ...(await this.d.kv.get<PrivacyRecord>(PRIVACY_STATE_KEY(chainId))) };
+    const r = { ...EMPTY, ...(await this.d.kv.get<PrivacyRecord>(PRIVACY_STATE_KEY(chainId))) };
+    return { ...r, ...(r.op ? { op: upgradeOp(r.op) } : {}), history: r.history.map(upgradeOp) };
   }
 
   private async save(chainId: number, patch: Partial<PrivacyRecord>): Promise<PrivacyRecord> {
@@ -156,19 +161,9 @@ export class PrivacyController {
     return s;
   }
 
-  private noteAnswers(chainId: number): NoteAnswers {
-    let a = this.answers.get(chainId);
-    if (!a) {
-      a = new NoteAnswers(this.d.session, chainId);
-      this.answers.set(chainId, a);
-    }
-    return a;
-  }
-
-  /** Wallet locked: drop every store key and every phone signature of the session. */
+  /** Wallet locked: drop every store key. */
   lock(): void {
     for (const s of this.stores.values()) s.lock();
-    for (const a of this.answers.values()) void a.clear().catch(() => undefined);
   }
 
   // ---------------------------------------------------------------------------------------------- ledger ----
@@ -208,17 +203,15 @@ export class PrivacyController {
   private async context(chainId: number) {
     const cfg = await this.config.get(chainId);
     if (!cfg) throw new Error("Private balance isn't set up on this network.");
-    const plan = await this.d.plans.get(chainId);
-    if (!plan) throw new Error("Finish setting up your account first.");
-    const payer = (await this.d.settings.getSetup()).vault?.payer;
-    if (!payer) throw new Error("Pair your Vault first: its fee-payment key signs the private notes.");
+    const address = await this.d.account(chainId);
+    if (!address) throw new Error("Create your account first.");
+    const { address: payer, signer } = await this.d.noteSigner();
     const provider = this.provider(chainId);
     const store = await this.store(chainId);
     const rec = await this.record(chainId);
-    const answers = this.noteAnswers(chainId);
     // No `cache`: a signature is a spend key and must never reach the seed-keyed store (see the class comment).
     const secrets = createSignatureSecretManager({
-      signer: phoneSigner(answers),
+      signer,
       chainId: BigInt(chainId),
       entrypoint: cfg.entrypoint,
       verifyDeterminism: rec.deterministicPayer?.toLowerCase() !== payer.toLowerCase(),
@@ -238,7 +231,9 @@ export class PrivacyController {
       storage: store,
     }));
     await client.loadState().catch(() => undefined);
-    return { cfg, plan, payer, provider, store, answers, client, secrets, timed };
+    if (rec.deterministicPayer?.toLowerCase() !== payer.toLowerCase())
+      await this.save(chainId, { deterministicPayer: getAddress(payer) });
+    return { cfg, address, payer, provider, store, client, secrets, timed };
   }
 
   private timedProver() {
@@ -257,21 +252,16 @@ export class PrivacyController {
   // ---------------------------------------------------------------------------------------------- view ----
 
   async view(chainId: number): Promise<PrivacyView> {
-    const [rec, cfg, plan, setup, anon] = await Promise.all([
+    const [rec, cfg, account, anon] = await Promise.all([
       this.record(chainId),
       this.config.get(chainId),
-      this.d.plans.get(chainId),
-      this.d.settings.getSetup(),
+      this.d.account(chainId),
       this.d.anonStatus(chainId).catch(() => ({ available: false, reason: "Private connection status unknown." })),
     ]);
     const net = findNetwork(chainId);
     let availability: PrivacyView["availability"] = { ok: true };
-    if (!net || net.backend !== "frame")
-      availability = {
-        ok: false,
-        reason: "Private balance needs a native account; it isn't available on this network yet.",
-      };
-    else if (net.capabilities && !net.capabilities.stagedBudget)
+    if (!net) availability = { ok: false, reason: "Private balance isn't available on this network yet." };
+    else if (!net.capabilities.stagedBudget)
       // Withdrawals go through PoolPayer, whose VERIFY needs more than 100k gas and precompile calls: only a mempool
       // with staked budgets admits it. Shielding is off too, so no one strands funds in a pool they could then only
       // leave publicly (ragequit).
@@ -288,9 +278,7 @@ export class PrivacyController {
           : "Privacy Pools isn't available on this network in QueueBit yet.",
         ...(this.d.localDevnet ? { action: "settings" as const } : {}),
       };
-    else if (!setup.vault?.payer)
-      availability = { ok: false, reason: "Pair your Vault first: your phone signs the private notes." };
-    else if (!plan) availability = { ok: false, reason: "Finish setting up your account first." };
+    else if (!account) availability = { ok: false, reason: "Create your account first." };
     const notes = rec.balance?.notes ?? [];
     const max = notes
       .filter((n) => n.status === "approved")
@@ -300,7 +288,7 @@ export class PrivacyController {
       chainId,
       availability,
       ...(cfg ? { config: cfg } : {}),
-      ...(plan ? { account: plan.address } : {}),
+      ...(account ? { account } : {}),
       approvedWei: rec.balance?.approvedWei ?? "0",
       pendingWei: rec.balance?.pendingWei ?? "0",
       notes,
@@ -343,7 +331,7 @@ export class PrivacyController {
 
   // ---------------------------------------------------------------------------------------------- sync ----
 
-  /** Root-checked note sync with progress, then the balance from the public ledger (never a phone scan). */
+  /** Root-checked note sync with progress, then the balance from the public ledger (no note keys needed). */
   async sync(chainId: number): Promise<PrivacyView> {
     const ctx = await this.context(chainId);
     await this.syncWith(chainId, ctx);
@@ -385,7 +373,7 @@ export class PrivacyController {
     await this.saveLedger(ctx.store, ctx.cfg.pool, ledger);
     const sum = (s: PublicNote["status"]) => notes.filter((n) => n.status === s).reduce((a, n) => a + n.value, 0n);
     await this.save(chainId, {
-      account: ctx.plan.address,
+      account: ctx.address,
       sync: {
         status: "idle",
         scannedTo: ctx.client.state!.syncedTo.toString(),
@@ -422,7 +410,7 @@ export class PrivacyController {
     const rec = await this.record(chainId);
     if (rec.op && !isFinal(rec.op))
       throw new Error("Finish or cancel the private-balance operation in progress first.");
-    await this.context(chainId); // fails early with the plain reason (no pool, no Vault, locked …)
+    await this.context(chainId); // fails early with the plain reason (no pool, no account, locked …)
     if (kind === "exit") {
       const n = rec.balance?.notes.find(
         (x) => note && x.depositIndex === note.depositIndex && x.secretIndex === note.secretIndex,
@@ -440,32 +428,6 @@ export class PrivacyController {
     return this.view(chainId);
   }
 
-  /** The phone's answer (the scanned `ur:queuebit-signature`, CBOR hex) for the operation's current question. */
-  async answerPhone(chainId: number, opId: string, signature: Hex): Promise<PrivacyView> {
-    const rec = await this.record(chainId);
-    const op = rec.op;
-    if (!op || op.id !== opId || op.step !== "phone" || !op.phone) throw new Error("Nothing is waiting for the phone.");
-    const ctx = await this.context(chainId);
-    try {
-      const { deterministic } = await acceptPhoneAnswer(ctx.answers, op.phone, signature, {
-        chainId,
-        entrypoint: ctx.cfg.entrypoint,
-        payer: ctx.payer,
-      });
-      if (deterministic) await this.save(chainId, { deterministicPayer: getAddress(ctx.payer) });
-    } catch (e) {
-      // A wrong code (another request, another phone) leaves the question open; a non-deterministic phone ends it.
-      if ((e as Error).name === "NonDeterministicSignerError") {
-        await this.apply(chainId, { type: "failed", error: failureFor(e) });
-        return this.view(chainId);
-      }
-      throw new Error(failureFor(e).message, { cause: e });
-    }
-    await this.apply(chainId, { type: "phone-answered" });
-    void this.run(chainId);
-    return this.view(chainId);
-  }
-
   async retry(chainId: number, opId: string): Promise<PrivacyView> {
     const rec = await this.record(chainId);
     if (!rec.op || rec.op.id !== opId) throw new Error("No such operation.");
@@ -474,7 +436,7 @@ export class PrivacyController {
     return this.view(chainId);
   }
 
-  /** Cancels an operation that has not sent anything yet (preparing / waiting for the phone). */
+  /** Cancels an operation that has not sent anything yet. */
   async cancel(chainId: number, opId: string): Promise<PrivacyView> {
     const rec = await this.record(chainId);
     const op = rec.op;
@@ -486,9 +448,6 @@ export class PrivacyController {
         type: "failed",
         error: { code: "cancelled", message: "Cancelled. Nothing was sent.", retry: false },
       });
-    await this.noteAnswers(chainId)
-      .clear()
-      .catch(() => undefined);
     return this.view(chainId);
   }
 
@@ -506,7 +465,7 @@ export class PrivacyController {
     for (const chainId of chainIds) {
       if (this.running.has(chainId)) continue; // this instance is working on it
       const op = (await this.record(chainId)).op;
-      if (!op || isFinal(op) || op.step === "phone") continue;
+      if (!op || isFinal(op)) continue;
       if (op.step === "proving") await this.apply(chainId, { type: "restart" });
       void this.run(chainId);
     }
@@ -529,45 +488,19 @@ export class PrivacyController {
 
   private async advance(chainId: number): Promise<void> {
     const op = (await this.record(chainId)).op;
-    if (!op || isFinal(op) || op.step === "phone") return;
+    if (!op || isFinal(op)) return;
     if (!(await this.d.keyring.isUnlocked())) return; // resumes on the next unlock
     const ctx = await this.context(chainId);
-    try {
-      if (op.kind === "shield") await this.advanceShield(chainId, ctx);
-      else if (op.kind === "exit") await this.advanceExit(chainId, ctx);
-      else await this.advanceUnshield(chainId, ctx);
-    } catch (e) {
-      if (e instanceof NeedsPhoneError) {
-        const cur = (await this.record(chainId)).op!;
-        await this.apply(chainId, {
-          type: "needs-phone",
-          phone: phoneAsk(e, {
-            chainId,
-            entrypoint: ctx.cfg.entrypoint,
-            payer: ctx.payer,
-            purpose:
-              e.attempt > 0
-                ? "check"
-                : cur.kind === "shield"
-                  ? "deposit-key"
-                  : cur.kind === "exit"
-                    ? "note-key"
-                    : e.secretIndex === cur.withdraw?.secretIndex
-                      ? "withdraw-key"
-                      : "note-key",
-          }),
-        });
-        return;
-      }
-      throw e;
-    }
+    if (op.kind === "shield") await this.advanceShield(chainId, ctx);
+    else if (op.kind === "exit") await this.advanceExit(chainId, ctx);
+    else await this.advanceUnshield(chainId, ctx);
   }
 
   private async advanceShield(chainId: number, ctx: Ctx) {
     let op = (await this.record(chainId)).op!;
     if (op.step === "preparing" && !op.deposit) {
       await this.syncWith(chainId, ctx);
-      // The next index is the count of deposits this browser made: one phone signature, no discovery scan.
+      // The next index is the count of deposits this browser made: no discovery scan.
       const rec = await this.record(chainId);
       const dep = await ctx.client.prepareDeposit(BigInt(op.amountWei), { depositIndex: rec.depositsMade });
       op = await this.apply(chainId, {
@@ -583,64 +516,25 @@ export class PrivacyController {
     const dep = op.deposit!;
     const call = { target: dep.tx.to, value: BigInt(dep.tx.valueWei), data: dep.tx.data };
     if (op.step === "preparing") {
-      // The deposit is a public payment from the account: instant within the daily limit, else a Vault approval.
-      const preview = await this.d.payments.preview(chainId, [call]);
-      if (preview.route.route === "hot") {
-        const entry = await this.d.payments.send(chainId, [call], { origin: "QueueBit Private balance" });
-        await this.apply(chainId, { type: "paying", route: "hot", activityId: entry.id });
-      } else if (preview.route.route === "needs-vault") {
-        // A deposit inserts into the pool's Poseidon tree: far more gas than a transfer, so the Vault request's body
-        // step gets the estimate (with room for the quantum-safe check in the same step); the simulation decides.
-        const est = await ctx.provider
-          .estimateGas({ from: ctx.plan.address, to: call.target, data: call.data, value: call.value })
-          .catch(() => 1_500_000n);
-        const req = await this.d.vault.create(
-          chainId,
-          {
-            type: "send",
-            calls: [{ target: call.target, value: call.value.toString(), data: call.data }],
-            usd6: String(Math.round(preview.route.amountUsd * 1e6)),
-            body: { execution: (700_000n + 2n * est).toString(), state: (400_000n + est).toString() },
-            label: `Deposit ${fmtEth(call.value)} ETH into your private balance`,
-          },
-          { origin: "QueueBit Private balance" },
-        );
-        await this.apply(chainId, { type: "paying", route: "vault", vaultRequestId: req.id });
-      } else {
-        throw new Error(`${preview.route.copy.headline}. ${preview.route.copy.detail}`);
-      }
+      // The deposit is a public payment from the account, signed with the owner key. It inserts into the pool's
+      // Poseidon tree: far more gas than a transfer, so its frame gets the estimate with room to spare.
+      const est = await ctx.provider
+        .estimateGas({ from: ctx.address, to: call.target, data: call.data, value: call.value })
+        .catch(() => 1_500_000n);
+      const p = await this.d.pay(chainId, call, {
+        label: `Deposit ${fmtEth(call.value)} ETH into your private balance`,
+        gas: { execution: 300_000n + 2n * est, state: 400_000n + est },
+      });
+      await this.apply(chainId, { type: "paying", route: "owner", activityId: p.id });
     }
-    // paying: poll until the payment is on chain (the hand-off page sends the Vault one).
+    // paying: poll until the payment is on chain.
     for (let i = 0; i < 400; i++) {
       op = (await this.record(chainId)).op!;
-      if (op.step !== "paying") return;
-      const d = op.deposit!;
-      if (d.route === "hot" && d.activityId) {
-        await this.d.payments.refreshPending().catch(() => undefined);
-        const e = await this.d.activity.get(d.activityId);
-        if (e?.status === "confirmed") return this.paid(chainId, ctx, e.txHash ?? e.hash);
-        if (e && (e.status === "failed" || e.status === "cancelled"))
-          throw new Error(`The deposit payment didn't go through: ${e.headline}.`);
-      } else if (d.route === "vault" && d.vaultRequestId) {
-        const r = await this.d.vault.get(d.vaultRequestId);
-        if (r?.status === "confirmed") return this.paid(chainId, ctx, r.hash);
-        if (!r || r.status === "failed" || r.status === "expired" || r.status === "cancelled") {
-          await this.apply(chainId, {
-            type: "failed",
-            error: {
-              code: "payment",
-              message:
-                r?.status === "cancelled" || r?.status === "expired"
-                  ? "The deposit's Vault approval was cancelled or expired. No money moved."
-                  : `The deposit payment didn't go through${r?.error ? `: ${r.error.message}` : ""}.`,
-              retry: true,
-            },
-          });
-          return;
-        }
-        // waiting (QR on the hand-off page) or sending: the page drives it; keep polling while it is quick.
-        if (r.status === "waiting" && i > 3) return; // resumed when the page reports back (privacy:run)
-      }
+      if (op.step !== "paying" || !op.deposit?.activityId) return;
+      const e = await this.d.payment(op.deposit.activityId);
+      if (e?.status === "confirmed") return this.paid(chainId, ctx, e.txHash);
+      if (!e || e.status === "failed")
+        throw new Error(`The deposit payment didn't go through${e?.detail ? `: ${e.detail}` : ""}.`);
       await sleep(2000);
     }
   }
@@ -662,14 +556,13 @@ export class PrivacyController {
       });
     await this.save(chainId, { depositsMade: Math.max(rec.depositsMade, dep.depositIndex + 1) });
     await this.apply(chainId, { type: "paid", ...(txHash ? { txHash } : {}) });
-    await ctx.answers.clear().catch(() => undefined); // the deposit key is not needed any more this session
     await this.syncWith(chainId, ctx).catch(() => undefined);
   }
 
   /**
-   * Public exit (ragequit): the note's key from the phone (checked against the pool), a commitment-circuit proof in
-   * the offscreen Worker, then `pool.ragequit(proof)` from the account as a Vault approval (the pool is not an app
-   * the everyday key may call; only the original depositor, the account, may exit). Public: it unlinks nothing.
+   * Public exit (ragequit): the note's key (checked against the pool), a commitment-circuit proof in the offscreen
+   * Worker, then `pool.ragequit(proof)` from the account as an owner payment (only the original depositor, the
+   * account, may exit). Public: it unlinks nothing.
    */
   private async advanceExit(chainId: number, ctx: Ctx) {
     let op = (await this.record(chainId)).op!;
@@ -691,53 +584,45 @@ export class PrivacyController {
           data: encodeFunctionData({ abi: POOL_ABI, functionName: "depositors", args: [note.label] }),
         }),
       });
-      if (getAddress(depositor) !== getAddress(ctx.plan.address))
+      if (getAddress(depositor) !== getAddress(ctx.address))
         throw new Error("Only the account that made the deposit can take it back publicly, and that isn't this one.");
       op = await this.apply(chainId, { type: "proving", at: this.now() });
       const r = await this.d.prover().proveRagequit(ragequitInputs(note));
       if (r.proof.pubSignals[0] !== note.commitment) throw new Error("The proof doesn't match this note.");
       const tx = buildRagequitTx(ctx.cfg.pool, r.proof);
       const est = await ctx.provider
-        .estimateGas({ from: ctx.plan.address, to: tx.to, data: tx.data, value: 0n })
+        .estimateGas({ from: ctx.address, to: tx.to, data: tx.data, value: 0n })
         .catch(() => 600_000n);
-      const req = await this.d.vault.create(
+      const p = await this.d.pay(
         chainId,
+        { target: tx.to, value: 0n, data: tx.data },
         {
-          type: "send",
-          calls: [{ target: tx.to, value: "0", data: tx.data }],
-          usd6: "0",
-          body: { execution: (700_000n + 2n * est).toString(), state: (400_000n + est).toString() },
-          label: `Public exit: take ${fmtEth(note.value)} ETH back from Privacy Pools to your account`,
+          label: `Public exit: take ${fmtEth(note.value)} ETH back from Privacy Pools`,
+          gas: { execution: 300_000n + 2n * est, state: 400_000n + est },
         },
-        { origin: "QueueBit Private balance" },
       );
-      op = await this.apply(chainId, { type: "exit-proved", vaultRequestId: req.id, provedMs: r.ms });
-      await ctx.answers.clear().catch(() => undefined); // the proof is made: the note key leaves memory
+      op = await this.apply(chainId, { type: "exit-proved", activityId: p.id, provedMs: r.ms });
     }
     for (let i = 0; i < 400; i++) {
       op = (await this.record(chainId)).op!;
-      if (op.step !== "paying" || !op.exit?.vaultRequestId) return;
-      const r = await this.d.vault.get(op.exit.vaultRequestId);
-      if (r?.status === "confirmed") {
-        await this.apply(chainId, { type: "paid", ...(r.hash ? { txHash: r.hash } : {}) });
+      if (op.step !== "paying" || !op.exit?.activityId) return;
+      const e = await this.d.payment(op.exit.activityId);
+      if (e?.status === "confirmed") {
+        await this.apply(chainId, { type: "paid", ...(e.txHash ? { txHash: e.txHash } : {}) });
         await this.syncWith(chainId, ctx).catch(() => undefined);
         return;
       }
-      if (!r || r.status === "failed" || r.status === "expired" || r.status === "cancelled") {
+      if (!e || e.status === "failed") {
         await this.apply(chainId, {
           type: "failed",
           error: {
             code: "payment",
-            message:
-              r?.status === "cancelled" || r?.status === "expired"
-                ? "The exit's Vault approval was cancelled or expired. Nothing moved."
-                : `The exit didn't go through${r?.error ? `: ${r.error.message}` : ""}.`,
+            message: `The exit didn't go through${e?.detail ? `: ${e.detail}` : ""}.`,
             retry: true,
           },
         });
         return;
       }
-      if (r.status === "waiting" && i > 3) return; // resumed when the hand-off page reports back (privacy:run)
       await sleep(2000);
     }
   }
@@ -767,8 +652,7 @@ export class PrivacyController {
         secretIndex: pub.secretIndex + 1,
         circuit: "direct",
       });
-    // The note's own key (one phone approval; checked against the pool), then the change note's (another, which
-    // also derives the fresh recipient). Both come from the session answers after a restart in the same session.
+    // The note's own key (checked against the pool), then the change note's (which also derives the fresh recipient).
     const note: Note = await ctx.client.noteFor(pub);
     const change = await ctx.client.changeSecrets(note);
 
@@ -790,7 +674,7 @@ export class PrivacyController {
     const maxFeePerGas = gasPrice * 2n > parseGwei("2") ? gasPrice * 2n : parseGwei("2");
     const broadcaster = new FramePaymasterBroadcaster({
       ...clients,
-      accountIsolationKeys: [isolationKeyFor(ctx.plan.address, BigInt(chainId))],
+      accountIsolationKeys: [isolationKeyFor(ctx.address, BigInt(chainId))],
       profile: getProfile(net.profileId ?? "ethrex-eip8141-tracer"),
       chainId: BigInt(chainId),
       payer: ctx.cfg.poolPayer,
@@ -869,7 +753,6 @@ export class PrivacyController {
     if (change) await this.recordNote(ctx, change).catch(() => undefined);
     const received = await wp.getBalance(recipient).catch(() => 0n);
     await this.apply(chainId, { type: "withdrawn", receivedWei: received.toString() });
-    await ctx.answers.clear().catch(() => undefined); // the spend keys of this withdrawal leave memory
     await this.syncWith(chainId, ctx).catch(() => undefined);
   }
 }

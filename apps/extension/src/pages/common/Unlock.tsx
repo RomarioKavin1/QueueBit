@@ -74,12 +74,10 @@ export function ResetSheet({ open, onClose }: { open: boolean; onClose: () => vo
   const [busy, setBusy] = useState(false);
   return (
     <Sheet open={open} title="Reset this browser?" onClose={onClose}>
-      <p className="t-body">
-        Removes the everyday key from this browser. Your money stays in the account; your phone and Recovery key are
-        untouched.
-      </p>
+      <p className="t-body">Removes your keys from this browser. Your money stays in the account.</p>
       <p className="t-small mt-2 text-muted">
-        Without a Vault yet, the only way back to this account is your everyday backup words. Make sure you have them.
+        The only way back to this account is your backup words (or your guardians, if you chose some). Make sure you
+        have them.
       </p>
       <div className="mt-4 flex gap-2">
         <Button variant="secondary" block onClick={onClose}>

@@ -34,48 +34,32 @@ export interface NoteView {
   status: NoteStatusView;
 }
 
-export type PrivacyStep = "preparing" | "phone" | "paying" | "proving" | "submitted" | "done" | "failed";
-
-export interface PhoneAsk {
-  requestId: string;
-  /** The `ur:queuebit-sign-request` (tx-type 2) CBOR, hex. */
-  cbor: Hex;
-  depositIndex: number;
-  secretIndex: number;
-  /** 0 = the first signature; 1 = the one-time check that the phone signs the same way twice. */
-  attempt: number;
-  /** `note-key`: the key of the note being spent; `withdraw-key`: the change note's key (also the fresh recipient). */
-  purpose: "deposit-key" | "note-key" | "withdraw-key" | "check";
-}
+export type PrivacyStep = "preparing" | "paying" | "proving" | "submitted" | "done" | "failed";
 
 export interface PrivacyOp {
   id: string;
-  /** `exit`: the public exit (ragequit) of one note back to the account, approved by the Vault. */
+  /** `exit`: the public exit (ragequit) of one note back to the account, sent as an owner payment. */
   kind: "shield" | "unshield" | "exit";
   chainId: number;
   amountWei: string;
   createdAt: number;
   updatedAt: number;
   step: PrivacyStep;
-  phone?: PhoneAsk;
-  /** How many phone approvals this operation needed so far. */
-  phoneCount: number;
   deposit?: {
     depositIndex: number;
     /** Public once deposited (`Deposited.precommitment`); the ledger entry is made from it when the payment lands. */
     precommitment?: string;
-    /** `Poseidon(nullifier)`: public when the note is spent; lets the sync follow the spend without the phone. */
+    /** `Poseidon(nullifier)`: public when the note is spent; lets the sync follow the spend without the note key. */
     nullifierHash?: string;
     tx: { to: Hex; data: Hex; valueWei: string };
-    route?: "hot" | "vault";
+    route?: "owner";
     activityId?: string;
-    vaultRequestId?: string;
     txHash?: Hex;
   };
   withdraw?: {
     depositIndex: number;
     secretIndex: number;
-    /** The fresh address that receives the withdrawal (derived from the change note's phone signature). */
+    /** The fresh address that receives the withdrawal (derived from the change note's key). */
     recipient?: Hex;
     feeWei?: string;
     hash?: Hex;
@@ -87,13 +71,14 @@ export interface PrivacyOp {
     /** The withdrawal's node calls: on their own Anon-RPC circuit, or direct on a network without Anon-RPC. */
     circuit?: "anonymous" | "direct";
   };
-  /** Public exit: which note, the Vault request that sends `pool.ragequit`, and its result. */
+  /** Public exit: which note, the payment that sends `pool.ragequit`, and its result. */
   exit?: {
     depositIndex: number;
     secretIndex: number;
     provingStartedAt?: number;
     provedMs?: number;
-    vaultRequestId?: string;
+    /** The owner payment that sends `pool.ragequit`. */
+    activityId?: string;
     txHash?: Hex;
   };
   error?: { code: string; message: string; retry: boolean };
@@ -111,7 +96,7 @@ export interface SyncProgress {
 /** What the Private balance page renders (built by the service worker). */
 export interface PrivacyView {
   chainId: number;
-  /** `unavailable`: nothing to show but the reason (no pool on this network, account not active, no Vault payer). */
+  /** `unavailable`: nothing to show but the reason (no pool on this network, account not created). */
   availability: { ok: true } | { ok: false; reason: string; action?: "settings" | "activate" };
   config?: PrivacyNetworkConfig;
   account?: Hex;
