@@ -1370,3 +1370,88 @@ Commits `6324659` (account + modules), `00199c0` (PoolPayer), `848567e` (deploy 
   per-function formats (`account.registerPermit`, role "any") but no hot-path section, so the new functions are a
   companion backlog item. The extension's `src/generated/contracts.ts` is regenerated in the working tree; the
   extension agent commits it with its generator changes.
+
+## Extension M6: the private balance, the offscreen prover and the watcher light mode (2026-11-06)
+
+Commits `9ccfd58` (`@leaked/privacy`), `d74b8d8` (extension). Plan §30 §10 M6, §40 §1, §5, §6; ux-spec §3.10, §3.11,
+§3.13. E2E `apps/extension/e2e/privacy.e2e.ts` (local devnet); screenshots `app-privacy-*`, `app-alerts`,
+`app-settings-privacy`.
+
+- **Offscreen document** (`src/entrypoints/offscreen/`, `src/offscreen/`): the extension's one `offscreen.html`
+  (reason `WORKERS`), created on demand by the service worker (`background/offscreen.ts`, one `createDocument` for
+  concurrent first calls). It hosts the withdraw prover in a module Worker: `@leaked/groth16`'s
+  `serveDefaultProver` (arkworks WASM inlined, `initSync` from bytes) with the circuit artifacts packaged in the CRX
+  under `pp-circuits/` (copied from `@fatsolutions/privacy-pools-core-circuits@1.0.5` by a `build:publicAssets` hook,
+  sha256-pinned, 20.4 MB of the 23.75 MB package). Protocol `shared/offscreen.ts`: `{target: "leaked-offscreen", id,
+  kind, payload}`, kinds `ping | prove | anon:status`, bigints tagged `{"$n"}` on the wire, errors keep their name.
+  CSP: still `script-src 'self' 'wasm-unsafe-eval'`; `connect-src` gained `'self'` (the Worker fetches the packaged
+  artifacts). Permissions gained `offscreen`, `notifications`, and an optional host permission requested only when
+  a self-hosted watcher is paired.
+- **Anon-RPC: not bundled (decided, not feasible for M6).** `@anon-rpc/browser-extension-harness@0.4.0` exists (MIT),
+  but it needs the sandbox pages, a mainnet specifier bootstrap and a live worker network to test; the devnet has no
+  specifier at all. `anon:status` answers "unavailable" with the reason; Settings shows the toggle disabled with it;
+  the privacy page labels its connection "off on this network". The seams are in place: `withdrawalClients({
+  anonFetch })` builds a withdrawal's node and sidecar clients on a fresh isolation key when a fetch is given.
+- **Private balance** (`background/privacy/`, `#privacy`). Every operation is a persisted state machine
+  (`machine.ts`, pure): shield `preparing → phone → paying → done`, unshield `preparing → phone → proving → submitted
+  → done`, any → `failed` with a plain reason and `retry` where safe. `run()` re-derives everything from storage and
+  the chain, so a service-worker restart resumes (a sent withdrawal is polled by its hash; a restart while proving
+  proves again).
+  - **The phone signs note keys without holding the SW open**: `phoneSigner` throws `NeedsPhoneError`; the op stores
+    the `ur:leaked-sign-request` (tx-type 2, the companion's typed-data flow, payer = the paired Vault's fee key); the
+    page shows the QR and scans the answer; `acceptPhoneAnswer` checks request id + payer recovery and keeps it in the
+    encrypted store (`ans:<d>:<k>:<attempt>`). The determinism double-sign happens once per Vault payer (attempt 1
+    compared with attempt 0, then `deterministicPayer` is persisted). Scans in the e2e: first shield 2, withdrawal 1.
+  - **Store key**: HKDF-SHA256 of the seed with label `privacy-pools:<chainId>` (`KeyringController.deriveStorageKey`)
+    — not a signing key, stable across password changes, dropped on lock (`EncryptedStorage.lock()` → the secret
+    manager's `forget()`, package change below). Deviation from plan §1.4 item 2 (key released by a Vault approval):
+    the balance must be readable after a normal unlock; spending still needs the phone every time, because a withdrawal
+    always signs a new change note.
+  - Discovery stops at the deposits this browser made (`maxDeposits`, new `notes()` option), so refreshing the balance
+    never asks the phone; `prepareDeposit` probes the next index, which is the key the deposit needs anyway.
+  - **Deposit** = a payment from the account (`payments.preview` → hot, else a Vault `send`). The Entrypoint is not an
+    allowed app, so it is a Vault approval in practice; the request carries a body gas hint (`body`, bounded by
+    `MAX_ROLE_BODY` 4M/3M; the first attempt failed at the stock 700k: a deposit is ~1.05M on the devnet) and a label
+    ("Deposit 0.1 ETH into your private balance"). The hand-off page returns to `#privacy` (`?back=privacy`).
+  - **Withdrawal**: one note per withdrawal (the smallest approved note that covers the amount), to the fresh sender
+    derived from the change note's signature, through `FramePaymasterBroadcaster` on `withdrawalClients` (its own
+    circuit; on the devnet direct and labelled), sidecar from the config (default the staked lane :14340). The UI has
+    no fee field anywhere; it says the fee comes out of the withdrawal at cost and is refunded, and shows the fee paid
+    (amount − received) after.
+  - **ASP on the devnet**: `pool-order` (the longest prefix of the pool's deposit labels whose root equals
+    `latestRoot()`; `verifiedAspLabels` re-checks exactly, so a wrong guess fails closed). 0xbow's IPFS list is not
+    implemented; mainnet/Sepolia have no privacy config (Settings shows the fixed table; a local-devnet build lets the
+    devnet pool be entered, checked on chain before it is saved).
+  - Honest proving estimate: none before the first measured proof on this computer, then the median of the last five
+    (`proofMs`).
+- **Watcher light mode** (`background/watcher/`): `chrome.alarms` `leaked:watcher` every 60 s (plus a `when` alarm at
+  the next deadline from `WatcherCore.nextDeadline()`), `eth_getLogs` over `TargetIndex.logAddresses()` from the
+  account's deployment block (`deployBlock.ts`: the activation receipt, else a binary search over `eth_getCode` at a
+  block; cached), then a persisted cursor, 1 confirmation. `initiated()` = this browser's Vault requests (opId, hash)
+  and payments (hash) → its own actions are `info` ("you did this"); everything else unknown → `urgent` for
+  loosenings. New alerts → `chrome.notifications` (urgent: `requireInteraction`; info: silent), the toolbar badge
+  (unread count, colour of the worst), and the `#alerts` list; a notification click opens its deep link. The same
+  deploy-block lookup fixed Pending's `Queued` scan (frame account and 4337 executor), which read from block 0.
+  Not in light mode: blocked everyday payments (no log; the self-hosted watcher reads blocks for that) and reorgs
+  deeper than the confirmation.
+- **Pairing** (Security › Alerts › Pair a watcher): the code `{url, topic, keyId, hmacKey}` (`parsePairing`), Chrome's
+  permission for that one origin, then `GET /v1/alerts?since=<seq>` with `LEAKED-HMAC` request auth on each poll;
+  only envelopes whose HMAC verifies are kept (a forged "all clear" is counted and ignored), retractions marked.
+- **`@leaked/privacy` changes (integration-driven, with tests)**: `EncryptedStorage.onLock`, and the secret manager
+  subscribes so `lock()` forgets the in-memory signatures; `FramePaymasterQuote` no longer holds `senderKey` (a
+  `FrameSenderSigner` handle signs, `localFrameSigner(key)` keeps the key in a closure; `quote({senderKey})` is
+  refused); `FramePaymasterOptions.circuit` is required and `accountIsolationKeys` refuses a withdrawal circuit on an
+  account's key (`withdrawalClients` builds node + sidecar on one fresh key); `createGroth16Prover` throws when the
+  engine has no `verify` unless `selfVerify: false`; `client.notes({maxDeposits})`; `withdrawViaPoolPayer({sender,
+  onBuilt})`.
+- **Results (local devnet, 2026-11-06).** Pool (cached in `node_modules/.cache/leaked-extension-e2e/privacy-pool.json`,
+  reused while on chain): Entrypoint `0x03b483f6…95a9`, pool `0xd3b99068…287f` (block 3574), PoolPayer
+  `0xe28556e8…7886` (staked 0.012 ETH), deployed by the sub-account `keccak("leaked/extension-e2e-privacy/v1")` of
+  anvil #5, which is also the reviewer. Withdrawal `0xea89e94b…14ba` via :14340 `OnChain`: 0.05 ETH out, 0.0488286 ETH
+  arrived at the fresh `0x27887Afd…40d0` (fee bound 0.0158 ETH at 2× gas price, refunded down to ~0.0012 ETH actually paid),
+  proof 2.53 s in the offscreen Worker (single-threaded WASM). The change note (0.05 ETH) is rediscovered from the
+  kept signature with no scan. The whole M6 e2e (onboarding, activation, shield, review, withdraw, a queued
+  loosening → "Limit change scheduled" in the list, badge and a notification, deep link to the highlighted Pending
+  op) takes ~1.4 min.
+- **Companion gap found**: the phone has no `Entrypoint.deposit(uint256)` format and no devnet Entrypoint, so the
+  deposit's Vault approval shows "Unrecognised call" (the e2e stand-in confirms it like the user would). Backlog.
