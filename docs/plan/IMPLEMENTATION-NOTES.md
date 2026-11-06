@@ -1159,3 +1159,44 @@ with the simulated phone `e2e/support/companion-sim.ts`. Local devnet, funding k
 - **Not done / open**: guardian freeze deep link; Vault-signer top-up UI; hot-key rotation is wired (keyring index,
   adopted once `vaultSetHotKey` confirms) but not e2e-tested; Pending lists `Queued` from a `fromBlock: 0` log scan
   (fine on the devnet, needs a cursor for mainnet); watcher alerts and the privacy tab remain (BACKLOG).
+
+## Account: initial tokens, recovery payer key, module mirrors (2026-11-06)
+
+Commits `0f7a63b` (account), `d160c2d` (modules), `c4a03b3` (G1), `2bba64d` (deploy + generated ABIs). Execution side
+only: `LeakedVerify` untouched, `lint-verify.sh` OK (step 4 now also runs the init-token I-2 test), VERIFY gas unchanged
+on the devnet (hot 45,750, Path B 36,213, Path A 151,701). Forge: 884 pass, 3 skip.
+
+- **New `InitConfig` field (appended, last): `tokens: TokenInit[]`, `TokenInit {address token; uint8 decimals;
+  uint256 usdPerToken}`** (USD-6 per whole token, as `vaultSetToken`). Set atomically at initialize, one
+  `TokenConfigured(token, true, decimals, usdPerToken)` each (same event as the setter), appended to `getTokenList()`.
+  Refused: more than 16 (`TooManyTokens`), a repeat (`DuplicateToken(address)`, new error), a token that is zero,
+  code-less, the account, a role signer, the hot key or the tank (`BadAddress`), `usdPerToken == 0` or `decimals > 36`
+  (`BadConfig`). ETH stays `ethUsdPrice`. After initialize the list is ordinary vault state (removal/raise instant,
+  add/lower queued). I-2: the token slots are execution-only; `InitTokensAndPayers.t.sol` checks VERIFY reads none of
+  what initialize wrote and costs the same gas with or without a list, in Open and Strict. Account creation on the
+  devnet (empty list) 2,508,090 gas (2,504,524 before).
+- **Role payer keys** (no new field: `RoleSignerParams.payerKey` already exists and is already in the derivation,
+  `predictRoleSigner(..., payerKey)`). New initialize checks: a non-zero `vault.payerKey` / `recovery.payerKey` is never
+  the hot key or the tank, and the two differ (`BadAddress(payer)`). `recovery.payerKey = 0` stays allowed (Path A only).
+  FrameSim test: a derived RecoverySigner with a payer runs `recoveryCancel` on Path B with a real C13 signature; with
+  payer 0 the same tx fails VERIFY (`PathBDisabled`). G1 (e) now asserts the on-chain `payerKey`, no stake, the
+  signer paying its own fee, public mempool (`0x36cef15d…cdad`, all of (a)–(g) PASS, `g1/last-run.json`).
+- **For the extension** (`src/generated/contracts.ts` regenerated; `encodeInitialize` must add `tokens`, `[]` keeps
+  today's behaviour): pass `recovery.payerKey` from the companion's recovery pairing (it must differ from the vault
+  payer, the hot key and the tank, else creation reverts); Path B is then a lane for Recovery, which removes the
+  bootstrap gap of the M4 notes (no stake, no private builder hook). Optionally pass `tokens` (≤ 16 priced ERC-20s,
+  e.g. the devnet test tokens) so a fresh account can pay and `registerPermit` without a ≥ 1 h queued `vaultSetToken`;
+  each listed token is also a value verifier for hot 1271 (the hot verifier rule), as with the setter.
+- **For the companion**: a Recovery key needs its own SECP256K1 payer key held on the recovery device (Path B entry 1,
+  signed over the same sig hash as the vault's), exported with the recovery pq-key so the extension can put it in
+  `InitConfig.recovery.payerKey`; recovery mode must accept the 2-signature Path B shape (E-78 refuses it today).
+  `abi:sync --check` reports no drift (no registry function changed).
+- **7579 modules (mirrors).** `LeakedRoleExecutor`: `SameRoleKey()` (new error) at install, on `setRecoveryKey` (vault
+  or pending vault key) and on a rotation to the recovery's key (was `BadConfig`); `isGuardian(account, who)`.
+  `LeakedPolicyHook`: the hot key is never the account, the hook or the executor; in Open a recipient that is not
+  allowlisted is never an allowlisted token (validation) or an enabled guardian (execution only: the guardian set is
+  not an account-associated slot, so the userOp passes validation and reverts in `preCheck`), as `NotAllowed`;
+  `HookInit.tokens`: ≤ 16, `DuplicateToken`, a contract other than the hot key. Tests `LeakedModulesMirrors.t.sol`
+  (3 hosts × 2 modes), invariants `rolesIndependent` and forbidden recipients; anvil 4337 e2e green.
+- **Watcher**: `packages/watcher-core/src/generated/abi.ts` regenerated (new errors only; no event changed).
+  `services/watcher/test/devnet.live.test.ts` encodes `InitConfig` and must add `tokens: []`.
