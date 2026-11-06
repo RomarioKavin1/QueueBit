@@ -170,6 +170,15 @@ await deploy(
   30_000_000n,
 );
 void c13;
+// LeanPool (the post-quantum everyday key, docs/plan/60-leanpool-merge-plan.md): the registry LeanPool nodes post batch
+// roots to (aggregators bond 0.01 ETH), and the factory of `LeanPoolHotSigner` clones that read it.
+const depsRegistry = await deploy("DepsRegistry", "DepsRegistry.sol", [parseEther("0.01").toString()], 10_000_000n);
+await deploy(
+  "LeanPoolHotSignerFactory",
+  "LeanPoolHotSignerFactory.sol",
+  [DEVNET_ERC8421_WORKSHOP, TXPARAM_MAX_COST, depsRegistry],
+  30_000_000n,
+);
 
 // Devnet test tokens: deployed like the contracts, recorded under "tokens" (not in "contracts").
 const tokens: Record<string, TokenEntry> = {};

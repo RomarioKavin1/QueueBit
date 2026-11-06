@@ -1,0 +1,18 @@
+{
+  "name": "queuebit-contracts-devnet-tests-leanpool",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The post-quantum everyday key end to end on the PUBLIC alt-mempool devnet: a QueueBit account, its Vault (C13, Path B) installs a LeanPoolHotSigner, a leanSPHINCS-signed payment goes through a LeanPool node into the alt mempool and is mined; the batch's STARK is verified (bun; standalone, not a pnpm workspace package).",
+  "scripts": {
+    "test": "bun run run.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "viem": "2.57.16"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.6",
+    "typescript": "6.0.3"
+  }
+}

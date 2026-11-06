@@ -1,0 +1,106 @@
+{
+  "startedAt": "2026-11-06T13:48:53.100Z",
+  "run": "LeanPool PQ everyday key, public devnet",
+  "node": {
+    "url": "http://127.0.0.1:8711",
+    "aggregator": "0xa6A1FB01Feb13c4FF1B9c415e4C365F4499A95dF",
+    "registry": "0x65a64Ab43aB280b7Ed0c4be422eC044D60a0225F",
+    "bond": {
+      "bonded": "10000000000000000",
+      "min": "10000000000000000"
+    },
+    "block": "4400"
+  },
+  "keys": {
+    "hot": "0x2849c75013a25130e8d55B3a6b113f6dE5Ab0e86",
+    "tank": "0x58674034e4Dda6FA3e4EFF8a182D672d20A18277",
+    "vaultPayer": "0x2637618948D24731a0688456C04a0256d78A3e49",
+    "recipient": "0x661aC833D7B77C8298E0399c6D22702b225bAf18",
+    "vaultPk": "0x33f8b4af6f543654e41e785e67d8d695d53fe1d2c424e2eeab96bc294328f985",
+    "leanSphincsVk": "0x9b4b6f46ee20d5870947160b9f265b1e12821258189bb98e29621c24bdcad6b9"
+  },
+  "account": {
+    "address": "0x26905DFa39111B4b52F528917dd91C049e5D5825",
+    "createTx": "0xc1a52cc229d66817519f24d87ccba0c33dd31675866601a7225efbdeebc6463d",
+    "vaultSigner": "0x4819c8d0932A4fa08A0297d1b8C73d9e6566d52C",
+    "vaultCloneTx": "0x849d5d0dc46c55f55acc4b8367e59f368def30b08847168316bc2eb6e09d7e79"
+  },
+  "hotSigner": {
+    "address": "0x69F4F1982964695bB67D1e403891ee8a4BF2Ef3C",
+    "createTx": "0x3497a918b7a5b328910301a2271f6119d7d5d67b6270152cdd825ea841920b4b",
+    "createGas": "452994",
+    "args": {
+      "account": "0x26905DFa39111B4b52F528917dd91C049e5D5825",
+      "registry": "0x65a64Ab43aB280b7Ed0c4be422eC044D60a0225F",
+      "aggregator": "0xa6A1FB01Feb13c4FF1B9c415e4C365F4499A95dF",
+      "vk": "0x9b4b6f46ee20d5870947160b9f265b1e12821258189bb98e29621c24bdcad6b9",
+      "maxFee": "10000000000000000"
+    },
+    "balance": "50000000000000000"
+  },
+  "install": {
+    "label": "Vault: vaultSetPQHotSigner",
+    "hash": "0x459691956e8d9a8d4f4e79b07f9b9619c8173d86f890cf2a2949fef8080aaaa4",
+    "block": "4410",
+    "gasUsed": "282544",
+    "c13SignMs": 22269
+  },
+  "pqPayment": {
+    "poolId": "0x9fc795672577ba139cadd1abe45d957ad53329f2f0760b482c7b7d845db741b6",
+    "txHash": "0x42810126a9135048df98094746e3b2072e9232ef4812a9cd4840c44ca5e66659",
+    "explorer": "https://explorer.altmempool.wtf/tx/0x42810126a9135048df98094746e3b2072e9232ef4812a9cd4840c44ca5e66659?node=https%3A%2F%2Faltmempool.forshtat.com%2Frpc",
+    "stages": [
+      "pooled",
+      "posted",
+      "mined"
+    ],
+    "block": "4414",
+    "payer": "0x69f4f1982964695bb67d1e403891ee8a4bf2ef3c",
+    "gasUsed": "344849",
+    "verifyGas": "61449",
+    "frames": [
+      {
+        "status": "success",
+        "execution": "61449",
+        "state": "0"
+      },
+      {
+        "status": "success",
+        "execution": "83530",
+        "state": "183600"
+      }
+    ],
+    "batch": {
+      "root": "0xcef3aaa08ecaed4831f1429b3b181c6996d7bbae1984c9e8a638e15b47aa9531",
+      "postTx": "0x31cb8be87b49922b36d4c890422aad9dfa657277a0e850f16b760359a398406d",
+      "block": "4412",
+      "ring": 0
+    },
+    "canonicalMempoolOnTheSameTx": {
+      "canonicalMempoolValid": false,
+      "violation": "StorageReadNonSender",
+      "verifyFrameGas": "0xf009"
+    },
+    "leanSphincs": {
+      "signatureBytes": 4276,
+      "signMs": 101,
+      "onChainSignatureBytes": 0
+    },
+    "recipientReceived": "1000000000000000",
+    "bucketDebitedUsd6": "3000000",
+    "minedFrom": "0x69f4f1982964695bb67d1e403891ee8a4bf2ef3c"
+  },
+  "overLimit": {
+    "amountWei": "3000000000000000",
+    "refusedBy": "Invalid Transaction: Invalid frame transaction: VERIFY frame 0 (target 0x26905dfa39111b4b52f528917dd91c049e5d5825, 89 bytes of code) failed: RevertOpcode",
+    "signed": false
+  },
+  "stark": {
+    "proofHash": "0x0793feb016e792a4874a227fc46e0f47ae325d5d5eb015b0828327c0e9ebaa91",
+    "onChainProofHash": "0x0793feb016e792a4874a227fc46e0f47ae325d5d5eb015b0828327c0e9ebaa91",
+    "verdict": "VALID",
+    "why": "1 signatures proven by a 194992-byte recursive STARK whose claims rebuild the posted root"
+  },
+  "finishedAt": "2026-11-06T13:51:32.658Z",
+  "passed": true
+}
