@@ -1,0 +1,706 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-06T20:31:11.794Z",
+  "title": "Design System: QueueBit",
+  "extensions": {
+    "colorMeta": {
+      "paper": {
+        "role": "neutral",
+        "displayName": "Paper",
+        "canonical": "oklch(0.984 0.004 255)",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(0.150 0.004 255)",
+          "oklch(0.264 0.004 255)",
+          "oklch(0.379 0.004 255)",
+          "oklch(0.493 0.004 255)",
+          "oklch(0.607 0.004 255)",
+          "oklch(0.721 0.004 255)",
+          "oklch(0.836 0.004 255)",
+          "oklch(0.950 0.004 255)"
+        ]
+      },
+      "paper-2": {
+        "role": "neutral",
+        "displayName": "Paper 2 (Procedure band)",
+        "canonical": "oklch(0.962 0.007 258)",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(0.150 0.007 258)",
+          "oklch(0.264 0.007 258)",
+          "oklch(0.379 0.007 258)",
+          "oklch(0.493 0.007 258)",
+          "oklch(0.607 0.007 258)",
+          "oklch(0.721 0.007 258)",
+          "oklch(0.836 0.007 258)",
+          "oklch(0.950 0.007 258)"
+        ]
+      },
+      "paper-3": {
+        "role": "neutral",
+        "displayName": "Paper 3 (harness)",
+        "canonical": "oklch(0.935 0.01 260)",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(0.150 0.01 260)",
+          "oklch(0.264 0.01 260)",
+          "oklch(0.379 0.01 260)",
+          "oklch(0.493 0.01 260)",
+          "oklch(0.607 0.01 260)",
+          "oklch(0.721 0.01 260)",
+          "oklch(0.836 0.01 260)",
+          "oklch(0.950 0.01 260)"
+        ]
+      },
+      "rule": {
+        "role": "neutral",
+        "displayName": "Rule",
+        "canonical": "oklch(0.85 0.014 262)",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(0.150 0.014 262)",
+          "oklch(0.264 0.014 262)",
+          "oklch(0.379 0.014 262)",
+          "oklch(0.493 0.014 262)",
+          "oklch(0.607 0.014 262)",
+          "oklch(0.721 0.014 262)",
+          "oklch(0.836 0.014 262)",
+          "oklch(0.950 0.014 262)"
+        ]
+      },
+      "rule-soft": {
+        "role": "neutral",
+        "displayName": "Rule Soft",
+        "canonical": "oklch(0.91 0.01 262)",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(0.150 0.01 262)",
+          "oklch(0.264 0.01 262)",
+          "oklch(0.379 0.01 262)",
+          "oklch(0.493 0.01 262)",
+          "oklch(0.607 0.01 262)",
+          "oklch(0.721 0.01 262)",
+          "oklch(0.836 0.01 262)",
+          "oklch(0.950 0.01 262)"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Blue-Black Ink",
+        "canonical": "oklch(0.21 0.03 266)",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(0.150 0.03 266)",
+          "oklch(0.264 0.03 266)",
+          "oklch(0.379 0.03 266)",
+          "oklch(0.493 0.03 266)",
+          "oklch(0.607 0.03 266)",
+          "oklch(0.721 0.03 266)",
+          "oklch(0.836 0.03 266)",
+          "oklch(0.950 0.03 266)"
+        ]
+      },
+      "ink-2": {
+        "role": "neutral",
+        "displayName": "Ink 2",
+        "canonical": "oklch(0.43 0.028 266)",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(0.150 0.028 266)",
+          "oklch(0.264 0.028 266)",
+          "oklch(0.379 0.028 266)",
+          "oklch(0.493 0.028 266)",
+          "oklch(0.607 0.028 266)",
+          "oklch(0.721 0.028 266)",
+          "oklch(0.836 0.028 266)",
+          "oklch(0.950 0.028 266)"
+        ]
+      },
+      "ink-3": {
+        "role": "neutral",
+        "displayName": "Ink 3",
+        "canonical": "oklch(0.56 0.022 266)",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(0.150 0.022 266)",
+          "oklch(0.264 0.022 266)",
+          "oklch(0.379 0.022 266)",
+          "oklch(0.493 0.022 266)",
+          "oklch(0.607 0.022 266)",
+          "oklch(0.721 0.022 266)",
+          "oklch(0.836 0.022 266)",
+          "oklch(0.950 0.022 266)"
+        ]
+      },
+      "plate-blue": {
+        "role": "primary",
+        "displayName": "Plate Blue",
+        "canonical": "oklch(0.52 0.2 266)",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(0.150 0.2 266)",
+          "oklch(0.264 0.2 266)",
+          "oklch(0.379 0.2 266)",
+          "oklch(0.493 0.2 266)",
+          "oklch(0.607 0.2 266)",
+          "oklch(0.721 0.2 266)",
+          "oklch(0.836 0.2 266)",
+          "oklch(0.950 0.2 266)"
+        ]
+      },
+      "plate-blue-2": {
+        "role": "primary",
+        "displayName": "Plate Blue Light",
+        "canonical": "oklch(0.66 0.13 266)",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(0.150 0.13 266)",
+          "oklch(0.264 0.13 266)",
+          "oklch(0.379 0.13 266)",
+          "oklch(0.493 0.13 266)",
+          "oklch(0.607 0.13 266)",
+          "oklch(0.721 0.13 266)",
+          "oklch(0.836 0.13 266)",
+          "oklch(0.950 0.13 266)"
+        ]
+      },
+      "blue-wash": {
+        "role": "primary",
+        "displayName": "Blue Wash",
+        "canonical": "oklch(0.935 0.035 266)",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(0.150 0.035 266)",
+          "oklch(0.264 0.035 266)",
+          "oklch(0.379 0.035 266)",
+          "oklch(0.493 0.035 266)",
+          "oklch(0.607 0.035 266)",
+          "oklch(0.721 0.035 266)",
+          "oklch(0.836 0.035 266)",
+          "oklch(0.950 0.035 266)"
+        ]
+      },
+      "on-blue": {
+        "role": "primary",
+        "displayName": "On Blue",
+        "canonical": "oklch(0.985 0.005 266)",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(0.150 0.005 266)",
+          "oklch(0.264 0.005 266)",
+          "oklch(0.379 0.005 266)",
+          "oklch(0.493 0.005 266)",
+          "oklch(0.607 0.005 266)",
+          "oklch(0.721 0.005 266)",
+          "oklch(0.836 0.005 266)",
+          "oklch(0.950 0.005 266)"
+        ]
+      },
+      "forgeable-red": {
+        "role": "secondary",
+        "displayName": "Forgeable Red",
+        "canonical": "oklch(0.54 0.19 27)",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(0.150 0.19 27)",
+          "oklch(0.264 0.19 27)",
+          "oklch(0.379 0.19 27)",
+          "oklch(0.493 0.19 27)",
+          "oklch(0.607 0.19 27)",
+          "oklch(0.721 0.19 27)",
+          "oklch(0.836 0.19 27)",
+          "oklch(0.950 0.19 27)"
+        ]
+      },
+      "red-wash": {
+        "role": "secondary",
+        "displayName": "Red Wash",
+        "canonical": "oklch(0.945 0.03 27)",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(0.150 0.03 27)",
+          "oklch(0.264 0.03 27)",
+          "oklch(0.379 0.03 27)",
+          "oklch(0.493 0.03 27)",
+          "oklch(0.607 0.03 27)",
+          "oklch(0.721 0.03 27)",
+          "oklch(0.836 0.03 27)",
+          "oklch(0.950 0.03 27)"
+        ]
+      },
+      "selection": {
+        "role": "neutral",
+        "displayName": "Selection",
+        "canonical": "oklch(0.9 0.06 266)",
+        "scheme": "light",
+        "tonalRamp": [
+          "oklch(0.150 0.06 266)",
+          "oklch(0.264 0.06 266)",
+          "oklch(0.379 0.06 266)",
+          "oklch(0.493 0.06 266)",
+          "oklch(0.607 0.06 266)",
+          "oklch(0.721 0.06 266)",
+          "oklch(0.836 0.06 266)",
+          "oklch(0.950 0.06 266)"
+        ]
+      },
+      "cyanotype-paper": {
+        "role": "neutral",
+        "displayName": "Cyanotype Paper",
+        "canonical": "oklch(0.385 0.105 256)",
+        "scheme": "dark",
+        "tonalRamp": [
+          "oklch(0.150 0.105 256)",
+          "oklch(0.264 0.105 256)",
+          "oklch(0.379 0.105 256)",
+          "oklch(0.493 0.105 256)",
+          "oklch(0.607 0.105 256)",
+          "oklch(0.721 0.105 256)",
+          "oklch(0.836 0.105 256)",
+          "oklch(0.950 0.105 256)"
+        ]
+      },
+      "cyanotype-paper-2": {
+        "role": "neutral",
+        "displayName": "Cyanotype Paper 2",
+        "canonical": "oklch(0.415 0.105 256)",
+        "scheme": "dark",
+        "tonalRamp": [
+          "oklch(0.150 0.105 256)",
+          "oklch(0.264 0.105 256)",
+          "oklch(0.379 0.105 256)",
+          "oklch(0.493 0.105 256)",
+          "oklch(0.607 0.105 256)",
+          "oklch(0.721 0.105 256)",
+          "oklch(0.836 0.105 256)",
+          "oklch(0.950 0.105 256)"
+        ]
+      },
+      "cyanotype-rule": {
+        "role": "neutral",
+        "displayName": "Cyanotype Rule",
+        "canonical": "oklch(0.6 0.08 250)",
+        "scheme": "dark",
+        "tonalRamp": [
+          "oklch(0.150 0.08 250)",
+          "oklch(0.264 0.08 250)",
+          "oklch(0.379 0.08 250)",
+          "oklch(0.493 0.08 250)",
+          "oklch(0.607 0.08 250)",
+          "oklch(0.721 0.08 250)",
+          "oklch(0.836 0.08 250)",
+          "oklch(0.950 0.08 250)"
+        ]
+      },
+      "cyanotype-rule-soft": {
+        "role": "neutral",
+        "displayName": "Cyanotype Rule Soft",
+        "canonical": "oklch(0.49 0.095 254)",
+        "scheme": "dark",
+        "tonalRamp": [
+          "oklch(0.150 0.095 254)",
+          "oklch(0.264 0.095 254)",
+          "oklch(0.379 0.095 254)",
+          "oklch(0.493 0.095 254)",
+          "oklch(0.607 0.095 254)",
+          "oklch(0.721 0.095 254)",
+          "oklch(0.836 0.095 254)",
+          "oklch(0.950 0.095 254)"
+        ]
+      },
+      "cyanotype-ink": {
+        "role": "neutral",
+        "displayName": "Cyanotype Ink",
+        "canonical": "oklch(0.975 0.01 240)",
+        "scheme": "dark",
+        "tonalRamp": [
+          "oklch(0.150 0.01 240)",
+          "oklch(0.264 0.01 240)",
+          "oklch(0.379 0.01 240)",
+          "oklch(0.493 0.01 240)",
+          "oklch(0.607 0.01 240)",
+          "oklch(0.721 0.01 240)",
+          "oklch(0.836 0.01 240)",
+          "oklch(0.950 0.01 240)"
+        ]
+      },
+      "cyanotype-ink-2": {
+        "role": "neutral",
+        "displayName": "Cyanotype Ink 2",
+        "canonical": "oklch(0.89 0.03 242)",
+        "scheme": "dark",
+        "tonalRamp": [
+          "oklch(0.150 0.03 242)",
+          "oklch(0.264 0.03 242)",
+          "oklch(0.379 0.03 242)",
+          "oklch(0.493 0.03 242)",
+          "oklch(0.607 0.03 242)",
+          "oklch(0.721 0.03 242)",
+          "oklch(0.836 0.03 242)",
+          "oklch(0.950 0.03 242)"
+        ]
+      },
+      "cyanotype-ink-3": {
+        "role": "neutral",
+        "displayName": "Cyanotype Ink 3",
+        "canonical": "oklch(0.8 0.045 245)",
+        "scheme": "dark",
+        "tonalRamp": [
+          "oklch(0.150 0.045 245)",
+          "oklch(0.264 0.045 245)",
+          "oklch(0.379 0.045 245)",
+          "oklch(0.493 0.045 245)",
+          "oklch(0.607 0.045 245)",
+          "oklch(0.721 0.045 245)",
+          "oklch(0.836 0.045 245)",
+          "oklch(0.950 0.045 245)"
+        ]
+      },
+      "cyanotype-line": {
+        "role": "primary",
+        "displayName": "Cyanotype Line",
+        "canonical": "oklch(0.93 0.055 235)",
+        "scheme": "dark",
+        "tonalRamp": [
+          "oklch(0.150 0.055 235)",
+          "oklch(0.264 0.055 235)",
+          "oklch(0.379 0.055 235)",
+          "oklch(0.493 0.055 235)",
+          "oklch(0.607 0.055 235)",
+          "oklch(0.721 0.055 235)",
+          "oklch(0.836 0.055 235)",
+          "oklch(0.950 0.055 235)"
+        ]
+      },
+      "cyanotype-line-2": {
+        "role": "primary",
+        "displayName": "Cyanotype Line 2",
+        "canonical": "oklch(0.8 0.07 240)",
+        "scheme": "dark",
+        "tonalRamp": [
+          "oklch(0.150 0.07 240)",
+          "oklch(0.264 0.07 240)",
+          "oklch(0.379 0.07 240)",
+          "oklch(0.493 0.07 240)",
+          "oklch(0.607 0.07 240)",
+          "oklch(0.721 0.07 240)",
+          "oklch(0.836 0.07 240)",
+          "oklch(0.950 0.07 240)"
+        ]
+      },
+      "cyanotype-on-line": {
+        "role": "primary",
+        "displayName": "Cyanotype On Line",
+        "canonical": "oklch(0.33 0.1 256)",
+        "scheme": "dark",
+        "tonalRamp": [
+          "oklch(0.150 0.1 256)",
+          "oklch(0.264 0.1 256)",
+          "oklch(0.379 0.1 256)",
+          "oklch(0.493 0.1 256)",
+          "oklch(0.607 0.1 256)",
+          "oklch(0.721 0.1 256)",
+          "oklch(0.836 0.1 256)",
+          "oklch(0.950 0.1 256)"
+        ]
+      },
+      "cyanotype-red": {
+        "role": "secondary",
+        "displayName": "Cyanotype Coral",
+        "canonical": "oklch(0.85 0.11 40)",
+        "scheme": "dark",
+        "tonalRamp": [
+          "oklch(0.150 0.11 40)",
+          "oklch(0.264 0.11 40)",
+          "oklch(0.379 0.11 40)",
+          "oklch(0.493 0.11 40)",
+          "oklch(0.607 0.11 40)",
+          "oklch(0.721 0.11 40)",
+          "oklch(0.836 0.11 40)",
+          "oklch(0.950 0.11 40)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "The paper title, once, in the hero."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Numbered section heads; number in regular-weight Plate Blue."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Unnumbered back matter heads (Limitations)."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Section prose, 66ch measure, old-style figures."
+      },
+      "abstract": {
+        "displayName": "Abstract",
+        "purpose": "The hero abstract with its run-in label, 60ch."
+      },
+      "note": {
+        "displayName": "Note",
+        "purpose": "Margin notes and references."
+      },
+      "caption": {
+        "displayName": "Caption",
+        "purpose": "Figure and table captions in run-in form."
+      },
+      "label": {
+        "displayName": "Plate Label",
+        "purpose": "Mono uppercase plate annotations at 87.5% width, 8 to 11 plate units."
+      },
+      "folio": {
+        "displayName": "Folio",
+        "purpose": "Running-head report folio."
+      },
+      "code": {
+        "displayName": "Code",
+        "purpose": "Algorithm 1 pseudocode."
+      },
+      "readout": {
+        "displayName": "Readout",
+        "purpose": "Fixed-digit counters."
+      }
+    },
+    "shadows": [
+      {
+        "name": "focus-ring",
+        "value": "0 0 0 2px var(--paper), 0 0 0 4px var(--blue)",
+        "purpose": "Keyboard focus only; the system has no elevation shadows."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-out",
+        "value": "cubic-bezier(0.22, 1, 0.36, 1)",
+        "purpose": "CSS state changes: button fill, arrow nudge, readout digits."
+      },
+      {
+        "name": "plate-ease-out",
+        "value": "1 - 2^(-10x)",
+        "purpose": "Arrivals inside plates (exponential ease-out)."
+      },
+      {
+        "name": "plate-ease-in-out",
+        "value": "cubic in-out",
+        "purpose": "Travel along a path inside plates."
+      },
+      {
+        "name": "digit-in",
+        "value": "420ms ease-out; from opacity 0, translateY(-35%), blur(1.5px)",
+        "purpose": "A readout digit settling into its cell."
+      },
+      {
+        "name": "button-fill",
+        "value": "200ms",
+        "purpose": "Begin control fill deepening on hover."
+      },
+      {
+        "name": "button-arrow",
+        "value": "300ms ease-out, translateX(2px)",
+        "purpose": "Begin control arrow nudge on hover."
+      },
+      {
+        "name": "plate-clock",
+        "value": "requestAnimationFrame while >=15% visible; frame step capped at 50ms; loops of ~5 to 9s",
+        "purpose": "One clock per plate, on screen only."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "explanatory still frame",
+        "purpose": "Plates rest on the frame that tells the whole story; CSS durations collapse to 0.001ms."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "sm",
+        "value": "640px",
+        "purpose": "Phone compositions below; gutters 16px to 32px; table restack."
+      },
+      {
+        "name": "md",
+        "value": "768px",
+        "purpose": "Running-head section links appear."
+      },
+      {
+        "name": "lg",
+        "value": "1024px",
+        "purpose": "12-column grid, hero 5/7 split, margin notes, folio."
+      }
+    ],
+    "dither": {
+      "matrix": "Bayer 4x4",
+      "cell": 1.6,
+      "tones": {
+        "blue": [
+          2,
+          4,
+          8,
+          12
+        ],
+        "red": [
+          4,
+          8
+        ],
+        "ink-3": [
+          3
+        ]
+      },
+      "unit": "inked cells of 16"
+    },
+    "strokes": {
+      "hairline": [
+        0.7,
+        0.8,
+        0.9
+      ],
+      "active": [
+        1,
+        1.4
+      ],
+      "leader": 0.7
+    }
+  },
+  "components": [
+    {
+      "name": "Begin Control",
+      "kind": "button",
+      "refersTo": "button-begin",
+      "description": "The single filled action: Start with a passkey.",
+      "html": "<a class=\"ds-begin\" href=\"#\">Start with a passkey <svg width=\"14\" height=\"10\" viewBox=\"0 0 14 10\" aria-hidden=\"true\" class=\"ds-arrow\"><path d=\"M0 5h12M8 1l4 4-4 4\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.4\"/></svg></a>",
+      "css": ".ds-begin{display:inline-flex;align-items:center;gap:10px;height:48px;padding:0 20px;background:var(--blue,oklch(0.52 0.2 266));color:var(--on-blue,oklch(0.985 0.005 266));font-family:'STIX Two Text',serif;font-weight:600;font-size:1rem;text-decoration:none;border-radius:0;transition:background-color 200ms}.ds-begin:hover{background:color-mix(in oklch,var(--blue,oklch(0.52 0.2 266)) 86%,var(--ink,oklch(0.21 0.03 266)))}.ds-begin .ds-arrow{transition:transform 300ms cubic-bezier(0.22,1,0.36,1)}.ds-begin:hover .ds-arrow{transform:translateX(2px)}.ds-begin:focus-visible{outline:2px solid transparent;box-shadow:0 0 0 2px var(--paper,oklch(0.984 0.004 255)),0 0 0 4px var(--blue,oklch(0.52 0.2 266));border-radius:2px}"
+    },
+    {
+      "name": "Begin Control, Small",
+      "kind": "button",
+      "refersTo": "button-begin-sm",
+      "description": "The running-head Start control.",
+      "html": "<a class=\"ds-begin-sm\" href=\"#\">Start <svg width=\"14\" height=\"10\" viewBox=\"0 0 14 10\" aria-hidden=\"true\" class=\"ds-arrow\"><path d=\"M0 5h12M8 1l4 4-4 4\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.4\"/></svg></a>",
+      "css": ".ds-begin-sm{display:inline-flex;align-items:center;gap:10px;height:32px;padding:0 12px;background:var(--blue,oklch(0.52 0.2 266));color:var(--on-blue,oklch(0.985 0.005 266));font-family:'STIX Two Text',serif;font-weight:600;font-size:0.86rem;text-decoration:none;border-radius:0;transition:background-color 200ms}.ds-begin-sm:hover{background:color-mix(in oklch,var(--blue,oklch(0.52 0.2 266)) 86%,var(--ink,oklch(0.21 0.03 266)))}.ds-begin-sm:focus-visible{outline:2px solid transparent;box-shadow:0 0 0 2px var(--paper,oklch(0.984 0.004 255)),0 0 0 4px var(--blue,oklch(0.52 0.2 266))}"
+    },
+    {
+      "name": "Running Head",
+      "kind": "nav",
+      "refersTo": "running-head",
+      "description": "Sticky journal header: mark, section links, folio, Start.",
+      "html": "<header class=\"ds-head\"><span class=\"ds-head-name\">QueueBit</span><nav class=\"ds-head-nav\"><a href=\"#\">The problem</a><a href=\"#\">Construction</a><a href=\"#\">Limitations</a></nav><span class=\"ds-head-folio\">Report QB-1 · Nov 2026</span></header>",
+      "css": ".ds-head{display:flex;align-items:center;gap:24px;height:48px;padding:0 32px;background:var(--paper,oklch(0.984 0.004 255));border-bottom:1px solid var(--rule,oklch(0.85 0.014 262));font-family:'STIX Two Text',serif}.ds-head-name{font-weight:600;letter-spacing:-0.01em;color:var(--ink,oklch(0.21 0.03 266))}.ds-head-nav{display:flex;gap:20px;font-size:0.86rem}.ds-head-nav a{color:var(--ink-2,oklch(0.43 0.028 266));text-decoration:none}.ds-head-nav a:hover{color:var(--ink,oklch(0.21 0.03 266))}.ds-head-nav a:focus-visible{outline:2px solid transparent;box-shadow:0 0 0 2px var(--paper,#fff),0 0 0 4px var(--blue,oklch(0.52 0.2 266))}.ds-head-folio{margin-left:auto;font-family:'Martian Mono',monospace;font-size:0.68rem;letter-spacing:0.06em;text-transform:uppercase;color:var(--ink-3,oklch(0.56 0.022 266))}"
+    },
+    {
+      "name": "Plate",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "A figure: crop marks, SVG line art with dither tone and a knocked-out label, run-in caption.",
+      "html": "<figure class=\"ds-plate\"><div class=\"ds-plate-sheet\"><i class=\"ds-c ds-tl\"></i><i class=\"ds-c ds-tr\"></i><i class=\"ds-c ds-bl\"></i><i class=\"ds-c ds-br\"></i><svg viewBox=\"0 0 240 90\" width=\"100%\"><defs><pattern id=\"ds-b8\" width=\"6.4\" height=\"6.4\" patternUnits=\"userSpaceOnUse\"><rect x=\"0\" y=\"0\" width=\"1.6\" height=\"1.6\" fill=\"oklch(0.52 0.2 266)\"/><rect x=\"3.2\" y=\"0\" width=\"1.6\" height=\"1.6\" fill=\"oklch(0.52 0.2 266)\"/><rect x=\"1.6\" y=\"1.6\" width=\"1.6\" height=\"1.6\" fill=\"oklch(0.52 0.2 266)\"/><rect x=\"4.8\" y=\"1.6\" width=\"1.6\" height=\"1.6\" fill=\"oklch(0.52 0.2 266)\"/><rect x=\"0\" y=\"3.2\" width=\"1.6\" height=\"1.6\" fill=\"oklch(0.52 0.2 266)\"/><rect x=\"3.2\" y=\"3.2\" width=\"1.6\" height=\"1.6\" fill=\"oklch(0.52 0.2 266)\"/><rect x=\"1.6\" y=\"4.8\" width=\"1.6\" height=\"1.6\" fill=\"oklch(0.52 0.2 266)\"/><rect x=\"4.8\" y=\"4.8\" width=\"1.6\" height=\"1.6\" fill=\"oklch(0.52 0.2 266)\"/></pattern></defs><rect x=\"20\" y=\"30\" width=\"60\" height=\"40\" fill=\"url(#ds-b8)\" stroke=\"oklch(0.52 0.2 266)\" stroke-width=\"0.9\"/><line x1=\"140\" y1=\"46\" x2=\"84\" y2=\"50\" stroke=\"oklch(0.52 0.2 266)\" stroke-width=\"0.7\"/><rect x=\"142\" y=\"38\" width=\"80\" height=\"11\" fill=\"oklch(0.984 0.004 255)\"/><text x=\"145\" y=\"46\" font-family=\"Martian Mono, monospace\" font-size=\"9\" letter-spacing=\"0.06em\" fill=\"oklch(0.52 0.2 266)\">PUBLIC KEY</text></svg></div><figcaption class=\"ds-cap\"><b>Figure 1.</b> <span class=\"ds-cap-t\">One attack, two keys.</span> The sentence follows in the second ink.</figcaption></figure>",
+      "css": ".ds-plate{margin:0;max-width:560px}.ds-plate-sheet{position:relative;padding:20px}.ds-c{position:absolute;width:12px;height:12px;border-color:var(--ink-3,oklch(0.56 0.022 266));border-style:solid;border-width:0}.ds-tl{top:0;left:0;border-top-width:1px;border-left-width:1px}.ds-tr{top:0;right:0;border-top-width:1px;border-right-width:1px}.ds-bl{bottom:0;left:0;border-bottom-width:1px;border-left-width:1px}.ds-br{bottom:0;right:0;border-bottom-width:1px;border-right-width:1px}.ds-cap{margin-top:8px;max-width:68ch;font-family:'STIX Two Text',serif;font-size:0.84rem;line-height:1.5;color:var(--ink-2,oklch(0.43 0.028 266))}.ds-cap b,.ds-cap-t{color:var(--ink,oklch(0.21 0.03 266))}"
+    },
+    {
+      "name": "Readout",
+      "kind": "custom",
+      "refersTo": "readout",
+      "description": "Fixed-digit counter; leading zeros dimmed.",
+      "html": "<span class=\"ds-ro\"><span class=\"ds-ro-cells\"><span class=\"ds-ro-d ds-ro-z\">0</span><span class=\"ds-ro-d\">4</span><span class=\"ds-ro-d\">2</span><span class=\"ds-ro-d\">7</span><span class=\"ds-ro-d\">6</span></span><span class=\"ds-ro-u\">bytes</span></span>",
+      "css": ".ds-ro{display:inline-flex;align-items:baseline;gap:8px}.ds-ro-cells{display:inline-flex;border:1px solid var(--rule,oklch(0.85 0.014 262));background:var(--paper,oklch(0.984 0.004 255));font-family:'Martian Mono',monospace;font-size:1.05rem;line-height:1;color:var(--blue,oklch(0.52 0.2 266));font-variant-numeric:tabular-nums lining-nums}.ds-ro-d{display:grid;place-items:center;width:1.15em;height:1.9em}.ds-ro-d+.ds-ro-d{border-left:1px solid var(--rule-soft,oklch(0.91 0.01 262))}.ds-ro-z{color:color-mix(in oklch,oklch(0.66 0.13 266) 45%,transparent)}.ds-ro-u{font-family:'Martian Mono',monospace;font-size:0.7rem;letter-spacing:0.06em;text-transform:uppercase;color:var(--ink-2,oklch(0.43 0.028 266))}"
+    },
+    {
+      "name": "Algorithm Box",
+      "kind": "custom",
+      "refersTo": "algorithm-band",
+      "description": "Numbered mono pseudocode between ink rules on the paper-2 band.",
+      "html": "<div class=\"ds-algo\"><p><b>Algorithm 1.</b> Start</p><ol><li><span>1</span>passkey ← create on this device</li><li><span>2</span>account ← address(owner) <em>▷ known before anything is on chain</em></li><li><span>3</span>return account</li></ol></div>",
+      "css": ".ds-algo{background:var(--paper-2,oklch(0.962 0.007 258));border-top:1px solid var(--ink,oklch(0.21 0.03 266));border-bottom:1px solid var(--ink,oklch(0.21 0.03 266));padding:12px 0;font-family:'STIX Two Text',serif;color:var(--ink,oklch(0.21 0.03 266))}.ds-algo p{margin:0 0 8px;font-size:0.9rem}.ds-algo ol{list-style:none;margin:0;padding:0;font-family:'Martian Mono',monospace;font-size:0.86rem;line-height:2}.ds-algo li span{display:inline-block;width:2ch;margin-right:12px;color:var(--ink-3,oklch(0.56 0.022 266))}.ds-algo em{font-style:normal;margin-left:16px;color:var(--ink-3,oklch(0.56 0.022 266))}"
+    },
+    {
+      "name": "Table",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "Paper table: ink head and foot rules, soft row rules, run-in caption.",
+      "html": "<table class=\"ds-table\"><caption><b>Table 1.</b> What moving in does.</caption><thead><tr><th>You have</th><th>What happens</th><th>Address</th></tr></thead><tbody><tr><th>A Safe</th><td>Its owners sign one Safe transaction.</td><td class=\"ds-code\">New</td></tr><tr><th>An upgradeable smart account</th><td>It is upgraded in place.</td><td class=\"ds-code\">Same</td></tr></tbody></table>",
+      "css": ".ds-table{width:100%;border-collapse:collapse;text-align:left;font-family:'STIX Two Text',serif;font-size:0.9rem;color:var(--ink,oklch(0.21 0.03 266))}.ds-table caption{text-align:left;margin-bottom:12px;font-size:0.84rem;color:var(--ink-2,oklch(0.43 0.028 266))}.ds-table caption b{color:var(--ink,oklch(0.21 0.03 266))}.ds-table thead tr{border-top:1px solid var(--ink,oklch(0.21 0.03 266));border-bottom:1px solid var(--ink,oklch(0.21 0.03 266))}.ds-table thead th{padding:8px 24px 8px 0;font-weight:600}.ds-table tbody tr{border-bottom:1px solid var(--rule-soft,oklch(0.91 0.01 262));vertical-align:top}.ds-table tbody tr:last-child{border-bottom-color:var(--ink,oklch(0.21 0.03 266))}.ds-table tbody th{font-weight:400;padding:10px 24px 10px 0}.ds-table td{padding:10px 24px 10px 0;color:var(--ink-2,oklch(0.43 0.028 266))}.ds-table .ds-code{font-family:'Martian Mono',monospace;font-size:0.78rem;text-transform:uppercase;color:var(--ink,oklch(0.21 0.03 266))}"
+    },
+    {
+      "name": "Margin Note",
+      "kind": "custom",
+      "refersTo": "margin-note",
+      "description": "A caveat in the margin under a soft rule.",
+      "html": "<aside class=\"ds-note\">The account trusts the node it names to have checked.</aside>",
+      "css": ".ds-note{max-width:48ch;border-top:1px solid var(--rule-soft,oklch(0.91 0.01 262));padding-top:12px;font-family:'STIX Two Text',serif;font-size:0.86rem;line-height:1.55;color:var(--ink-2,oklch(0.43 0.028 266))}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Preprint That Runs",
+    "overview": "QueueBit's surfaces are set as a short technical paper: cool white stock, blue-black ink in a journal serif, numbered sections, margin notes, tables, an algorithm box, references and a colophon. The persuading is done by the figures, which are line-art plates drawn in code in the brand blue and which *run*: the attack sweeps, the signature fills, the payment hits its cap. A reader should feel they are holding a well-made report from a lab that shows its working, not a product page. The dark scheme is a cyanotype: the same paper printed as a blueprint, pale lines on deep blue, not a \"dark mode\" with glowing accents.\n\nThe system explicitly refuses the crypto landing: dark hero, glowing gradient, stat strip, feature cards, hype styling. It also refuses to be a clone of makingsoftware.com: it shares the genre (technical manual with animated plates) but owns its materials (STIX on cool paper, Bayer-dithered plates, crop marks, cyanotype, fixed-digit readouts). Density is that of a paper: generous measure, quiet furniture, one action color.\n\nLayout is a 12-column page (max 1240px, 48px column gap; 16px gutters on phones, 32px from 640px). A section is a hairline rule across the page, a numbered headline spanning all twelve columns, body copy in the first seven (66ch measure), a margin note in columns 9 to 12, and a wide plate across all twelve. The hero splits 5/7: title, byline, abstract and the begin control on the left; Figure 1 on the right, spanning both rows. Sections breathe at 56px top and 64px bottom on phones, 80px and 96px from 1024px.",
+    "keyCharacteristics": [
+      "A paper's furniture, used literally: running head with folio, byline, abstract, numbered sections, margin notes, Table 1, Algorithm 1, Limitations, References, colophon.",
+      "Plates are SVG line art with crop marks; every tone is an ordered 4×4 Bayer dither.",
+      "Two inks of meaning in plates: blue for the construction, red for what fails.",
+      "Serif for everything a reader reads; mono only for what an instrument would print.",
+      "Square corners, hairline rules, no shadows; depth comes from rules, dither and the one paper-2 band.",
+      "Motion lives only inside plates, one clock per plate, running only while the plate is on screen."
+    ],
+    "rules": [
+      {
+        "name": "The Red Means Failure Rule",
+        "body": "Red appears only where the story fails for someone: the forgeable key, the refused payment. It is never brand, never emphasis, never a CTA, and a plate carries at most one red event. If red is decorating, delete it.",
+        "section": "colors"
+      },
+      {
+        "name": "The Cyanotype Rule",
+        "body": "The dark scheme is a blueprint print of the same paper: deep blue stock, pale lines, coral for red. Never black, never neon, never a glowing accent.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Action Rule",
+        "body": "The filled blue block is the begin control and nothing else. Every other link is underlined text or plain ink.",
+        "section": "colors"
+      },
+      {
+        "name": "The Instrument Voice Rule",
+        "body": "Mono is for what a machine would print: plate labels, readouts, the folio, pseudocode, codes in a table cell. Mono is prohibited for headlines, body, buttons, nav, and any label above a heading.",
+        "section": "typography"
+      },
+      {
+        "name": "The Run-In Rule",
+        "body": "Paper furniture labels itself in-line, in semibold serif, the way journals do: \"Abstract.\", \"Figure 3.\", \"Table 1.\", \"Algorithm 1.\", \"Fees.\" Never a separate small-caps line above the content.",
+        "section": "typography"
+      },
+      {
+        "name": "The Printed Depth Rule",
+        "body": "If something needs to stand forward, draw it: a rule, a denser dither, an isometric face. Never a drop shadow, a blur, or a translucent layer.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Dither-Only Tone Rule",
+        "body": "Inside a plate every fill tone is an ordered 4×4 Bayer dither from the shared set (blue at 2, 4, 8 and 12 of 16; red at 4 and 8; ink-3 at 3), 1.6-unit cells. Gradients, alpha fills and soft glows are forbidden as tone. Opacity is allowed only as time, to fade an element in or out of a sequence.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** set every new surface as part of the paper: numbered sections, run-in labels, captions in \"Figure n.\" form, a Limitations section where limits exist.",
+      "**Do** draw explanation as a plate: SVG from geometry, crop marks, Bayer dither tones from the shared set, knocked-out mono labels with leaders.",
+      "**Do** keep red for the single failure event in a plate (the forgeable key, the refused payment).",
+      "**Do** give every plate one on-screen-only clock and an explanatory reduced-motion still.",
+      "**Do** recompose wide drawings vertically below 640px.",
+      "**Do** show quantities as fixed-digit readouts when they change, with real figures from the repo (4,276 bytes, 120,000 signatures).",
+      "**Do** keep corners square (0px) and separate with hairline rules."
+    ],
+    "donts": [
+      "**Don't** build the crypto landing: no dark hero, no glowing gradient, no stat strip, no feature cards, no crypto/hype styling.",
+      "**Don't** use a gradient anywhere, in a plate or on the page; tone is dither.",
+      "**Don't** put an eyebrow or kicker above a heading; the section number and run-in labels are the only labels.",
+      "**Don't** use cards: no bordered, rounded or shadowed boxes holding content. Plates have crop marks, not frames.",
+      "**Don't** use glass: no translucent panels, no backdrop blur, no frosted chrome.",
+      "**Don't** use em dashes in copy; use a colon, a comma or a full stop.",
+      "**Don't** use mono for prose, headings, buttons or navigation.",
+      "**Don't** use red as brand, emphasis or a second accent.",
+      "**Don't** shrink a desktop drawing onto a phone or hide a figure behind sideways scroll.",
+      "**Don't** animate a plate off screen or start it from a blank frame for reduced-motion users.",
+      "**Don't** read as a clone of makingsoftware.com: keep QueueBit's own paper, inks, dither, crop marks and cyanotype rather than borrowing that site's layout, palette or illustration style."
+    ]
+  }
+}

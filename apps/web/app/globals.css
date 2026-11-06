@@ -1,9 +1,42 @@
 @import "tailwindcss";
-/* One set of design tokens for the extension and the web app (light/dark, status colours, spacing). */
-@import "../../extension/src/styles/tokens.css";
 
 @source "../components";
 @source "../app";
+
+/*
+ * QueueBit paper, in the Making Software manual palette (the user's binding reference): a near-white sheet, near-black
+ * ink, one electric blue for every drawing and its flat light tints, and labels at half-ink. Light only: the manual is
+ * a printed object. One red is kept for what a quantum computer can forge.
+ */
+:root {
+  color-scheme: light;
+  --paper: #fbfbfb;
+  --paper-2: oklch(0.97 0.006 265);
+  --paper-3: oklch(0.945 0.012 265);
+  --rule: oklch(0.86 0.005 265);
+  --rule-soft: oklch(0.92 0.004 265);
+  --ink: #171717;
+  --ink-2: oklch(0 0 0 / 0.62);
+  --ink-3: oklch(0 0 0 / 0.5);
+  --grid-dot: oklch(0 0 0 / 0.1);
+  /* the manual's blue, and its tints */
+  --blue: oklch(0.5058 0.2886 264.84);
+  --blue-2: oklch(0.66 0.18 266);
+  --blue-wash: oklch(0.95 0.03 266);
+  --blue-t1: oklch(0.965 0.022 266);
+  --blue-t2: oklch(0.925 0.05 266);
+  --blue-t3: oklch(0.8 0.11 266);
+  --blue-t4: oklch(0.68 0.17 266);
+  --on-blue: #fbfbfb;
+  /* forgeable */
+  --red: oklch(0.55 0.21 27);
+  --red-wash: oklch(0.93 0.04 27);
+  --red-t: oklch(0.86 0.08 27);
+  --ok: oklch(0.5 0.11 160);
+  --selection: oklch(0.88 0.08 266);
+  --focus-ring: 0 0 0 2px var(--paper), 0 0 0 3.5px var(--blue);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+}
 
 @theme {
   --color-*: initial;
@@ -13,42 +46,58 @@
 }
 
 @theme inline {
-  --color-bg: var(--bg);
-  --color-surface: var(--surface);
-  --color-surface-2: var(--surface-2);
-  --color-line: var(--border);
-  --color-fg: var(--text);
-  --color-muted: var(--text-muted);
-  --color-inverse: var(--text-inverse);
-  --color-brand: var(--brand);
-  --color-brand-hover: var(--brand-hover);
-  --color-on-brand: var(--on-brand);
-  --color-safe: var(--safe);
-  --color-safe-bg: var(--safe-bg);
-  --color-limit: var(--limit);
-  --color-limit-bg: var(--limit-bg);
-  --color-owner: var(--owner);
-  --color-owner-bg: var(--owner-bg);
-  --color-danger: var(--danger);
-  --color-danger-bg: var(--danger-bg);
+  --color-paper: var(--paper);
+  --color-paper-2: var(--paper-2);
+  --color-paper-3: var(--paper-3);
+  --color-rule: var(--rule);
+  --color-rule-soft: var(--rule-soft);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-blue: var(--blue);
+  --color-blue-2: var(--blue-2);
+  --color-blue-wash: var(--blue-wash);
+  --color-on-blue: var(--on-blue);
+  --color-red: var(--red);
+  --color-red-wash: var(--red-wash);
   --color-transparent: transparent;
-  --font-sans: var(--font-ui);
-  --font-mono: var(--font-code);
-  --radius-sm: var(--r-sm);
-  --radius-md: var(--r-md);
-  --radius-lg: var(--r-lg);
+  /* aliases the /test harness uses */
+  --color-bg: var(--paper);
+  --color-surface: var(--paper-2);
+  --color-surface-2: var(--paper-3);
+  --color-line: var(--rule);
+  --color-fg: var(--ink);
+  --color-muted: var(--ink-2);
+  --color-brand: var(--blue);
+  --color-on-brand: var(--on-blue);
+  --color-safe: var(--ok);
+  --color-danger: var(--red);
+  --color-danger-bg: var(--red-wash);
+  --font-serif: var(--font-garamond), "EB Garamond", Georgia, serif;
+  --font-mono: var(--font-departure), ui-monospace, "SF Mono", Menlo, monospace;
+  --radius-sm: 2px;
+  --radius-md: 3px;
+  --radius-lg: 4px;
   --radius-full: 9999px;
 }
 
 @layer base {
-  html,
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: var(--font-ui);
-    font-size: 14px;
-    line-height: 20px;
+  html {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-serif);
+    font-size: 16px;
+    line-height: 1.8;
+    text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
+    font-feature-settings: "kern", "liga", "calt";
+  }
+  body {
+    background: var(--paper);
+  }
+  ::selection {
+    background: var(--selection);
+    color: var(--ink);
   }
   input,
   select,
@@ -56,10 +105,91 @@
   button {
     font: inherit;
     color: inherit;
+    caret-color: var(--blue);
+  }
+  a {
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.2em;
+    text-decoration-style: dotted;
+  }
+  a:hover {
+    text-decoration-style: solid;
   }
   :focus-visible {
     outline: 2px solid transparent;
     box-shadow: var(--focus-ring);
-    border-radius: var(--r-sm);
+  }
+  * {
+    scrollbar-color: var(--rule) transparent;
+    scrollbar-width: thin;
+  }
+  .tnum {
+    font-variant-numeric: tabular-nums lining-nums;
+  }
+}
+
+@layer components {
+  /* Body copy as the manual sets it: justified, hyphenated, airy leading. */
+  .prose-manual {
+    font-size: clamp(0.94rem, 0.86rem + 0.18vw, 1.03rem);
+    line-height: 1.85;
+    text-align: justify;
+    hyphens: auto;
+    -webkit-hyphens: auto;
+    text-wrap: pretty;
+  }
+  .prose-manual p + p {
+    margin-top: 1.4em;
+  }
+  /* A figure panel: the faint dot grid the drawing sits on. */
+  .plate-grid {
+    background-color: var(--paper);
+    background-image: radial-gradient(circle, var(--grid-dot) 0.7px, transparent 0.9px);
+    background-size: 4px 4px;
+    background-position: 2px 2px;
+    outline: 1px dashed oklch(0 0 0 / 0.06);
+    outline-offset: -1px;
+  }
+  /* A vertical figure tag, read top to bottom. */
+  .fig-tag {
+    writing-mode: vertical-rl;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    line-height: 1;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  /* The manual's mono controls and labels. */
+  .mono-label {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.2;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+  }
+}
+
+/* A readout digit settling into its cell (a counter's change of state). */
+@keyframes digit-in {
+  from {
+    opacity: 0;
+    transform: translateY(-35%);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.digit-in {
+  animation: digit-in 360ms var(--ease-out) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
   }
 }

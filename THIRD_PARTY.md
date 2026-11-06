@@ -356,3 +356,12 @@ Ported from LeanPool ([`LeoFranklin015/Queue-bit`](https://github.com/LeoFrankli
 `@queuebit/lean-sphincs` compiles [`leanEthereum/leanVM`](https://github.com/leanEthereum/leanVM) `crates/signatures`
 @ `a39758de10f35c7b34023d061cc05dfc0b36d43a` (a Cargo git dependency, MIT OR Apache-2.0, used under MIT) into its
 WASM; no source is copied. Its vectors come from `@kevaundray/lean-pq` 0.7.0 (MIT OR Apache-2.0).
+
+## Web app fonts (`apps/web`)
+
+| Where in this repo | Origin | License | What was taken |
+|---|---|---|---|
+| `apps/web/app/fonts/DepartureMono-Regular.woff2` | [Departure Mono](https://github.com/rektdeckard/departure-mono) v1.500 release (`DepartureMono-1.500.zip`), © 2022–2024 Helena Zhang | SIL OFL 1.1 (`apps/web/app/fonts/DepartureMono-LICENSE.txt`) | The font file, unmodified, self-hosted for the wordmark, labels and controls |
+
+EB Garamond (SIL OFL 1.1) is fetched at build time by `next/font/google` and self-hosted in the build output; no
+font file is committed.
