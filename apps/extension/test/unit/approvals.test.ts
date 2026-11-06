@@ -195,3 +195,95 @@ describe("wallet events", () => {
     expect(await wallet.providerState(ORIGIN)).toEqual({ chainId: "0xaa36a7", accounts: [] });
   });
 });
+
+describe("sign-in approvals (M3, ux-spec E-50)", () => {
+  const CHAIN = 1337;
+  const siweFor = (domain: string) =>
+    [
+      `${domain} wants you to sign in with your Ethereum account:`,
+      ACCOUNT,
+      "",
+      "Sign in",
+      "",
+      `URI: https://${domain}`,
+      "Version: 1",
+      `Chain ID: ${CHAIN}`,
+      "Nonce: n1",
+      "Issued At: 2026-11-06T10:00:00Z",
+    ].join("\n");
+
+  async function connected() {
+    const h = makeWallet();
+    await h.wallet.keyring.import(MNEMONIC, "password-1");
+    await h.wallet.permissions.grant(ORIGIN, [ACCOUNT], CHAIN);
+    return h;
+  }
+
+  it("a SIWE message naming another site: the screen is blocked and the site gets 4100 SIG-DOMAIN-NOT-ALLOWED whichever way it closes", async () => {
+    for (const approved of [false, true]) {
+      const { wallet } = await connected();
+      const p = wallet.handleProvider(
+        { origin: ORIGIN, requestId: `s:${String(approved)}` },
+        { method: "personal_sign", params: [siweFor("evil.example"), ACCOUNT] },
+      );
+      await flush();
+      const [a] = await wallet.approvals.store.pending();
+      expect(a!.sig).toMatchObject({ siwe: { domain: "evil.example" }, domainOk: false });
+      expect(a!.routeDenial).toMatchObject({ leakedRule: "SIG-DOMAIN-NOT-ALLOWED" });
+      // The service worker refuses even an "approve" from the page (the screen never offers one).
+      await wallet.resolveApproval(a!.id, approved);
+      await expect(p).rejects.toMatchObject({ code: 4100, data: { leakedRule: "SIG-DOMAIN-NOT-ALLOWED" } });
+    }
+  });
+
+  it("a SIWE message for the requesting site is signed by the everyday key (no denial recorded)", async () => {
+    const { wallet } = await connected();
+    const p = wallet.handleProvider(
+      { origin: ORIGIN, requestId: "s:ok" },
+      { method: "personal_sign", params: [siweFor("dapp.example"), ACCOUNT] },
+    );
+    await flush();
+    const [a] = await wallet.approvals.store.pending();
+    expect(a!.sig).toMatchObject({ domainOk: true, firstSignIn: true });
+    expect(a!.routeDenial).toBeUndefined();
+    await wallet.resolveApproval(a!.id, true);
+    expect(await p).toMatch(/^0x[0-9a-f]{130}$/u);
+  });
+
+  it("a permit for another owner or chain is refused before any window opens", async () => {
+    const { wallet, w } = await connected();
+    const permit = (owner: string, chainId: number) =>
+      JSON.stringify({
+        domain: { name: "USD", version: "2", chainId, verifyingContract: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238" },
+        primaryType: "Permit",
+        types: {
+          Permit: [
+            { name: "owner", type: "address" },
+            { name: "spender", type: "address" },
+            { name: "value", type: "uint256" },
+            { name: "nonce", type: "uint256" },
+            { name: "deadline", type: "uint256" },
+          ],
+        },
+        message: {
+          owner,
+          spender: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+          value: "1",
+          nonce: "0",
+          deadline: "4000000000",
+        },
+      });
+    for (const [owner, chainId] of [
+      ["0x70997970C51812dc3A010C7d01b50e0d17dc79C8", CHAIN],
+      [ACCOUNT, 1],
+    ] as const) {
+      await expect(
+        wallet.handleProvider(
+          { origin: ORIGIN, requestId: `p:${owner}:${chainId}` },
+          { method: "eth_signTypedData_v4", params: [ACCOUNT, permit(owner, chainId)] },
+        ),
+      ).rejects.toMatchObject({ code: 4100, data: { leakedRule: "SIG-PERMIT-MISMATCH" } });
+    }
+    expect(w.open).not.toHaveBeenCalled();
+  });
+});

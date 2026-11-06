@@ -16,7 +16,7 @@ import type { SidecarClient } from "@leaked/rpc";
 import { accountAbi, roleSignerFactoryAbi } from "../generated/contracts";
 import { ROLE_ID, type AccountPlan } from "./account";
 import { choosePath } from "./lanes";
-import { registerPermitCall, type SignatureClass } from "./signing";
+import { permitMismatch, registerPermitCall, type SignatureClass } from "./signing";
 import {
   messageText,
   parseSiwe,
@@ -263,9 +263,9 @@ export class Wallet {
       throw err;
     }
     if (record.status === "approved" && record.result) return record.result;
-    if (record.denial) {
-      throw new ProviderRpcError(RpcErrorCode.unauthorized, record.denial.explanation, record.denial);
-    }
+    // A screen that could only explain why (needs the Vault, blocked) ends with that reason however it was closed.
+    const denial = record.denial ?? record.routeDenial;
+    if (denial) throw new ProviderRpcError(RpcErrorCode.unauthorized, denial.explanation, denial);
     throw userRejected("The user rejected the transaction.");
   }
 
@@ -362,8 +362,11 @@ export class Wallet {
         `Signatures on ${net?.name ?? "this network"} arrive with the compatible-account update.`,
       );
     }
+    const account = await this.accountFor(chainId);
+    if (!account) throw new ProviderRpcError(RpcErrorCode.unauthorized, "No account yet.");
     const sig: ApprovalSignature = { method: req.method };
     let kind: "sign-in" | "permit" = "sign-in";
+    let routeDenial: Approval["routeDenial"];
     if (req.method === "personal_sign") {
       const raw = req.raw as string;
       sig.raw = raw;
@@ -378,17 +381,38 @@ export class Wallet {
           ...(siwe.nonce ? { nonce: siwe.nonce } : {}),
         };
         sig.domainOk = siweDomainMatches(siwe.domain, ctx.origin);
+        if (!sig.domainOk) {
+          // ux-spec E-50: the screen only offers Cancel, and the site learns the rule whichever way it is closed.
+          routeDenial = {
+            leakedRule: "SIG-DOMAIN-NOT-ALLOWED",
+            explanation: `This sign-in message says it's for ${siwe.domain}, but the request came from ${ctx.origin}. LEAKED didn't sign it.`,
+          };
+        }
       }
     } else {
       const json = typeof req.raw === "string" ? req.raw : JSON.stringify(req.raw);
       sig.typedJson = json;
-      const td = JSON.parse(json) as { domain?: { name?: string; verifyingContract?: string; chainId?: unknown } };
+      const td = JSON.parse(json) as {
+        domain?: { name?: string; verifyingContract?: string; chainId?: unknown };
+        primaryType?: string;
+      };
       sig.appDomain = {
         ...(td.domain?.name ? { name: td.domain.name } : {}),
         ...(td.domain?.verifyingContract ? { verifyingContract: td.domain.verifyingContract } : {}),
         ...(td.domain?.chainId !== undefined ? { chainId: Number(td.domain.chainId) } : {}),
       };
+      if (typeof td.primaryType === "string") sig.primaryType = td.primaryType.slice(0, 64);
       if (req.cls.kind === "register-permit") {
+        // Before any window: a permit the account could never record as asked (another owner or chain) is refused
+        // outright, else the pre-approval would be mined, count against the limit, and still be "not registered".
+        const why = permitMismatch(td, account, chainId);
+        if (why) {
+          throw new ProviderRpcError(RpcErrorCode.unauthorized, why, {
+            leakedRule: "SIG-PERMIT-MISMATCH",
+            explanation: why,
+            remedy: "Ask the site for a permit for the connected account on this network.",
+          });
+        }
         kind = "permit";
         let symbol: string | undefined;
         let decimals: number | undefined;
@@ -421,6 +445,7 @@ export class Wallet {
           chainId,
           firstVisit: false,
           sig,
+          ...(routeDenial ? { routeDenial } : {}),
           ...(ctx.embedded ? { embedded: true, ...(ctx.topOrigin ? { topOrigin: ctx.topOrigin } : {}) } : {}),
         },
         ctx.requestId,
@@ -430,7 +455,8 @@ export class Wallet {
       throw err;
     }
     if (record.status === "approved" && record.result?.signature) return record.result.signature;
-    if (record.denial) throw new ProviderRpcError(RpcErrorCode.unauthorized, record.denial.explanation, record.denial);
+    const denial = record.denial ?? record.routeDenial;
+    if (denial) throw new ProviderRpcError(RpcErrorCode.unauthorized, denial.explanation, denial);
     throw userRejected("The user rejected the signature request.");
   }
 
@@ -443,15 +469,23 @@ export class Wallet {
     approved: boolean,
     opts: { alwaysAllow?: boolean },
   ): Promise<void> {
-    if (!approved) return void (await this.approvals.resolve(approval.id, "rejected"));
+    if (!approved) {
+      await this.approvals.resolve(
+        approval.id,
+        "rejected",
+        approval.routeDenial ? { denial: approval.routeDenial } : {},
+      );
+      return;
+    }
     if (!(await this.keyring.isUnlocked())) throw new KeyringError("locked", "Unlock LEAKED before signing.");
     const sig = approval.sig!;
     const account = await this.accountFor(approval.chainId);
     if (!account) throw new KeyringError("missing", "No account yet.");
     if (approval.kind === "sign-in") {
       if (sig.siwe && !sig.domainOk) {
+        // Enforced here, not only by the screen: a message naming another site is never signed (plan §30 §9.1).
         await this.approvals.resolve(approval.id, "rejected", {
-          denial: {
+          denial: approval.routeDenial ?? {
             leakedRule: "SIG-DOMAIN-NOT-ALLOWED",
             explanation: `This sign-in message says it's for ${sig.siwe.domain}, but the request came from ${approval.origin}. LEAKED didn't sign it.`,
           },
@@ -927,16 +961,18 @@ export class Wallet {
     },
     "vault:create": async ({ chainId, action }) => {
       const id = chainId ?? (await this.settings.get()).selectedChainId;
-      return this.vf().create(id, await this.prepareAction(id, action));
+      return this.afterCreate(await this.vf().create(id, await this.prepareAction(id, action)));
     },
     "approval:toVault": async ({ id }) => {
       const a = await this.approvals.store.get(id);
       if (!a || a.kind !== "transaction" || a.status !== "pending" || !a.tx) throw new Error("No such request.");
       const preview = await this.pay().preview(a.chainId, toCalls(a.tx.calls));
-      return this.vf().create(
-        a.chainId,
-        { type: "send", calls: a.tx.calls, usd6: String(Math.round(preview.route.amountUsd * 1e6)) },
-        { origin: a.origin, approvalId: a.id },
+      return this.afterCreate(
+        await this.vf().create(
+          a.chainId,
+          { type: "send", calls: a.tx.calls, usd6: String(Math.round(preview.route.amountUsd * 1e6)) },
+          { origin: a.origin, approvalId: a.id },
+        ),
       );
     },
     "vault:get": async ({ id }) => {
@@ -978,6 +1014,25 @@ export class Wallet {
   };
 
   /**
+   * A new request withdrew every older waiting one for the same signer (plan §30 §6.3). A dapp whose payment was
+   * waiting on one of those learns it ended without a transaction, instead of hanging on a code that is now refused.
+   */
+  private async afterCreate(rec: Awaited<ReturnType<VaultFlow["create"]>>) {
+    for (const r of await this.vf().list()) {
+      if (r.error?.code !== "superseded" || !r.approvalId || r.approvalId === rec.approvalId) continue;
+      await this.approvals
+        .resolve(r.approvalId, "rejected", {
+          denial: {
+            leakedRule: "ROUTE-NEEDS-VAULT",
+            explanation: "A newer Vault request replaced this one before the phone's approval was sent.",
+          },
+        })
+        .catch(() => undefined);
+    }
+    return rec;
+  }
+
+  /**
    * Fills in what only the service worker knows before a Vault request is built: a later Recovery key's signer
    * address (linked with `vaultSetRecoverySigner`).
    */
@@ -986,6 +1041,12 @@ export class Wallet {
     const plan = await this.plans.get(chainId);
     const setup = await this.settings.getSetup();
     if (!plan || !setup.recovery) throw new VaultError("no-recovery", "Scan your Recovery key code first.");
+    if (!setup.recovery.testedAt) {
+      throw new VaultError(
+        "no-recovery",
+        "Finish the Recovery key test first (re-enter 6 words on the phone and scan its test code), so a key with a typo is never linked.",
+      );
+    }
     const net = findNetwork(chainId)!;
     const params = {
       salt: plan.salt,

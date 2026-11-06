@@ -127,6 +127,28 @@ export function classifyTypedData(input: unknown): SignatureClass {
   return { kind: "sign-in", rule: "SIG-SIGN-IN", ...(td.domain?.name ? { domain: td.domain.name } : {}) };
 }
 
+/**
+ * Why an ERC-2612 permit can never match what `registerPermit` would record, checked before anything is sent: the
+ * account registers a digest for `owner = itself` on the current chain, so a permit naming another owner or another
+ * chain would be recorded (and debited from the daily limit) yet never be the signature the site asked for.
+ */
+export function permitMismatch(input: unknown, account: Address, chainId: number): string | undefined {
+  const td = (typeof input === "string" ? safeJson(input) : input) as TypedData | undefined;
+  if (!td || typeof td !== "object") return undefined;
+  const owner = td.message?.owner;
+  if (typeof owner === "string" && isAddress(owner) && getAddress(owner) !== getAddress(account)) {
+    return `This permit is for another account (${owner}), not yours.`;
+  }
+  const chain = td.domain?.chainId;
+  if (chain !== undefined && chain !== null) {
+    const n = big(chain);
+    if (n === undefined || n !== BigInt(chainId)) {
+      return `This permit is for another network (chain ${String(chain)}), not the one this site is connected to.`;
+    }
+  }
+  return undefined;
+}
+
 /** The hot-batch call for an ERC-2612 permit (the account computes and registers the digest itself). */
 export function registerPermitCall(account: Address, c: Extract<SignatureClass, { kind: "register-permit" }>) {
   return {

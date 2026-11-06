@@ -91,6 +91,8 @@ export interface ApprovalSignature {
   firstSignIn?: boolean;
   /** Typed data: the app's domain name and contract, for the screen. */
   appDomain?: { name?: string; verifyingContract?: string; chainId?: number };
+  /** Typed data: `primaryType`, so a sign-in screen can say what kind of message it is (a vote, a login, …). */
+  primaryType?: string;
   /** ERC-2612 permit: the pre-approval the account will register (bigints as decimal strings). */
   permit?: { token: Address; spender: Address; value: string; deadline: string; symbol?: string; decimals?: number };
 }

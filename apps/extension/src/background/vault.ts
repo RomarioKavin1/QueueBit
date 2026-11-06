@@ -483,6 +483,17 @@ export class VaultFlow {
       ...(req.type === "setHotKey" ? { hotIndex: req.index } : {}),
       updatedAt: now,
     };
+    // Plan §30 §6.3: never hold two live requests for one (signer, nonce). Every waiting request of this signer
+    // carries the same pending nonce as this one, so an older code the phone may still sign is withdrawn now: its
+    // answer is refused at scan-back rather than racing this one.
+    for (const r of await this.list()) {
+      if (r.status === "waiting" && r.chainId === chainId && isAddressEqual(r.signer, signer.address)) {
+        await this.update(r.id, {
+          status: "cancelled",
+          error: { code: "superseded", message: "A newer request for this key replaced it. Nothing was sent." },
+        });
+      }
+    }
     await this.put(record);
     return record;
   }
@@ -497,6 +508,12 @@ export class VaultFlow {
     if (rec.status === "expired" || this.d.now() > rec.expiresAt) {
       await this.update(id, { status: "expired" });
       throw new VaultError("E-60", "This request expired. Nothing was sent. Start again for a fresh code.");
+    }
+    if (rec.status === "cancelled" && rec.error?.code === "superseded") {
+      throw new VaultError(
+        "superseded",
+        "This code was replaced by a newer request. Nothing was sent. Scan the newest code shown by LEAKED instead.",
+      );
     }
     if (rec.status !== "waiting") throw new VaultError("not-waiting", "This request was already handled.");
 

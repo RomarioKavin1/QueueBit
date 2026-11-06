@@ -195,7 +195,7 @@ async function phoneSigns(rec: VaultRequestRecord): Promise<Hex> {
   return toHex(r.signatureCbor);
 }
 
-const ACTIONS: Array<[string, VaultActionRequest, { action: string; queued: boolean; phoneKnows?: false }]> = [
+const ACTIONS: Array<[string, VaultActionRequest, { action: string; queued: boolean }]> = [
   [
     "an over-limit ETH send (vaultExecute)",
     {
@@ -218,7 +218,7 @@ const ACTIONS: Array<[string, VaultActionRequest, { action: string; queued: bool
   [
     "Strict recipients (instant)",
     { type: "setRecipientMode", mode: "strict" },
-    { action: "vaultSetRecipientMode", queued: false, phoneKnows: false },
+    { action: "vaultSetRecipientMode", queued: false },
   ],
   ["pause everyday spending", { type: "freeze" }, { action: "vaultFreeze", queued: false }],
   [
@@ -245,12 +245,6 @@ describe("Vault requests: the extension's encoding vs the companion's parser", (
     expect(review.structure.path).toBe("B");
     expect(review.structure.account?.toLowerCase()).toBe(rec.account.toLowerCase());
     expect(review.mismatch).toEqual([]);
-    if (want.phoneKnows === false) {
-      // Known gap (BACKLOG): the companion's registry predates `vaultSetRecipientMode`, so the phone shows it as an
-      // unknown step (long-press + typed confirmation) instead of clear-signing it.
-      expect(review.unknown).toBe(true);
-      return;
-    }
     expect(review.unknown).toBe(false);
     expect(review.approval).toBe("normal");
   });
@@ -306,8 +300,9 @@ describe("signature pre-verification before anything is sent", () => {
       encodeSignature({ ...good, payerSig: toHex(signDigestVrs(stranger, fromHex(rec.digest))) }),
     );
     await expect(flow.submit(rec.id, otherPayer)).rejects.toMatchObject({ code: "E-62" });
-    const other = await flow.create(CHAIN, ACTIONS[3]![1]);
-    await expect(flow.submit(other.id, toHex(encodeSignature(good)))).rejects.toMatchObject({ code: "E-61" });
+    // An answer carrying another request's id (a stale or replayed code) is refused before any verification.
+    const stale = toHex(encodeSignature({ ...good, requestId: crypto.randomUUID() }));
+    await expect(flow.submit(rec.id, stale)).rejects.toMatchObject({ code: "E-61" });
     expect(sent).toHaveLength(0);
     // The request is still waiting: the user can scan again.
     expect((await flow.get(rec.id))!.status).toBe("waiting");
@@ -321,4 +316,22 @@ describe("signature pre-verification before anything is sent", () => {
     expect(() => reviewRequestBytes(fromHex(rec.cbor), ctx())).toThrow(/different Vault/u);
     expect(sent).toHaveLength(0);
   });
+});
+
+describe("one live request per signer (plan §30 §6.3)", () => {
+  it("a new request withdraws the older waiting one; the phone's answer to the old code is refused, the new one is sent", async () => {
+    const { flow, sent } = await harness();
+    const first = await flow.create(CHAIN, ACTIONS[4]![1]);
+    const firstSig = await phoneSigns(first); // the phone signed the old code before the browser moved on
+    const second = await flow.create(CHAIN, ACTIONS[2]![1]);
+    expect((await flow.get(first.id))!).toMatchObject({ status: "cancelled", error: { code: "superseded" } });
+    expect((await flow.get(second.id))!.status).toBe("waiting");
+    await expect(flow.submit(first.id, firstSig)).rejects.toMatchObject({ code: "superseded" });
+    expect(sent).toHaveLength(0);
+    await flow.submit(second.id, await phoneSigns(second));
+    expect(sent).toHaveLength(1);
+    // A sent request is not withdrawn by a later one.
+    await flow.create(CHAIN, ACTIONS[4]![1]);
+    expect((await flow.get(second.id))!.status).toBe("sending");
+  }, 120_000);
 });

@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { decodeFunctionData } from "viem";
+import { decodeFunctionData, type Address } from "viem";
 import { accountAbi } from "../../src/generated/contracts";
-import { PERMIT2, classifyPersonalSign, classifyTypedData, registerPermitCall } from "../../src/background/signing";
+import {
+  PERMIT2,
+  classifyPersonalSign,
+  classifyTypedData,
+  permitMismatch,
+  registerPermitCall,
+} from "../../src/background/signing";
 
 const TOKEN = "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238";
 const SPENDER = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8";
@@ -79,5 +85,32 @@ describe("signature classifier (account audit 2026-11-06)", () => {
     expect(classifyTypedData("not json")).toMatchObject({ kind: "needs-vault", rule: "SIG-UNKNOWN-SCHEMA" });
     // A permit with garbage fields is not trusted as a permit.
     expect(classifyTypedData({ ...permit, message: { ...permit.message, value: "lots" } }).kind).toBe("needs-vault");
+  });
+});
+
+describe("permit pre-check: what registerPermit could never record as asked", () => {
+  it("passes a permit for the connected account on the connected chain", () => {
+    expect(permitMismatch(permit, ACCOUNT, 1337)).toBeUndefined();
+    expect(permitMismatch(JSON.stringify(permit), ACCOUNT.toLowerCase() as Address, 1337)).toBeUndefined();
+    // chainId as a string or hex, as dapps send it
+    expect(permitMismatch({ ...permit, domain: { ...domain, chainId: "1337" } }, ACCOUNT, 1337)).toBeUndefined();
+    expect(permitMismatch({ ...permit, domain: { ...domain, chainId: "0x539" } }, ACCOUNT, 1337)).toBeUndefined();
+  });
+
+  it("refuses another owner (the account would register its own permit, not the one the site asked for)", () => {
+    const other = { ...permit, message: { ...permit.message, owner: SPENDER } };
+    expect(permitMismatch(other, ACCOUNT, 1337)).toMatch(/another account/u);
+  });
+
+  it("refuses another chain, and an unreadable chain id", () => {
+    expect(permitMismatch({ ...permit, domain: { ...domain, chainId: 1 } }, ACCOUNT, 1337)).toMatch(/another network/u);
+    expect(permitMismatch({ ...permit, domain: { ...domain, chainId: "mainnet" } }, ACCOUNT, 1337)).toMatch(
+      /another network/u,
+    );
+  });
+
+  it("ignores typed data it cannot read (the classifier already refused those)", () => {
+    expect(permitMismatch("not json", ACCOUNT, 1337)).toBeUndefined();
+    expect(permitMismatch({ ...permit, domain: undefined, message: undefined }, ACCOUNT, 1337)).toBeUndefined();
   });
 });

@@ -184,14 +184,17 @@ export class Payments {
     const setup = await this.d.getLimits();
     if (!setup.vault) throw new PaymentsError("no-vault", "Pair your Vault first: the account address depends on it.");
     const existing = await this.d.plans.get(chainId);
-    const salt = accountSalt(accounts.everyday, setup.vault.pk, setup.recovery?.pk, chainId);
+    // Only a Recovery key whose recovery-test code verified is bound into the account (ux-spec §3.1.4: the ceremony
+    // ends with the test). A key that was scanned but never tested stays out, exactly as the Done screen says.
+    const recovery = setup.recovery?.testedAt ? setup.recovery : undefined;
+    const salt = accountSalt(accounts.everyday, setup.vault.pk, recovery?.pk, chainId);
     const rsalt = roleSalt(salt);
     const config = initConfigFor({
       hotKey: accounts.everyday,
       tank: accounts.feeTank,
       deployment: net.deployment,
       vault: setup.vault,
-      ...(setup.recovery ? { recovery: setup.recovery } : {}),
+      ...(recovery ? { recovery } : {}),
       salt: rsalt,
       dailyLimitUsd: setup.dailyLimitUsd,
       perPaymentUsd: setup.perPaymentUsd,
@@ -221,7 +224,7 @@ export class Payments {
         args: [p.salt, role, draft.address, p.pk, p.verifier, p.payerKey],
       }) as Promise<Address>;
     const vaultSigner = await predict(1, config.vault);
-    const recoverySigner = setup.recovery ? await predict(2, config.recovery) : undefined;
+    const recoverySigner = recovery ? await predict(2, config.recovery) : undefined;
     const plan = buildPlan(
       chainId,
       net.deployment,

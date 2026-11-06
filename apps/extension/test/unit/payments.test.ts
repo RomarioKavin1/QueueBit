@@ -2,6 +2,7 @@ import { parseEther, type Address, type Hex, type PublicClient } from "viem";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { decodeTx, getProfile, txHash, type FrameTxReceipt } from "@leaked/frames";
 import type { NodeClient, SimulationResult } from "@leaked/rpc";
+import { accountSalt } from "../../src/background/account";
 import { bucketFromStatus } from "../../src/background/bucket";
 import { Wallet } from "../../src/background/wallet";
 import { MemoryKV } from "../../src/shared/kv";
@@ -18,7 +19,7 @@ const profile = getProfile("ethrex-eip8141-tracer");
  * Payments against a fake node and a fake viem client: an activated account with a $500 / $200 policy, ETH at $3,000,
  * the fee tank allowlisted. The node admits everything it is asked to simulate; receipts and nonces are scripted.
  */
-async function harness() {
+async function harness(opts: { recovery?: { testedAt?: number } } = {}) {
   const sent: Hex[] = [];
   const receipts = new Map<string, FrameTxReceipt>();
   const chain = { pendingNonce: 7n, head: 10n, countAtHeadMinusOne: 7n, bodyOk: true };
@@ -40,6 +41,17 @@ async function harness() {
     payer: "0x00000000000000000000000000000000000000fa",
     at: 1,
   });
+  if (opts.recovery) {
+    await wallet.settings.setPaired(
+      "recovery",
+      {
+        schemeId: "0xb2062c48f163f38edbf050c4a98b6abbe194acda9a6de525b69b330a739aa054",
+        pk: `0x${"cd".repeat(32)}`,
+        at: 2,
+      },
+      opts.recovery.testedAt,
+    );
+  }
 
   const node = {
     getTransactionCount: async () => chain.pendingNonce,
@@ -210,5 +222,22 @@ describe("the everyday bucket before activation", () => {
     expect(bucketFromStatus(unsupported, setup)).toMatchObject({ capUsd: 500, perTxMaxUsd: 200 });
     const unreadable = { ...base, limits: { capUsd: 0, perTxMaxUsd: 0, availableUsd: 0 }, error: "offline" };
     expect(bucketFromStatus(unreadable, setup)).toMatchObject({ capUsd: 500, perTxMaxUsd: 200 });
+  });
+});
+
+describe("the account plan and the Recovery key (ux-spec §3.1.4: the ceremony ends with the test)", () => {
+  const VAULT_PK = `0x${"ab".repeat(32)}` as Hex;
+  const RECOVERY_PK = `0x${"cd".repeat(32)}` as Hex;
+  it("binds a Recovery key only once its recovery-test code verified; a scanned, untested key stays out", async () => {
+    const untested = await harness({ recovery: {} });
+    const uPlan = (await untested.wallet.plans.get(CHAIN))!;
+    expect(uPlan.recoverySigner).toBeUndefined();
+    // The address (through its salt) commits to no Recovery key at all.
+    expect(uPlan.salt).toBe(accountSalt(untested.accounts.everyday, VAULT_PK, undefined, CHAIN));
+
+    const tested = await harness({ recovery: { testedAt: 3 } });
+    const tPlan = (await tested.wallet.plans.get(CHAIN))!;
+    expect(tPlan.recoverySigner).toBe("0x00000000000000000000000000000000000000c1");
+    expect(tPlan.salt).toBe(accountSalt(tested.accounts.everyday, VAULT_PK, RECOVERY_PK, CHAIN));
   });
 });
