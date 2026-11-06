@@ -12,6 +12,7 @@ import {
   OctagonIcon,
   ReasonCode,
   RiskBanner,
+  ShieldIcon,
   Timeline,
   WalletIcon,
 } from "../../ui";
@@ -82,6 +83,9 @@ function ActivityRow({ e, onChanged }: { e: ActivityEntry; onChanged: () => void
   const [error, setError] = useState<string | null>(null);
   const net = findNetwork(e.chainId);
   const pending = e.status === "confirming" || e.status === "sending";
+  const pq = e.lane === "leanpool";
+  // A post-quantum payment's hash is its LeanPool id until it is mined; the explorer only knows the mined hash.
+  const minedHash = !pq || (e.poolId && e.hash.toLowerCase() !== e.poolId.toLowerCase());
   return (
     <li data-testid="activity-row" data-status={e.status}>
       <button
@@ -95,6 +99,11 @@ function ActivityRow({ e, onChanged }: { e: ActivityEntry; onChanged: () => void
           <span className="t-strong block" data-testid="activity-headline">
             {e.headline}
           </span>
+          {pq && (
+            <span className="t-small inline-flex items-center gap-1 text-safe" data-testid="activity-quantum-safe">
+              <ShieldIcon size={12} /> Quantum-safe
+            </span>
+          )}
           <span className="t-small text-muted">
             <span className={cx(e.status === "failed" && "text-danger")}>{STATUS_WORD[e.status]}</span> ·{" "}
             {formatRelative(e.updatedAt)}
@@ -105,9 +114,11 @@ function ActivityRow({ e, onChanged }: { e: ActivityEntry; onChanged: () => void
       {open && (
         <div className="flex flex-col gap-3 px-3 pb-3">
           {e.detail && <p className="t-small text-muted">{e.detail}</p>}
+          {e.fallbackNote && <p className="t-small text-muted">{e.fallbackNote}</p>}
           {e.kind !== "activation" && (
             <p className="t-small">
-              Approved by: your everyday key · Daily limit: {e.status === "confirmed" ? "used" : "not used"}
+              Approved by: {pq ? "your quantum-safe key (LeanPool)" : "your everyday key"} · Daily limit:{" "}
+              {e.status === "confirmed" ? "used" : "not used"}
             </p>
           )}
           <Timeline
@@ -120,11 +131,11 @@ function ActivityRow({ e, onChanged }: { e: ActivityEntry; onChanged: () => void
           {e.feeWei && (
             <p className="t-small text-muted">
               Fee {pending ? "≈ " : ""}
-              {eth(e.feeWei)} · Lane: Standard
+              {eth(e.feeWei)} · Lane: {pq ? "LeanPool (alt mempool)" : "Standard"}
             </p>
           )}
           {pending && e.stuck && <RiskBanner level="limit" title="Taking longer than usual." />}
-          {pending && e.kind !== "activation" && (
+          {pending && e.kind !== "activation" && !pq && (
             <div className="flex gap-2">
               {(["speed-up", "cancel"] as const).map((mode) => (
                 <Button
@@ -163,8 +174,9 @@ function ActivityRow({ e, onChanged }: { e: ActivityEntry; onChanged: () => void
               )}
               <p>Network: {net?.name ?? e.chainId}</p>
               <p className="t-mono break-all">Id: {e.hash}</p>
+              {pq && e.poolId && minedHash && <p className="t-mono break-all">LeanPool id: {e.poolId}</p>}
               {/* The devnet explorers index frame transactions; activation is a plain transaction from the fee tank. */}
-              {net?.backend === "frame" && e.kind !== "activation" && explorerTxLink(net, e.hash) && (
+              {net?.backend === "frame" && e.kind !== "activation" && minedHash && explorerTxLink(net, e.hash) && (
                 <a
                   className="underline underline-offset-2"
                   href={explorerTxLink(net, e.hash)}

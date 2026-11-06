@@ -1,6 +1,7 @@
 import { DEVNET_1337 } from "@queuebit/rpc";
 import { local4337Deployment, localDeployment, publicDeployment, type LocalToken } from "../generated/contracts";
 import { LOCAL_DEVNET, SHARED_DEVNET, SHARED_DEVNET_BASE } from "./build";
+import { BUILD_LEANPOOL_URL } from "./leanpoolBuild";
 import { sharedNetworks } from "./sharedDevnet";
 
 /**
@@ -19,6 +20,10 @@ export interface AccountDeployment {
   c13Verifier: `0x${string}`;
   /** ERC-8421 staking registry (a staked role signer gets the staked lane's larger budget, Path A). */
   stakingRegistry: `0x${string}`;
+  /** LeanPool (the post-quantum everyday key): the registry its nodes post batch roots to. */
+  depsRegistry?: `0x${string}` | null;
+  /** LeanPool: creates the account's `LeanPoolHotSigner`. */
+  leanPoolHotSignerFactory?: `0x${string}` | null;
 }
 
 /**
@@ -73,6 +78,8 @@ export interface Network {
   rpcUrl: string;
   /** ERC-8421 alt-mempool sidecar (frame backend). */
   sidecarUrl?: string;
+  /** A LeanPool node for the post-quantum everyday key (`services/leanpool-node`), when this build has one. */
+  leanpoolUrl?: string;
   /**
    * A sidecar that implements BUDGET-010 per-entity verification budgets (the "staked lane"): a staked role signer
    * may run a C13 signature check inside VERIFY there (Path A). Its `skandha_config.budgets` is read at runtime.
@@ -118,6 +125,9 @@ export interface Network {
  * devnet/ and the contracts devnet/deploy put there; a normal build uses the public devnet, where QueueBit has no
  * account contracts yet (activation is then unavailable and says so).
  */
+/** The LeanPool node of this build (chain 1337), or "" (src/shared/build.ts). */
+const LEANPOOL_URL = BUILD_LEANPOOL_URL;
+
 const localTokens = (t: { tokens?: LocalToken[] } | null): TokenPreset[] =>
   t?.tokens
     ? t.tokens.map((x) => ({
@@ -171,6 +181,7 @@ const devnet: Network = shared
         rpcUrl: "http://localhost:8545",
         sidecarUrl: "http://localhost:14337/rpc",
         stakedSidecarUrl: "http://localhost:14340/rpc",
+        ...(LEANPOOL_URL ? { leanpoolUrl: LEANPOOL_URL } : {}),
         backend: "frame",
         profileId: "ethrex-eip8141-tracer",
         ...(localDeployment
@@ -181,6 +192,8 @@ const devnet: Network = shared
                 roleSignerFactory: localDeployment.roleSignerFactory,
                 c13Verifier: localDeployment.c13Verifier,
                 stakingRegistry: localDeployment.stakingRegistry,
+                depsRegistry: localDeployment.depsRegistry,
+                leanPoolHotSignerFactory: localDeployment.leanPoolHotSignerFactory,
               },
             }
           : {}),
@@ -198,6 +211,7 @@ const devnet: Network = shared
         shortName: "Devnet",
         rpcUrl: DEVNET_1337.nodeUrl,
         sidecarUrl: DEVNET_1337.sidecarUrl,
+        ...(LEANPOOL_URL ? { leanpoolUrl: LEANPOOL_URL } : {}),
         backend: "frame",
         profileId: "ethrex-eip8141-tracer",
         // devnet/deploy `bun run deploy:public` (addresses.public.json); its RoleSignerFactory reads the public registry.
@@ -209,6 +223,8 @@ const devnet: Network = shared
                 roleSignerFactory: publicDeployment.roleSignerFactory,
                 c13Verifier: publicDeployment.c13Verifier,
                 stakingRegistry: publicDeployment.stakingRegistry,
+                depsRegistry: publicDeployment.depsRegistry,
+                leanPoolHotSignerFactory: publicDeployment.leanPoolHotSignerFactory,
               },
             }
           : {}),

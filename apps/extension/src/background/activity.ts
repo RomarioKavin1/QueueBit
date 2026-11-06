@@ -49,6 +49,16 @@ export interface ActivityEntry {
   userOp?: SerializedOp;
   txHash?: Hex;
   fees?: { maxFeePerGas: string; maxPriorityFeePerGas: string };
+  /**
+   * "leanpool": a post-quantum everyday payment. `hash` is its LeanPool id until the node reports the mined hash;
+   * `nonce` is `lane:seq` of the signer's keyed nonce; `wire` is the signer's transaction.
+   */
+  lane?: "leanpool";
+  poolId?: Hex;
+  pqNodeUrl?: string;
+  pqSigner?: Address;
+  /** Why a payment that would have used the quantum-safe key went out with the everyday key instead. */
+  fallbackNote?: string;
   /** Block number when the transaction was sent (for "stuck after 3 blocks", plan §30 §4.7). */
   sentAtBlock?: string;
   stuck?: boolean;

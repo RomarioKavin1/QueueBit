@@ -9,22 +9,20 @@
   "stakingRegistry": "0x8464135c8F25Da09e49BC8782676a84730C318bC",
   "contracts": {
     "QueueBitAccountRoles": {
-      "address": "0xedbD3DD27c2B8bE165790663e77605Ba832C5c3b",
+      "address": "0x59eAbF5f82400CA7F6615Fcfd814b93369d3d970",
       "artifact": "QueueBitAccountRoles.sol/QueueBitAccountRoles",
       "args": [],
-      "initCodeHash": "0x6b825ec5db41a9dd91b7d0dd981b4cdecc72a2ee1a67354a077fe836945272e4",
-      "deployTx": "0x2c8c251e934a97b150fb987c71d4edd9bfc11927638492e58e904cd2134173b6"
+      "initCodeHash": "0x488befa74b99a51babd2142d7267068632b5b497fb64da3ff3f3c74ac61a5d28"
     },
     "QueueBitAccountImpl": {
-      "address": "0x36a3dc1ec67e30e7954fDF7c7636E6c6b102d55D",
+      "address": "0x22EA04Cf20818679B8051ba9A007fF590F0e3eb4",
       "artifact": "QueueBitAccountImpl.sol/QueueBitAccountImpl",
       "args": [
         0,
         true,
-        "0xedbD3DD27c2B8bE165790663e77605Ba832C5c3b"
+        "0x59eAbF5f82400CA7F6615Fcfd814b93369d3d970"
       ],
-      "initCodeHash": "0x99a5cf116878b4bee5add424e1ed6338008b23a0c854502b182bd77fafd4dab5",
-      "deployTx": "0x5cc8a0341e149ac974b7fb6c3e712d25eb0ade63d91ff4d43cdea1764931d69f"
+      "initCodeHash": "0x179a0cdb1524c0082195086491850fec80dec9b8918439f80824eb2c586487ad"
     },
     "AccountFactory": {
       "address": "0x602D0b1A46d6fc77A8690691844Fe0F9a7Be7316",
@@ -51,6 +49,24 @@
       ],
       "initCodeHash": "0xb099a5792d3758b0f8c65fe1f7dba9efd9923ad4c8ef0d85329cb60a42ea2b0c",
       "deployTx": "0xb98a49da3c21fff50a16debfc5285ebd84109f0298dfe7d2840626ab0b8c8f38"
+    },
+    "DepsRegistry": {
+      "address": "0x65a64Ab43aB280b7Ed0c4be422eC044D60a0225F",
+      "artifact": "DepsRegistry.sol/DepsRegistry",
+      "args": [
+        "10000000000000000"
+      ],
+      "initCodeHash": "0x302f79bdaaedd85c88c58c55e0a6cbb284a36117121cd56bc8cf9843aecffc9a"
+    },
+    "LeanPoolHotSignerFactory": {
+      "address": "0x226ea7C2672864A48C7c0EE5A923d3A89173f1bE",
+      "artifact": "LeanPoolHotSignerFactory.sol/LeanPoolHotSignerFactory",
+      "args": [
+        0,
+        6,
+        "0x65a64Ab43aB280b7Ed0c4be422eC044D60a0225F"
+      ],
+      "initCodeHash": "0xe963e447293f0260404297a26b2549e4e814a855dc9e5c80092ab815ca793421"
     }
   },
   "testVault": {

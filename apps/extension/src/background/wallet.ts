@@ -19,6 +19,9 @@ import { ApprovalBroker, ApprovalStore, TooManyPendingError, type ApprovalWindow
 import { bucketFromStatus } from "./bucket";
 import { KeyringController, KeyringError, type KeyringOptions } from "./keyring";
 import { Payments, PaymentsError, RouteError, type ChainIo } from "./payments";
+import { PQ_MIN_BALANCE, PqEveryday, PqEverydayError, type PqEverydayRecord } from "./leanpool";
+import { StorageKeys } from "../shared/kv";
+import { privateKeyToAccount } from "viem/accounts";
 import type { SidecarClient } from "@queuebit/rpc";
 import { accountAbi, policyHookAbi, roleSignerFactoryAbi } from "../generated/contracts";
 import { ROLE_ID, type AccountPlan } from "./account";
@@ -47,7 +50,7 @@ import {
 import { aaNetwork } from "./aa/payments";
 import { VaultError, VaultFlow, last8 } from "./vault";
 import type { VaultActionRequest } from "./vaultActions";
-import type { PairPreview, PolicyView, SignerView } from "../shared/views";
+import type { PairPreview, PolicyView, PqEverydayView, SignerView } from "../shared/views";
 import type { ApprovalSignature } from "../shared/types";
 import { PermissionsStore } from "./permissions";
 import {
@@ -111,6 +114,8 @@ export class Wallet {
   readonly plans: AccountPlans;
   readonly activity: ActivityStore;
   readonly payments: Payments | undefined;
+  /** The post-quantum everyday key (LeanPool). */
+  readonly pq: PqEveryday | undefined;
   readonly vault: VaultFlow | undefined;
   readonly privacy: PrivacyController | undefined;
   readonly alerts: AlertStore;
@@ -126,6 +131,22 @@ export class Wallet {
     this.approvals = new ApprovalBroker(new ApprovalStore(env.session, this.now), env.windows, this.now);
     this.plans = new AccountPlans(env.local);
     this.activity = new ActivityStore(env.local, this.now);
+    const io0 = env.io;
+    this.pq = io0
+      ? new PqEveryday({
+          deriveSeed: (label) => this.keyring.derivePqSeed(label),
+          client: (chainId) => io0.publicClient(chainId) as never,
+          sendFromTank: (chainId, tx) => this.sendFromTank(chainId, tx),
+          getRecord: async (chainId) =>
+            (await env.local.get<Record<string, PqEverydayRecord>>(StorageKeys.pqEveryday))?.[String(chainId)],
+          putRecord: async (r) => {
+            const all = (await env.local.get<Record<string, PqEverydayRecord>>(StorageKeys.pqEveryday)) ?? {};
+            await env.local.set(StorageKeys.pqEveryday, { ...all, [String(r.chainId)]: r });
+          },
+          now: this.now,
+          ...(io0.leanpool ? { leanpool: (url: string) => io0.leanpool!(url) } : {}),
+        })
+      : undefined;
     this.payments = env.io
       ? new Payments({
           io: env.io,
@@ -134,6 +155,7 @@ export class Wallet {
           activity: this.activity,
           getLimits: () => this.settings.getSetup(),
           now: this.now,
+          ...(this.pq ? { pq: this.pq } : {}),
         })
       : undefined;
     this.vault = env.io
@@ -411,10 +433,14 @@ export class Wallet {
     const { autoLockMinutes } = await this.settings.get();
     if (await this.keyring.autoLockIfIdle(autoLockMinutes)) {
       this.privacy?.lock();
+      this.pq?.lock();
       await this.emitAccountsToAll([]);
     }
     // A lock from elsewhere (session cleared, browser restart): the private-balance store must not stay open.
-    else if (!(await this.keyring.isUnlocked())) this.privacy?.lock();
+    else if (!(await this.keyring.isUnlocked())) {
+      this.privacy?.lock();
+      this.pq?.lock();
+    }
   }
 
   private async emitAccountsToAll(accounts: Address[]): Promise<void> {
@@ -1286,6 +1312,98 @@ export class Wallet {
     return { paymentHash: entry.hash, ...(hash ? { hash } : {}), balanceWei };
   }
 
+  // ---- the post-quantum everyday key (Security › Quantum-safe everyday key) ----
+
+  private pqOr(): PqEveryday {
+    if (!this.pq) throw new Error("The quantum-safe key isn't available in this context.");
+    return this.pq;
+  }
+
+  private async activePlan(chainId: number): Promise<AccountPlan> {
+    const plan = await this.plans.get(chainId);
+    if (!plan) throw new PaymentsError("no-account", "Finish setting up your account first.");
+    const code = await this.env.io!.publicClient(chainId).getCode({ address: plan.address });
+    if (!code || code === "0x") throw new PaymentsError("not-activated", "Activate your account first.");
+    return plan;
+  }
+
+  private async pqView(chainId: number): Promise<PqEverydayView> {
+    const minBalanceWei = PQ_MIN_BALANCE.toString();
+    if (!this.pq)
+      return { state: "unavailable", reason: "Not available in this context.", nodeOk: false, minBalanceWei };
+    const plan = await this.plans.get(chainId);
+    const net = findNetwork(chainId);
+    const code = plan ? await this.env.io!.publicClient(chainId).getCode({ address: plan.address }) : undefined;
+    const st = await this.pq.state(net, code && code !== "0x" ? plan!.address : undefined);
+    if (st.state === "unavailable") return { state: "unavailable", reason: st.reason, nodeOk: false, minBalanceWei };
+    const base = { nodeOk: st.nodeOk, ...(net?.leanpoolUrl ? { nodeUrl: net.leanpoolUrl } : {}), minBalanceWei };
+    if (st.state === "off") return { state: "off", ...base, ...(st.aggregator ? { aggregator: st.aggregator } : {}) };
+    const r = st.record;
+    return {
+      state: st.state,
+      ...base,
+      signer: r.signer,
+      aggregator: r.aggregator,
+      vkLast8: r.vk.slice(-8),
+      balanceWei: st.balanceWei,
+      preferred: r.preferred,
+      active: st.state === "on" ? st.active : false,
+    };
+  }
+
+  /** A legacy transaction from the fee tank (creating the quantum-safe key's signer, funding it). Waits for it. */
+  private async sendFromTank(
+    chainId: number,
+    tx: { to: Address; data: Hex; value: bigint; gas: bigint },
+  ): Promise<Hex> {
+    const io = this.env.io!;
+    const client = io.publicClient(chainId);
+    const accounts = await this.keyring.accounts();
+    if (!accounts) throw new PqEverydayError("locked", "Unlock QueueBit first.");
+    const gp = await client.getGasPrice();
+    const gasPrice = gp * 2n > 1_000_000_000n ? gp * 2n : 1_000_000_000n;
+    const tank = await client.getBalance({ address: accounts.feeTank });
+    if (tank < tx.value + tx.gas * gasPrice) {
+      throw new PaymentsError("tank-low", "Your fee tank doesn't have enough ETH for this. Top it up first.");
+    }
+    const nonce = await client.getTransactionCount({ address: accounts.feeTank, blockTag: "pending" });
+    const raw = await this.keyring.withHotKeys((k) =>
+      privateKeyToAccount(k.feeTank).signTransaction({ type: "legacy", chainId, nonce, gasPrice, ...tx }),
+    );
+    const hash = await io.node(chainId).sendRawTransaction(raw);
+    const r = await client.waitForTransactionReceipt({ hash, timeout: 180_000 });
+    if (r.status !== "success")
+      throw new PaymentsError("top-up-failed", "That didn't go through; your fee tank paid the network fee.");
+    return hash;
+  }
+
+  /** Account → fee tank as an everyday payment (within the limit), then tank → the quantum-safe key's signer. */
+  private async pqTopUp(chainId: number, amount: bigint) {
+    if (amount <= 0n) throw new PaymentsError("bad-amount", "Enter an amount above zero.");
+    const st = await this.pqView(chainId);
+    if (!st.signer) throw new PqEverydayError("not-installed", "Set up the quantum-safe key first.");
+    const tank = (await this.keyring.accounts())!.feeTank;
+    // The top-up's own payment must not use the key whose fee balance is empty: send it with the everyday key.
+    const preferred = st.preferred;
+    if (preferred) await this.pqOr().setPreferred(chainId, false);
+    let entry: ActivityEntry;
+    try {
+      entry = await this.pay().send(chainId, [{ target: tank, value: amount, data: "0x" }]);
+      for (let i = 0; i < 90 && (entry.status === "confirming" || entry.status === "sending"); i++) {
+        await new Promise((r) => setTimeout(r, 2000));
+        await this.pay().refreshPending();
+        entry = (await this.activity.get(entry.id)) ?? entry;
+      }
+    } finally {
+      if (preferred) await this.pqOr().setPreferred(chainId, true);
+    }
+    if (entry.status !== "confirmed")
+      throw new PaymentsError("top-up-failed", "The payment to your fee tank didn't go through, so nothing was moved.");
+    const hash = await this.sendFromTank(chainId, { to: st.signer, data: "0x", value: amount, gas: 60_000n });
+    const balanceWei = (await this.env.io!.publicClient(chainId).getBalance({ address: st.signer })).toString();
+    return { paymentHash: entry.hash, hash, balanceWei };
+  }
+
   /** Effects of a confirmed Vault approval that the extension must mirror (the new everyday key, a linked Recovery key). */
   private async afterVault(): Promise<void> {
     if (!this.vault) return;
@@ -1400,6 +1518,7 @@ export class Wallet {
     "keyring:lock": async () => {
       await this.keyring.lock();
       this.privacy?.lock();
+      this.pq?.lock();
       await this.emitAccountsToAll([]);
       return null;
     },
@@ -1540,6 +1659,19 @@ export class Wallet {
       this.topUpPreview(await this.chainOr(chainId), role, BigInt(amountWei)),
     "vault:topUp": async ({ chainId, role, amountWei }) =>
       this.topUpSigner(await this.chainOr(chainId), role, BigInt(amountWei)),
+    "pq:status": async ({ chainId }) => this.pqView(await this.chainOr(chainId)),
+    "pq:prepare": async ({ chainId }) => {
+      const id = await this.chainOr(chainId);
+      const plan = await this.activePlan(id);
+      await this.pqOr().prepare(findNetwork(id)!, plan.address);
+      return this.pqView(id);
+    },
+    "pq:setPreferred": async ({ chainId, preferred }) => {
+      const id = await this.chainOr(chainId);
+      await this.pqOr().setPreferred(id, preferred);
+      return this.pqView(id);
+    },
+    "pq:topUp": async ({ chainId, amountWei }) => this.pqTopUp(await this.chainOr(chainId), BigInt(amountWei)),
     "security:nextEverydayKey": async () => {
       const index = (await this.keyring.everydayIndex()) + 1;
       return { index, address: await this.keyring.everydayAt(index) };

@@ -11379,15 +11379,15 @@ export const localDeployment: {
   tokens: LocalToken[];
 } | null = {
   chainId: 1337,
-  accountImpl: "0x36a3dc1ec67e30e7954fDF7c7636E6c6b102d55D",
-  accountImplInitCodeHash: "0x99a5cf116878b4bee5add424e1ed6338008b23a0c854502b182bd77fafd4dab5",
-  rolesModule: "0xedbD3DD27c2B8bE165790663e77605Ba832C5c3b",
+  accountImpl: "0x22EA04Cf20818679B8051ba9A007fF590F0e3eb4",
+  accountImplInitCodeHash: "0x179a0cdb1524c0082195086491850fec80dec9b8918439f80824eb2c586487ad",
+  rolesModule: "0x59eAbF5f82400CA7F6615Fcfd814b93369d3d970",
   factory: "0x602D0b1A46d6fc77A8690691844Fe0F9a7Be7316",
   c13Verifier: "0xAD7432C0BFd52Dd1c62774701005eeAbBc224152",
   roleSignerFactory: "0xc9de1A8cBf55331acF4180bF30f64045e75C364E",
   stakingRegistry: "0x8464135c8F25Da09e49BC8782676a84730C318bC",
-  depsRegistry: null,
-  leanPoolHotSignerFactory: null,
+  depsRegistry: "0x65a64Ab43aB280b7Ed0c4be422eC044D60a0225F",
+  leanPoolHotSignerFactory: "0x226ea7C2672864A48C7c0EE5A923d3A89173f1bE",
   testVault: "0xC777f69338283Af388ABB2Ae38B524ACaEd2A0A0",
   tokens: [
     {

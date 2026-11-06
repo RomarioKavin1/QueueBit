@@ -26,15 +26,16 @@
     "release:build": "node scripts/release-build.mjs"
   },
   "dependencies": {
+    "@noble/hashes": "2.4.0",
     "@queuebit/frames": "workspace:*",
     "@queuebit/groth16": "workspace:*",
+    "@queuebit/lean-sphincs": "workspace:*",
     "@queuebit/pq-signer": "workspace:*",
     "@queuebit/privacy": "workspace:*",
     "@queuebit/relay-client": "workspace:*",
     "@queuebit/rpc": "workspace:*",
     "@queuebit/ur": "workspace:*",
     "@queuebit/watcher-core": "workspace:*",
-    "@noble/hashes": "2.4.0",
     "@scure/bip32": "2.4.0",
     "@scure/bip39": "2.4.0",
     "jsqr": "1.4.0",

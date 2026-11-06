@@ -1,7 +1,7 @@
 import type { BucketReading } from "../background/bucket";
 import type { ActivityEntry } from "../background/activity";
 import type { SerializedRpcError } from "./errors";
-import type { AccountStatus, SendPreview, PairPreview, PolicyView, SignerView } from "./views";
+import type { AccountStatus, SendPreview, PairPreview, PolicyView, PqEverydayView, SignerView } from "./views";
 import type { QueuedView, VaultRequestRecord } from "../background/vault";
 import type { VaultActionRequest } from "../background/vaultActions";
 import type { SiteWarning } from "./sites";
@@ -107,6 +107,17 @@ export interface UiApi {
   "vault:topUp": {
     req: { chainId?: number; role: "vault" | "recovery"; amountWei: string };
     res: { paymentHash: `0x${string}`; hash?: `0x${string}`; balanceWei: string };
+  };
+  // ---- Quantum-safe everyday key (LeanPool) ----
+  "pq:status": { req: { chainId?: number }; res: PqEverydayView };
+  /** Creates the account's LeanPoolHotSigner (the fee tank pays and funds it). The Vault then installs it. */
+  "pq:prepare": { req: { chainId?: number }; res: PqEverydayView };
+  /** Pay with the quantum-safe key (true) or with the regular everyday key (false). Local choice, instant. */
+  "pq:setPreferred": { req: { chainId?: number; preferred: boolean }; res: PqEverydayView };
+  /** Everyday payment account → fee tank, then tank → the quantum-safe key's signer. */
+  "pq:topUp": {
+    req: { chainId?: number; amountWei: string };
+    res: { paymentHash: `0x${string}`; hash: `0x${string}`; balanceWei: string };
   };
   /** The next everyday key's address (for "Replace everyday key"). */
   "security:nextEverydayKey": { req: undefined; res: { index: number; address: `0x${string}` } };

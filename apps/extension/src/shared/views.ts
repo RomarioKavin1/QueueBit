@@ -55,6 +55,11 @@ export interface SendPreview {
   effects: string[];
   /** The fee tank can't cover the worst-case fee (E-05). */
   tankTooLow?: boolean;
+  /**
+   * Which key signs, when the quantum-safe everyday key is set up: "quantum-safe" (LeanPool; the fee comes from that
+   * key's own fee balance) or "everyday" with the reason it falls back.
+   */
+  signingKey?: { kind: "quantum-safe"; feeBalanceWei: string } | { kind: "everyday"; fallback: string };
   ethUsdPrice: number;
 }
 
@@ -95,4 +100,28 @@ export interface SignerView {
   pkLast8: string;
   /** How approvals with this key reach the network, in plain words, plus the reason codes. */
   lane: { ok: boolean; text: string; rules: string[] };
+}
+
+/**
+ * Security › Quantum-safe everyday key (LeanPool). `unavailable`: not on this network or build (`reason`); `off`: not
+ * set up; `awaiting-vault`: the signer exists, the phone still has to approve it; `on`: installed by the Vault.
+ */
+export interface PqEverydayView {
+  state: "unavailable" | "off" | "awaiting-vault" | "on";
+  reason?: string;
+  /** The LeanPool node answers and posts to this network's registry. */
+  nodeOk: boolean;
+  nodeUrl?: string;
+  signer?: `0x${string}`;
+  aggregator?: `0x${string}`;
+  /** Last 8 hex characters of the leanSPHINCS public key, to compare across devices. */
+  vkLast8?: string;
+  /** The signer's own fee balance (it pays for its payments). */
+  balanceWei?: string;
+  /** The user's choice to pay with it. */
+  preferred?: boolean;
+  /** Payments go through it right now (installed, preferred, funded, node up). */
+  active?: boolean;
+  /** Below this, payments fall back to the everyday key. */
+  minBalanceWei: string;
 }

@@ -22,6 +22,7 @@ import { formatUsd, shortAddress } from "../../ui/format";
 import { call, UiCallError } from "../lib/api";
 import { useAsync, usePoll } from "../lib/hooks";
 import { eth, parseEth, usdOf } from "../lib/money";
+import { SigningKeyNote, feeLine } from "../lib/signingKey";
 
 type Stage = "compose" | "review" | "sending" | "done";
 
@@ -121,9 +122,7 @@ export function SendScreen({
 
   const isTank = toValid && to.toLowerCase() === s.tank.toLowerCase();
   const route = preview?.route;
-  const feeText = preview?.feeWei
-    ? `Network fee ≈ ${eth(preview.feeWei)} · ${preview.backend === "4337" ? "from your account" : "from your fee tank"}`
-    : undefined;
+  const feeText = feeLine(preview);
 
   if (stage === "review" && preview && route && wei !== undefined) {
     return (
@@ -253,6 +252,7 @@ export function SendScreen({
             </RouteCard>
           )
         ))}
+      {route?.route === "hot" && <SigningKeyNote preview={preview} />}
       {preview?.tankTooLow && (
         <RiskBanner
           level="limit"

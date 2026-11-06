@@ -35,6 +35,8 @@ export type VaultActionRequest =
   | { type: "unfreeze" }
   | { type: "lockdown" }
   | { type: "setHotKey"; hotKey: Address; index: number }
+  /** Install (or with the zero address, remove) the post-quantum everyday key's `LeanPoolHotSigner`. */
+  | { type: "setPQHotSigner"; signer: Address }
   | { type: "setGuardian"; guardian: Address; enabled: boolean; name?: string }
   | { type: "setRecoverySigner"; signer: Address }
   /** 4337 backend: the executor stores the Recovery key's PQ public key itself (no signer contract). */
@@ -243,6 +245,20 @@ export function buildVaultAction(account: Address, req: VaultActionRequest, cur:
         "Instant. The old everyday key stops working immediately; your address stays the same.",
         [req.hotKey],
       );
+    case "setPQHotSigner":
+      return BigInt(req.signer) === 0n
+        ? now(
+            "vaultSetPQHotSigner",
+            "Turn off the quantum-safe everyday key",
+            "Instant. Everyday payments go back to your regular everyday key.",
+            [req.signer],
+          )
+        : now(
+            "vaultSetPQHotSigner",
+            "Use a quantum-safe everyday key",
+            "Instant. Everyday payments can then be signed with a post-quantum key, under the same daily limit and allowed lists.",
+            [req.signer],
+          );
     case "setGuardian":
       return now(
         "vaultSetGuardian",
