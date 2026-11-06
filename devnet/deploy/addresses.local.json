@@ -56,5 +56,27 @@
     "address": "0xd2A752cbA5c92DfEEa06957819F229a6fdC1107a",
     "privateKey": "0x719beaf8d3bd6187f4467212fde50b9937efcaf53109c6d125157e13f7debd37",
     "note": "Legacy: public devnet-only key for explicit-mode (unbound) accounts; the bound InitConfig needs no stand-in. Never use elsewhere."
+  },
+  "tokens": {
+    "USDC": {
+      "address": "0x78285198eD7Ae004ae654f2Da44338D6e0785Fdf",
+      "symbol": "USDC",
+      "decimals": 18,
+      "permit": true,
+      "usdPerToken": "1000000",
+      "artifact": "AccountMocks.sol/PermitToken1271",
+      "initCodeHash": "0x61188abbd2f859368fc875e6c457edb814e7736021a6ecf40ba801aafe60e34e",
+      "deployTx": "0x64108691835f863394e3338ece2a1f858eaaff8811b695b60babb952ebe8d072"
+    },
+    "DAI": {
+      "address": "0x814F7A72b8579040d99d0882681281851C076986",
+      "symbol": "DAI",
+      "decimals": 18,
+      "permit": false,
+      "usdPerToken": "1000000",
+      "artifact": "AccountMocks.sol/MockToken",
+      "initCodeHash": "0xe281fa69edb5de40faede4bfdd0893903052628db586bf565e41cea46127af3a",
+      "deployTx": "0xa6743c9f1778126c2cc4ec6d74cf044ef25fcd0cc21cc975258c24d5f42e58be"
+    }
   }
 }

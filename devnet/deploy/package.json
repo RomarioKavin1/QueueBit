@@ -7,6 +7,11 @@
   "scripts": {
     "deploy": "bun run deploy.ts",
     "check": "CHECK_ONLY=1 bun run deploy.ts",
+    "deploy:4337": "bun run deploy-4337.ts",
+    "check:4337": "CHECK_ONLY=1 bun run deploy-4337.ts",
+    "bundler": "bun run bundler.ts",
+    "up:4337": "bun run up-4337.ts",
+    "smoke:4337": "bun run smoke-4337.ts",
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {

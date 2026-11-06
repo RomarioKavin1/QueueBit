@@ -14,6 +14,9 @@
 //   AccountFactory()                                      CREATE2 ERC1967 proxies (the extension's counterfactual)
 //   C13Verifier()                                         IPQVerifier for SPHINCS- C13 (the Vault's scheme, M4)
 //   RoleSignerFactory(ERC8421_WORKSHOP, MAX_COST, NaiveStakingRegistry, 0.01 ETH)
+// Devnet test tokens (AccountMocks.sol fixtures, public `mint(address,uint256)`; not minted here), under "tokens":
+//   USDC = PermitToken1271("USDC")   ERC-2612 permit verifying contract owners via ERC-1271 (18 decimals as compiled)
+//   DAI  = MockToken("DAI", 18)
 // Accounts bind their VaultSigner at initialize (`InitConfig.roleSignerFactory` + the vault's PQ params: the account
 // derives `predictRoleSigner(salt, 1, account, pk, C13Verifier, payerKey)` from this RoleSignerFactory), so a fresh
 // account needs the Vault's pk and no stand-in. The "test Vault stand-in" below (a public, deterministic devnet key)
@@ -82,6 +85,18 @@ interface Entry {
   deployTx?: Hex;
 }
 
+interface TokenEntry {
+  address: Address;
+  symbol: string;
+  decimals: number;
+  permit: boolean;
+  /** Preset price: USD (6 decimals) per whole token. */
+  usdPerToken: string;
+  artifact: string;
+  initCodeHash: Hex;
+  deployTx?: Hex;
+}
+
 interface Deployment {
   network: { chainId: number; rpcUrl: string };
   deployer: Address;
@@ -90,6 +105,7 @@ interface Deployment {
   stakingRegistry: Address;
   contracts: Record<string, Entry>;
   testVault: { address: Address; privateKey: Hex; note: string };
+  tokens?: Record<string, TokenEntry>;
 }
 
 const previous: Deployment | undefined = existsSync(FILE) ? JSON.parse(readFileSync(FILE, "utf8")) : undefined;
@@ -148,6 +164,24 @@ await deploy(
 );
 void c13;
 
+// Devnet test tokens: deployed like the contracts, recorded under "tokens" (not in "contracts").
+const tokens: Record<string, TokenEntry> = {};
+const decimalsAbi = [{ type: "function", name: "decimals", stateMutability: "view", inputs: [], outputs: [{ type: "uint8" }] }] as const;
+async function deployToken(symbol: string, name: string, args: unknown[], permit: boolean): Promise<void> {
+  const address = await deploy(name, "AccountMocks.sol", args, 8_000_000n);
+  const e = contracts[name];
+  delete contracts[name];
+  const prev = previous?.tokens?.[symbol];
+  const deployTx = e.deployTx ?? (prev?.address === address ? prev.deployTx : undefined);
+  let decimals = 18;
+  if ((await pub.getCode({ address })) !== undefined) {
+    decimals = Number(await pub.readContract({ address, abi: decimalsAbi, functionName: "decimals" }));
+  }
+  tokens[symbol] = { address, symbol, decimals, permit, usdPerToken: "1000000", artifact: e.artifact, initCodeHash: e.initCodeHash, ...(deployTx ? { deployTx } : {}) };
+}
+await deployToken("USDC", "PermitToken1271", ["USDC"], true);
+await deployToken("DAI", "MockToken", ["DAI", 18], false);
+
 // The test Vault stand-in: keep it funded for vault-side devnet transactions.
 const vault = privateKeyToAccount(TEST_VAULT_KEY);
 if (!checkOnly && (await pub.getBalance({ address: vault.address })) < parseEther("0.5")) {
@@ -177,6 +211,7 @@ const out: Deployment = {
     privateKey: TEST_VAULT_KEY,
     note: "Legacy: public devnet-only key for explicit-mode (unbound) accounts; the bound InitConfig needs no stand-in. Never use elsewhere.",
   },
+  tokens,
 };
 writeFileSync(FILE, `${JSON.stringify(out, null, 2)}\n`);
 console.log(`wrote ${FILE}`);

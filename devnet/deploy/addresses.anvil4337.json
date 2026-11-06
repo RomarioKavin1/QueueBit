@@ -1,0 +1,83 @@
+{
+  "network": {
+    "chainId": 31337,
+    "rpcUrl": "http://localhost:8546",
+    "bundlerUrl": "http://localhost:4337/rpc"
+  },
+  "entryPoint": "0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108",
+  "deployer": "0x4e59b44847b379578588920cA78FbF26c0B4956C",
+  "salt": "0xaca47e8a366ca735530b57aa7c0af4c32cd86e606bcb4245905a07b91e267401",
+  "funder": "0x14dC79964da2C08b23698B3D3cc7Ca32193d9955",
+  "contracts": {
+    "C13Verifier": {
+      "address": "0xf67f51B70d6e751db52E9Ab8C20e5430dBB04715",
+      "artifact": "C13Verifier.sol/C13Verifier",
+      "args": [],
+      "initCodeHash": "0x6bb7940450c486efc601df5db8e29082e5328f9d5793e0fa807a5e55b223dc38"
+    },
+    "LeakedRoleExecutor": {
+      "address": "0x94656178267d434D9103018339E5aD43a170f4B4",
+      "artifact": "LeakedRoleExecutor.sol/LeakedRoleExecutor",
+      "args": [],
+      "initCodeHash": "0xbd891ce65dd5aae84d024a2486db2f8df341d1dbcce437d27104064991d53458"
+    },
+    "LeakedPolicyHook": {
+      "address": "0x856Fb066E6433BCB989436337502a61fA0489702",
+      "artifact": "LeakedPolicyHook.sol/LeakedPolicyHook",
+      "args": [
+        "0x94656178267d434D9103018339E5aD43a170f4B4"
+      ],
+      "initCodeHash": "0x82b7caac0cef51e6e074a5fa99a0c669931617acdf30b2c1ea2d889910b83b11"
+    },
+    "LeakedHotValidator": {
+      "address": "0x3Dbda88bA775DDD894739b324dB19Bb5393fC3e0",
+      "artifact": "LeakedHotValidator.sol/LeakedHotValidator",
+      "args": [
+        "0x856Fb066E6433BCB989436337502a61fA0489702"
+      ],
+      "initCodeHash": "0x363e8e24d9f3243c21b78d1d0999c600e6f1eacc944caf7832b60b069395ee03"
+    },
+    "MSAAdvancedEP": {
+      "address": "0x4165661A01cf071b05167E325f276dE43D63C083",
+      "artifact": "HostArtifacts.sol/MSAAdvancedEP",
+      "args": [
+        "0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108"
+      ],
+      "initCodeHash": "0xeeb591205099eaf3c975f68795d6f85be2acd65dbe2d46a7ac4642d786ef8a5d"
+    },
+    "MSAFactory": {
+      "address": "0x90cf141D2a49FBE9Af1BF34DDff99E3CA2e2AF05",
+      "artifact": "MSAFactory.sol/MSAFactory",
+      "args": [
+        "0x4165661A01cf071b05167E325f276dE43D63C083"
+      ],
+      "initCodeHash": "0x9dc5547cb754686dfbf20d9288c85cb217290134ce2b9a706d615cc0abe9dc76"
+    },
+    "Bootstrap": {
+      "address": "0x99c930235bA710e1Aec88A5Cd3bE6d28AF606656",
+      "artifact": "Bootstrap.sol/Bootstrap",
+      "args": [],
+      "initCodeHash": "0x76e8826553e049beabbb1fde0dea6d8e0630f66c455e5106104e65ac0c42653c"
+    }
+  },
+  "tokens": {
+    "USDC": {
+      "address": "0x78285198eD7Ae004ae654f2Da44338D6e0785Fdf",
+      "symbol": "USDC",
+      "decimals": 18,
+      "permit": true,
+      "usdPerToken": "1000000",
+      "artifact": "AccountMocks.sol/PermitToken1271",
+      "initCodeHash": "0x61188abbd2f859368fc875e6c457edb814e7736021a6ecf40ba801aafe60e34e"
+    },
+    "DAI": {
+      "address": "0x814F7A72b8579040d99d0882681281851C076986",
+      "symbol": "DAI",
+      "decimals": 18,
+      "permit": false,
+      "usdPerToken": "1000000",
+      "artifact": "AccountMocks.sol/MockToken",
+      "initCodeHash": "0xe281fa69edb5de40faede4bfdd0893903052628db586bf565e41cea46127af3a"
+    }
+  }
+}
