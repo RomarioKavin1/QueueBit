@@ -1018,7 +1018,7 @@ the security review" fixes (A1 to A5) and host matrix are unchanged. Commits `9d
     variable-length verifier (`BadConfig`).
   - It stores the length (`sigLengthOf`) and emits `VaultBound(account, vaultPk, verifier, sigLength)`.
   - `_verify` refuses a witness of any other length before it calls the verifier.
-- **Tests (317 module tests, all green).**
+- **Tests (323 module tests, all green; `6dc76dd` adds the Open-payee reentry PoC of the account review).**
   - Every host suite (MSA, Safe7579, Kernel) runs in Open, plus a `*StrictTest` re-run of each.
   - The audit PoCs A1 to A7 run in both modes (`LeakedModulesAudit*StrictTest`).
   - New recipient-mode tests: `test_recipientMode_*` and `test_executor_bindsVaultPkVerifierSigLength`. The ERC-7562
