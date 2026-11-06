@@ -1,6 +1,6 @@
 import { getProfile, recoverSecp256k1Signer, setSignature } from "@leaked/frames";
-import { SCHEME_ID, verify } from "@leaked/pq-signer";
-import { AnimatedUr, UR_TYPES, UrReceiver, fromHex, recoveryTestChallenge, type DecodedUr } from "@leaked/ur";
+import { SCHEME_ID, schemeById, verify } from "@leaked/pq-signer";
+import { AnimatedUr, UR_TYPES, UrReceiver, fromHex, recoveryTestChallengeOf, type DecodedUr } from "@leaked/ur";
 import { PROFILE_ID, type Built } from "../fixtures/requests.js";
 
 /**
@@ -32,7 +32,8 @@ export async function checkSignature(text: string, built: Built, pk: `0x${string
   const d = decodeParts(text, UR_TYPES.signature);
   if (d.type !== UR_TYPES.signature) throw new Error("not a signature");
   const s = d.value;
-  const witnessOk = !!s.witness && verify(fromHex(pk), fromHex(built.digest), fromHex(s.witness));
+  const scheme = schemeById(s.schemeId ?? SCHEME_ID);
+  const witnessOk = !!s.witness && !!scheme && scheme.verify(fromHex(pk), fromHex(built.digest), fromHex(s.witness));
   let payerOk: boolean | undefined;
   if (s.payerSig) {
     const p = getProfile(PROFILE_ID);
@@ -60,10 +61,14 @@ export function checkRecoveryTest(text: string) {
   const t = d.value;
   return {
     pk: t.recoveryPk,
-    ok: verify(
-      fromHex(t.recoveryPk),
-      fromHex(recoveryTestChallenge(SCHEME_ID, t.recoveryPk, t.requestId)),
-      fromHex(t.witness),
-    ),
+    payer: t.payer,
+    ok: verify(fromHex(t.recoveryPk), fromHex(recoveryTestChallengeOf(t)), fromHex(t.witness)),
   };
+}
+
+/** The raw signature response (scheme id, payer signature presence) for the leanSphincs-s and Recovery Path B tests. */
+export function decodeSignatureText(text: string) {
+  const d = decodeParts(text, UR_TYPES.signature);
+  if (d.type !== UR_TYPES.signature) throw new Error("not a signature");
+  return d.value;
 }

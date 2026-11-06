@@ -1,7 +1,8 @@
 import { UR_TYPES } from "@leaked/ur";
 import { useEffect, useRef, useState } from "react";
 import { SIGNATURE_TTL_MS, type Built } from "../app/routes.js";
-import { useStore } from "../app/state.js";
+import { useNav, useStore } from "../app/state.js";
+import { afterSign, keyState, signGate, signKeyParams } from "../app/vaultKey.js";
 import { updateSnapshots, type ActionView, type Review } from "../core/clearsign.js";
 import { formatDuration, shortAddress, shortHex } from "../core/format.js";
 import type { Mode } from "../core/types.js";
@@ -14,6 +15,7 @@ import {
   Button,
   Card,
   HoldButton,
+  PassphraseField,
   ProgressBar,
   Row,
   Screen,
@@ -178,7 +180,7 @@ export function ReviewScreen({
               value={
                 review.structure.path === "B"
                   ? "Standard: the quantum-safe signature is checked on-chain; the fee step uses a classical key on this phone"
-                  : "Staked: quantum-safe end to end"
+                  : "Quantum-safe end to end: the signature is checked before any fee is paid"
               }
             />
           )}
@@ -346,6 +348,9 @@ function ApproveSheet({
     return () => window.clearInterval(t);
   }, [busy]);
 
+  const nav = useNav();
+  const gate = mode === "vault" && store.vault ? signGate(store.vault, review) : ({ ok: true } as const);
+
   const go = async () => {
     setBusy(true);
     setError(undefined);
@@ -358,23 +363,30 @@ function ApproveSheet({
           requestCbor: cbor,
           expectDigest: review.digest,
           allowUnknown,
-          ...(mode === "vault" && v ? { sealed: v.sealed, vaultPk: v.vaultPk, passphrase: pass } : {}),
+          ...(mode === "vault" && v ? { sealed: v.sealed, passphrase: pass, ...signKeyParams(v, review) } : {}),
         },
         (p, f) => setPhase({ p, ...(f !== undefined ? { f } : {}), at: Date.now() }),
       );
       setPass("");
-      const summary = review.headline;
+      let summary = review.headline;
+      let saved = v;
       if (mode === "vault" && v) {
-        const signMs = r.signMs > 0 ? Math.round(v.signMs ? (v.signMs + r.signMs) / 2 : r.signMs) : v.signMs;
-        await store.saveVault({ ...v, ...(signMs ? { signMs } : {}), lastSignedAt: Date.now() });
+        // The new signature count is stored before the signature is shown (usage guard).
+        const next = afterSign(v, review, r, Date.now());
+        saved = next.vault;
+        await store.saveVault(saved);
         await store.saveSnapshots(updateSnapshots(review, store.snapshots, Date.now()));
+        if (next.promoted) summary = `${summary}. This phone now uses your new Vault key`;
       }
-      await store.log_({
-        at: Date.now(),
-        kind: review.unknown ? "signed-unknown" : "signed",
-        summary,
-        fingerprint: r.digest,
-      });
+      await store.log_(
+        {
+          at: Date.now(),
+          kind: review.unknown ? "signed-unknown" : "signed",
+          summary,
+          fingerprint: r.digest,
+        },
+        saved,
+      );
       onSigned({
         type: UR_TYPES.signature,
         cbor: r.signatureCbor,
@@ -437,11 +449,20 @@ function ApproveSheet({
             }}
           >
             <p className="t-body">{review.headline}</p>
-            {needsPass && (
-              <TextField
+            {!gate.ok && (
+              <Banner level="danger" title={gate.title} testId="budget-gate">
+                {gate.body}
+              </Banner>
+            )}
+            {!gate.ok && (
+              <Button variant="vault" onClick={() => nav.push({ name: "rotate" })} data-testid="gate-rotate">
+                Replace the key
+              </Button>
+            )}
+            {gate.ok && <BudgetNotice review={review} />}
+            {needsPass && gate.ok && (
+              <PassphraseField
                 label="Passphrase"
-                type="password"
-                autoComplete="current-password"
                 value={pass}
                 onChange={(e) => setPass(e.target.value)}
                 error={error}
@@ -454,14 +475,16 @@ function ApproveSheet({
                 {error}
               </Banner>
             )}
-            <Button
-              type="submit"
-              variant={review.recoveryMode ? "danger" : "vault"}
-              disabled={needsPass && pass.length === 0}
-              data-testid="approve-sign"
-            >
-              Sign
-            </Button>
+            {gate.ok && (
+              <Button
+                type="submit"
+                variant={review.recoveryMode ? "danger" : "vault"}
+                disabled={needsPass && pass.length === 0}
+                data-testid="approve-sign"
+              >
+                Sign
+              </Button>
+            )}
             <Button variant="secondary" onClick={onCancel}>
               Cancel
             </Button>
@@ -475,5 +498,22 @@ function ApproveSheet({
         )}
       </div>
     </Sheet>
+  );
+}
+
+/** leanSphincs-s: a quiet reminder from 50 % of the key's budget (the gate above handles 90 % and 100 %). */
+function BudgetNotice({ review }: { review: Review }) {
+  const store = useStore();
+  const v = store.vault;
+  if (!v || review.kind !== "frameTx") return null;
+  const k = keyState(v);
+  const st = review.signingKey === "next" ? k.next?.status : k.status;
+  if (!k.counted || !st || st.level === "ok") return null;
+  return (
+    <p className="flex items-start gap-2 t-small text-limit" data-testid="budget-notice">
+      <WarnIcon size={16} className="mt-0.5 shrink-0" />
+      {st.used.toLocaleString("en-US")} of {st.budget.toLocaleString("en-US")} safe signatures used on this key.{" "}
+      {v.next ? "Its replacement is ready: switch the browser to it soon." : "Plan its replacement (Key health)."}
+    </p>
   );
 }

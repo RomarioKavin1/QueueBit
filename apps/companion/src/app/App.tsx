@@ -2,6 +2,7 @@ import { useNav, useStore, NavProvider, StoreProvider } from "./state.js";
 import { Backup, Create, Pair, Restore, Welcome } from "../screens/Onboarding.js";
 import { AddressBook, Health, Settings } from "../screens/Manage.js";
 import { Ceremony, RecoveryHub, RecoveryTest, RecoveryUse } from "../screens/Recovery.js";
+import { Rotate } from "../screens/Rotate.js";
 import { Home, ReviewRoute, Scan, Signed } from "../screens/Vault.js";
 import { Spinner } from "../ui/kit.js";
 
@@ -51,6 +52,8 @@ function Router() {
       return <AddressBook />;
     case "health":
       return <Health />;
+    case "rotate":
+      return <Rotate />;
     case "settings":
       return <Settings />;
   }

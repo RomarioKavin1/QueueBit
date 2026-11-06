@@ -476,3 +476,26 @@ export function TextField({
     </div>
   );
 }
+
+/**
+ * A passphrase input. Deliberately not `autocomplete="current-password"` / `"new-password"`: those invite the
+ * browser's or a password manager's offer to save (and sync to a cloud account) the one secret that, with this phone's
+ * storage, opens the Vault key. `off` plus the managers' own opt-out attributes (1Password, LastPass, Bitwarden,
+ * Dashlane) keep them out; no username field is ever next to it, which is what most save prompts key on.
+ */
+export function PassphraseField(props: Parameters<typeof TextField>[0]) {
+  return (
+    <TextField
+      type="password"
+      autoComplete="off"
+      autoCapitalize="off"
+      autoCorrect="off"
+      spellCheck={false}
+      data-1p-ignore=""
+      data-lpignore="true"
+      data-bwignore="true"
+      data-form-type="other"
+      {...props}
+    />
+  );
+}

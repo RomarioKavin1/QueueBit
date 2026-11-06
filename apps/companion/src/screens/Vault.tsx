@@ -1,8 +1,10 @@
 import { SCHEME_ID } from "@leaked/pq-signer";
 import { UR_TYPES, UrReceiver } from "@leaked/ur";
 import { useEffect, useMemo, useState } from "react";
+import type { Address } from "viem";
 import type { Built } from "../app/routes.js";
 import { useNav, useStore } from "../app/state.js";
+import { keyState, type KeyState } from "../app/vaultKey.js";
 import { RequestRejected, reviewRequestBytes, type Review } from "../core/clearsign.js";
 import { last8, relativeTime } from "../core/format.js";
 import type { DeviceContext, Mode } from "../core/types.js";
@@ -19,6 +21,7 @@ import {
   WifiOffIcon,
 } from "../ui/icons.js";
 import { Banner, Button, Card, NavRow, Screen } from "../ui/kit.js";
+import { BuildLine, UpdateBanner } from "../ui/update.js";
 import { AnimatedQr } from "../ui/qr.js";
 import { Scanner } from "../ui/Scanner.js";
 import { ReviewScreen } from "./Review.js";
@@ -58,6 +61,7 @@ export function Home() {
   const online = useOnline();
   const v = store.vault!;
   const again = currentBuilt();
+  const k = keyState(v);
   const [, tick] = useState(0);
   useEffect(() => {
     const t = window.setInterval(() => tick((x) => x + 1), 30_000);
@@ -76,6 +80,9 @@ export function Home() {
           </p>
         </div>
       </div>
+
+      <UpdateBanner />
+      <KeyBudgetBanner k={k} onRotate={() => nav.push({ name: "rotate" })} />
 
       {!v.backupConfirmed && (
         <Banner
@@ -104,11 +111,9 @@ export function Home() {
 
       <Card>
         <dl className="flex flex-col gap-2">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2">
             <dt className="t-body text-muted">Health</dt>
-            <dd className="inline-flex items-center gap-1 t-strong text-safe">
-              <ShieldIcon size={18} /> Good · unlimited safe signatures
-            </dd>
+            <HealthValue k={k} />
           </div>
           <div className="flex items-center justify-between">
             <dt className="t-body text-muted">Last approval</dt>
@@ -165,7 +170,68 @@ export function Home() {
           testId="nav-settings"
         />
       </nav>
+      <BuildLine />
     </Screen>
+  );
+}
+
+/** Health in one line: "unlimited" for C13; the key's budget state for counted key types (ux-spec §4.7). */
+export function healthText(k: KeyState): { text: string; tone: "safe" | "limit" | "danger" } {
+  if (!k.counted || !k.status) return { text: "Good · unlimited safe signatures", tone: "safe" };
+  const st = k.status;
+  const n = `${st.used.toLocaleString("en-US")} of ${st.budget.toLocaleString("en-US")} used`;
+  if (st.unknown) return { text: "Replace this key · restored, count unknown", tone: "danger" };
+  switch (st.level) {
+    case "ok":
+      return { text: `Good · ${n}`, tone: "safe" };
+    case "warn":
+      return { text: `Plan a replacement · ${n}`, tone: "limit" };
+    case "rotate":
+      return { text: `Replace now · ${n}`, tone: "danger" };
+    case "exceeded":
+      return { text: `Stop · ${n}`, tone: "danger" };
+  }
+}
+
+function HealthValue({ k }: { k: KeyState }) {
+  const h = healthText(k);
+  const cls = { safe: "text-safe", limit: "text-limit", danger: "text-danger" }[h.tone];
+  return (
+    <dd className={`inline-flex items-center gap-1 text-right t-strong ${cls}`} data-testid="home-health">
+      <ShieldIcon size={18} className="shrink-0" /> {h.text}
+    </dd>
+  );
+}
+
+/** From 50 % of a counted key's budget: what to do, with the way to do it. */
+function KeyBudgetBanner({ k, onRotate }: { k: KeyState; onRotate: () => void }) {
+  if (!k.counted || !k.status || k.status.level === "ok") return null;
+  const st = k.status;
+  const action = (
+    <Button variant="secondary" block={false} onClick={onRotate} data-testid="home-rotate">
+      {k.next ? "See the replacement steps" : "Replace the key"}
+    </Button>
+  );
+  if (st.unknown || st.level === "exceeded")
+    return (
+      <Banner level="danger" title="This Vault key can't approve any more" testId="budget-banner" action={action}>
+        {st.unknown
+          ? "It was restored from words, so it may already have signed on another phone."
+          : "It has used its safe signatures."}{" "}
+        Make a fresh key and switch the browser to it.
+      </Banner>
+    );
+  if (st.level === "rotate")
+    return (
+      <Banner level="danger" title="Replace your Vault key now" testId="budget-banner" action={action}>
+        It has used 90% of its safe signatures.{" "}
+        {k.next ? "Its replacement is ready: finish the switch in the browser." : "Approvals need a replacement first."}
+      </Banner>
+    );
+  return (
+    <Banner level="limit" title="Plan a replacement for your Vault key" testId="budget-banner" action={action}>
+      It has used half of its safe signatures. Replacing it takes a few minutes here and 7 days on the network.
+    </Banner>
   );
 }
 
@@ -236,18 +302,28 @@ export function RequestScanner({
 export function deviceContext(
   store: ReturnType<typeof useStore>,
   mode: Mode,
-  recoveryPk?: `0x${string}`,
+  recovery?: { pk: `0x${string}`; payer: Address },
 ): DeviceContext {
+  const v = store.vault;
   return mode === "vault"
     ? {
         mode,
-        publicKey: store.vault!.vaultPk,
-        schemeId: SCHEME_ID,
-        payerAddress: store.vault!.payerAddress,
+        publicKey: v!.vaultPk,
+        ...(v!.next ? { nextPublicKey: v!.next.pk } : {}),
+        schemeId: v!.schemeId,
+        payerAddress: v!.payerAddress,
         addressBook: store.addressBook,
         snapshots: store.snapshots,
       }
-    : { mode, publicKey: recoveryPk!, schemeId: SCHEME_ID, addressBook: store.addressBook, snapshots: store.snapshots };
+    : {
+        mode,
+        publicKey: recovery!.pk,
+        // The Recovery key is always SPHINCS- C13 (plan §20 §5); its fee key signs entry 1 on Path B.
+        schemeId: SCHEME_ID,
+        payerAddress: recovery!.payer,
+        addressBook: store.addressBook,
+        snapshots: store.snapshots,
+      };
 }
 
 export function Scan() {

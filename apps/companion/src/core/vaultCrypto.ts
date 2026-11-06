@@ -67,6 +67,17 @@ export async function sealSeed(
   kdfOverride?: Partial<Omit<KdfParams, "salt">>,
   onProgress?: (p: number) => void,
 ): Promise<SealedSeed> {
+  return (await sealSeedWithKey(secret, passphrase, bindTo, kdfOverride, onProgress)).sealed;
+}
+
+/** `sealSeed`, also returning the AES key (to seal the counter and the log key in the same call; see `unlock`). */
+export async function sealSeedWithKey(
+  secret: SeedSecret,
+  passphrase: string,
+  bindTo: string,
+  kdfOverride?: Partial<Omit<KdfParams, "salt">>,
+  onProgress?: (p: number) => void,
+): Promise<{ sealed: SealedSeed; key: CryptoKey }> {
   if (passphrase.length < 8) throw new Error("Use at least 8 characters.");
   const pass = new TextEncoder().encode(secret.bip39Passphrase.normalize("NFKD"));
   if (pass.length > 255) throw new Error("BIP-39 passphrase too long");
@@ -89,7 +100,7 @@ export async function sealSeed(
     const ct = new Uint8Array(
       await crypto.subtle.encrypt({ name: "AES-GCM", iv, additionalData: aad(bindTo) }, key, plain),
     );
-    return { v: 1, kdf, iv, ciphertext: ct };
+    return { sealed: { v: 1, kdf, iv, ciphertext: ct }, key };
   } finally {
     plain.fill(0);
     pass.fill(0);
@@ -102,6 +113,20 @@ export async function openSeed(
   bindTo: string,
   onProgress?: (p: number) => void,
 ): Promise<SeedSecret> {
+  return (await unlock(sealed, passphrase, bindTo, onProgress)).secret;
+}
+
+/**
+ * Opens the seed and also returns the AES key it was sealed under (a non-extractable WebCrypto key), so one
+ * passphrase entry can also open and re-seal the small records that share this key-wrapping: the signature counter
+ * and the activity log's key (`sealBlob` / `openBlob`). The key lives only inside one worker call.
+ */
+export async function unlock(
+  sealed: SealedSeed,
+  passphrase: string,
+  bindTo: string,
+  onProgress?: (p: number) => void,
+): Promise<{ secret: SeedSecret; key: CryptoKey }> {
   if (sealed.v !== 1 || sealed.kdf.alg !== "scrypt") throw new Error("Unsupported vault record");
   const key = await deriveKey(passphrase, sealed.kdf, onProgress);
   let plain: Uint8Array;
@@ -124,5 +149,51 @@ export async function openSeed(
   const entropy = plain.slice(1, 1 + n);
   const bip39Passphrase = new TextDecoder().decode(plain.subarray(2 + n));
   plain.fill(0);
-  return { entropy, bip39Passphrase };
+  return { secret: { entropy, bip39Passphrase }, key };
+}
+
+/** A small record sealed under the seed's key: AES-256-GCM, AAD = `leaked-companion/<purpose>/v1/<bindTo>`. */
+export interface SealedBlob {
+  iv: Uint8Array;
+  ciphertext: Uint8Array;
+}
+
+export type BlobPurpose = "usage" | "logkey";
+
+const blobAad = (purpose: BlobPurpose, bindTo: string) =>
+  new TextEncoder().encode(`leaked-companion/${purpose}/v1/${bindTo.toLowerCase()}`);
+
+export async function sealBlob(
+  key: CryptoKey,
+  purpose: BlobPurpose,
+  bindTo: string,
+  plain: Uint8Array,
+): Promise<SealedBlob> {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv, additionalData: blobAad(purpose, bindTo) },
+    key,
+    plain as Uint8Array<ArrayBuffer>,
+  );
+  return { iv, ciphertext: new Uint8Array(ct) };
+}
+
+/** Throws `Error("tampered")` if the blob was changed, swapped between keys/purposes, or sealed under another key. */
+export async function openBlob(
+  key: CryptoKey,
+  purpose: BlobPurpose,
+  bindTo: string,
+  blob: SealedBlob,
+): Promise<Uint8Array> {
+  try {
+    return new Uint8Array(
+      await crypto.subtle.decrypt(
+        { name: "AES-GCM", iv: blob.iv as Uint8Array<ArrayBuffer>, additionalData: blobAad(purpose, bindTo) },
+        key,
+        blob.ciphertext as Uint8Array<ArrayBuffer>,
+      ),
+    );
+  } catch {
+    throw new Error("tampered");
+  }
 }

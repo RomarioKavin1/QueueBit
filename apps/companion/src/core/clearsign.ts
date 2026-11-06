@@ -7,6 +7,7 @@ import {
   type FrameTx,
   type Profile,
 } from "@leaked/frames";
+import { schemeById } from "@leaked/pq-signer";
 import { decodeSignRequest, ROLE, TX_TYPE, type AdvisoryPolicy, type SignRequest } from "@leaked/ur";
 import {
   decodeAbiParameters,
@@ -178,6 +179,8 @@ export interface Review {
   approval: "normal" | "anyway" | "unknown";
   structure: StructureView;
   recoveryMode: boolean;
+  /** The request is for this phone's prepared replacement key, not its current one (key rotation). */
+  signingKey?: "next";
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -227,7 +230,14 @@ function reviewFrameTx(req: SignRequest, ctx: DeviceContext): Review {
   if (req.schemeId?.toLowerCase() !== ctx.schemeId.toLowerCase()) {
     reject("E-70", "This request is for a key this phone doesn't hold.", "It asks for a different kind of signature.");
   }
-  if (req.expectedPk?.toLowerCase() !== ctx.publicKey.toLowerCase()) {
+  const expected = req.expectedPk?.toLowerCase();
+  const signingKey: "current" | "next" | undefined =
+    expected === ctx.publicKey.toLowerCase()
+      ? "current"
+      : ctx.nextPublicKey && expected === ctx.nextPublicKey.toLowerCase()
+        ? "next"
+        : undefined;
+  if (!signingKey) {
     reject(
       "E-71",
       "This request is for a different Vault.",
@@ -266,7 +276,8 @@ function reviewFrameTx(req: SignRequest, ctx: DeviceContext): Review {
   }
   const placeholderLen = (entry!.signature.length - 2) / 2;
   const zeros = /^0x(00)*$/.test(entry!.signature);
-  const okLen = placeholderLen === 3688 || (p.sigHashElision === "empty" && placeholderLen === 0);
+  const sigLength = schemeById(ctx.schemeId)?.SIG_LENGTH ?? 3688;
+  const okLen = placeholderLen === sigLength || (p.sigHashElision === "empty" && placeholderLen === 0);
   if (!zeros || !okLen)
     reject("E-77", "This request can't be signed.", "Its signature slot is not empty or has the wrong size.");
 
@@ -278,18 +289,15 @@ function reviewFrameTx(req: SignRequest, ctx: DeviceContext): Review {
     const pe = tx.signatures[payerIdx]!;
     if (pe.scheme !== SECP || pe.msg !== "0x")
       reject("E-77", "This request can't be signed.", "Its fee-payment slot is malformed.");
-    if (ctx.mode === "recovery") {
-      reject(
-        "E-78",
-        "This Recovery request needs a fee-payment key.",
-        "Recovery approvals must use the staked lane. Start again in the browser.",
-      );
-    }
+    // Path B: the role's own secp256k1 fee key signs entry 1 (the Vault's, or since the Recovery bootstrap the
+    // Recovery key's, both derived on this phone from the words).
     if (!ctx.payerAddress || pe.signer.length !== 42 || !isAddressEqual(pe.signer as Address, ctx.payerAddress)) {
       reject(
         "E-78",
         "This request expects a different fee-payment key.",
-        "Check that this phone is the Vault paired with this account.",
+        ctx.mode === "recovery"
+          ? "The Recovery words you entered make a different fee-payment key than the one this account uses."
+          : "Check that this phone is the Vault paired with this account.",
       );
     }
   } else {
@@ -403,11 +411,12 @@ function reviewFrameTx(req: SignRequest, ctx: DeviceContext): Review {
     ...(req.origin ? { origin: req.origin } : {}),
   };
 
-  return finish(req, ctx, "frameTx", digest, actions, warnings, structure, {
+  const review = finish(req, ctx, "frameTx", digest, actions, warnings, structure, {
     sigIndex,
     needsPayerSig: path === "B",
     account,
   });
+  return signingKey === "next" ? { ...review, signingKey } : review;
 }
 
 /**

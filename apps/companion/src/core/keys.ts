@@ -10,11 +10,16 @@ import { getAddress, type Address, type Hex } from "viem";
  *  - Vault / Recovery PQ key: `@leaked/pq-signer` `keygen(seed, { role })` (HMAC-SHA512 domain-separated by scheme
  *    and role, in WASM).
  *  - Path-B payer (fee-payment) key: BIP-32 `m/44'/60'/8141'/0/0` of the same seed (a separate branch).
+ *  - Recovery payer key (the Recovery signer's Path-B fee key, so a Recovery key can act on the public mempool):
+ *    BIP-32 `m/44'/60'/8141'/1'/0'` of the *Recovery* seed. A different, hardened branch from the Vault's, so the two
+ *    fee keys are independent even if one mnemonic were (wrongly) used for both roles, and a leaked child key plus an
+ *    xpub of the parent can never reach the other role's branch.
  * Only the signing worker calls the derivations that produce secrets; the UI thread handles words only while the user
  * reads or types them.
  */
 
 export const PAYER_PATH = "m/44'/60'/8141'/0/0";
+export const RECOVERY_PAYER_PATH = "m/44'/60'/8141'/1'/0'";
 export const WORDLIST = wordlist;
 
 export function newEntropy(): Uint8Array {
@@ -44,8 +49,13 @@ export function seedFromEntropy(entropy: Uint8Array, bip39Passphrase = ""): Uint
   return mnemonicToSeedSync(entropyToMnemonic(entropy, wordlist), bip39Passphrase);
 }
 
-export function payerKeyFromSeed(seed: Uint8Array): { privateKey: Uint8Array; address: Address } {
-  const node = HDKey.fromMasterSeed(seed).derive(PAYER_PATH);
+export function payerKeyFromSeed(
+  seed: Uint8Array,
+  role: "vault" | "recovery" = "vault",
+): { privateKey: Uint8Array; address: Address } {
+  const root = HDKey.fromMasterSeed(seed);
+  const node = root.derive(role === "vault" ? PAYER_PATH : RECOVERY_PAYER_PATH);
+  root.wipePrivateData();
   if (!node.privateKey) throw new Error("payer derivation failed");
   const privateKey = node.privateKey.slice();
   node.wipePrivateData();
@@ -68,6 +78,22 @@ export function vrsToRsv(vrs: Uint8Array): Uint8Array {
   out.set(vrs.subarray(1, 65), 0);
   out[64] = 27 + vrs[0]!;
   return out;
+}
+
+/**
+ * Key labels (leanSphincs-s rotation, plan: README "Usage counter and key rotation"): key #1 is derived with
+ * `chainScope = "any"` (the v1 label, so every existing Vault is key #1), key #n with `"any-n"`. The label is part of
+ * the HMAC key of the derivation, so each number is an independent key from the same words.
+ */
+export const chainScopeFor = (keyNumber: number): string => {
+  if (!Number.isInteger(keyNumber) || keyNumber < 1 || keyNumber > 999) throw new Error("key number must be 1..999");
+  return keyNumber === 1 ? "any" : `any-${keyNumber}`;
+};
+export function keyNumberOf(chainScope: string | undefined): number {
+  if (chainScope === undefined || chainScope === "any") return 1;
+  const m = /^any-([1-9]\d{0,2})$/.exec(chainScope);
+  if (!m || m[1] === "1") throw new Error(`unknown key label ${chainScope}`);
+  return Number(m[1]);
 }
 
 const bytesToHex = (b: Uint8Array): Hex => `0x${Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("")}` as Hex;

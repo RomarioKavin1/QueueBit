@@ -1,6 +1,7 @@
 import { execSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defaultClientConditions, defineConfig, type Plugin } from "vite";
@@ -87,32 +88,41 @@ function securityHeaders(): Plugin {
   };
 }
 
-/** Emits sw.js with the exact precache list and a version derived from the bundle contents. */
+/**
+ * Emits sw.js with the exact precache list, the SHA-256 of every precached file (the worker refuses to install if a
+ * download differs: see src/sw.template.js) and a version that is a hash over all of them.
+ */
 function serviceWorker(): Plugin {
   return {
     name: "leaked-sw",
     apply: "build",
     enforce: "post",
-    generateBundle(_opts, bundle) {
+    // writeBundle, not generateBundle: later generateBundle hooks (Vite's preload/import rewriting) still change chunk
+    // code, so the digests are taken from the files exactly as written.
+    writeBundle(opts, bundle) {
+      const outDir = opts.dir!;
       const files = Object.keys(bundle).filter((f) => !f.endsWith(".map") && f !== "_headers" && f !== "sw.js");
       const publicFiles = ["manifest.webmanifest", "icon.svg", "icon-192.png", "icon-512.png", "icon-maskable-512.png"];
+      const bytesOf = (f: string): Buffer =>
+        bundle[f] ? readFileSync(join(outDir, f)) : readFileSync(new URL(`./public/${f}`, import.meta.url));
+      if (!bundle["index.html"]) this.error("sw.js: index.html is not in the bundle");
       const all = [...new Set(["./", ...files, ...publicFiles])].sort();
+      const integrity: Record<string, string> = {};
+      for (const f of all)
+        integrity[f] = createHash("sha256")
+          .update(bytesOf(f === "./" ? "index.html" : f))
+          .digest("hex");
       const h = createHash("sha256");
-      for (const f of files.sort()) {
-        const item = bundle[f]!;
-        h.update(f);
-        h.update(
-          item.type === "chunk" ? item.code : typeof item.source === "string" ? item.source : Buffer.from(item.source),
-        );
-      }
+      for (const f of all) h.update(`${f}\0${integrity[f]}\n`);
       const version = h.digest("hex").slice(0, 16);
       const template = readFileSync(new URL("./src/sw.template.js", import.meta.url), "utf8");
       const source = template
         .replace('"__VERSION__"', JSON.stringify(version))
-        .replace("= __PRECACHE__;", `= ${JSON.stringify(all)};`);
-      if (source.includes("= __PRECACHE__") || source.includes('"__VERSION__"'))
-        this.error("sw.js template not filled in");
-      this.emitFile({ type: "asset", fileName: "sw.js", source });
+        .replace('"__BUILD__"', JSON.stringify(gitShort()))
+        .replace("= __PRECACHE__;", `= ${JSON.stringify(all)};`)
+        .replace("= __INTEGRITY__;", `= ${JSON.stringify(integrity)};`);
+      if (/= __(PRECACHE|INTEGRITY)__|"__(VERSION|BUILD)__"/.test(source)) this.error("sw.js template not filled in");
+      writeFileSync(join(outDir, "sw.js"), source);
     },
   };
 }

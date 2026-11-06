@@ -170,3 +170,16 @@ export const WifiOffIcon = (p: P) => (
     <path d="M12 19.5v.1" />
   </Svg>
 );
+/** Lock = encrypted on this phone. */
+export const LockIcon = (p: P) => (
+  <Svg {...p}>
+    <rect x="5" y="10.5" width="14" height="10" rx="2" />
+    <path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" />
+  </Svg>
+);
+/** Rotate = replace a key. */
+export const RotateIcon = (p: P) => (
+  <Svg {...p}>
+    <path d="M4.5 12a7.5 7.5 0 0 1 13-5.1L20 9.5M20 4.5v5h-5M19.5 12a7.5 7.5 0 0 1-13 5.1L4 14.5M4 19.5v-5h5" />
+  </Svg>
+);

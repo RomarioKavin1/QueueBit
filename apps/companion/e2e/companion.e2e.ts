@@ -177,7 +177,8 @@ test("recovery: test the Recovery key and sign a Vault replacement in recovery m
   await page.getByTestId("words-submit").click();
   await expect(page.getByTestId("signed-banner")).toBeVisible({ timeout: 60_000 });
   const t = H.checkRecoveryTest(await page.getByTestId("ur-text").inputValue());
-  expect(t).toEqual({ pk: H.recovery.pk, ok: true });
+  // v2: the code also carries the Recovery fee-payment address, covered by the signature.
+  expect(t).toEqual({ pk: H.recovery.pk, payer: H.recovery.payer.toLowerCase(), ok: true });
   await page.getByTestId("signed-done").click();
 
   await page.getByRole("button", { name: "Recovery key tools" }).click();

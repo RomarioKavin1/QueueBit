@@ -1,10 +1,11 @@
 import { SCHEME_ID } from "@leaked/pq-signer";
 import { ROLE, UR_TYPES, encodePqKey, randomUuid, singlePartUr, type Hex } from "@leaked/ur";
 import { useEffect, useRef, useState } from "react";
+import type { Address } from "viem";
 import { SIGNATURE_TTL_MS, type Built } from "../app/routes.js";
 import { useNav, useStore } from "../app/state.js";
 import type { Review } from "../core/clearsign.js";
-import { last8 } from "../core/format.js";
+import { last8, shortAddress } from "../core/format.js";
 import { entropyToWords, newEntropy, wordsToEntropy } from "../core/keys.js";
 import { call } from "../worker/client.js";
 import { CheckIcon, PlaneIcon, RecoveryIcon, WarnIcon } from "../ui/icons.js";
@@ -75,7 +76,18 @@ function OfflineCheck() {
   );
 }
 
-/** Test-ok QR: the recovery-test signature for the browser's conductor (ux-spec PLAN CHANGE 9.3). */
+/** The Recovery key's pairing code: its pk and (since the Recovery bootstrap) its fee-payment address. */
+export function recoveryPairingUr(pk: Hex, payer: Address): string {
+  return singlePartUr(
+    UR_TYPES.pqKey,
+    encodePqKey({ schemeId: SCHEME_ID as Hex, pk, role: ROLE.recovery, payer: payer.toLowerCase() as Hex }),
+  );
+}
+
+/**
+ * Test-ok QR: the recovery-test signature for the browser's conductor (ux-spec PLAN CHANGE 9.3). It carries the
+ * Recovery fee-payment address, covered by the signature (v2 challenge), for the browser's `InitConfig`.
+ */
 async function signTest(): Promise<Built> {
   const r = await call({ op: "recoveryTest", requestId: randomUuid() });
   await call({ op: "recoveryWipe" });
@@ -83,7 +95,7 @@ async function signTest(): Promise<Built> {
     type: UR_TYPES.recoveryTest,
     cbor: r.cbor,
     title: "Show this to the browser",
-    summary: "Recovery key test passed. The key has been wiped from this phone.",
+    summary: "Recovery key test passed. The key and its fee key have been wiped from this phone.",
     expiresAt: Date.now() + SIGNATURE_TTL_MS,
   };
 }
@@ -94,6 +106,7 @@ export function Ceremony() {
   type Step = "check" | "gen" | "words" | "quiz" | "pk" | "recheck" | "signing" | "done";
   const [step, setStep] = useState<Step>("check");
   const [pk, setPk] = useState<Hex>();
+  const [payer, setPayer] = useState<Address>();
   const [built, setBuilt] = useState<Built>();
   const [error, setError] = useState<string>();
   const words = useRef<string[]>([]);
@@ -119,6 +132,7 @@ export function Ceremony() {
     try {
       const r = await call({ op: "recoveryLoad", entropy: e, bip39Passphrase: "" });
       setPk(r.pk);
+      setPayer(r.payerAddress);
       setStep("words");
     } catch (err) {
       setError((err as Error).message);
@@ -210,13 +224,22 @@ export function Ceremony() {
           In the browser's Recovery setup, scan this code. Check the browser shows the same last 8 characters:
         </p>
         <KeyCheck value={last8(pk!)} />
-        <StaticQr
-          text={singlePartUr(UR_TYPES.pqKey, encodePqKey({ schemeId: SCHEME_ID as Hex, pk: pk!, role: ROLE.recovery }))}
-          label="Recovery key code for the browser"
-        />
-        <p className="t-mono break-all t-small text-muted" data-testid="recovery-pk">
-          {pk}
-        </p>
+        <StaticQr text={recoveryPairingUr(pk!, payer!)} label="Recovery key code for the browser" />
+        <details className="rounded-md border border-line px-3 py-2">
+          <summary className="tap flex cursor-pointer items-center t-strong">Show the full key</summary>
+          <p className="mt-2 t-small text-muted">Recovery key (quantum-safe, SPHINCS- C13)</p>
+          <p className="t-mono break-all" data-testid="recovery-pk">
+            {pk}
+          </p>
+          <p className="mt-2 t-small text-muted">Recovery fee-payment address</p>
+          <p className="t-mono break-all" data-testid="recovery-payer">
+            {payer}
+          </p>
+          <p className="mt-1 t-small text-muted">
+            Made from the same Recovery words. It only pays the network fee when the Recovery key acts, so a Recovery
+            approval can go through any network lane.
+          </p>
+        </details>
       </Screen>
     );
   if (step === "recheck")
@@ -256,6 +279,7 @@ export function RecoveryTest() {
   const [step, setStep] = useState<"words" | "busy" | "done">("words");
   const [built, setBuilt] = useState<Built>();
   const [pk, setPk] = useState<Hex>();
+  const [payer, setPayer] = useState<Address>();
   const [error, setError] = useState<string>();
   useEffect(() => () => void call({ op: "recoveryWipe" }), []);
   if (step === "words")
@@ -281,6 +305,7 @@ export function RecoveryTest() {
             call({ op: "recoveryLoad", entropy: e, bip39Passphrase: "" })
               .then(async (r) => {
                 setPk(r.pk);
+                setPayer(r.payerAddress);
                 setBuilt(await signTest());
                 await store.log_({
                   at: Date.now(),
@@ -308,7 +333,7 @@ export function RecoveryTest() {
     <SignedView
       built={{
         ...built!,
-        summary: `These words make the Recovery key ending in …${last8(pk!)}. Show this code to the browser to confirm it matches your account.`,
+        summary: `These words make the Recovery key ending in …${last8(pk!)} (fee-payment address ${shortAddress(payer!)}). Show this code to the browser to confirm it matches your account.`,
       }}
       onDone={() => nav.reset({ name: store.vault ? "home" : "welcome" })}
     />
@@ -320,7 +345,7 @@ export function RecoveryUse() {
   const nav = useNav();
   const store = useStore();
   const [step, setStep] = useState<"words" | "loading" | "scan" | "review" | "signed">("words");
-  const [pk, setPk] = useState<Hex>();
+  const [key, setKey] = useState<{ pk: Hex; payer: Address }>();
   const [review, setReview] = useState<{ r: Review; cbor: Uint8Array }>();
   const [built, setBuilt] = useState<Built>();
   const [error, setError] = useState<string>();
@@ -351,7 +376,7 @@ export function RecoveryUse() {
               setStep("loading");
               call({ op: "recoveryLoad", entropy: e, bip39Passphrase: "" })
                 .then((r) => {
-                  setPk(r.pk);
+                  setKey({ pk: r.pk, payer: r.payerAddress });
                   setStep("scan");
                 })
                 .catch((err: Error) => {
@@ -368,10 +393,10 @@ export function RecoveryUse() {
     return (
       <Screen title="Scan the recovery request" onBack={exit} tone="recovery">
         <p className="t-body">
-          Recovery key ends in <span className="t-mono">…{last8(pk!)}</span>.
+          Recovery key ends in <span className="t-mono">…{last8(key!.pk)}</span>.
         </p>
         <RequestScanner
-          ctx={deviceContext(store, "recovery", pk)}
+          ctx={deviceContext(store, "recovery", key)}
           onReview={(r, cbor) => {
             setReview({ r, cbor });
             setStep("review");
@@ -387,7 +412,10 @@ export function RecoveryUse() {
         mode="recovery"
         onReject={exit}
         onSigned={(b) => {
-          setBuilt({ ...b, summary: `${b.summary}. The Recovery key has been wiped from this phone.` });
+          setBuilt({
+            ...b,
+            summary: `${b.summary}. The Recovery key and its fee key have been wiped from this phone.`,
+          });
           setStep("signed");
         }}
       />

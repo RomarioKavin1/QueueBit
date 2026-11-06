@@ -1,11 +1,17 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { fromHex } from "@leaked/ur";
 import * as db from "../core/db.js";
 import type { LogEntry, Settings, VaultRecord } from "../core/db.js";
+import { sealLogEntry } from "../core/logCrypto.js";
 import type { AccountSnapshot, AddressBookEntry } from "../core/types.js";
 import type { Review } from "../core/clearsign.js";
 import type { Built } from "./routes.js";
 
-/** App-wide state: what is in IndexedDB, plus a navigation stack. No secrets ever live here. */
+/**
+ * App-wide state: what is in IndexedDB, plus a navigation stack. No secrets ever live here. The activity log is
+ * stored sealed (logCrypto.ts): the store only knows how many entries there are, appends new ones sealed to the
+ * Vault's log key, and holds decrypted entries only after the user unlocked them (Settings › Activity).
+ */
 
 export interface Store {
   loaded: boolean;
@@ -13,12 +19,18 @@ export interface Store {
   addressBook: AddressBookEntry[];
   snapshots: AccountSnapshot[];
   settings: Settings;
-  log: LogEntry[];
+  /** Number of activity entries on this phone (sealed + any legacy plaintext ones). */
+  logCount: number;
   saveVault(v: VaultRecord | undefined): Promise<void>;
   saveAddressBook(a: AddressBookEntry[]): Promise<void>;
   saveSnapshots(s: AccountSnapshot[]): Promise<void>;
   saveSettings(s: Settings): Promise<void>;
-  log_(e: LogEntry): Promise<void>;
+  /** Appends an activity entry, sealed. Without a Vault log key (no Vault, or one made before it existed) it is dropped. */
+  log_(e: LogEntry, vault?: VaultRecord): Promise<void>;
+  /** The raw log for the worker to open: sealed entries and legacy plaintext ones. */
+  logForUnlock(): Promise<{ sealed: Uint8Array[]; legacy: LogEntry[] }>;
+  /** After an unlock: store re-sealed legacy entries and drop the plaintext copy. */
+  replaceLegacyLog(resealed: Uint8Array[]): Promise<void>;
   eraseAll(): Promise<void>;
 }
 
@@ -30,7 +42,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [addressBook, setAddressBook] = useState<AddressBookEntry[]>([]);
   const [snapshots, setSnapshots] = useState<AccountSnapshot[]>([]);
   const [settings, setSettings] = useState<Settings>(db.DEFAULT_SETTINGS);
-  const [log, setLog] = useState<LogEntry[]>([]);
+  const [logCount, setLogCount] = useState(0);
 
   useEffect(() => {
     void (async () => {
@@ -38,7 +50,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setAddressBook((await db.get("addressBook")) ?? []);
       setSnapshots((await db.get("snapshots")) ?? []);
       setSettings({ ...db.DEFAULT_SETTINGS, ...(await db.get("settings")) });
-      setLog((await db.get("log")) ?? []);
+      setLogCount(((await db.get("logSealed")) ?? []).length + ((await db.get("log")) ?? []).length);
       setLoaded(true);
     })();
   }, []);
@@ -55,7 +67,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     addressBook,
     snapshots,
     settings,
-    log,
+    logCount,
     saveVault: async (v) => {
       if (v) await db.put("vault", v);
       else await db.del("vault");
@@ -70,12 +82,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setSnapshots(s);
     },
     saveSettings: async (s) => {
+      setSettings(s); // optimistic: a toggle reflects the tap at once
       await db.put("settings", s);
-      setSettings(s);
     },
-    log_: async (e) => {
-      await db.appendLog(e);
-      setLog((l) => [...l, e].slice(-200));
+    log_: async (e, v = vault) => {
+      if (!v?.logKey) return;
+      const n = await db.appendSealedLog(await sealLogEntry(fromHex(v.logKey.publicKey), e));
+      setLogCount(n + ((await db.get("log")) ?? []).length);
+    },
+    logForUnlock: async () => ({ sealed: (await db.get("logSealed")) ?? [], legacy: (await db.get("log")) ?? [] }),
+    replaceLegacyLog: async (resealed) => {
+      const all = [...resealed, ...((await db.get("logSealed")) ?? [])].slice(-db.LOG_LIMIT);
+      await db.put("logSealed", all);
+      await db.del("log");
+      setLogCount(all.length);
     },
     eraseAll: async () => {
       await db.eraseAll();
@@ -83,7 +103,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setAddressBook([]);
       setSnapshots([]);
       setSettings(db.DEFAULT_SETTINGS);
-      setLog([]);
+      setLogCount(0);
     },
   };
   return <StoreCtx.Provider value={store}>{children}</StoreCtx.Provider>;
@@ -115,6 +135,7 @@ export type Route =
   | { name: "recoveryUse" }
   | { name: "addressBook" }
   | { name: "health" }
+  | { name: "rotate" }
   | { name: "settings" };
 
 interface Nav {

@@ -49,8 +49,10 @@ export interface DeviceContext {
   mode: Mode;
   /** The key this phone signs with in this mode. */
   publicKey: Hex;
+  /** Vault mode: a prepared replacement key (rotation); requests for it are accepted too. */
+  nextPublicKey?: Hex;
   schemeId: Hex;
-  /** Vault mode: the Path-B fee-payment (payer) address. */
+  /** The Path-B fee-payment (payer) address of this mode's key (the Vault's, or the Recovery key's). */
   payerAddress?: Address;
   addressBook: AddressBookEntry[];
   snapshots: AccountSnapshot[];

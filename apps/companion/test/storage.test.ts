@@ -1,7 +1,17 @@
 import "fake-indexeddb/auto";
 import { describe, expect, it } from "vitest";
 import * as db from "../src/core/db.js";
-import { WrongPassphrase, openSeed, sealSeed } from "../src/core/vaultCrypto.js";
+import { newLogKeyPair, openLogEntry, sealLogEntry } from "../src/core/logCrypto.js";
+import { decodeUsage, encodeUsage } from "../src/core/usage.js";
+import {
+  WrongPassphrase,
+  openBlob,
+  openSeed,
+  sealBlob,
+  sealSeed,
+  sealSeedWithKey,
+  unlock,
+} from "../src/core/vaultCrypto.js";
 
 const FAST = { N: 2 ** 10, r: 8, p: 1 };
 const entropy = () => Uint8Array.from({ length: 32 }, (_, i) => i);
@@ -91,10 +101,54 @@ describe("IndexedDB store", () => {
     expect(await db.get("vault")).toBeUndefined();
   });
 
-  it("keeps the last 200 log entries", async () => {
-    for (let i = 0; i < 205; i++) await db.appendLog({ at: i, kind: "signed", summary: String(i) });
-    const log = (await db.get("log"))!;
+  it("keeps the last 200 sealed log entries", async () => {
+    const kp = newLogKeyPair();
+    for (let i = 0; i < 205; i++)
+      await db.appendSealedLog(await sealLogEntry(kp.publicKey, { at: i, kind: "signed", summary: String(i) }));
+    const log = (await db.get("logSealed"))!;
     expect(log).toHaveLength(200);
-    expect(log[0]!.summary).toBe("5");
+    expect((await openLogEntry(kp.secretKey, log[0]!))?.summary).toBe("5");
+  });
+});
+
+describe("activity log at rest (sealed box)", () => {
+  const entry = { at: 7, kind: "signed" as const, summary: "Send 250 USDC to Alice (0xAb58…eC9B)" };
+  it("stores no amount, recipient or summary text in clear, and opens with the secret key only", async () => {
+    const kp = newLogKeyPair();
+    const blob = await sealLogEntry(kp.publicKey, entry);
+    const text = Buffer.from(blob).toString("latin1");
+    for (const needle of ["USDC", "Alice", "0xAb58", "signed", "summary"]) expect(text).not.toContain(needle);
+    expect(await openLogEntry(kp.secretKey, blob)).toEqual(entry);
+    expect(await openLogEntry(newLogKeyPair().secretKey, blob)).toBeUndefined();
+    const bad = blob.slice();
+    bad[50]! ^= 1;
+    expect(await openLogEntry(kp.secretKey, bad)).toBeUndefined();
+  });
+  it("uses a fresh ephemeral key per entry", async () => {
+    const kp = newLogKeyPair();
+    const a = await sealLogEntry(kp.publicKey, entry);
+    const b = await sealLogEntry(kp.publicKey, entry);
+    expect(Buffer.from(a.subarray(0, 32)).equals(Buffer.from(b.subarray(0, 32)))).toBe(false);
+  });
+});
+
+describe("sealed blobs under the seed key (counter, log key)", () => {
+  it("round-trip, and fail when swapped between purposes or keys, or edited", async () => {
+    const { key } = await sealSeedWithKey({ entropy: entropy(), bip39Passphrase: "" }, "long enough", PK, FAST);
+    const b = await sealBlob(key, "usage", PK, encodeUsage(41));
+    expect(decodeUsage(await openBlob(key, "usage", PK, b))).toBe(41);
+    await expect(openBlob(key, "logkey", PK, b)).rejects.toThrow(/tampered/);
+    await expect(openBlob(key, "usage", `0x${"cd".repeat(32)}`, b)).rejects.toThrow(/tampered/);
+    const ct = b.ciphertext.slice();
+    ct[0]! ^= 1;
+    await expect(openBlob(key, "usage", PK, { ...b, ciphertext: ct })).rejects.toThrow(/tampered/);
+    const other = await sealSeedWithKey({ entropy: entropy(), bip39Passphrase: "" }, "long enough", PK, FAST);
+    await expect(openBlob(other.key, "usage", PK, b)).rejects.toThrow(/tampered/);
+  });
+  it("the key from unlock() opens what the key from sealing sealed", async () => {
+    const s = await sealSeedWithKey({ entropy: entropy(), bip39Passphrase: "" }, "long enough", PK, FAST);
+    const b = await sealBlob(s.key, "usage", PK, encodeUsage(null));
+    const { key } = await unlock(s.sealed, "long enough", PK);
+    expect(decodeUsage(await openBlob(key, "usage", PK, b))).toBeNull();
   });
 });

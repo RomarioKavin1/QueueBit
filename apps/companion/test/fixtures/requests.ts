@@ -1,5 +1,5 @@
 import { getProfile, roleSignerPathATx, roleSignerPathBTx, encodeTx, sigHash, type FrameTx } from "@leaked/frames";
-import { SCHEME_ID, keygen } from "@leaked/pq-signer";
+import { SCHEME_ID, keygen, schemes } from "@leaked/pq-signer";
 import { ROLE, TX_TYPE, encodeSignRequest, toHex, type SignRequest } from "@leaked/ur";
 import { encodeFunctionData, keccak256, stringToHex, type Address, type Hex } from "viem";
 import { ACCOUNT_ABI, ERC20_ABI, ROLE_SIGNER_ABI } from "../../src/core/clearsign.js";
@@ -32,7 +32,7 @@ export const MALLORY: Address = "0x9999999999999999999999999999999999999999";
 function keys(words: string[], role: "vault" | "recovery") {
   const seed = seedFromEntropy(wordsToEntropy(words));
   const kp = keygen(seed, { role });
-  const payer = payerKeyFromSeed(seed);
+  const payer = payerKeyFromSeed(seed, role);
   return { pk: toHex(kp.publicKey), payer: payer.address, secretKey: kp.secretKey, payerKey: payer.privateKey };
 }
 
@@ -57,6 +57,8 @@ function wrap(
     policy?: SignRequest["policy"];
     requestId?: string;
     innerTarget?: Address;
+    /** Another key type / key (leanSphincs-s): its scheme id, witness length and the pk the request names. */
+    key?: { schemeId: Hex; sigLength: number; pk: Hex };
   } = {},
 ): Built {
   const role = opts.role ?? "vault";
@@ -64,12 +66,19 @@ function wrap(
   const profile = getProfile(PROFILE_ID);
   const signer = role === "vault" ? VAULT_SIGNER : RECOVERY_SIGNER;
   const target = opts.innerTarget ?? ACCOUNT;
-  const common = { chainId: CHAIN_ID, nonceSeq: 7n, fees, roleSigner: signer, sigLength: 3688, verifyGas: 400_000n };
+  const common = {
+    chainId: CHAIN_ID,
+    nonceSeq: 7n,
+    fees,
+    roleSigner: signer,
+    sigLength: opts.key?.sigLength ?? 3688,
+    verifyGas: 400_000n,
+  };
   const tx =
     path === "B"
       ? roleSignerPathBTx(profile, {
           ...common,
-          payerKey: vault.payer,
+          payerKey: role === "vault" ? vault.payer : recovery.payer,
           body: {
             data: encodeFunctionData({ abi: ROLE_SIGNER_ABI, functionName: "executePQ", args: [0n, target, roleData] }),
             execution: 300_000n,
@@ -88,9 +97,9 @@ function wrap(
     txType: TX_TYPE.frameTx,
     payload: encodeTx(profile, tx),
     role: role === "vault" ? ROLE.vault : ROLE.recovery,
-    schemeId: SCHEME_ID,
+    schemeId: opts.key?.schemeId ?? SCHEME_ID,
     sigIndex: 0,
-    expectedPk: role === "vault" ? vault.pk : recovery.pk,
+    expectedPk: opts.key?.pk ?? (role === "vault" ? vault.pk : recovery.pk),
     origin: "LEAKED extension",
     profileId: PROFILE_ID,
     ...(opts.intent ? { intent: opts.intent } : {}),
@@ -186,9 +195,12 @@ export function lockdown(): Built {
   return wrap(acct("vaultEnableBunker", []), { policy: POLICY });
 }
 
-/** Recovery: replace the Vault (Path A, signed by the Recovery key). */
-export function rotation(): Built {
-  return wrap(acct("recoveryStartVaultRotation", ["0x3333333333333333333333333333333333333333"]), { role: "recovery" });
+/** Recovery: replace the Vault (Path A by default, signed by the Recovery key; Path B adds its fee key). */
+export function rotation(path: "A" | "B" = "A"): Built {
+  return wrap(acct("recoveryStartVaultRotation", ["0x3333333333333333333333333333333333333333"]), {
+    role: "recovery",
+    path,
+  });
 }
 
 /** The Privacy Pools note envelope (tx-type 2), signed by the payer key. */
@@ -256,3 +268,25 @@ export function recipientMode(mode: "open" | "strict", queued = mode === "open")
     intent: { action: "vaultSetRecipientMode", summary: mode === "open" ? "Pay anyone" : "Approved only" },
   });
 }
+
+/** leanSphincs-s Vault keys of the fixture words: key #1 ("any") and key #2 ("any-2"). */
+export function leanKey(keyNumber = 1) {
+  const seed = seedFromEntropy(wordsToEntropy(VAULT_WORDS));
+  const kp = schemes.leanSphincsS.keygen(seed, {
+    role: "vault",
+    chainScope: keyNumber === 1 ? "any" : `any-${keyNumber}`,
+  });
+  return { pk: toHex(kp.publicKey), secretKey: kp.secretKey };
+}
+
+/** A leanSphincs-s Vault request (Path A: its VERIFY fits the stock mempool): pause everyday spending. */
+export function leanFreeze(pk: Hex, requestId?: string): Built {
+  return wrap(acct("vaultFreeze", []), {
+    path: "A",
+    policy: POLICY,
+    ...(requestId ? { requestId } : {}),
+    key: { schemeId: schemes.leanSphincsS.SCHEME_ID, sigLength: schemes.leanSphincsS.SIG_LENGTH, pk },
+  });
+}
+
+export const LEAN_SCHEME_ID = schemes.leanSphincsS.SCHEME_ID;

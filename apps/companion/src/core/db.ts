@@ -1,16 +1,40 @@
 import type { Address, Hex } from "viem";
 import type { AccountSnapshot, AddressBookEntry } from "./types.js";
-import type { SealedSeed } from "./vaultCrypto.js";
+import type { UsageRecord } from "./usage.js";
+import type { SealedBlob, SealedSeed } from "./vaultCrypto.js";
 
 /**
  * Local storage: one IndexedDB database, one key-value store. Everything here is either public (keys, address book,
- * the policy snapshot) or sealed (the seed). The companion stores only what plan §20 §4.4 lists.
+ * the policy snapshot) or sealed (the seed, the signature counter, the activity log). The companion stores only what
+ * plan §20 §4.4 lists.
  */
+
+/** A prepared replacement key (leanSphincs-s rotation): derived, shown to the browser, not yet in use on chain. */
+export interface NextKey {
+  chainScope: string;
+  pk: Hex;
+  usage?: UsageRecord;
+  preparedAt: number;
+}
 
 export interface VaultRecord {
   v: 1;
+  /** The key type (`IPQVerifier.schemeId()`): SPHINCS- C13 by default, leanSphincs-s behind the experimental flag. */
   schemeId: Hex;
+  /** The key this phone approves with. */
   vaultPk: Hex;
+  /** Derivation label of `vaultPk` (keys.ts `chainScopeFor`); absent = `"any"` (key #1). */
+  chainScope?: string;
+  /** The pk the sealed seed's AAD is bound to (the first key); absent = `vaultPk`. Kept across key rotations. */
+  sealedFor?: Hex;
+  /** leanSphincs-s: the signature counter of `vaultPk` (absent for C13). */
+  usage?: UsageRecord;
+  /** leanSphincs-s: a replacement key prepared on this phone. */
+  next?: NextKey;
+  /** Keys this phone used before (newest last). */
+  retired?: { pk: Hex; chainScope: string; used: number | null; retiredAt: number }[];
+  /** The activity log's sealing key (logCrypto.ts); absent on Vaults made before it existed, until the next unlock. */
+  logKey?: { publicKey: Hex; sealed: SealedBlob };
   payerAddress: Address;
   sealed: SealedSeed;
   createdAt: number;
@@ -32,6 +56,8 @@ export interface LogEntry {
 export interface Settings {
   theme: "system" | "light" | "dark";
   qrSpeed: "normal" | "slow";
+  /** Offer experimental key types (leanSphincs-s) when creating or restoring a Vault. Off by default. */
+  experimental?: boolean;
 }
 
 interface Schema {
@@ -39,7 +65,10 @@ interface Schema {
   addressBook: AddressBookEntry[];
   snapshots: AccountSnapshot[];
   settings: Settings;
+  /** Legacy plaintext log (before the encrypted log): moved into `logSealed` at the next unlock, then deleted. */
   log: LogEntry[];
+  /** The activity log, one sealed box per entry (logCrypto.ts). */
+  logSealed: Uint8Array[];
 }
 
 const DB_NAME = "leaked-companion";
@@ -93,10 +122,15 @@ export async function eraseAll(): Promise<void> {
   });
 }
 
-export async function appendLog(e: LogEntry): Promise<void> {
-  const log = (await get("log")) ?? [];
-  log.push(e);
-  await put("log", log.slice(-200));
+export const LOG_LIMIT = 200;
+
+/** Appends one sealed log entry (the caller seals it to the Vault's log key), keeping the newest `LOG_LIMIT`. */
+export async function appendSealedLog(blob: Uint8Array): Promise<number> {
+  const log = (await get("logSealed")) ?? [];
+  log.push(blob);
+  const kept = log.slice(-LOG_LIMIT);
+  await put("logSealed", kept);
+  return kept.length;
 }
 
 export const DEFAULT_SETTINGS: Settings = { theme: "system", qrSpeed: "normal" };
