@@ -1,6 +1,6 @@
 // Builds each target twice, in two fresh directories, and fails unless every output byte matches.
 //
-//   node scripts/release/verify-reproducible.mjs [companion] [extension]     (default: both)
+//   node scripts/release/verify-reproducible.mjs [extension]     (default: every target)
 //
 // A target whose hook reports "not implemented" (the extension, until its release:build lands) is reported as skipped,
 // and fails the run only with REQUIRE_ALL=1. Run in CI by the `release-reproducible` job (ci.yml) and by release.yml.
