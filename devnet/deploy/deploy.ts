@@ -3,6 +3,12 @@
 //
 //   cd contracts && forge build && cd ../devnet/deploy && bun install && bun run deploy
 //   CHECK_ONLY=1 bun run deploy.ts   # exit 1 unless every contract in the current artifacts is deployed
+//   bun run deploy:public            # the PUBLIC devnet (https://altmempool.forshtat.com), see below
+//
+// Options (env), all for the public devnet: ETHREX_URL; DEPLOYER_KEY (default anvil #7; public devnet: the published
+// sidecar genesis key 0x5544…16f9 from devnet/README.md); STAKING_REGISTRY (default the local NaiveStakingRegistry;
+// public: read from the sidecar's `skandha_config.stakingRegistryAddress`); ADDRESSES_FILE (default
+// addresses.local.json); NO_TEST_VAULT=1 (skip the legacy test-Vault funding: minimal transactions).
 //
 // Idempotent by construction: every contract goes through the Arachnid CREATE2 deployer (in the devnet genesis) with
 // one fixed salt, so its address is a function of its init code (creation code + constructor args). A run deploys
@@ -43,11 +49,12 @@ import { privateKeyToAccount } from "viem/accounts";
 const RPC = process.env.ETHREX_URL ?? "http://localhost:8545";
 const CHAIN_ID = 1337;
 /** anvil #7: the extension e2e funding key (public test key, never real). */
-const FUNDER_KEY: Hex = "0x4bbbf85ce3377467afe5d46f804f221813b2bb87f24d81f60f1fcdbf7cbf4356";
+const FUNDER_KEY: Hex = (process.env.DEPLOYER_KEY as Hex | undefined) ?? "0x4bbbf85ce3377467afe5d46f804f221813b2bb87f24d81f60f1fcdbf7cbf4356";
 /** Arachnid deterministic-deployment proxy (devnet genesis). Calldata = salt ‖ initCode. */
 const CREATE2_DEPLOYER: Address = "0x4e59b44847b379578588920cA78FbF26c0B4956C";
 const SALT = keccak256(stringToHex("queuebit.devnet.deploy.v1"));
-const STAKING_REGISTRY: Address = "0x8464135c8F25Da09e49BC8782676a84730C318bC";
+const STAKING_REGISTRY: Address = (process.env.STAKING_REGISTRY as Address | undefined) ?? "0x8464135c8F25Da09e49BC8782676a84730C318bC";
+const NO_TEST_VAULT = process.env.NO_TEST_VAULT === "1";
 /** Public by design: anyone on the local devnet can act as this Vault. Never use it anywhere else. */
 export const TEST_VAULT_KEY = keccak256(stringToHex("queuebit/devnet/test-vault-stand-in/v1"));
 const DEVNET_ERC8421_WORKSHOP = 0;
@@ -55,7 +62,7 @@ const TXPARAM_MAX_COST = 6;
 
 const here = fileURLToPath(new URL(".", import.meta.url));
 const OUT = fileURLToPath(new URL("../../contracts/out/", import.meta.url));
-const FILE = `${here}addresses.local.json`;
+const FILE = `${here}${process.env.ADDRESSES_FILE ?? "addresses.local.json"}`;
 
 const chain = {
   id: CHAIN_ID,
@@ -184,7 +191,7 @@ await deployToken("DAI", "MockToken", ["DAI", 18], false);
 
 // The test Vault stand-in: keep it funded for vault-side devnet transactions.
 const vault = privateKeyToAccount(TEST_VAULT_KEY);
-if (!checkOnly && (await pub.getBalance({ address: vault.address })) < parseEther("0.5")) {
+if (!checkOnly && !NO_TEST_VAULT && (await pub.getBalance({ address: vault.address })) < parseEther("0.5")) {
   const hash = await wallet.sendTransaction({ to: vault.address, value: parseEther("1"), gas: 250_000n, type: "legacy", gasPrice: 2_000_000_000n });
   await pub.waitForTransactionReceipt({ hash, timeout: 240_000 });
   console.log(`+ funded test Vault stand-in ${vault.address} (${hash})`);
@@ -200,7 +207,7 @@ if (checkOnly) {
 }
 
 const out: Deployment = {
-  network: { chainId: CHAIN_ID, rpcUrl: "http://localhost:8545" },
+  network: { chainId: CHAIN_ID, rpcUrl: process.env.ETHREX_URL ?? "http://localhost:8545" },
   deployer: CREATE2_DEPLOYER,
   salt: SALT,
   funder: funder.address,

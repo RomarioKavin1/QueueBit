@@ -15,6 +15,8 @@ const ROOT = join(here, "..", "..", "..");
 export const OUT_DIR = join(ROOT, "contracts", "out");
 export const DEPLOYMENT_FILE = join(ROOT, "devnet", "deploy", "addresses.local.json");
 export const AA_DEPLOYMENT_FILE = join(ROOT, "devnet", "deploy", "addresses.anvil4337.json");
+/** The public alt-mempool devnet (https://altmempool.forshtat.com): `bun run deploy:public`. */
+export const PUBLIC_DEPLOYMENT_FILE = join(ROOT, "devnet", "deploy", "addresses.public.json");
 export const TARGET = join(here, "..", "src", "generated", "contracts.ts");
 
 const art = (file, name) => JSON.parse(readFileSync(join(OUT_DIR, file, `${name}.json`), "utf8"));
@@ -80,6 +82,22 @@ export async function render() {
         tokens: tokens(aaDeployment),
       }
     : null;
+  const frameDeployment = (deployment) =>
+    deployment
+      ? {
+          chainId: deployment.network.chainId,
+          accountImpl: deployment.contracts.QueueBitAccountImpl.address,
+          factory: deployment.contracts.AccountFactory.address,
+          c13Verifier: deployment.contracts.C13Verifier.address,
+          roleSignerFactory: deployment.contracts.RoleSignerFactory.address,
+          stakingRegistry: deployment.stakingRegistry,
+          tokens: tokens(deployment),
+        }
+      : null;
+  const publicFile = existsSync(PUBLIC_DEPLOYMENT_FILE)
+    ? JSON.parse(readFileSync(PUBLIC_DEPLOYMENT_FILE, "utf8"))
+    : null;
+  const pub = frameDeployment(publicFile);
   const deployment = existsSync(DEPLOYMENT_FILE) ? JSON.parse(readFileSync(DEPLOYMENT_FILE, "utf8")) : null;
   const local = deployment
     ? {
@@ -176,6 +194,17 @@ export const localDeployment: {
   testVault: \`0x\${string}\`;
   tokens: LocalToken[];
 } | null = ${j(local)};
+
+/** The public alt-mempool devnet deployment (devnet/deploy/addresses.public.json), or null when none was recorded. */
+export const publicDeployment: {
+  chainId: number;
+  accountImpl: \`0x\${string}\`;
+  factory: \`0x\${string}\`;
+  c13Verifier: \`0x\${string}\`;
+  roleSignerFactory: \`0x\${string}\`;
+  stakingRegistry: \`0x\${string}\`;
+  tokens: LocalToken[];
+} | null = ${j(pub)};
 `;
   const options = (await prettier.resolveConfig(TARGET)) ?? {};
   return prettier.format(text, { ...options, filepath: TARGET });

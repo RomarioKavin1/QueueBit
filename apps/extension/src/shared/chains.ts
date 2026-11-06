@@ -1,5 +1,5 @@
 import { DEVNET_1337 } from "@queuebit/rpc";
-import { local4337Deployment, localDeployment, type LocalToken } from "../generated/contracts";
+import { local4337Deployment, localDeployment, publicDeployment, type LocalToken } from "../generated/contracts";
 import { LOCAL_DEVNET, SHARED_DEVNET, SHARED_DEVNET_BASE } from "./build";
 import { sharedNetworks } from "./sharedDevnet";
 
@@ -52,6 +52,19 @@ export interface TokenPreset {
   preselected?: boolean;
 }
 
+/**
+ * What a devnet's mempool can do, declared per devnet (measured on the live sidecars: `skandha_config`):
+ *  - stagedBudget: a BUDGET-010 lane (per-entity budgets; a staked role signer may run a >100k VERIFY): C13 Path A and
+ *    the Privacy Pools fee payer (PoolPayer) need it. Without it every VERIFY must fit the flat 100,000.
+ *  - precompilesAllowed: the sidecar's `precompiles` list is non-empty (PoolPayer's proof check calls them in VERIFY).
+ *  - has4337: an ERC-4337 chain (EntryPoint v0.8 + bundler) belongs to this devnet.
+ */
+export interface DevnetCapabilities {
+  stagedBudget: boolean;
+  precompilesAllowed: boolean;
+  has4337: boolean;
+}
+
 export interface Network {
   chainId: number;
   /** User-facing name (ux-spec §3.13 "Networks"). */
@@ -86,6 +99,15 @@ export interface Network {
   accountKind: string;
   currency: { symbol: string; decimals: number };
   explorerUrl?: string;
+  /** A transaction's page in this network's explorer, `{hash}` replaced (frame backend: the frame tx hash). */
+  explorerTxUrl?: string;
+  /**
+   * Devnets whose explorer reads the stock sidecar (`skandha_explorer_*`): standard-lane frame transactions go through
+   * `sidecarUrl` (falling back to the node), so the explorer knows them (background/submit.ts).
+   */
+  submitViaSidecar?: boolean;
+  /** Devnets: what the mempool supports (routing and the private balance read this). */
+  capabilities?: DevnetCapabilities;
   /** One honest line for the network picker. */
   note: string;
   testnet: boolean;
@@ -114,6 +136,30 @@ const localTokens = (t: { tokens?: LocalToken[] } | null): TokenPreset[] =>
  * until its addresses.json is loaded and checked (src/shared/sharedDevnetRuntime.ts fills them in).
  */
 const shared: readonly [Network, Network] | undefined = SHARED_DEVNET ? sharedNetworks(SHARED_DEVNET_BASE) : undefined;
+
+/**
+ * The devnets QueueBit knows, one of which is chain 1337 in a given build: the local fork (`build:local`, e2e), the
+ * shared OCI devnet (`build:shared`) or the public alt-mempool devnet (every other build).
+ */
+export const DEVNET_CAPABILITIES = {
+  local: { stagedBudget: true, precompilesAllowed: true, has4337: true },
+  shared: { stagedBudget: true, precompilesAllowed: true, has4337: true },
+  /** Stock skandha v4.1.1 at altmempool.forshtat.com: flat 100k MAX_VERIFY_GAS, no budgets, empty precompiles. */
+  public: { stagedBudget: false, precompilesAllowed: false, has4337: false },
+} as const satisfies Record<string, DevnetCapabilities>;
+
+/**
+ * The public devnet's explorer (the sidecar's Frame pool explorer), showing the transaction as the sidecar QueueBit
+ * submits to saw it (`?node=`; its default instance is a gateway node that never sees them).
+ */
+export const PUBLIC_EXPLORER_TX =
+  "https://explorer.altmempool.wtf/tx/{hash}?node=https%3A%2F%2Faltmempool.forshtat.com%2Frpc";
+
+/** The explorer link of a transaction on `net`, if it has an explorer. */
+export function explorerTxLink(net: Network | undefined, hash: string): string | undefined {
+  if (!net?.explorerTxUrl || !/^0x[0-9a-fA-F]{64}$/u.test(hash)) return undefined;
+  return net.explorerTxUrl.replace("{hash}", hash);
+}
 
 const devnet: Network = shared
   ? shared[0]
@@ -144,6 +190,7 @@ const devnet: Network = shared
         testnet: true,
         tokenPresets: localTokens(localDeployment),
         enabled: true,
+        capabilities: DEVNET_CAPABILITIES.local,
       }
     : {
         chainId: DEVNET_1337.chainId,
@@ -153,12 +200,27 @@ const devnet: Network = shared
         sidecarUrl: DEVNET_1337.sidecarUrl,
         backend: "frame",
         profileId: "ethrex-eip8141-tracer",
+        // devnet/deploy `bun run deploy:public` (addresses.public.json); its RoleSignerFactory reads the public registry.
+        ...(publicDeployment
+          ? {
+              deployment: {
+                factory: publicDeployment.factory,
+                accountImpl: publicDeployment.accountImpl,
+                roleSignerFactory: publicDeployment.roleSignerFactory,
+                c13Verifier: publicDeployment.c13Verifier,
+                stakingRegistry: publicDeployment.stakingRegistry,
+              },
+            }
+          : {}),
         accountKind: "Native account",
         currency: { symbol: "ETH", decimals: 18 },
-        note: "Test network for native QueueBit accounts. Test money only.",
+        note: "The public test network for native QueueBit accounts (it can be reset). Test money only.",
         testnet: true,
-        tokenPresets: [],
+        tokenPresets: localTokens(publicDeployment),
         enabled: true,
+        explorerTxUrl: PUBLIC_EXPLORER_TX,
+        submitViaSidecar: true,
+        capabilities: DEVNET_CAPABILITIES.public,
       };
 
 /**

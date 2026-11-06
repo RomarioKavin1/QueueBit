@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { ActivityEntry } from "../../background/activity";
-import { findNetwork } from "../../shared/chains";
+import { explorerTxLink, findNetwork } from "../../shared/chains";
 import {
   ActivityIcon,
   AppsIcon,
@@ -163,6 +163,18 @@ function ActivityRow({ e, onChanged }: { e: ActivityEntry; onChanged: () => void
               )}
               <p>Network: {net?.name ?? e.chainId}</p>
               <p className="t-mono break-all">Id: {e.hash}</p>
+              {/* The devnet explorers index frame transactions; activation is a plain transaction from the fee tank. */}
+              {net?.backend === "frame" && e.kind !== "activation" && explorerTxLink(net, e.hash) && (
+                <a
+                  className="underline underline-offset-2"
+                  href={explorerTxLink(net, e.hash)}
+                  target="_blank"
+                  rel="noreferrer"
+                  data-testid="activity-explorer-link"
+                >
+                  View in the explorer
+                </a>
+              )}
               {e.replaced.length > 0 && <p className="t-mono break-all">Replaced: {e.replaced.join(", ")}</p>}
               {e.blockNumber && <p>Block {e.blockNumber}</p>}
               {e.batchId && <p>Batch id: {e.batchId}</p>}

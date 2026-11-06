@@ -56,7 +56,8 @@ export interface EngineRpc {
     frames: unknown[] | null;
     executionError: string | null;
   }>;
-  sendRawTransaction(raw: Hex): Promise<Hex>;
+  /** Submits on the standard lane (`tx` and `hash` let a devnet route it through its sidecar: background/submit.ts). */
+  sendRawTransaction(raw: Hex, tx?: FrameTx, hash?: Hex): Promise<Hex>;
   getTransactionReceipt(hash: Hex): Promise<FrameTxReceipt | null>;
 }
 
@@ -265,7 +266,7 @@ export class FrameEngine {
     if (!p.verdict.admitted) {
       throw new EngineError("not-admitted", p.verdict.reason ?? "The network would not accept this transaction.");
     }
-    const hash = await this.rpc.sendRawTransaction(p.raw);
+    const hash = await this.rpc.sendRawTransaction(p.raw, fromWire(p.wire), p.hash);
     if (hash.toLowerCase() !== p.hash.toLowerCase()) {
       throw new EngineError("hash-mismatch", `The node returned ${hash} for ${p.hash}.`);
     }

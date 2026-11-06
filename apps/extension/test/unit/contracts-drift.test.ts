@@ -1,7 +1,14 @@
 import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-// @ts-expect-error: plain ESM script without types
-import { AA_DEPLOYMENT_FILE, DEPLOYMENT_FILE, OUT_DIR, TARGET, render } from "../../scripts/gen-contracts.mjs";
+import {
+  AA_DEPLOYMENT_FILE,
+  DEPLOYMENT_FILE,
+  OUT_DIR,
+  PUBLIC_DEPLOYMENT_FILE,
+  TARGET,
+  render,
+  // @ts-expect-error: plain ESM script without types
+} from "../../scripts/gen-contracts.mjs";
 
 /**
  * The account ABI is read from the forge artifacts, never hand-copied: this fails when contracts/out (e.g. an audit
@@ -13,8 +20,9 @@ describe.runIf(existsSync(OUT_DIR as string))("generated contracts", () => {
     expect(readFileSync(TARGET as string, "utf8")).toBe(await (render as () => Promise<string>)());
   });
 
-  it("the recorded deployments (devnet 1337, anvil 4337) were made from the current artifacts", async () => {
-    for (const file of [DEPLOYMENT_FILE as string, AA_DEPLOYMENT_FILE as string]) await checkDeployment(file);
+  it("the recorded deployments (devnet 1337, anvil 4337, public devnet) were made from the current artifacts", async () => {
+    for (const file of [DEPLOYMENT_FILE as string, AA_DEPLOYMENT_FILE as string, PUBLIC_DEPLOYMENT_FILE as string])
+      await checkDeployment(file);
   });
 });
 

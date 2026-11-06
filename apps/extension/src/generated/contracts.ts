@@ -10542,3 +10542,37 @@ export const localDeployment: {
     },
   ],
 };
+
+/** The public alt-mempool devnet deployment (devnet/deploy/addresses.public.json), or null when none was recorded. */
+export const publicDeployment: {
+  chainId: number;
+  accountImpl: `0x${string}`;
+  factory: `0x${string}`;
+  c13Verifier: `0x${string}`;
+  roleSignerFactory: `0x${string}`;
+  stakingRegistry: `0x${string}`;
+  tokens: LocalToken[];
+} | null = {
+  chainId: 1337,
+  accountImpl: "0x36a3dc1ec67e30e7954fDF7c7636E6c6b102d55D",
+  factory: "0x602D0b1A46d6fc77A8690691844Fe0F9a7Be7316",
+  c13Verifier: "0xAD7432C0BFd52Dd1c62774701005eeAbBc224152",
+  roleSignerFactory: "0x1b140b91B0d3f4BE6761963b9D3A0761BD8Aac08",
+  stakingRegistry: "0xd51c04d7a0b01124e84de152f4e56d9eecb22d2f",
+  tokens: [
+    {
+      address: "0xA906a5e54E522a95D361bD2Be84c3d3B3d5d57E9",
+      symbol: "DAI",
+      decimals: 18,
+      usdPerToken: "1000000",
+      permit: false,
+    },
+    {
+      address: "0x1049a551b5766170A89B7FC0546a2cb2dbC04c78",
+      symbol: "USDC",
+      decimals: 18,
+      usdPerToken: "1000000",
+      permit: true,
+    },
+  ],
+};

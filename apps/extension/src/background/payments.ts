@@ -1,7 +1,8 @@
 import { erc20Abi, parseGwei, type Address, type Hex, type PublicClient } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { fromWire, signTx, type Profile } from "@queuebit/frames";
-import type { NodeClient } from "@queuebit/rpc";
+import type { NodeClient, SidecarClient } from "@queuebit/rpc";
+import { submitStandardLane } from "./submit";
 import { findNetwork, type Network } from "../shared/chains";
 import type { AccountStatus, RouteView, SendPreview } from "../shared/views";
 import type { AccountPlans } from "./account";
@@ -43,6 +44,8 @@ import { BundlerClient } from "./aa/userop";
 export interface ChainIo {
   publicClient(chainId: number): PublicClient;
   node(chainId: number): NodeClient;
+  /** A sidecar client by URL (devnets that take standard-lane transactions through their sidecar). */
+  sidecar?(url: string): SidecarClient;
   /** 4337 backend: the chain's bundler (defaults to the network's `bundlerUrl`). */
   bundler?(chainId: number): BundlerClient;
 }
@@ -211,7 +214,17 @@ export class Payments {
         getTransactionCount: (a, tag) => node.getTransactionCount(a, tag),
         baseFee: async () => (await client.getBlock({ blockTag: "latest" })).baseFeePerGas ?? 0n,
         simulate: (raw) => node.simulateFrameTransaction(raw),
-        sendRawTransaction: (raw) => node.sendRawTransaction(raw),
+        sendRawTransaction: (raw, tx, hash) =>
+          tx && hash
+            ? submitStandardLane({
+                net: findNetwork(chainId)!,
+                raw,
+                tx,
+                expectedHash: hash,
+                node,
+                sidecar: this.d.io.sidecar?.bind(this.d.io),
+              })
+            : node.sendRawTransaction(raw),
         getTransactionReceipt: (h) => node.getTransactionReceipt(h),
       };
       e = new FrameEngine(rpc, (profile, tx) => this.signHot(profile, tx));

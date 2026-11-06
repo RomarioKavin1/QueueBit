@@ -99,6 +99,10 @@ bun run build:contracts     # (foundry) rebuild contracts/src/*.sol -> artifacts
 ETHREX_URL=https://altmempool.forshtat.com SIDECAR_URL=https://altmempool.forshtat.com/rpc STAKING_REGISTRY=0xd51c04d7a0b01124e84de152f4e56d9eecb22d2f bun run smoke
 ```
 
+QueueBit's contracts on the public devnet: `cd devnet/deploy && bun run deploy:public` (idempotent, CREATE2; from the
+published sidecar devnet key above, no test-Vault funding) writes `addresses.public.json`, which the store-flavour
+extension bundles (`gen:contracts`). The registry address comes from the sidecar's `skandha_config.stakingRegistryAddress`.
+
 `contracts/src/OpcodeProbe.sol` is a single-owner wallet on `HegotaSupport(Devnet.ERC8421_WORKSHOP)` whose
 VERIFY frame reads every introspection opcode and whose SENDER frame emits their values as events;
 `VerifyBisect.sol` performs one selected read per frame. Both are built with solc 0.8.28 against the vendored package.

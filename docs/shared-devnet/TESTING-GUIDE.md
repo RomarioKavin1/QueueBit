@@ -106,7 +106,34 @@ deposits within about 30 seconds; after that you can spend from the private bala
 browser, which takes a little while). The fee payer runs on the BUDGET-010 ("staked") mempool lane.
 
 Things to look at in the explorer: each transaction's frames (VERIFY / SENDER), the rule-by-rule admission report, and
-which mempool (stock or staked) admitted it. Example: open https://<explorer>.trycloudflare.com/ and click any row.
+which mempool (stock or staked) admitted it. Open https://<explorer>.trycloudflare.com/ and click any row, or in the popup, Activity, a
+payment, Details, **View in the explorer**.
+
+## Public devnet (altmempool.forshtat.com)
+
+QueueBit also runs on the public EIP-8141 devnet that the sidecar authors operate (ethrex `https://altmempool.forshtat.com`,
+its stock sidecar at `/rpc`, explorer https://explorer.altmempool.wtf). It is a normal (store-flavour) build: build it with
+`pnpm --filter @queuebit/extension build` and load `apps/extension/.output/chrome-mv3` unpacked; the network is called
+**Alt-mempool devnet**. The contracts are at the same CREATE2 addresses as here, except the RoleSignerFactory
+(`devnet/deploy/addresses.public.json`), and the chain can be reset by its operators at any time.
+
+What works and what doesn't there, and why:
+
+| | Public devnet | Why |
+|---|---|---|
+| Onboarding, activation, everyday payments | works | VERIFY 45k, well inside the stock sidecar's flat 100,000 |
+| Vault approvals (C13) | works, on **Path B** | the phone's pinned fee key pays in VERIFY (36k) and the quantum-safe signature is checked in execution. Path A (signature inside VERIFY, 151,701 gas) would need a staked per-entity budget, which the stock sidecar does not have; QueueBit never sends a VERIFY over 100k there |
+| leanSphincs-s Vault key | Path A works | its VERIFY is 84,465 gas: fits 100k |
+| Private balance | **off** | private withdrawals go through PoolPayer, whose VERIFY needs more than 100k and precompile calls (the public sidecar's `precompiles` list is empty). Adding money is off too, so nobody strands funds they could then only take out publicly |
+| 4337 chain | none | the public devnet has no ERC-4337 chain |
+| Faucet | none | ask the devnet operators, or send yourself test ETH from the published devnet key (`0x5544…16f9`, listed in `devnet/README.md`; public, devnet only) |
+| Explorer links | work | QueueBit sends standard-lane frame transactions through the public sidecar so its explorer has them: Activity › Details › **View in the explorer** |
+
+The reason for the difference is the ERC-8421 verification budget: the stock sidecar admits at most 100,000 gas of
+VERIFY per transaction, flat. The shared devnet runs a second sidecar with **BUDGET-010** (per-entity budgets: 100k
+unstaked, 1M for a staked signer), which is what lets a staked Vault signer check its C13 signature in VERIFY and lets
+PoolPayer pay for private withdrawals. The proposal and its rationale:
+https://github.com/RomarioKavin1/QueueBit/blob/main/upstream/skandha-budget-010/PR.md
 
 ## If the URL changes
 

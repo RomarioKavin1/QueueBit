@@ -26,6 +26,7 @@ export const SHARED_PATHS = {
   faucet: "/faucet",
   addresses: "/addresses.json",
   companion: "/companion/",
+  explorer: "/explorer/",
 } as const;
 
 export class SharedDevnetError extends Error {
@@ -269,6 +270,10 @@ export function sharedNetworks(base: string): [Network, Network] {
       tokenPresets: [],
       enabled: false,
       disabledReason: LOADING,
+      // The gateway redirects <base>/explorer/* to the explorer's own tunnel (/tx/<hash> deep links).
+      explorerTxUrl: `${u.explorer}tx/{hash}`,
+      submitViaSidecar: true,
+      capabilities: { stagedBudget: true, precompilesAllowed: true, has4337: true },
     },
     {
       chainId: 31337,
@@ -298,6 +303,7 @@ export function retargetSharedNetworks(nets: readonly Network[], base: string): 
     if (src.sidecarUrl) n.sidecarUrl = src.sidecarUrl;
     if (src.stakedSidecarUrl) n.stakedSidecarUrl = src.stakedSidecarUrl;
     if (src.bundlerUrl) n.bundlerUrl = src.bundlerUrl;
+    if (src.explorerTxUrl) n.explorerTxUrl = src.explorerTxUrl;
   }
 }
 

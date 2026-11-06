@@ -27,6 +27,7 @@ import {
 } from "@queuebit/frames";
 import { schemeById } from "@queuebit/pq-signer";
 import type { NodeClient, SidecarClient } from "@queuebit/rpc";
+import { submitStandardLane } from "./submit";
 import {
   ROLE,
   TX_TYPE,
@@ -311,7 +312,9 @@ export class VaultFlow {
   async budgets(chainId: number): Promise<LaneBudgets> {
     const net = this.network(chainId);
     const out: LaneBudgets = { standard: STOCK_VERIFY_BUDGET };
-    if (net.stakedSidecarUrl) {
+    // A devnet that declares no staged budget (the public one: stock sidecar, flat 100k) never gets a staked lane, so
+    // the router can only pick what fits 100k there (C13 → Path B; leanSphincs-s Path A at 84k).
+    if (net.stakedSidecarUrl && net.capabilities?.stagedBudget !== false) {
       try {
         const staked = parseBudgets(await this.sidecar(net.stakedSidecarUrl).config());
         if (staked) out.staked = staked;
@@ -760,7 +763,14 @@ export class VaultFlow {
     const hash =
       rec.lane === "staked"
         ? await this.sidecar(this.network(rec.chainId).stakedSidecarUrl!).sendFrameTransaction(tx)
-        : await this.d.io.node(rec.chainId).sendRawTransaction(raw);
+        : await submitStandardLane({
+            net: this.network(rec.chainId),
+            raw,
+            tx,
+            expectedHash: txHash(profile, tx),
+            node: this.d.io.node(rec.chainId),
+            sidecar: this.d.io.sidecar?.bind(this.d.io),
+          });
     // The bytes are on the network now, whatever the node answered: never leave this request "waiting" (a second
     // scan would race the first broadcast). Track the hash of the bytes we sent; record the node's answer and say so.
     const ours = txHash(profile, tx);

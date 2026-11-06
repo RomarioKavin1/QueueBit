@@ -271,6 +271,15 @@ export class PrivacyController {
         ok: false,
         reason: "Private balance needs a native account; it isn't available on this network yet.",
       };
+    else if (net.capabilities && !net.capabilities.stagedBudget)
+      // Withdrawals go through PoolPayer, whose VERIFY needs more than 100k gas and precompile calls: only a mempool
+      // with staked budgets admits it. Shielding is off too, so no one strands funds in a pool they could then only
+      // leave publicly (ragequit).
+      availability = {
+        ok: false,
+        reason:
+          "Private withdrawals need a mempool with staked budgets (not available on this network yet), so the private balance is off here: adding money to it would leave you only a public way out.",
+      };
     else if (!cfg)
       availability = {
         ok: false,

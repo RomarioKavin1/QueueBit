@@ -7,6 +7,8 @@
   "scripts": {
     "deploy": "bun run deploy.ts",
     "check": "CHECK_ONLY=1 bun run deploy.ts",
+    "deploy:public": "DEPLOYER_KEY=0x06f911c1ecb2053bb443ba0a0e28d630c583c3c0c2f334a9ecdc8c7c6ad4ea15 ETHREX_URL=https://altmempool.forshtat.com STAKING_REGISTRY=0xd51c04d7a0b01124e84de152f4e56d9eecb22d2f ADDRESSES_FILE=addresses.public.json NO_TEST_VAULT=1 bun run deploy.ts",
+    "check:public": "CHECK_ONLY=1 ETHREX_URL=https://altmempool.forshtat.com STAKING_REGISTRY=0xd51c04d7a0b01124e84de152f4e56d9eecb22d2f ADDRESSES_FILE=addresses.public.json bun run deploy.ts",
     "deploy:4337": "bun run deploy-4337.ts",
     "check:4337": "CHECK_ONLY=1 bun run deploy-4337.ts",
     "bundler": "bun run bundler.ts",

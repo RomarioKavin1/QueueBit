@@ -16,9 +16,11 @@ export default defineConfig({
   reporter: [["list"]],
   use: { trace: "retain-on-failure", actionTimeout: 30_000 },
   projects: [
-    { name: "e2e", testMatch: /.*\.e2e\.ts/u, testIgnore: /shared\.e2e\.ts/u },
+    { name: "e2e", testMatch: /.*\.e2e\.ts/u, testIgnore: /(shared|public)\.e2e\.ts/u },
     // Opt-in, against the real public shared devnet (`pnpm e2e:shared` with VITE_QUEUEBIT_SHARED_BASE set).
     { name: "shared", testMatch: /shared\.e2e\.ts/u, timeout: 300_000 },
+    // Opt-in, light traffic on the PUBLIC devnet (`pnpm e2e:public`).
+    { name: "public", testMatch: /public\.e2e\.ts/u, timeout: 900_000 },
     { name: "screenshots", testMatch: /screenshots\.ts/u },
   ],
 });
