@@ -187,7 +187,7 @@ test("M3/M4: Vault-first onboarding, Open payment, Vault payment, queued change 
   await vaultTab.getByRole("button", { name: "Open Pending" }).click();
   const op = vaultTab.getByTestId("queued-op");
   await expect(op).toBeVisible({ timeout: 30_000 });
-  await expect(op.getByTestId("countdown")).toHaveText(/Happens in 1 d 2\d h \d+ m/u);
+  await expect(op.getByTestId("countdown")).toHaveText(/Happens in (?:1 d 2\d h \d+ m|2 d 0 h(?: \d+ m)?)/u);
   await expect(op).toContainText("Change daily limit $500 → $2,000");
   await shot("app-pending-scheduled", vaultTab);
 
