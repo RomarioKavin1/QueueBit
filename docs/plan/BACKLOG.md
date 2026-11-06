@@ -19,7 +19,7 @@ Each entry is tagged with its source. Remove an entry when it lands, and cite th
 - [ ] leanSphincs-s usage guard (if the experimental scheme is enabled): a per-key signature counter in companion storage, incremented on every returned `sign` (retries count); exported with the key metadata. A restored seed has unknown usage and counts as "exceeded". Warn at 50%, require rotation at 90%, refuse at 100% via `PQScheme.budgetStatus`. Rotation = a fresh `chainScope` label → a new VaultSigner clone (leanSphincs-s review, 7449363).
 
 ## Contracts
-- [ ] Mirror the account's Open recipient mode and initialize-derived vault binding in the 7579 modules (module review).
+- [x] Mirror the account's Open recipient mode and initialize-derived vault binding in the 7579 modules (module review). `9dbb5a7` (hook RecipientMode, executor binds pk/verifier/sigLength), `fd2573c` (anvil e2e).
 - [ ] `registerPermit` covers ERC-2612 only; add typed registration for EIP-3009 and Permit2 (account audit).
 - [ ] Vault policy guidance for non-monitored assets moved by session targets (account audit).
 - [ ] Document that a recovery-key compromise means an uncancellable 7-day vault takeover (account audit).
@@ -34,8 +34,8 @@ Each entry is tagged with its source. Remove an entry when it lands, and cite th
 - [ ] `createGroth16Prover` must fail if the engine has no `verify` (don't silently skip self-verify).
 
 ## Watcher (review 13f10d4..20bfcd8)
-- [ ] Webhook/request-auth nonce (replayable within the 5-minute skew today); move the EventSource `sig` out of the query string; trust-proxy for rate-limit keys; don't echo `e.message` in 500s.
-- [ ] Copy fixes: "Anyone can finish it" while a rotation is pending; tell vault userOp reverts apart from everyday-payment blocks on 4337; module reinstall looks like account creation; avoid "staked lane" wording.
+- [ ] Webhook/request-auth nonce (replayable within the 5-minute skew today); move the EventSource `sig` out of the query string; trust-proxy for rate-limit keys. (Done: no `e.message` echo in 500s, `f03a9f0`.)
+- [x] Copy fixes (`e3b9b83`): "Anyone can finish it" while a rotation is pending; tell vault userOp reverts apart from everyday-payment blocks on 4337; module reinstall looks like account creation; avoid "staked lane" wording.
 
 ## Infra / upstream
 - [ ] Open the BUDGET-010 PR upstream (needs the user's GitHub account).
