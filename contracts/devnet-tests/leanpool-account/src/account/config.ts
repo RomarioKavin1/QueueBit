@@ -15,7 +15,9 @@ export interface AccountDeployment {
   legacyImplementation?: Address;
   testToken?: Address;
 }
-const FILE = path.join(ROOT, "deployments", "devnet-account.json");
+/** ACCOUNT_DEPLOYMENT names another file in deployments/ (queuebit-public.json: the stack devnet/deploy put on the public
+ * devnet); the default is the stack these scripts deployed themselves. */
+const FILE = path.join(ROOT, "deployments", process.env.ACCOUNT_DEPLOYMENT ?? "devnet-account.json");
 export const hasAccountDeployment = () => fs.existsSync(FILE);
 export const readAccountDeployment = (): AccountDeployment => JSON.parse(fs.readFileSync(FILE, "utf8"));
 export const writeAccountDeployment = (d: AccountDeployment) => fs.writeFileSync(FILE, JSON.stringify(d, null, 2) + "\n");

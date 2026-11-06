@@ -12,7 +12,8 @@
     "live:migrate": "bun src/account/scripts/migrate-live.ts",
     "live:keystore": "bun src/account/scripts/live-keystore.ts",
     "live:recovery": "bun src/account/scripts/recovery-live.ts",
-    "live:passkey": "bun src/account/scripts/passkey-live.ts"
+    "live:passkey": "bun src/account/scripts/passkey-live.ts",
+    "live:safe": "bun src/account/scripts/safe-migrate-live.ts"
   },
   "dependencies": {
     "@forshtat/hegota-support": "0.0.1",

@@ -1,0 +1,43 @@
+{
+  "network": "alt-mempool devnet",
+  "deployment": {
+    "registry": "0x9B7C395c5b666D23dbd1E08781a85aE1e5944A80",
+    "hub": "0x22b28CBC1177AaA894A2Bc555d7a0e3ad2b84483",
+    "legacyImplementation": "0xbb8F4693C27FC4a676c050da83B4c4cfAD60Dca5",
+    "testToken": "0x1F8669850fffF3D25528f80a017ec3F9A165632a",
+    "implementation": "0x130D4d3633d8ED106544278cc200d141643d7299",
+    "factory": "0x01864686257c6De40bD671ea10D60d53ef984394",
+    "keystore": "0x1422840e6fdda8642B802b9c213DF793314FCeba",
+    "hook": "0xd5302201B562eB26dE2D3B4AfCd9EEfa5f047F82",
+    "recovery": "0xa06381544b037975EfEcB3602EC0127c56187c9F"
+  },
+  "safeContracts": {
+    "SAFE_SINGLETON": "0x6e63789469BF7Bd5e245b6676540b897B7ECbf46",
+    "PROXY_FACTORY": "0x37700bB3a1e3B43581087ff286722641201Be669",
+    "MULTISEND": "0xbB2004883b0B4bd69Ca926833f8fF9878D36c952",
+    "FALLBACK": "0xE2Ba97d9bD688DEd2f031C4599E7eb4985B77E59"
+  },
+  "safe": "0x612dd11C8CBBC87f02605b19565e864BC0017cb1",
+  "owners": [
+    "0x9B879F098bE72eB9358e0Be77273151A9716FD09",
+    "0x65FEad1E69B5b79d333a1201402B7738Ce619d24"
+  ],
+  "threshold": 2,
+  "createTx": "0x201ef919b2f9c7c0896683f9665ba603a447bca3b6009976df0de78ecd95ad33",
+  "before": {
+    "eth": "2000000000000000",
+    "tokens": "1000000000000000000000"
+  },
+  "account": "0xeF4426e289Ac5560DC4ff292A0Dc2D00b92b0A8F",
+  "safeTxHash": "0x5768f012c4552e71a2387072cd8836e0f8ca199d3e3c36fc785faefda907e2fd",
+  "migrationTx": "0xec6aec93dfbb126b92698962ff66ae4c2dc392b7354fd4dee2f9db8a97094d27",
+  "safeAfter": {
+    "eth": "0",
+    "tokens": "0"
+  },
+  "accountAfter": {
+    "eth": "2000000000000000",
+    "tokens": "1000000000000000000000"
+  },
+  "pqSpend": "0x2857b6414be4ed44b3ecb66c9b8436a5e4b70468c582b04d8d7ad0e248ff74d7"
+}
