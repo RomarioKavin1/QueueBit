@@ -3,11 +3,15 @@
 Each entry is tagged with its source. Remove an entry when it lands, and cite the commit.
 
 ## Extension
-- [ ] M4: onboarding pairs the Vault **before** the account address is computed (needs the account's vault binding in initialize, which is in progress). Fix the "plan frozen on first account:status" limits mismatch as part of the same rework (M1 review).
-- [ ] `wallet_getCapabilities` exposes `capRemainingUsd` to any connected site, which is a cross-site signal. Restrict it to the connecting origin's needs, or drop it (M1 review).
-- [ ] `parseSimFrames` treats a status-less frame as succeeded. Decide whether to keep that tolerant default (M1 review).
+- [x] M4: onboarding pairs the Vault **before** the account address is computed; the "plan frozen on first account:status" limits mismatch is fixed (the plan is computed once, at the end of onboarding) (M1 review; e2f1298).
+- [x] `wallet_getCapabilities` no longer exposes the limit or `capRemainingUsd`: `leaked: {backend, activated}` only (M1 review; e2f1298).
+- [x] `parseSimFrames`: decided fail closed, a frame without any outcome counts as failed (M1 review; e2f1298).
 - [ ] Postmessage channel nonce against co-installed extensions (M0 review, deferred).
-- [ ] Show the top-level origin on embedded-frame requests (M0 review).
+- [x] Embedded-frame requests show the top-level page (`location.ancestorOrigins`, read by the content script) (M0 review; e2f1298).
+- [ ] Recovery bootstrap: a C13 Recovery signer has no payer key, so it can only use Path A on the staked lane, and it can only stake with a transaction it signs itself. Decide: stake from `msg.value` in `createRoleSigner`, or a Recovery payer key in the companion (E-78 refuses Path B in recovery mode today). The extension e2e stakes it through ethrex's private builder hook (devnet-only stand-in) (extension M4).
+- [ ] Companion registry: re-sync `abi:sync` for `vaultSetRecipientMode` (the phone shows it as an unknown step today) (extension M4).
+- [ ] `InitConfig` has no token list, so a fresh account has no allowed ERC-20 and an ERC-2612 pre-approval needs a ≥ 1 h queued `vaultSetToken` first; consider tokens at initialize (extension M3).
+- [ ] Extension: Pending scans `Queued` logs from block 0 (devnet only; needs a cursor), Vault-signer top-up UI, guardian freeze deep link, hot-key rotation e2e (extension M4).
 - [ ] Wire the watcher light mode (`@leaked/watcher-core`) and the privacy tab (`@leaked/privacy` + `@leaked/groth16`) into the extension.
 
 ## Companion

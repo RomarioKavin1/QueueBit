@@ -1083,3 +1083,79 @@ example hot 45,750, Path B 36,213, Path A 151,701).
   - `LeakedPolicyHook._checkCalls` in Open should refuse a payment `to` the account, the hook, the executor, the
     token itself (`to == token`), an enabled guardian, the tank, or an allowlisted token, unless it is allowlisted.
     The account, the hook, the executor and `to == token` should be refused in both modes.
+
+## Extension M3 + M4: Vault-first onboarding, the Vault flow, scoped 1271 (2026-11-06)
+
+Code: `apps/extension/src/background/{account,vault,vaultActions,lanes,signin,wallet,payments,policy,engine}.ts`,
+pages `src/pages/app/{Onboarding,VaultHandoff,Pending,Limits,Security}.tsx`, `src/pages/approve/SignatureBody.tsx`,
+`src/ui/QrHandoff.tsx`; tests `test/unit/{vault-interop,lanes,policy-open,signin}.test.ts`, e2e `e2e/vault.e2e.ts`
+with the simulated phone `e2e/support/companion-sim.ts`. Local devnet, funding key anvil #7.
+
+- **Onboarding order** (task brief; ux-spec §3.1 differs only in putting the limit before Recovery): create →
+  pair the Vault (`ur:leaked-pq-key`, camera or paste, the 8-character check, "This matches") → Recovery ceremony
+  (scan the Recovery key's pq-key code, then its `ur:leaked-recovery-test` code, verified in the service worker
+  against `recoveryTestChallenge`; E-23 on a different key) or "Set up later" with the risk sheet → optional Guardian
+  (stored; added with one Vault approval after activation, `InitConfig` has no guardian field) → daily limit and
+  "who can you pay" (Open default, Strict explained) → network → the address is computed (`account:computePlan`)
+  → fund the tank → Activate. There is no "skip the Vault" any more. The M1 test-vault stand-in is gone from every
+  path (`testVault` stays in addresses.local.json for explicit-mode tests of other workstreams only).
+- **InitConfig** is the bound shape: `vault = {salt, pk, C13Verifier, payerKey}` from pairing, `recovery = {salt,
+  pk, C13Verifier, payerKey: 0}` when the ceremony finished (the companion pairs no payer for Recovery), Open
+  recipients. Account salt = `keccak(hotKey, vaultPk, recoveryPk, "leaked.account.2", chainId)`; the role salt is
+  derived from it. Signer addresses come from `RoleSignerFactory.predictRoleSigner` (eth_call) and are checked
+  against `getRoles()` in the e2e.
+- **Plan-frozen mismatch fixed**: `Payments.plan()` no longer computes anything; the plan is built only by
+  `computePlan` at the end of onboarding, from the limits the user just set, and may be recomputed only while the
+  address has no code, no balance and no activation (else `frozen`).
+- **Activation** = two legacy txs from the tank: `createAccount` and `createRoleSigner(vault)` with a 0.02 ETH float
+  (the signer pays its own fees, ~0.001 ETH per approval). A missing signer is also deployed lazily before the
+  first Vault request (`VaultFlow.ensureSigner`); the Recovery signer (0.03 ETH float) on its first use.
+- **Vault requests** (`VaultFlow.create`): action → account calldata (`vaultActions.ts`: tighten = direct setter,
+  loosen = `vaultQueue([setter], KIND_LOOSEN)`, sends above the Vault's instant allowance = `vaultQueue(calls,
+  KIND_SPEND)` with the calls kept for `executeQueued`) → path (`lanes.ts`) → `roleSignerPathBTx` / `PathATx`
+  (Path B VERIFY 90k; body 700k execution / 400k state; fees 2 × base + 1 gwei) → `ur:leaked-sign-request` keys
+  1–12 (11 intent with action/recipient/amount/token, 12 the current limits and pinned prices; role 1 or 2).
+  `vault-interop.test.ts` decodes every action with `apps/companion`'s `reviewRequestBytes` and signs with its
+  worker `handle()`: same digest, no mismatch, clear-signed, except `vaultSetRecipientMode`, which the companion's
+  registry does not know yet (shown as an unknown step: BACKLOG).
+- **Pre-verification before anything is sent** (`VaultFlow.submit`): request id (E-61), expiry (E-60, 10 min), scheme
+  id, the witness against the signer's on-chain `pk()` with `@leaked/pq-signer` (`schemeById`), on Path B the payer
+  signature recovered against `payerKey()`, then `ethrex_simulateFrameTransaction` of the exact bytes (valid, SENDER
+  frame ok, MAX_COST ≤ the signer's `maxFee`, signer balance), then submit (ethrex, or the staked sidecar). A failed
+  check leaves the request waiting (scan again). The WASM verifier runs in the MV3 service worker: CSP
+  `script-src 'self' 'wasm-unsafe-eval'` (nothing else changed), `initSync` from the embedded bytes; the e2e asserts
+  the SW instantiated it and that no `.wasm` was fetched.
+- **Path A / B** (`choosePath`): Path A when the scheme's `verifyGasEstimate()` + 45k role-signer overhead + 100
+  fits the lane: the stock 100k (leanSphincs-s: limit 99,900) or a BUDGET-010 sidecar's `skandha_config.budgets`
+  staked budget when the signer is staked in the registry (C13). Else Path B if the signer has a payer key. Else
+  "no lane" with the reason. Network table gains `stakedSidecarUrl` (local: `:14340`).
+- **Recovery bootstrap gap (found here, needs a contracts or companion decision):** a Recovery signer has no payer
+  key (the companion's recovery pq-key has none and its recovery mode refuses 2-signature txs, E-78), so it can only
+  send Path A, which for C13 needs the staked lane; staking is `executePQ/relay(self, stake)`, i.e. a transaction the
+  unstaked signer must send itself. On the public lanes that loop has no way out. The e2e plays the operator: it
+  deploys the derived clone from the account's `RoleSignerDerived` log and mines `relay(self, stake(86400, 0.012))`
+  through ethrex's private builder hook (`ethrex_submitPrivilegedFrameTransaction`, local devnet only); after that
+  the extension's own Recovery cancel goes Path A through the BUDGET-010 sidecar. Fix options: stake in
+  `RoleSignerFactory.createRoleSigner` from `msg.value`, or a Recovery payer key in the companion.
+- **Hot body gas (bug found by the M4 e2e):** an Open payment to a fresh address ran out of gas: the frame's
+  `gasUsed` is execution only, and the ~205k state gas of a new account is taken from the execution limit on this
+  ethrex build. The engine now sizes the body from the transaction's `gasUsed` minus the prefix frames (× 1.25 +
+  20k), state 300k. `parseSimFrames`: a frame without any outcome now counts as failed (BACKLOG decision: fail closed).
+- **M3**: `personal_sign` / zero-value typed data → approval window "Sign in" (SIWE fields, domain must equal the
+  origin host or E-50 blocks it, first-sign-in warning with an in-extension "always allow" list = ux-spec §9.1
+  option a) → ERC-7739 PersonalSign / TypedDataSign by the everyday key in the account's domain ("LEAKED", "1").
+  The e2e checks the SIWE signature with an `isValidSignature` eth_call (code-less caller) → `0x1626ba7e`. ERC-2612
+  `Permit` → "Pre-approve": a hot batch `registerPermit(token, spender, value, deadline)` (routed and priced like a
+  token payment, counts against the limit), waits for it to be mined, checks `registeredHashExpiry(digest)` and
+  returns `REGISTERED_MARKER ‖ digest`. Permit2 / Seaport / orders / unknown value-bearing → `4100` with
+  `leakedRule` and a plain remedy (the Vault can't help: its PQ key never signs for sites). The e2e's permit stops
+  at the honest "token isn't on your allowed list" (a fresh account has no allowed tokens: `InitConfig` has no token
+  list and adding one waits ≥ 1 h), with nothing sent.
+- **Dapp payments over the limit** stay pending while the phone approves (`approval:toVault`); the site gets the
+  Vault transaction's hash when it is sent.
+- **Privacy of capabilities**: `wallet_getCapabilities` now returns `leaked: {backend, activated}` only (no limit or
+  remaining amount). **Embedded frames**: the content script sends `location.ancestorOrigins`' top entry; the
+  approval window names the page the frame is in.
+- **Not done / open**: guardian freeze deep link; Vault-signer top-up UI; hot-key rotation is wired (keyring index,
+  adopted once `vaultSetHotKey` confirms) but not e2e-tested; Pending lists `Queued` from a `fromBlock: 0` log scan
+  (fine on the devnet, needs a cursor for mainnet); watcher alerts and the privacy tab remain (BACKLOG).
