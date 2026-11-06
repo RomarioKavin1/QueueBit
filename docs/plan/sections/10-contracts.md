@@ -525,7 +525,7 @@ Nonce handling: the signer's legacy nonce; `tx.nonce == state[signer].nonce` che
 
 ## 10.8 Audit-readiness checklist
 
-- [ ] Threat model document mapping C1–C4/H1–H6/M-*/L-* to code locations and tests (10.7.2) kept in `docs/threat-model.md`.
+- [ ] Threat model document mapping C1–C4/H1–H6/M-*/L-* to code locations and tests (10.7.2): user/auditor version in `docs/security/THREAT-MODEL.md` (2026-11-06); the per-threat code/test map is still to do.
 - [ ] Storage layout frozen and snapshotted (`forge inspect … storage-layout`), ERC-7201 namespaces documented; upgrade safety test (`openzeppelin-foundry-upgrades` or manual layout diff) in CI.
 - [ ] Every VERIFY-reachable function has: banned-opcode lint pass, storage-read lint pass, devnet trace artefact attached (JSON from `ethrex_simulateFrameTransaction {"trace": true}`) for both mempools.
 - [ ] Gas report per frame for every shape in §10.2.2, with the canonical 100k / alt per-entity budgets as hard CI thresholds (frame 0 ≤ 80k).
@@ -645,3 +645,45 @@ Applied in place above (search for "2026-11-06"): §10.1.1 opcode re-verificatio
 5. `secp256k1` entries of a **contract** sender must carry `signer = owner` explicitly (`signer: 0x` resolves to `tx.sender` and the sidecar answers "Invalid frame transaction signature") [VERIFIED smoke].
 6. A VERIFY frame whose `data` is empty runs `receive()` when the contract has one, so it never approves ("validation prefix did not establish a payer") — item 9 of the master plan confirmed live; `verifyFrame()` selector stays mandatory.
 7. M1 "sidecar docker-compose devnet in CI" → use `devnet/` as is (pin image digests from `devnet/README.md`). M6's devnet suite must run against the local fork first and the public devnet nightly.
+
+## 10.12 Security notes after the audits (2026-11-06; user/auditor version: `docs/security/THREAT-MODEL.md`)
+
+- **Typed 1271 registrations (account and `LeakedPolicyHook`).** Besides ERC-2612 `registerPermit`:
+  `registerPermit2(token, amount, expiration, spender, sigDeadline, sessionSelector)` (Permit2 `PermitSingle`),
+  `registerPermit2Transfer(token, amount, spender, nonce, deadline, sessionSelector)` (Permit2 `PermitTransferFrom`) and
+  `registerTransferAuthorization(token, value, to, validAfter, validBefore, nonce, receiveAuth)` (EIP-3009). Each
+  computes its digest on chain (`src/lib/TypedPermits.sol`: Permit2's domain `EIP712Domain(string name,uint256
+  chainId,address verifyingContract)`/"Permit2" computed for the canonical address, the canonical `PermitHash.sol`
+  type hashes, the current Permit2 nonce or an unspent nonce), debits the typed amount against the bucket and
+  `perTxMaxUsd`, and binds the hash to one 1271 caller (Permit2, or the token). A Permit2 spender must be an
+  allowlisted target or the target of a live session `(spender, sessionSelector)` in both recipient modes; the 3009
+  recipient follows the hot `transfer` rule. Expiry = min(deadline, now + 30 d); Permit2 `expiration` in (now, now +
+  30 d]. VERIFY unchanged (I-2). Not covered: Permit2 batch and witness permits.
+- **Recovery-key compromise = an uncancellable 7-day vault takeover.** By design (H6): the vault cannot cancel a
+  recovery rotation, or a vault-key thief could block recovery forever. Only the recovery key cancels or restarts
+  one, so a second holder of the same recovery key can only stall (the account stays frozen). The recovery key is the
+  most powerful secret; the watcher alerts on `VaultRotationStarted`.
+- **Vault policy for non-monitored assets.** Session calls are debited by the balance deltas of ETH and allowlisted
+  tokens only; a session target able to move anything else (assets with standing vault approvals or Permit2
+  allowances, positions it custodies, NFTs) moves it with no debit. Grant sessions only on targets that cannot reach
+  unmonitored assets, allowlist and price what they can reach, and drop sessions when dropping a token (removal does
+  not revoke them).
+- **Kernel `MAGIC_VALUE_SIG_REPLAYABLE` (low).** Kernel v3 accepts a chain-agnostic userOp hash when the signature
+  starts with `keccak256("kernel.replayable.signature")`; the hot key can sign userOps valid on every chain where the
+  same Kernel account carries the modules at the same nonce. Each chain's cap still applies, so the leaked-key bound
+  on Kernel is per chain.
+- **Host matrix.** MSA (EntryPoint v0.8 build), Safe7579 (single keyless owner `0xdEaD`, vault-only emergency
+  uninstall), Kernel v3.3 (no hot 1271: it rewraps every hash).
+- **Leaked-key bound.** Per 24 h at most `capUsdPerDay` (rolling), per tx `perTxMaxUsd`, plus the tank's balance in fees
+  (`maxFeeWeiPerTx` per tx; an over-cap tx still pays). Every value path (transfers, sessions by measured delta,
+  registrations by typed or declared amount) debits the same bucket.
+- **PQ assumptions.** C13: Lean 4 / Verity refinement proof of the verifier against its byte spec (not of the
+  scheme's parameters, the signer or our wrappers), upstream "not audited", malleable signatures (track vault txs by
+  sender/nonce). leanSphincs-s: experimental, no formal proof, estimated budget, companion usage counter can be rolled
+  back by a backup restore. Hot key, tank, payer keys and guardians are secp256k1 (bounded powers, §2 of the threat
+  model).
+- **Mempool trust.** Hot and Path B txs: canonical public mempool. Path A and PoolPayer: need a BUDGET-010 staked
+  mempool (unmerged). `ethrex_submitPrivilegedFrameTransaction` is devnet-only; no production flow may depend on it.
+  Timelocks assume role txs are included within the delay.
+- **PoolPayer.** v1 enforces exactly `[VERIFY…, pay, settle, refund]` (no user tail frames, only VERIFY frames before
+  the pay frame) in `verify`; the operator handover is two-step (`proposeOperator` / `acceptOperator`).

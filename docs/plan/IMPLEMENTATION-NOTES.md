@@ -1254,3 +1254,47 @@ plus `e2e/followups.e2e.ts`) on the built PWA; screenshots `apps/companion/docs/
 - **Navigation.** `src/navGuard.ts`, imported first: cancels cross-origin navigations of the window (Navigation API)
   and replaces `window.open`. A speed bump, not a boundary (no CSP directive covers navigation since `navigate-to` was
   dropped; DNS prefetch and other side channels remain); the boundary is still that secrets live only in the worker.
+
+## Contracts: typed Permit2 / EIP-3009 registrations, PoolPayer v1 shape, threat model (2026-11-06)
+
+Commits `6324659` (account + modules), `00199c0` (PoolPayer), `848567e` (deploy + watcher ABI). Docs:
+`docs/security/THREAT-MODEL.md` (new), `10-contracts.md` §10.12.
+
+- **Typed registrations.** `registerPermit2` (Permit2 `PermitSingle`), `registerPermit2Transfer` (`PermitTransferFrom`),
+  `registerTransferAuthorization` (EIP-3009, `receiveAuth` selects `ReceiveWithAuthorization`), in the account and
+  mirrored in `LeakedPolicyHook`. Shared `src/lib/TypedPermits.sol`; `registerPermit` now uses it too. The Permit2
+  domain is computed (name "Permit2", no version, canonical address), not read; the type hashes equal the published
+  `PermitHash.sol` constants (checked against the canonical source on `main` and pinned as hex in
+  `TypedPermits.t.sol`). The nonce comes from Permit2 (`allowance(...).nonce`) or must be unspent (`nonceBitmap`,
+  `authorizationState`: `NonceUsed`). Each hash is bound to one 1271 caller (Permit2 or the token) through the
+  existing `registeredFor`; `isValidSignature` is unchanged.
+  - **Spender rule** ("allowlisted or session-bound"): `targets[spender]`, or a live session `(spender,
+    sessionSelector)` with allowance > 0. The caller names the selector because sessions are keyed by
+    `keccak(target, selector)`. Open mode does not widen spenders (the spender chooses the destination). The 3009
+    recipient follows `_checkRecipient` (it can do no more than a hot `transfer`).
+  - **Bounds:** debit = typed amount, once, at registration (bucket + `perTxMaxUsd`; an "infinite" uint160 permit
+    cannot fit); hash expiry min(deadline, now + 30 d); Permit2 `expiration` in (now, now + 30 d] (0 = "this block"
+    is refused). The vault must approve Permit2 on the token; the hot key cannot (I-6).
+  - **7579:** the validation-time debit reads (token, amount) per selector: registerHash (1, 2; 132 B),
+    registerPermit (0, 2; 132 B), Permit2 ×2 (0, 1; 196 B), 3009 (0, 1; 228 B). The hook's transfer-recipient check
+    moved to `_checkTransferRecipient`, shared with 3009.
+  - **Sizes:** LeakedAccountImpl 23,662 B (914 B margin), LeakedPolicyHook 23,690 B (886 B). The next account feature
+    will need code moved to `LeakedAccountRoles` or a library.
+  - VERIFY unchanged: `lint-verify.sh` OK, plus a new I-2 test that the three registrations write no VERIFY slot.
+  - Tests: `test/account/TypedPermits.t.sol` (13 × Open/Strict) with a Permit2 mock transcribed from the canonical
+    source and etched at the canonical address, a USDC-style 3009 token (`bytes signature`, SignatureChecker);
+    `LeakedModulesHosts.t.sol` +6 per host × MSA/Safe7579/Kernel × Open/Strict. `forge test`: 940 passed, 0 failed,
+    3 skipped.
+- **PoolPayer.** `verify` now requires `FRAME_COUNT == i + 3` and MODE VERIFY for every frame before the pay frame.
+  The tail-call branch and `TailCallsNeedRecipientSender` are removed. `setOperator` is replaced by
+  `proposeOperator` (0 cancels) + `acceptOperator`. Privacy e2e re-run (`e2e-1793931494098`, funder = the sub-account
+  `0xF465…fC5C` of anvil #5 via the new `FUNDER_LABEL`, top-up `0x60977904…63d2`): w1 `0x5eec231c…2a97` (privileged,
+  blk 3043), w2 `0x0bada4f4…02ff` (privileged, blk 3052), w3 `0x5a5f7b7e…f798` via the BUDGET-010 sidecar :14340
+  (`OnChain`, blk 3053; 14340 now lists the precompiles). **VERIFY frame 306,754 gas** (+748 for the VERIFY-mode
+  loop), refund frame 25,818; payer net −5,528 / −5,552 gas (calibrated B). A top-up of a fresh account needs more
+  than 21,000 gas on this devnet (state gas): the first run's transfer reverted at 21k.
+- **Deploy.** LeakedAccountImpl `0x4306F6A3…e8fb` (local devnet); the 7579 modules re-deployed on anvil :8546. The
+  watcher ABI was regenerated (NonceUsed). The companion registry matches the artifacts (`abi:sync --check`). It has
+  per-function formats (`account.registerPermit`, role "any") but no hot-path section, so the new functions are a
+  companion backlog item. The extension's `src/generated/contracts.ts` is regenerated in the working tree; the
+  extension agent commits it with its generator changes.
