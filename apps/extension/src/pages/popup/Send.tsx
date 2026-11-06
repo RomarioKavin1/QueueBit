@@ -121,7 +121,9 @@ export function SendScreen({
 
   const isTank = toValid && to.toLowerCase() === s.tank.toLowerCase();
   const route = preview?.route;
-  const feeText = preview?.feeWei ? `Network fee ≈ ${eth(preview.feeWei)} · from your fee tank` : undefined;
+  const feeText = preview?.feeWei
+    ? `Network fee ≈ ${eth(preview.feeWei)} · ${preview.backend === "4337" ? "from your account" : "from your fee tank"}`
+    : undefined;
 
   if (stage === "review" && preview && route && wei !== undefined) {
     return (
@@ -254,8 +256,16 @@ export function SendScreen({
       {preview?.tankTooLow && (
         <RiskBanner
           level="limit"
-          title="Your fee tank is empty."
-          body="Everyday payments need it to pay network fees."
+          title={
+            preview.backend === "4337"
+              ? "Your account can't cover this payment and its network fee."
+              : "Your fee tank is empty."
+          }
+          body={
+            preview.backend === "4337"
+              ? "On this network your account pays its own network fees: add ETH to it."
+              : "Everyday payments need it to pay network fees."
+          }
           action={{ label: "Top up fee tank", onClick: () => setTo(s.tank) }}
         />
       )}
@@ -314,7 +324,10 @@ function Review({
           to <AddressChip address={to} {...(isTank ? { name: "Your fee tank" } : { badge: "new" as const })} />
         </p>
         {preview.feeWei && (
-          <p className="t-small text-muted">Network fee ≈ {eth(preview.feeWei)} · from your fee tank</p>
+          <p className="t-small text-muted">
+            Network fee ≈ {eth(preview.feeWei)} ·{" "}
+            {preview.backend === "4337" ? "from your account" : "from your fee tank"}
+          </p>
         )}
         {route.leftAfterUsd !== undefined && (
           <p className="t-small">After this: {formatUsd(route.leftAfterUsd)} left today</p>

@@ -72,7 +72,11 @@ export function TransactionBody({ view }: { view: ApprovalView }) {
           {(!route || hot) && (
             <>
               <dt className="text-muted">Fee</dt>
-              <dd>{preview?.feeWei ? `≈ ${eth(preview.feeWei)} · from your fee tank` : "Checking…"}</dd>
+              <dd>
+                {preview?.feeWei
+                  ? `≈ ${eth(preview.feeWei)} · ${preview.backend === "4337" ? "from your account" : "from your fee tank"}`
+                  : "Checking…"}
+              </dd>
             </>
           )}
         </dl>
@@ -112,8 +116,16 @@ export function TransactionBody({ view }: { view: ApprovalView }) {
         {preview?.tankTooLow && (
           <RiskBanner
             level="limit"
-            title="Your fee tank is empty."
-            body="Everyday payments need it to pay network fees."
+            title={
+              preview.backend === "4337"
+                ? "Your account can't cover this payment and its network fee."
+                : "Your fee tank is empty."
+            }
+            body={
+              preview.backend === "4337"
+                ? "On this network your account pays its own network fees: add ETH to it."
+                : "Everyday payments need it to pay network fees."
+            }
           />
         )}
         {error && <RiskBanner level="danger" title={error} />}

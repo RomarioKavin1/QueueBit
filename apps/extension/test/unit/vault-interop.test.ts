@@ -71,7 +71,7 @@ beforeAll(async () => {
   sealed = created.sealed as never;
 }, 60_000);
 
-async function harness(opts: { vaultAvailableUsd?: bigint; pk?: Hex } = {}) {
+async function harness(opts: { vaultAvailableUsd?: bigint; pk?: Hex; mismatch?: boolean; now?: () => number } = {}) {
   const local = new MemoryKV();
   const keyring = new KeyringController(local, new MemoryKV(), { scrypt: { N: 2 ** 10, r: 8, p: 1 } });
   await keyring.create("password-1");
@@ -152,7 +152,8 @@ async function harness(opts: { vaultAvailableUsd?: bigint; pk?: Hex } = {}) {
     }),
     sendRawTransaction: async (raw: Hex) => {
       sent.push(raw);
-      return txHash(profile, decodeTx(profile, raw));
+      // `mismatch`: a node that answers with a hash other than the bytes' (hash-mismatch after broadcast).
+      return opts.mismatch ? (`0x${"ab".repeat(32)}` as Hex) : txHash(profile, decodeTx(profile, raw));
     },
     getTransactionReceipt: async (): Promise<FrameTxReceipt | null> => receipt.value,
   } as unknown as NodeClient;
@@ -162,9 +163,9 @@ async function harness(opts: { vaultAvailableUsd?: bigint; pk?: Hex } = {}) {
     keyring,
     plans,
     activity: new ActivityStore(local),
-    now: Date.now,
+    now: opts.now ?? Date.now,
   });
-  return { flow, plan, sent, receipt };
+  return { flow, plan, sent, receipt, activity: new ActivityStore(local) };
 }
 
 const ctx = () => ({
@@ -334,4 +335,28 @@ describe("one live request per signer (plan §30 §6.3)", () => {
     await flow.create(CHAIN, ACTIONS[4]![1]);
     expect((await flow.get(second.id))!.status).toBe("sending");
   }, 120_000);
+
+  it("hash-mismatch after broadcast: the request is never left waiting; it is tracked by our hash with a recoverable error", async () => {
+    let t = Date.now();
+    const { flow, sent, activity } = await harness({ mismatch: true, now: () => t });
+    const rec = await flow.create(CHAIN, { type: "setLimits", dailyUsd: 100, perPaymentUsd: 50 });
+    const out = await flow.submit(rec.id, await phoneSigns(rec));
+    expect(sent).toHaveLength(1);
+    const ours = txHash(profile, decodeTx(profile, sent[0]!));
+    expect(out).toMatchObject({
+      status: "sending",
+      hash: ours,
+      nodeHash: `0x${"ab".repeat(32)}`,
+      error: { code: "hash-mismatch" },
+    });
+    expect((await activity.get(rec.id))?.status).toBe("confirming");
+    // A second scan of the same answer is refused (already handled), nothing is re-broadcast.
+    await expect(flow.submit(rec.id, await phoneSigns(rec))).rejects.toMatchObject({ code: "not-waiting" });
+    expect(sent).toHaveLength(1);
+    // No receipt for either hash within 15 minutes: it ends as a recoverable failure (start again).
+    t += 16 * 60_000;
+    const [u] = await flow.refresh();
+    expect(u).toMatchObject({ status: "failed", error: { code: "hash-mismatch" } });
+    expect((await activity.get(rec.id))?.status).toBe("failed");
+  }, 60_000);
 });

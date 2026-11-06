@@ -22,9 +22,34 @@ export const DEFAULT_SETTINGS: Settings = {
 export interface PairedKeyRecord {
   schemeId: `0x${string}`;
   pk: `0x${string}`;
-  /** Vault only: the Path-B fee-payment address on the phone. */
+  /**
+   * The role's Path-B fee-payment address on the phone. Vault: from the pairing code. Recovery: from the v2
+   * recovery-test code (the witness covers it), else from the Recovery key code; `InitConfig.recovery.payerKey`.
+   */
   payer?: Address;
   at: number;
+}
+
+/**
+ * A token the user chose during onboarding ("Tokens you'll spend"): it goes into `InitConfig.tokens` with a static,
+ * Vault-pinned price (USD with 6 decimals per whole token, as a decimal string), so everyday payments and ERC-2612
+ * pre-approvals work from the first day. Changing it later is a Vault action.
+ */
+export interface TokenChoice {
+  token: Address;
+  symbol: string;
+  decimals: number;
+  /** USD-6 per one whole token, decimal string (e.g. "1000000" = $1.00). */
+  usdPerToken: string;
+  /** The user confirmed the pinned price on screen. */
+  confirmedAt: number;
+}
+
+/** The recovery test's request id, chosen by the browser (single use, shown to the phone as a code). */
+export interface RecoveryChallengeRecord {
+  requestId: string;
+  pk: `0x${string}`;
+  issuedAt: number;
 }
 
 /**
@@ -43,6 +68,10 @@ export interface SetupState {
   /** The Recovery key's public key, scanned during the ceremony; `testedAt` once its recovery-test code verified. */
   recovery?: PairedKeyRecord & { testedAt?: number };
   guardian?: { address: Address; name?: string; requestedAt: number };
+  /** Tokens for `InitConfig.tokens`, per chain id (addresses differ per network). */
+  tokens?: Record<string, TokenChoice[]>;
+  /** The outstanding recovery-test challenge (consumed by the first test code that verifies against it). */
+  recoveryChallenge?: RecoveryChallengeRecord;
   recoverySkippedAt?: number;
   guardianSkippedAt?: number;
   completedAt?: number;

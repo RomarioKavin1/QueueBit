@@ -1255,6 +1255,78 @@ plus `e2e/followups.e2e.ts`) on the built PWA; screenshots `apps/companion/docs/
   and replaces `window.open`. A speed bump, not a boundary (no CSP directive covers navigation since `navigate-to` was
   dropped; DNS prefetch and other side channels remain); the boundary is still that secrets live only in the worker.
 
+## Extension M2: the 4337 backend, InitConfig tokens and the recovery payer (2026-11-06)
+
+Code: `apps/extension/src/background/aa/{config,userop,payments,executor,vault}.ts` (wired into `Payments` and
+`VaultFlow` by `plan.backend === "4337"`), onboarding step "Tokens you'll spend", `pair:recoveryChallenge`; tests
+`test/unit/{aa,recovery-challenge}.test.ts`, the hash-mismatch case in `vault-interop.test.ts`, contract-in-the-loop
+`test/devnet/aa.devnet.test.ts` (`LOCAL_4337=1`), e2e `e2e/aa.e2e.ts`; local chain `devnet/deploy/{deploy-4337,
+bundler,up-4337,smoke-4337}.ts` (`c96eb23`); UR additions `d0ae1b2`.
+
+- **Host: the reference MSA (`MSAAdvanced` + the v0.8 EntryPoint shim `MSAAdvancedEP`), created by `MSAFactory` with
+  `Bootstrap.initMSA(validator, executor, hook)`.** Against Safe7579: no keyless `0xdEaD` owner to get right (A5),
+  module reverts bubble (the route copy and the activity name `OverCap`, `NotAllowed`), ~29k less gas per hot op
+  (388k vs 417k, M7); against Kernel v3.3: hot ERC-1271 must be off there (A3), so no sign-in and no permits. Cost:
+  Rhinestone publishes no v0.8 MSA build, so LEAKED deploys its own shim on every chain (CREATE2, deterministic).
+- **Account = CREATE2 of the whole init code** (`MSAFactory.getAddress(salt, initCode)` by eth_call), salt
+  `keccak(hotKey, vaultPk, recoveryPk, "leaked.account.4337.1", chainId)`. `HookInit`: limits, `maxFeeWei` 0.01 ETH
+  (the per-op prefund bound, the tank's `maxFeeWeiPerTx` on the native account), the chosen tokens, the fee tank as the
+  one allowlisted target, Open. `ExecutorInit`: C13Verifier, Vault pk, Recovery pk (when tested), 48 h, $1,000.
+  Activation is a plain `createAccount` tx from the tank (826,665 gas; ERC-7562 [STO-022] rules out initCode in a
+  first userOp without a staked factory). No role-signer clones on this backend.
+- **Everyday userOps** (viem `account-abstraction`: v0.8 EIP-712 userOpHash, `toPackedUserOperation`,
+  `formatUserOperationRequest`; permissionless.js is not needed). `execute(single)` for one call, `execute(batch,
+  abi.encode(Execution[]))` for `wallet_sendCalls` (atomic). Nonce key = validator << 32. Fees: tip ≤ min(1 gwei, the
+  hook's max), `maxFeePerGas = 2 × base + tip`. Before sending, three checks, fail closed: an `eth_call` of the
+  account's `execute` from the EntryPoint (hook preCheck/postCheck: the bucket, guardians), the bundler's
+  `eth_estimateUserOperationGas` (stub signature), the prefund ≤ `maxFeeWei`, then the signed op simulated as
+  `handleOps([op])` by `eth_call` (validation: the validator's policy and fee checks). The account pays its own fee
+  (bounded per op); the activity says "from your account". The bundler's returned hash is compared with ours; a
+  different one is kept in `replaced` and polled too. Measured on anvil: hot ETH userOp 273,819 actualGasUsed.
+- **Provider mapping** (plan §30 §3.2 U): `eth_sendTransaction` → userOpHash; `eth_getTransactionReceipt(userOpHash)`
+  → the bundle tx receipt with `transactionHash` = the userOpHash; `wallet_sendCalls` → one batch userOp, id = the
+  app's or the userOpHash; `wallet_getCallsStatus` → status from `eth_getUserOperationReceipt`, `receipts` = the
+  bundle tx receipt; `wallet_getCapabilities` → `atomic: supported`, `leaked: {backend: "4337", activated}`. SIWE /
+  zero-value typed data: ERC-7739 in LeakedHotValidator's domain (`"LeakedHotValidator"`, `"1"`, no salt for
+  PersonalSign, `salt = 0` in the nested TypedDataSign), prefixed with the validator address (the MSA routes 1271 by
+  it). ERC-2612: `hook.registerPermit` in a userOp; the marker is `validator ‖ 0xdc6b87c9 ‖ digest`.
+- **Vault on 4337** = `LeakedRoleExecutor` calls relayed by the fee tank as plain transactions (the PQ check runs in
+  execution; no payer key, no lanes). `buildAaVaultAction` reuses the native account's tighten/loosen and
+  instant/queued framing and emits `vaultExec(account, calls, usdValue, nonce, "")` (hook / executor setters with the
+  account first, or spends), `vaultQueue(…, KIND_SPEND|KIND_LOOSEN, …)`, `vaultCancel` / `recoveryCancel`; Recovery
+  linking is `executor.setRecoveryKey(pk)`. The request is `ur:leaked-sign-request` **tx-type 3** (new, `d0ae1b2`):
+  key 4 = that calldata with an empty `pqSig`, key 14 = the executor. The extension recomputes the EIP-712 digest
+  from the calldata and refuses unless it equals the executor's own `hash*` view; at scan-back it verifies the
+  witness against `getRoles(account).vaultPk/recoveryPk` with `@leaked/pq-signer`, `eth_estimateGas`es the signed call
+  from the tank (a revert = SIM-REJECTED), then sends it. **The companion does not sign tx-type 3 yet (E-76): the
+  e2e's phone is a stand-in that implements the spec (`executorRequestDigest`), BACKLOG "Companion".**
+- **Network selector**: devnet 1337 (native) and "Local 4337 test chain" 31337 (anvil :8546 + bundler :4337, local
+  builds only); Sepolia and Ethereum are listed with their USDC/DAI presets but `enabled: false` until module
+  addresses are recorded. `wallet_switchEthereumChain` still accepts a known disabled chain (reads only; 4902 for
+  chains not in the table).
+- **Tokens at creation** ("Tokens you'll spend", after the network): presets per network (the devnet/deploy USDC =
+  `PermitToken1271("USDC")`, DAI = `MockToken`, both 18 decimals, on 1337 and 31337 at the same CREATE2 addresses);
+  each ticked token shows "LEAKED counts USDC as $1.00 toward your daily limit" with an editable price; the SW checks
+  `decimals()` on-chain before storing and again when the address is computed. The e2e proves the ERC-2612 pre-approval
+  on both backends: mined, `registeredHashExpiry > 0`, and then `USDC.permit(…, marker)` sent by a third party sets the
+  allowance (the token's ERC-1271 call is the one consumer).
+- **Recovery payer key**: the v2 recovery test's key 6 (signed by the Recovery PQ key) is stored and goes into
+  `InitConfig.recovery.payerKey` (and `vaultSetRecoverySigner`'s clone params); checked ≠ hot key, ≠ tank, ≠ Vault payer
+  before an address is shown (`payerConflict`). The 1337 e2e now cancels with the Recovery key on **Path B** from the
+  public mempool: no stake, no `ethrex_submitPrivilegedFrameTransaction` (the devnet stand-in is gone from the test).
+- **Recovery test request id**: extension-chosen (`ur:leaked-recovery-challenge`, single use, 30 min, serialized
+  issuance; reused while unused so a double page request cannot split it). A test with any other id is E-61. The
+  companion's `Recovery.tsx` still picks its own id: BACKLOG.
+- **hash-mismatch after broadcast**: the request goes to `sending` tracked by the hash of the bytes we sent, with
+  `nodeHash` and a recoverable error shown on the hand-off ("Sent, but the network's answer didn't match"); either
+  hash's receipt settles it; none within 15 minutes → `failed` with "start again" (a re-run cannot double-spend: the
+  nonce is used once). Same on 4337 for a bundler hash.
+- **Contracts moved during this work** (`6324659`, typed Permit2/EIP-3009; redeployed in `848567e`): the extension's
+  generated ABIs follow, and the drift test now also covers `addresses.anvil4337.json`.
+- **Results**: unit 149 pass (+ contract-in-the-loop 4337 pass); Playwright e2e 10/10 (both backends: onboarding →
+  activation → Open-mode instant send → over-limit through the Vault → dapp `wallet_sendCalls` + status; plus 4337
+  SIWE and permit).
+
 ## Contracts: typed Permit2 / EIP-3009 registrations, PoolPayer v1 shape, threat model (2026-11-06)
 
 Commits `6324659` (account + modules), `00199c0` (PoolPayer), `848567e` (deploy + watcher ABI). Docs:

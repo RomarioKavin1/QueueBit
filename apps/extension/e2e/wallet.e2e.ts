@@ -141,7 +141,7 @@ test("a dapp discovers LEAKED via EIP-6963, connects, and gets the account", asy
   expect((await rpc(dapp, "eth_sendTransaction", [{}])).error?.code).toBe(-32602);
   const unsupported = await rpc(dapp, "eth_sign", [account, `0x${"11".repeat(32)}`]);
   expect(unsupported.error?.code).toBe(4200);
-  expect((await rpc(dapp, "wallet_switchEthereumChain", [{ chainId: "0x1" }])).error?.code).toBe(4902);
+  expect((await rpc(dapp, "wallet_switchEthereumChain", [{ chainId: "0x2a" }])).error?.code).toBe(4902);
   expect(await rpc(dapp, "wallet_switchEthereumChain", [{ chainId: "0xaa36a7" }])).toEqual({ result: null });
   await expect
     .poll(() =>

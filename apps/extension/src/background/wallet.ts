@@ -1,19 +1,26 @@
-import { erc20Abi, hexToBytes, type Address, type Hex } from "viem";
+import { concatHex, erc20Abi, hexToBytes, isAddress, type Address, type Hex } from "viem";
 import { schemeById } from "@leaked/pq-signer";
-import { UR_TYPES, UrReceiver, recoveryTestChallenge } from "@leaked/ur";
+import {
+  UR_TYPES,
+  UrReceiver,
+  encodeRecoveryChallenge,
+  randomUuid,
+  recoveryTestChallenge,
+  singlePartUr,
+} from "@leaked/ur";
 import { findNetwork, getNetwork, toHexChainId } from "../shared/chains";
 import type { KV } from "../shared/kv";
 import type { ApprovalView, SendRequest, UiApi, UiType } from "../shared/messages";
-import type { Approval, ApprovalTx, WalletState } from "../shared/types";
+import type { Approval, ApprovalTx, TokenChoice, WalletState } from "../shared/types";
 import { ProviderRpcError, RpcErrorCode, userRejected } from "../shared/errors";
-import { AccountPlans } from "./account";
+import { AccountPlans, MAX_INIT_TOKENS, payerConflict } from "./account";
 import { ActivityStore, callsStatusCode, type ActivityEntry } from "./activity";
 import { ApprovalBroker, ApprovalStore, TooManyPendingError, type ApprovalWindows } from "./approvals";
 import { bucketFromStatus } from "./bucket";
 import { KeyringController, KeyringError, type KeyringOptions } from "./keyring";
 import { Payments, PaymentsError, RouteError, type ChainIo } from "./payments";
 import type { SidecarClient } from "@leaked/rpc";
-import { accountAbi, roleSignerFactoryAbi } from "../generated/contracts";
+import { accountAbi, policyHookAbi, roleSignerFactoryAbi } from "../generated/contracts";
 import { ROLE_ID, type AccountPlan } from "./account";
 import { choosePath } from "./lanes";
 import { permitMismatch, registerPermitCall, type SignatureClass } from "./signing";
@@ -26,7 +33,9 @@ import {
   signTyped7739,
   siweDomainMatches,
   typedDigest,
+  validatorDomain,
 } from "./signin";
+import { aaNetwork } from "./aa/payments";
 import { VaultError, VaultFlow, last8 } from "./vault";
 import type { VaultActionRequest } from "./vaultActions";
 import type { PairPreview, PolicyView, SignerView } from "../shared/views";
@@ -41,6 +50,9 @@ import {
 } from "./router";
 import type { Call } from "./routing";
 import { SettingsStore } from "./settings";
+
+/** How long the recovery-test code this browser shows stays valid. */
+export const RECOVERY_CHALLENGE_TTL_MS = 30 * 60_000;
 
 export interface WalletEnv {
   local: KV;
@@ -173,8 +185,31 @@ export class Wallet {
           throw err;
         }
       },
-      readRpc: this.env.readRpc,
+      readRpc: (chainId, method, params) => this.readRpc(chainId, method, params),
     };
+  }
+
+  /**
+   * Read methods for sites. On the 4337 backend a site holds a userOpHash (what eth_sendTransaction returned):
+   * `eth_getTransactionReceipt` for it is answered with the bundle transaction's receipt (plan §30 §3.2, as Ambire
+   * and Safe do), with `transactionHash` set to the userOpHash the site knows.
+   */
+  private async readRpc(chainId: number, method: string, params: unknown[]): Promise<unknown> {
+    if (
+      method === "eth_getTransactionReceipt" &&
+      typeof params[0] === "string" &&
+      findNetwork(chainId)?.backend === "4337"
+    ) {
+      const e = await this.activity.findByHash(params[0] as Hex);
+      if (e?.backend === "4337") {
+        if (e.status === "confirming" || e.status === "sending") await this.payments?.refreshPending();
+        const cur = (await this.activity.get(e.id)) ?? e;
+        if (!cur.txHash) return null;
+        const r = (await this.env.readRpc(chainId, method, [cur.txHash])) as Record<string, unknown> | null;
+        return r ? { ...r, transactionHash: params[0], status: cur.status === "confirmed" ? "0x1" : "0x0" } : null;
+      }
+    }
+    return this.env.readRpc(chainId, method, params);
   }
 
   async handleProvider(ctx: RequestContext, req: ProviderRequest): Promise<unknown> {
@@ -238,10 +273,10 @@ export class Wallet {
     tx: ApprovalTx,
   ): Promise<{ hash: Hex; activityId: string; batchId?: string }> {
     const net = findNetwork(chainId);
-    if (!net || net.backend !== "frame") {
+    if (!net || (net.backend === "4337" && !aaNetwork(chainId))) {
       throw new ProviderRpcError(
         RpcErrorCode.unsupportedMethod,
-        `Payments on ${net?.name ?? "this network"} arrive with the compatible-account update (M2).`,
+        `LEAKED's account contracts aren't on ${net?.name ?? "this network"} yet.`,
         { leakedRule: "BACKEND-NOT-READY" },
       );
     }
@@ -282,7 +317,11 @@ export class Wallet {
     const status = callsStatusCode(e);
     let receipts: unknown[] | undefined;
     if (status !== 100 && e.status !== "cancelled") {
-      const r = await this.env.readRpc(e.chainId, "eth_getTransactionReceipt", [e.hash]).catch(() => null);
+      // 4337: the bundle transaction's receipt (from eth_getUserOperationReceipt), plan §30 §3.2 column U.
+      const txHash = e.backend === "4337" ? e.txHash : e.hash;
+      const r = txHash
+        ? await this.env.readRpc(e.chainId, "eth_getTransactionReceipt", [txHash]).catch(() => null)
+        : null;
       if (r) receipts = [r];
     }
     return {
@@ -297,8 +336,9 @@ export class Wallet {
 
   private async capabilities(chainId: number): Promise<Record<string, unknown>> {
     const net = getNetwork(chainId);
-    if (net.backend !== "frame" || !this.payments) return { atomic: { status: "unsupported" } };
-    const leaked: Record<string, unknown> = { backend: "frame" };
+    if ((net.backend === "4337" && !aaNetwork(chainId)) || !this.payments) return { atomic: { status: "unsupported" } };
+    // Both backends batch atomically: one hotExecute frame, or one 7579 batch `execute`.
+    const leaked: Record<string, unknown> = { backend: net.backend };
     try {
       const s = await this.payments.status(chainId);
       // Only what a site needs to choose a flow. The limit and what is left of it today are not exposed: they are a
@@ -356,10 +396,10 @@ export class Wallet {
     req: { method: "personal_sign" | "eth_signTypedData_v4"; raw: unknown; cls: SignatureClass },
   ): Promise<Hex> {
     const net = findNetwork(chainId);
-    if (!net || net.backend !== "frame") {
+    if (!net || (net.backend === "4337" && !aaNetwork(chainId))) {
       throw new ProviderRpcError(
         RpcErrorCode.unsupportedMethod,
-        `Signatures on ${net?.name ?? "this network"} arrive with the compatible-account update.`,
+        `LEAKED's account contracts aren't on ${net?.name ?? "this network"} yet.`,
       );
     }
     const account = await this.accountFor(chainId);
@@ -492,11 +532,26 @@ export class Wallet {
         });
         return;
       }
-      const signature = await this.keyring.withHotKeys((k) =>
+      const aa = aaNetwork(approval.chainId);
+      const raw = await this.keyring.withHotKeys((k) =>
         sig.method === "personal_sign"
-          ? signPersonal7739(k.everyday, account, approval.chainId, personalMessage(sig.raw ?? ""))
-          : signTyped7739(k.everyday, account, approval.chainId, JSON.parse(sig.typedJson!)),
+          ? signPersonal7739(
+              k.everyday,
+              account,
+              approval.chainId,
+              personalMessage(sig.raw ?? ""),
+              ...(aa ? [validatorDomain(account, approval.chainId, false)] : []),
+            )
+          : signTyped7739(
+              k.everyday,
+              account,
+              approval.chainId,
+              JSON.parse(sig.typedJson!),
+              ...(aa ? [validatorDomain(account, approval.chainId, true)] : []),
+            ),
       );
+      // 7579 hosts route ERC-1271 to a validator named by the signature's first 20 bytes.
+      const signature = aa ? concatHex([aa.aa.validator, raw]) : raw;
       if (opts.alwaysAllow) {
         const sites = await this.signInSites();
         if (!sites.includes(approval.origin))
@@ -510,7 +565,8 @@ export class Wallet {
     // permit: register the ERC-2612 digest on-chain in an everyday batch (it counts against the daily limit), wait
     // for it to be mined, then hand the site the registered-hash marker.
     const p = sig.permit!;
-    const call = registerPermitCall(account, {
+    const aaNet = aaNetwork(approval.chainId);
+    const call = registerPermitCall(aaNet ? aaNet.aa.hook : account, {
       kind: "register-permit",
       rule: "SIG-PERMIT-2612",
       token: p.token,
@@ -545,12 +601,19 @@ export class Wallet {
       await new Promise((r) => setTimeout(r, 2000));
     }
     const digest = typedDigest(JSON.parse(sig.typedJson!));
-    const expiry = (await this.env.io!.publicClient(approval.chainId).readContract({
-      address: account,
-      abi: accountAbi,
-      functionName: "registeredHashExpiry",
-      args: [digest],
-    })) as number;
+    const expiry = (await (aaNet
+      ? this.env.io!.publicClient(approval.chainId).readContract({
+          address: aaNet.aa.hook,
+          abi: policyHookAbi,
+          functionName: "registeredHashExpiry",
+          args: [account, digest],
+        })
+      : this.env.io!.publicClient(approval.chainId).readContract({
+          address: account,
+          abi: accountAbi,
+          functionName: "registeredHashExpiry",
+          args: [digest],
+        }))) as number;
     if (entry.status !== "confirmed" || Number(expiry) === 0) {
       await this.approvals.resolve(approval.id, "rejected", {
         denial: {
@@ -564,7 +627,11 @@ export class Wallet {
       return;
     }
     await this.approvals.resolve(approval.id, "approved", {
-      result: { activityId: entry.id, hash: entry.hash, signature: registeredMarker(digest) },
+      result: {
+        activityId: entry.id,
+        hash: entry.hash,
+        signature: aaNet ? concatHex([aaNet.aa.validator, registeredMarker(digest)]) : registeredMarker(digest),
+      },
     });
   }
 
@@ -643,7 +710,39 @@ export class Wallet {
     return !!code && code !== "0x";
   }
 
-  private async recoveryTest(text: string): Promise<{ ok: true; last8: string }> {
+  /**
+   * The browser picks the recovery test's request id (single use): the phone signs over it, so a test code recorded
+   * earlier, or made for another browser, can never be replayed here. A new challenge replaces the old one.
+   */
+  private challengeLock: Promise<unknown> = Promise.resolve();
+  private recoveryChallenge(): Promise<{ text: string; requestId: string }> {
+    // Serialized: two page requests at once (React StrictMode) must not each store a different challenge.
+    const run = this.challengeLock.then(() => this.issueRecoveryChallenge());
+    this.challengeLock = run.catch(() => undefined);
+    return run;
+  }
+
+  private async issueRecoveryChallenge(): Promise<{ text: string; requestId: string }> {
+    const setup = await this.settings.getSetup();
+    if (!setup.recovery) throw new VaultError("E-23", "Scan the Recovery key code first.");
+    // The outstanding one while it is unused and fresh (the page may ask twice); a used one is gone (single use).
+    const cur = setup.recoveryChallenge;
+    const reuse =
+      cur &&
+      cur.pk.toLowerCase() === setup.recovery.pk.toLowerCase() &&
+      this.now() - cur.issuedAt < RECOVERY_CHALLENGE_TTL_MS / 2;
+    const requestId = reuse ? cur.requestId : randomUuid();
+    if (!reuse) await this.settings.setRecoveryChallenge({ requestId, pk: setup.recovery.pk, issuedAt: this.now() });
+    return {
+      requestId,
+      text: singlePartUr(
+        UR_TYPES.recoveryChallenge,
+        encodeRecoveryChallenge({ requestId, recoveryPk: setup.recovery.pk }),
+      ),
+    };
+  }
+
+  private async recoveryTest(text: string): Promise<{ ok: true; last8: string; payer?: Address }> {
     const d = this.readUr(text, UR_TYPES.recoveryTest);
     if (d.type !== UR_TYPES.recoveryTest) throw new VaultError("E-24", "That isn't a recovery test code.");
     const t = d.value;
@@ -654,6 +753,19 @@ export class Wallet {
       throw new VaultError(
         "E-23",
         "The Recovery key on the phone doesn't match the one scanned. Start the recovery setup again.",
+      );
+    }
+    // Replay protection: only the answer to the challenge this browser showed, once, within 30 minutes.
+    const ch = setup.recoveryChallenge;
+    if (
+      !ch ||
+      ch.requestId !== t.requestId ||
+      ch.pk.toLowerCase() !== want.toLowerCase() ||
+      this.now() - ch.issuedAt > RECOVERY_CHALLENGE_TTL_MS
+    ) {
+      throw new VaultError(
+        "E-61",
+        "That test code wasn't made for the code this screen shows. On the phone, scan this screen's test code first, then show the phone's answer.",
       );
     }
     // A test that names a Recovery payer address (key 6) must name the one the pairing code carried, if any.
@@ -669,8 +781,56 @@ export class Wallet {
     if (!scheme || !t.ok || !scheme.verify(hexToBytes(t.recoveryPk), hexToBytes(challenge), hexToBytes(t.witness))) {
       throw new VaultError("E-62", "The test signature didn't check out. Run the test again on the phone.");
     }
-    await this.settings.setPaired("recovery", setup.recovery, this.now());
-    return { ok: true, last8: last8(t.recoveryPk) };
+    // The v2 payer is signed by the Recovery key itself: it becomes InitConfig.recovery.payerKey (Path B for
+    // Recovery, no stake needed). A pairing-code payer without a v2 test is not trusted on its own.
+    const payer = (t.payer as Address | undefined) ?? undefined;
+    const accounts = await this.keyring.accounts();
+    if (payer && accounts) {
+      const conflict = payerConflict({
+        hotKey: accounts.everyday,
+        tank: accounts.feeTank,
+        ...(setup.vault?.payer ? { vaultPayer: setup.vault.payer } : {}),
+        recoveryPayer: payer,
+      });
+      if (conflict) throw new VaultError("E-23", conflict);
+    }
+    const { payer: _scanned, ...rest } = setup.recovery!;
+    void _scanned;
+    await this.settings.setPaired("recovery", { ...rest, ...(payer ? { payer } : {}) }, this.now());
+    await this.settings.setRecoveryChallenge(undefined);
+    return { ok: true, last8: last8(t.recoveryPk), ...(payer ? { payer } : {}) };
+  }
+
+  /** "Tokens you'll spend" (onboarding): each token must be a contract with the decimals shown; prices are pinned. */
+  private async setTokens(req: UiApi["setup:setTokens"]["req"]) {
+    const net = getNetwork(req.chainId);
+    const plan = await this.plans.get(req.chainId);
+    if (plan && (await this.planInUse(plan))) {
+      throw new VaultError("frozen", "Your account is already active; change tokens from Limits with your Vault.");
+    }
+    if (req.tokens.length > MAX_INIT_TOKENS) throw new Error(`At most ${MAX_INIT_TOKENS} tokens.`);
+    const list: TokenChoice[] = [];
+    for (const t of req.tokens) {
+      if (!isAddress(t.token)) throw new Error("Not a token address.");
+      if (!Number.isFinite(t.usd) || t.usd <= 0 || t.usd > 1_000_000)
+        throw new Error(`Set a price above $0 for ${t.symbol}.`);
+      if (this.env.io) {
+        const d = await this.env.io
+          .publicClient(net.chainId)
+          .readContract({ address: t.token, abi: erc20Abi, functionName: "decimals" })
+          .catch(() => undefined);
+        if (d === undefined || Number(d) !== t.decimals)
+          throw new Error(`${t.symbol} isn't a token with ${t.decimals} decimals on ${net.name}.`);
+      }
+      list.push({
+        token: t.token,
+        symbol: t.symbol.slice(0, 16),
+        decimals: t.decimals,
+        usdPerToken: String(Math.round(t.usd * 1e6)),
+        confirmedAt: this.now(),
+      });
+    }
+    return this.settings.setTokens(req.chainId, list);
   }
 
   // ---- Limits / Security views ----
@@ -735,6 +895,7 @@ export class Wallet {
   private async signerViews(chainId: number): Promise<SignerView[]> {
     const plan = await this.plans.get(chainId);
     if (!plan) return [];
+    if (plan.backend === "4337") return this.aaSignerViews(chainId, plan);
     const out: SignerView[] = [];
     const budgets = await this.vf().budgets(chainId);
     for (const role of ["vault", "recovery"] as const) {
@@ -772,6 +933,37 @@ export class Wallet {
                   : `Can't send approvals right now: ${choice.reason}`,
               rules: choice.rules,
             },
+      });
+    }
+    return out;
+  }
+
+  /** 4337: the Vault and the Recovery key are PQ keys stored by LeakedRoleExecutor; the fee tank relays approvals. */
+  private async aaSignerViews(chainId: number, plan: AccountPlan): Promise<SignerView[]> {
+    const client = this.env.io!.publicClient(chainId);
+    const code = await client.getCode({ address: plan.address });
+    if (!code || code === "0x") return [];
+    const roles = await this.vf().aa.roles(chainId, plan.address);
+    const scheme = schemeById(await this.vf().aa.schemeId(chainId, roles.verifier));
+    const tank = (await this.keyring.accounts())!.feeTank;
+    const tankWei = (await client.getBalance({ address: tank })).toString();
+    const out: SignerView[] = [];
+    for (const role of ["vault", "recovery"] as const) {
+      const pk = role === "vault" ? roles.vaultPk : roles.recoveryPk;
+      if (/^0x0+$/u.test(pk)) continue;
+      out.push({
+        role,
+        address: this.vf().aa.dep(chainId).executor,
+        deployed: true,
+        balanceWei: tankWei,
+        staked: false,
+        schemeName: scheme?.name ?? "unknown",
+        pkLast8: last8(pk),
+        lane: {
+          ok: true,
+          text: "Quantum-safe signature checked on-chain by your account's Vault module; your fee tank sends it (no classical key on the phone).",
+          rules: ["ROUTE-VAULT-EXECUTOR"],
+        },
       });
     }
     return out;
@@ -958,6 +1150,8 @@ export class Wallet {
     "pair:vault": ({ text, confirm }) => this.pair("vault", text, confirm),
     "pair:recovery": ({ text, confirm }) => this.pair("recovery", text, confirm),
     "pair:recoveryTest": ({ text }) => this.recoveryTest(text),
+    "pair:recoveryChallenge": () => this.recoveryChallenge(),
+    "setup:setTokens": (req) => this.setTokens(req),
     "pair:forgetRecovery": async () => {
       await this.settings.setPaired("recovery", undefined);
       return null;
@@ -1055,12 +1249,15 @@ export class Wallet {
         "Finish the Recovery key test first (re-enter 6 words on the phone and scan its test code), so a key with a typo is never linked.",
       );
     }
+    // 4337: the executor stores the Recovery key's PQ key itself (`setRecoveryKey`), no signer contract.
+    if (plan.backend === "4337") return { type: "setRecoveryKey", pk: setup.recovery.pk };
     const net = findNetwork(chainId)!;
     const params = {
       salt: plan.salt,
       pk: setup.recovery.pk,
       verifier: net.deployment!.c13Verifier,
-      payerKey: "0x0000000000000000000000000000000000000000" as Address,
+      // The v2 recovery test's payer (signed by the Recovery key): Path B for Recovery, no stake needed.
+      payerKey: setup.recovery.payer ?? ("0x0000000000000000000000000000000000000000" as Address),
     };
     const signer = (await this.env.io!.publicClient(chainId).readContract({
       address: net.deployment!.roleSignerFactory,

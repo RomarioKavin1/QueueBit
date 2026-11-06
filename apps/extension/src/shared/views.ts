@@ -10,6 +10,8 @@ export interface AccountStatus {
   unsupportedReason?: string;
   /** The address sites see on this chain. */
   address: Address;
+  /** "4337": a compatible account (everyday fees come from the account's own balance). */
+  backend?: "frame" | "4337";
   deployed: boolean;
   activation?: { txHash: Hex; sentAt: number };
   tank: Address;
@@ -43,6 +45,8 @@ export interface RouteView {
 
 export interface SendPreview {
   chainId: number;
+  /** "4337": the fee comes from the account's own balance, not a fee tank. */
+  backend?: "4337";
   route: RouteView;
   /** Expected network fee, paid by the fee tank (wei). Absent when not simulated (e.g. needs the Vault). */
   feeWei?: string;

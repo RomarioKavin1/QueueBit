@@ -1,5 +1,5 @@
 import { DEVNET_1337 } from "@leaked/rpc";
-import { localDeployment } from "../generated/contracts";
+import { local4337Deployment, localDeployment, type LocalToken } from "../generated/contracts";
 import { BUILD } from "./build";
 
 /**
@@ -20,6 +20,37 @@ export interface AccountDeployment {
   stakingRegistry: `0x${string}`;
 }
 
+/**
+ * Where the compatible (ERC-4337 + ERC-7579) account lives on a chain: the reference MSA host with an EntryPoint v0.8
+ * shim, its factory and bootstrap, and the three LEAKED modules (IMPLEMENTATION-NOTES "Extension M2").
+ */
+export interface AaDeployment {
+  entryPoint: `0x${string}`;
+  /** `MSAFactory(msaImpl)`: `createAccount(salt, initCode)` / `getAddress(salt, initCode)`. */
+  factory: `0x${string}`;
+  msaImpl: `0x${string}`;
+  /** `Bootstrap.initMSA(validators, executors, hook, fallbacks)`, delegatecalled at account creation. */
+  bootstrap: `0x${string}`;
+  validator: `0x${string}`;
+  hook: `0x${string}`;
+  executor: `0x${string}`;
+  c13Verifier: `0x${string}`;
+}
+
+/** A token offered in onboarding's "Tokens you'll spend" step, with the static price LEAKED proposes. */
+export interface TokenPreset {
+  token: `0x${string}`;
+  symbol: string;
+  name: string;
+  decimals: number;
+  /** Proposed static price, USD per whole token (the user confirms it; the account pins it). */
+  usd: number;
+  /** ERC-2612 `permit` (sites can ask for a pre-approval). */
+  permit?: boolean;
+  /** Ticked by default. */
+  preselected?: boolean;
+}
+
 export interface Network {
   chainId: number;
   /** User-facing name (ux-spec §3.13 "Networks"). */
@@ -38,6 +69,18 @@ export interface Network {
   profileId?: string;
   /** Frame backend: the account contracts on this chain, or undefined when LEAKED has none deployed there yet. */
   deployment?: AccountDeployment;
+  /** 4337 backend: an ERC-4337 bundler (`eth_sendUserOperation`, `eth_getUserOperationReceipt`, …). */
+  bundlerUrl?: string;
+  /** 4337 backend: the module stack, or undefined when LEAKED has none deployed there yet. */
+  aa?: AaDeployment;
+  /** Tokens offered at setup (InitConfig.tokens), with proposed prices. */
+  tokenPresets: readonly TokenPreset[];
+  /**
+   * Shown but not selectable until LEAKED's contracts exist there (the picker says why). Sepolia and mainnet stay
+   * disabled until audited addresses are recorded.
+   */
+  enabled: boolean;
+  disabledReason?: string;
   /** ux-spec §1.2: "Native account" (frame backend) / "Compatible account" (4337 backend). */
   accountKind: string;
   currency: { symbol: string; decimals: number };
@@ -52,6 +95,19 @@ export interface Network {
  * devnet/ and the contracts devnet/deploy put there; a normal build uses the public devnet, where LEAKED has no
  * account contracts yet (activation is then unavailable and says so).
  */
+const localTokens = (t: { tokens?: LocalToken[] } | null): TokenPreset[] =>
+  t?.tokens
+    ? t.tokens.map((x) => ({
+        token: x.address,
+        symbol: x.symbol,
+        name: `${x.symbol} (test token)`,
+        decimals: x.decimals,
+        usd: Number(x.usdPerToken) / 1e6,
+        ...(x.permit ? { permit: true } : {}),
+        preselected: x.symbol === "USDC",
+      }))
+    : [];
+
 const devnet: Network = BUILD.localDevnet
   ? {
       chainId: DEVNET_1337.chainId,
@@ -77,6 +133,8 @@ const devnet: Network = BUILD.localDevnet
       currency: { symbol: "ETH", decimals: 18 },
       note: "Your local copy of the native-account test network. Test money only.",
       testnet: true,
+      tokenPresets: localTokens(localDeployment),
+      enabled: true,
     }
   : {
       chainId: DEVNET_1337.chainId,
@@ -90,10 +148,52 @@ const devnet: Network = BUILD.localDevnet
       currency: { symbol: "ETH", decimals: 18 },
       note: "Test network for native LEAKED accounts. Test money only.",
       testnet: true,
+      tokenPresets: [],
+      enabled: true,
     };
+
+/**
+ * Chain 31337: a local anvil with EntryPoint v0.8 at its canonical address, the LEAKED 7579 modules and a minimal
+ * bundler (`devnet/deploy`: `bun run up:4337`). The compatible-account backend runs here exactly as on Sepolia.
+ */
+const local4337: Network | undefined = BUILD.localDevnet
+  ? {
+      chainId: 31337,
+      name: "Local 4337 test chain",
+      shortName: "Local 4337",
+      rpcUrl: "http://localhost:8546",
+      bundlerUrl: "http://localhost:4337/rpc",
+      backend: "4337",
+      ...(local4337Deployment
+        ? {
+            aa: {
+              entryPoint: local4337Deployment.entryPoint,
+              factory: local4337Deployment.factory,
+              msaImpl: local4337Deployment.msaImpl,
+              bootstrap: local4337Deployment.bootstrap,
+              validator: local4337Deployment.validator,
+              hook: local4337Deployment.hook,
+              executor: local4337Deployment.executor,
+              c13Verifier: local4337Deployment.c13Verifier,
+            },
+          }
+        : {}),
+      accountKind: "Compatible account",
+      currency: { symbol: "ETH", decimals: 18 },
+      note: "A local chain without native accounts: your account is an ERC-4337 smart account with LEAKED's modules. Test money only.",
+      testnet: true,
+      tokenPresets: localTokens(local4337Deployment),
+      enabled: local4337Deployment !== null,
+      ...(local4337Deployment ? {} : { disabledReason: "Run devnet/deploy `bun run up:4337` and rebuild." }),
+    }
+  : undefined;
+
+/** Not selectable until LEAKED's module stack has audited, recorded addresses there (plan §30 §8). */
+const NOT_YET = "LEAKED's account contracts aren't deployed on this network yet.";
 
 export const NETWORKS: readonly Network[] = [
   devnet,
+  ...(local4337 ? [local4337] : []),
   {
     chainId: 11155111,
     name: "Sepolia",
@@ -105,6 +205,51 @@ export const NETWORKS: readonly Network[] = [
     explorerUrl: "https://sepolia.etherscan.io",
     note: "Ethereum's public test network. Test money only.",
     testnet: true,
+    tokenPresets: [
+      {
+        token: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
+        symbol: "USDC",
+        name: "USD Coin (Sepolia)",
+        decimals: 6,
+        usd: 1,
+        permit: true,
+        preselected: true,
+      },
+    ],
+    enabled: false,
+    disabledReason: NOT_YET,
+  },
+  {
+    chainId: 1,
+    name: "Ethereum",
+    shortName: "Ethereum",
+    rpcUrl: "https://ethereum-rpc.publicnode.com",
+    backend: "4337",
+    accountKind: "Compatible account",
+    currency: { symbol: "ETH", decimals: 18 },
+    explorerUrl: "https://etherscan.io",
+    note: "Ethereum mainnet. Real money.",
+    testnet: false,
+    tokenPresets: [
+      {
+        token: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        symbol: "USDC",
+        name: "USD Coin",
+        decimals: 6,
+        usd: 1,
+        permit: true,
+        preselected: true,
+      },
+      {
+        token: "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+        symbol: "DAI",
+        name: "Dai",
+        decimals: 18,
+        usd: 1,
+      },
+    ],
+    enabled: false,
+    disabledReason: "Not before the audit: LEAKED's account contracts aren't deployed on mainnet.",
   },
 ] as const;
 

@@ -104,86 +104,125 @@ export class PolicyReader {
   /** The policy facts of each call, mirroring `_hotCall` (LeakedAccountImpl). */
   async classify(plan: AccountPlan, state: AccountChainState, calls: Call[]): Promise<ClassifiedCall[]> {
     const cfg = planConfig(plan);
-    const isTarget = async (a: Address) =>
-      state.deployed ? this.read<boolean>(plan.address, "isTarget", [a]) : a.toLowerCase() === cfg.tank.toLowerCase();
-    // Open mode (the default): a plain ETH send or an allowed token's `transfer` may go to any non-zero address
-    // within the limits (IMPLEMENTATION-NOTES "Account: Open recipient mode"); Strict keeps the recipient list.
-    const recipientOk = async (a: Address) =>
-      (state.recipientMode === "open" && a.toLowerCase() !== ETH) || (await isTarget(a));
-    const token = async (t: Address) =>
-      state.deployed
-        ? this.read<{ allowed: boolean; decimals: number; usdPerToken: bigint }>(plan.address, "getToken", [t])
-        : { allowed: false, decimals: 18, usdPerToken: 0n };
-    const out: ClassifiedCall[] = [];
-    for (const call of calls) {
-      const s = callShape(call);
-      if (s.kind === "eth-transfer") {
-        out.push({
-          call,
-          kind: s.kind,
-          recipient: s.recipient,
-          amount: s.amount,
-          assetAllowed: state.ethUsdPrice > 0n,
-          recipientAllowed: s.amount > 0n ? await recipientOk(s.recipient) : await isTarget(s.recipient),
-          sessionMatch: false,
-          usd: quote(s.amount, state.ethUsdPrice, 18),
-        });
-      } else if (s.kind === "token-transfer") {
-        const t = await token(s.token!);
-        out.push({
-          call,
-          kind: s.kind,
-          recipient: s.recipient,
-          amount: s.amount,
-          token: s.token!,
-          assetAllowed: t.allowed,
-          recipientAllowed: await recipientOk(s.recipient),
-          sessionMatch: false,
-          usd: t.allowed ? quote(s.amount, t.usdPerToken, Number(t.decimals)) : 0n,
-        });
-      } else if (
-        call.target.toLowerCase() === plan.address.toLowerCase() &&
-        call.data.toLowerCase().startsWith(REGISTER_PERMIT)
-      ) {
-        // An ERC-2612 pre-approval: the account debits the permit's value from the daily limit itself.
-        const { args } = decodeFunctionData({ abi: accountAbi, data: call.data });
-        const [tokenAddr, , value] = args as unknown as readonly [Address, Address, bigint, bigint];
-        const t = await token(tokenAddr);
-        out.push({
-          call,
-          kind: "permit-registration",
-          recipient: tokenAddr,
-          amount: value,
-          token: tokenAddr,
-          assetAllowed: t.allowed,
-          recipientAllowed: true,
-          sessionMatch: false,
-          usd: t.allowed ? quote(value, t.usdPerToken, Number(t.decimals)) : 0n,
-        });
-      } else {
-        let sessionMatch = false;
-        if (state.deployed && call.data.length >= 10) {
-          const selector = call.data.slice(0, 10) as Hex;
+    return classifyCalls(
+      {
+        account: plan.address,
+        permitTarget: plan.address,
+        state,
+        isTarget: (a) =>
+          state.deployed
+            ? this.read<boolean>(plan.address, "isTarget", [a])
+            : Promise.resolve(a.toLowerCase() === cfg.tank.toLowerCase()),
+        token: async (t) => {
+          if (state.deployed) return this.read<TokenFacts>(plan.address, "getToken", [t]);
+          // Before activation: exactly what initialize will write (InitConfig.tokens).
+          const init = (cfg.tokens ?? []).find((x) => x.token.toLowerCase() === t.toLowerCase());
+          return init
+            ? { allowed: true, decimals: init.decimals, usdPerToken: init.usdPerToken }
+            : { allowed: false, decimals: 18, usdPerToken: 0n };
+        },
+        sessionLive: async (target, selector) => {
+          if (!state.deployed) return false;
           const sess = await this.read<{ allowanceUsd: bigint; expiry: number }>(plan.address, "getSession", [
-            call.target,
+            target,
             selector,
           ]);
-          sessionMatch = Number(sess.expiry) * 1000 > Date.now();
-        }
-        out.push({
-          call,
-          kind: s.kind,
-          recipient: s.recipient,
-          amount: s.amount,
-          assetAllowed: state.ethUsdPrice > 0n || call.value === 0n,
-          recipientAllowed: false,
-          sessionMatch,
-          usd: quote(call.value, state.ethUsdPrice, 18),
-        });
-      }
-    }
-    return out;
+          return Number(sess.expiry) * 1000 > Date.now();
+        },
+      },
+      calls,
+    );
   }
+}
+
+export interface TokenFacts {
+  allowed: boolean;
+  decimals: number;
+  usdPerToken: bigint;
+}
+
+/** What `classifyCalls` reads, per backend (the native account, or the 7579 policy hook). */
+export interface PolicySource {
+  account: Address;
+  /** Where `registerPermit(token, spender, value, deadline)` is called: the account (native) or the hook (4337). */
+  permitTarget: Address;
+  state: Pick<AccountChainState, "recipientMode" | "ethUsdPrice" | "deployed">;
+  isTarget(a: Address): Promise<boolean>;
+  token(t: Address): Promise<TokenFacts>;
+  sessionLive(target: Address, selector: Hex): Promise<boolean>;
+}
+
+/** The policy facts of each call (both backends share the rules: plan §30 §5, IMPLEMENTATION-NOTES M7 mirrors). */
+export async function classifyCalls(src: PolicySource, calls: Call[]): Promise<ClassifiedCall[]> {
+  const { state } = src;
+  // Open mode (the default): a plain ETH send or an allowed token's `transfer` may go to any non-zero address
+  // within the limits (IMPLEMENTATION-NOTES "Account: Open recipient mode"); Strict keeps the recipient list.
+  const recipientOk = async (a: Address) =>
+    (state.recipientMode === "open" && a.toLowerCase() !== ETH) || (await src.isTarget(a));
+  const out: ClassifiedCall[] = [];
+  for (const call of calls) {
+    const s = callShape(call);
+    if (s.kind === "eth-transfer") {
+      out.push({
+        call,
+        kind: s.kind,
+        recipient: s.recipient,
+        amount: s.amount,
+        assetAllowed: state.ethUsdPrice > 0n,
+        recipientAllowed: s.amount > 0n ? await recipientOk(s.recipient) : await src.isTarget(s.recipient),
+        sessionMatch: false,
+        usd: quote(s.amount, state.ethUsdPrice, 18),
+      });
+    } else if (s.kind === "token-transfer") {
+      const t = await src.token(s.token!);
+      out.push({
+        call,
+        kind: s.kind,
+        recipient: s.recipient,
+        amount: s.amount,
+        token: s.token!,
+        assetAllowed: t.allowed,
+        recipientAllowed: await recipientOk(s.recipient),
+        sessionMatch: false,
+        usd: t.allowed ? quote(s.amount, t.usdPerToken, Number(t.decimals)) : 0n,
+      });
+    } else if (
+      call.target.toLowerCase() === src.permitTarget.toLowerCase() &&
+      call.data.toLowerCase().startsWith(REGISTER_PERMIT)
+    ) {
+      // An ERC-2612 pre-approval: the account debits the permit's value from the daily limit itself.
+      const { args } = decodeFunctionData({ abi: accountAbi, data: call.data });
+      const [tokenAddr, , value] = args as unknown as readonly [Address, Address, bigint, bigint];
+      const t = await src.token(tokenAddr);
+      out.push({
+        call,
+        kind: "permit-registration",
+        recipient: tokenAddr,
+        amount: value,
+        token: tokenAddr,
+        assetAllowed: t.allowed,
+        recipientAllowed: true,
+        sessionMatch: false,
+        usd: t.allowed ? quote(value, t.usdPerToken, Number(t.decimals)) : 0n,
+      });
+    } else {
+      const sessionMatch =
+        state.deployed && call.data.length >= 10
+          ? await src.sessionLive(call.target, call.data.slice(0, 10) as Hex)
+          : false;
+      out.push({
+        call,
+        kind: s.kind,
+        recipient: s.recipient,
+        amount: s.amount,
+        assetAllowed: state.ethUsdPrice > 0n || call.value === 0n,
+        recipientAllowed: false,
+        sessionMatch,
+        usd: quote(call.value, state.ethUsdPrice, 18),
+      });
+    }
+  }
+  return out;
 }
 
 /** `Math.mulDiv(amount, usdPerToken, 10**decimals, Ceil)` (LeakedAccountBase._quote). */

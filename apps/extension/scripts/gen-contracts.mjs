@@ -12,6 +12,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(here, "..", "..", "..");
 export const OUT_DIR = join(ROOT, "contracts", "out");
 export const DEPLOYMENT_FILE = join(ROOT, "devnet", "deploy", "addresses.local.json");
+export const AA_DEPLOYMENT_FILE = join(ROOT, "devnet", "deploy", "addresses.anvil4337.json");
 export const TARGET = join(here, "..", "src", "generated", "contracts.ts");
 
 const art = (file, name) => JSON.parse(readFileSync(join(OUT_DIR, file, `${name}.json`), "utf8"));
@@ -40,6 +41,39 @@ export async function render() {
   const roleSigner = strip(art("PQRoleSigner.sol", "PQRoleSigner").abi);
   const pqVerifier = strip(art("IPQVerifier.sol", "IPQVerifier").abi);
   const proxy = art("ERC1967Proxy.sol", "ERC1967Proxy").bytecode.object;
+  const hook = strip(art("LeakedPolicyHook.sol", "LeakedPolicyHook").abi);
+  const validator = strip(art("LeakedHotValidator.sol", "LeakedHotValidator").abi);
+  const executor = strip(art("LeakedRoleExecutor.sol", "LeakedRoleExecutor").abi);
+  const msaFactory = strip(art("MSAFactory.sol", "MSAFactory").abi);
+  const bootstrap = strip(art("Bootstrap.sol", "Bootstrap").abi);
+  const tokens = (d) =>
+    d?.tokens
+      ? Object.values(d.tokens)
+          .map((t) => ({
+            address: t.address,
+            symbol: t.symbol,
+            decimals: t.decimals,
+            usdPerToken: String(t.usdPerToken),
+            permit: Boolean(t.permit),
+          }))
+          .sort((a, b) => a.symbol.localeCompare(b.symbol))
+      : [];
+  const aaDeployment = existsSync(AA_DEPLOYMENT_FILE) ? JSON.parse(readFileSync(AA_DEPLOYMENT_FILE, "utf8")) : null;
+  const local4337 = aaDeployment
+    ? {
+        chainId: aaDeployment.network.chainId,
+        entryPoint: aaDeployment.entryPoint,
+        factory: aaDeployment.contracts.MSAFactory.address,
+        msaImpl: aaDeployment.contracts.MSAAdvancedEP.address,
+        bootstrap: aaDeployment.contracts.Bootstrap.address,
+        validator: aaDeployment.contracts.LeakedHotValidator.address,
+        hook: aaDeployment.contracts.LeakedPolicyHook.address,
+        hookInitCodeHash: aaDeployment.contracts.LeakedPolicyHook.initCodeHash,
+        executor: aaDeployment.contracts.LeakedRoleExecutor.address,
+        c13Verifier: aaDeployment.contracts.C13Verifier.address,
+        tokens: tokens(aaDeployment),
+      }
+    : null;
   const deployment = existsSync(DEPLOYMENT_FILE) ? JSON.parse(readFileSync(DEPLOYMENT_FILE, "utf8")) : null;
   const local = deployment
     ? {
@@ -52,6 +86,7 @@ export async function render() {
         roleSignerFactory: deployment.contracts.RoleSignerFactory.address,
         stakingRegistry: deployment.stakingRegistry,
         testVault: deployment.testVault.address,
+        tokens: tokens(deployment),
       }
     : null;
   const j = (v) => JSON.stringify(v, null, 2);
@@ -74,6 +109,46 @@ export const pqVerifierAbi = ${j(pqVerifier)} as const;
 /** \`type(ERC1967Proxy).creationCode\`: the factory's CREATE2 init code is this ‖ abi.encode(implementation, initData). */
 export const erc1967ProxyCreationCode = ${j(proxy)} as const;
 
+/** \`LeakedPolicyHook\` (ERC-7579 hook, 4337 backend): the policy store (bucket, prices, allowlist, sessions). */
+export const policyHookAbi = ${j(hook)} as const;
+
+/** \`LeakedHotValidator\` (ERC-7579 validator): the hot key's userOp and scoped ERC-1271 checks. */
+export const hotValidatorAbi = ${j(validator)} as const;
+
+/** \`LeakedRoleExecutor\` (ERC-7579 executor): the Vault / Recovery PQ roles, timelock queue and EIP-712 digests. */
+export const roleExecutorAbi = ${j(executor)} as const;
+
+/** Reference ERC-7579 \`MSAFactory\`: \`createAccount(salt, initCode)\`, \`getAddress(salt, initCode)\`. */
+export const msaFactoryAbi = ${j(msaFactory)} as const;
+
+/** Reference ERC-7579 \`Bootstrap\`: \`initMSA(validators, executors, hook, fallbacks)\`. */
+export const msaBootstrapAbi = ${j(bootstrap)} as const;
+
+/** A devnet test token devnet/deploy put on a local chain (with the static price onboarding proposes). */
+export interface LocalToken {
+  address: \`0x\${string}\`;
+  symbol: string;
+  decimals: number;
+  /** USD-6 per whole token, decimal string. */
+  usdPerToken: string;
+  permit: boolean;
+}
+
+/** The local anvil 4337 deployment (devnet/deploy/deploy-4337.ts), or null when none was recorded. */
+export const local4337Deployment: {
+  chainId: number;
+  entryPoint: \`0x\${string}\`;
+  factory: \`0x\${string}\`;
+  msaImpl: \`0x\${string}\`;
+  bootstrap: \`0x\${string}\`;
+  validator: \`0x\${string}\`;
+  hook: \`0x\${string}\`;
+  hookInitCodeHash: \`0x\${string}\`;
+  executor: \`0x\${string}\`;
+  c13Verifier: \`0x\${string}\`;
+  tokens: LocalToken[];
+} | null = ${j(local4337)};
+
 /** The local devnet deployment (devnet/deploy), or null when none was recorded. */
 export const localDeployment: {
   chainId: number;
@@ -87,6 +162,7 @@ export const localDeployment: {
   stakingRegistry: \`0x\${string}\`;
   /** Legacy public devnet key for explicit-mode test accounts only; the extension never uses it. */
   testVault: \`0x\${string}\`;
+  tokens: LocalToken[];
 } | null = ${j(local)};
 `;
   const options = (await prettier.resolveConfig(TARGET)) ?? {};

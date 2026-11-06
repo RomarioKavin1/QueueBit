@@ -1,9 +1,7 @@
-import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { BrowserContext, Page } from "@playwright/test";
 import { createPublicClient, hashMessage, http, parseEther, type Address, type Hex } from "viem";
-import { createFrameRpc } from "@leaked/rpc";
 import { localDeployment } from "../src/generated/contracts";
 import {
   activateFromOnboarding,
@@ -26,8 +24,9 @@ import {
  * the paste fallback. In order: onboarding with the Vault paired first and the Recovery ceremony → activation (the
  * account and the Vault signer, paid by the fee tank) → an Open-mode everyday payment to a fresh address → an
  * over-limit payment through the Vault (Path B, verified locally, simulated, mined) → raising the daily limit
- * (queued; the countdown shows) and cancelling it with the Recovery key (Path A on the BUDGET-010 staked lane) →
- * SIWE sign-in checked with an ERC-1271 eth_call → an ERC-2612 pre-approval request.
+ * (queued; the countdown shows) and cancelling it with the Recovery key (Path B, its own payer key from the v2
+ * recovery test) → SIWE sign-in checked with an ERC-1271 eth_call → an ERC-2612 pre-approval on USDC (allowlisted at
+ * creation), mined and consumed by the token.
  */
 const RPC = "http://localhost:8545";
 const SHOTS = join(dirname(fileURLToPath(import.meta.url)), "..", "docs", "screenshots");
@@ -37,7 +36,6 @@ async function shot(name: string, page: Page) {
   await page.screenshot({ path: join(SHOTS, `${name}.png`), fullPage: true, animations: "disabled" });
 }
 const pub = createPublicClient({ transport: http(RPC) });
-const node = createFrameRpc(RPC).node;
 
 async function devnetReady(): Promise<string | undefined> {
   try {
@@ -193,14 +191,14 @@ test("M3/M4: Vault-first onboarding, Open payment, Vault payment, queued change 
   await expect(op).toContainText("Change daily limit $500 → $2,000");
   await shot("app-pending-scheduled", vaultTab);
 
-  // ---- cancel it with the Recovery key: Path A on the staked lane ----
-  await sim.stakeRecoverySigner(account, phone);
+  // ---- cancel it with the Recovery key: Path B on the public mempool, with the Recovery's own payer key ----
+  // (the v2 recovery test put it in InitConfig.recovery.payerKey: no stake and no private builder hook any more)
   await vaultTab.reload();
   const cancel = vaultTab.getByTestId("queued-op").getByRole("button", { name: "Cancel with Recovery key" });
   await expect(cancel).toBeEnabled({ timeout: 30_000 });
   await cancel.click();
-  await expect(vaultTab.getByText("Recovery key approval")).toBeVisible({ timeout: 30_000 });
-  await expect(vaultTab.getByText("ROUTE-PATH-A")).toBeAttached();
+  await expect(vaultTab.getByText("Recovery key approval")).toBeVisible({ timeout: 60_000 });
+  await expect(vaultTab.getByText("ROUTE-PATH-B")).toBeAttached();
   await shot("app-recovery-handoff", vaultTab);
   await approveOnPhone(vaultTab, phone, "recovery");
   await expect(vaultTab.getByTestId("vault-handoff")).toHaveAttribute("data-status", "confirmed", { timeout: 180_000 });
@@ -276,15 +274,14 @@ test("M3/M4: Vault-first onboarding, Open payment, Vault payment, queued change 
   await shot("approve-sign-in-wrong-site", phish);
   await Promise.all([phish.waitForEvent("close"), phish.getByRole("button", { name: "Cancel" }).click()]);
 
-  // ---- ERC-2612: classified as a pre-approval (registerPermit in an everyday batch, counts against the limit) ----
-  const art = JSON.parse(
-    readFileSync(new URL("../../../contracts/out/AccountMocks.sol/PermitToken1271.json", import.meta.url), "utf8"),
-  ) as { abi: unknown[]; bytecode: { object: Hex } };
-  const token = await sim.deployPermitToken({ abi: art.abi, bytecode: art.bytecode.object }, account);
+  // ---- ERC-2612 on USDC, allowlisted at creation (InitConfig.tokens): registerPermit in an everyday batch, mined,
+  // then consumed by the token itself (USDC-style permit verifies the account with ERC-1271) ----
+  const usdc = localDeployment!.tokens.find((t) => t.symbol === "USDC")!;
   const spender = "0x00000000000000000000000000000000000c0ffe" as Address;
-  const deadline = Math.floor(Date.now() / 1000) + 3600;
+  const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600);
+  const value = 25n * 10n ** 18n;
   const permit = {
-    domain: { name: "E2EUSD", version: "2", chainId: 1337, verifyingContract: token },
+    domain: { name: "USDC", version: "2", chainId: 1337, verifyingContract: usdc.address },
     types: {
       EIP712Domain: [
         { name: "name", type: "string" },
@@ -301,22 +298,24 @@ test("M3/M4: Vault-first onboarding, Open payment, Vault payment, queued change 
       ],
     },
     primaryType: "Permit",
-    message: { owner: account, spender, value: "25000000000000000000", nonce: "0", deadline: String(deadline) },
+    message: { owner: account, spender, value: value.toString(), nonce: "0", deadline: deadline.toString() },
   };
   await start(dapp, "eth_signTypedData_v4", [account, JSON.stringify(permit)]);
   const pre = await waitForApproval(context);
-  await expect(pre.getByTestId("permit-headline")).toContainText("move up to 25 E2EUSD");
+  await expect(pre.getByTestId("permit-headline")).toContainText("move up to 25 USDC");
   await expect(pre.getByText(/It counts against your daily limit now\./u)).toBeVisible();
   await shot("approve-pre-approve", pre);
-  const nonceBefore = await node.getTransactionCount(account, "pending");
-  await pre.getByRole("button", { name: "Pre-approve" }).click();
-  // A fresh account has no allowed tokens (InitConfig has no token list; adding one waits 48 h), so the honest
-  // outcome is the reason, before anything is signed or sent.
-  await expect(pre.getByTestId("approval-denial")).toContainText("isn't on your allowed list", { timeout: 60_000 });
-  await shot("approve-pre-approve-token-not-allowed", pre);
+  await Promise.all([
+    pre.waitForEvent("close", { timeout: 240_000 }),
+    pre.getByRole("button", { name: "Pre-approve" }).click(),
+  ]);
   await expect
-    .poll(() => dapp.evaluate(() => (window as unknown as Win).__error), { timeout: 15_000 })
-    .toMatchObject({ code: 4100, data: { leakedRule: "ROUTE-NEEDS-VAULT" } });
-  expect(await node.getTransactionCount(account, "pending")).toBe(nonceBefore);
+    .poll(() => dapp.evaluate(() => (window as unknown as Win).__result), { timeout: 240_000 })
+    .toMatch(/^0xdc6b87c9/u);
+  const marker = (await dapp.evaluate(() => (window as unknown as Win).__result)) as Hex;
+  expect(marker.toLowerCase()).toBe(`0xdc6b87c9${marker.slice(10)}`.toLowerCase());
+  expect(
+    await sim.consumePermit(1337, usdc.address, { owner: account, spender, value, deadline, signature: marker }),
+  ).toBe(value);
   await page.close();
 });

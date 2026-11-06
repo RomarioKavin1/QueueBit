@@ -313,6 +313,11 @@ export const accountAbi = [
   },
   {
     type: "error",
+    name: "NonceUsed",
+    inputs: [],
+  },
+  {
+    type: "error",
     name: "NoRotationPending",
     inputs: [],
   },
@@ -2442,6 +2447,125 @@ export const accountAbi = [
   },
   {
     type: "function",
+    name: "registerPermit2",
+    inputs: [
+      {
+        name: "token",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "amount",
+        type: "uint160",
+        internalType: "uint160",
+      },
+      {
+        name: "expiration",
+        type: "uint48",
+        internalType: "uint48",
+      },
+      {
+        name: "spender",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "sigDeadline",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "sessionSelector",
+        type: "bytes4",
+        internalType: "bytes4",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "registerPermit2Transfer",
+    inputs: [
+      {
+        name: "token",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "amount",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "spender",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "nonce",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "deadline",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "sessionSelector",
+        type: "bytes4",
+        internalType: "bytes4",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "registerTransferAuthorization",
+    inputs: [
+      {
+        name: "token",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "value",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "to",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "validAfter",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "validBefore",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "nonce",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+      {
+        name: "receiveAuth",
+        type: "bool",
+        internalType: "bool",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
     name: "ROLES_MODULE",
     inputs: [],
     outputs: [
@@ -3909,6 +4033,6467 @@ export const pqVerifierAbi = [
 export const erc1967ProxyCreationCode =
   "0x6080604052610279803803806100148161016e565b9283398101604082820312610156578151916001600160a01b03831690818403610156576020810151906001600160401b038211610156570182601f82011215610156578051906001600160401b03821161015a5761007c601f8301601f191660200161016e565b938285526020838301011161015657815f9260208093018387015e8401015281511561014757823b15610135577f360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc80546001600160a01b031916821790557fbc7cd75a20ee27fd9adebab32041f755214dbc6bffa90cc0225b39da2e5c2d3b5f80a280511561011e5761010e91610193565b505b604051605990816102208239f35b505034156101105763b398979f60e01b5f5260045ffd5b634c9c8ce360e01b5f5260045260245ffd5b6330a289cf60e21b5f5260045ffd5b5f80fd5b634e487b7160e01b5f52604160045260245ffd5b6040519190601f01601f191682016001600160401b0381118382101761015a57604052565b905f8091602081519101845af4808061020c575b156101c75750506040513d81523d5f602083013e60203d82010160405290565b156101ec57639996b31560e01b5f9081526001600160a01b0391909116600452602490fd5b3d156101fd576040513d5f823e3d90fd5b63d6bda27560e01b5f5260045ffd5b503d1515806101a75750813b15156101a756fe60806040527f360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc545f9081906001600160a01b0316368280378136915af43d5f803e156048573d5ff35b3d5ffdfea164736f6c634300081c000a" as const;
 
+/** `LeakedPolicyHook` (ERC-7579 hook, 4337 backend): the policy store (bucket, prices, allowlist, sessions). */
+export const policyHookAbi = [
+  {
+    type: "function",
+    name: "EXECUTOR",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "KEYLESS_OWNER",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "MAX_HOT_CALLS",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "MAX_REGISTERED_TTL",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "uint48",
+        internalType: "uint48",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "MAX_TOKENS",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "PERMIT2",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "checkHotCalls",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "execs",
+        type: "tuple[]",
+        internalType: "struct Execution[]",
+        components: [
+          {
+            name: "target",
+            type: "address",
+            internalType: "address",
+          },
+          {
+            name: "value",
+            type: "uint256",
+            internalType: "uint256",
+          },
+          {
+            name: "callData",
+            type: "bytes",
+            internalType: "bytes",
+          },
+        ],
+      },
+    ],
+    outputs: [
+      {
+        name: "usd",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "clearExpiredFreeze",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "enableBunker",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "freeze",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "until",
+        type: "uint48",
+        internalType: "uint48",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "getBucket",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    outputs: [
+      {
+        name: "available",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "lastUpdate",
+        type: "uint48",
+        internalType: "uint48",
+      },
+      {
+        name: "cap",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "getFreeze",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    outputs: [
+      {
+        name: "frozen",
+        type: "bool",
+        internalType: "bool",
+      },
+      {
+        name: "until",
+        type: "uint48",
+        internalType: "uint48",
+      },
+      {
+        name: "bunker",
+        type: "bool",
+        internalType: "bool",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "getSession",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "target",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "selector",
+        type: "bytes4",
+        internalType: "bytes4",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "tuple",
+        internalType: "struct ILeakedModules.Session",
+        components: [
+          {
+            name: "allowanceUsd",
+            type: "uint256",
+            internalType: "uint256",
+          },
+          {
+            name: "expiry",
+            type: "uint48",
+            internalType: "uint48",
+          },
+        ],
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "getToken",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "token",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "tuple",
+        internalType: "struct ILeakedModules.TokenCfg",
+        components: [
+          {
+            name: "allowed",
+            type: "bool",
+            internalType: "bool",
+          },
+          {
+            name: "decimals",
+            type: "uint8",
+            internalType: "uint8",
+          },
+          {
+            name: "usdPerToken",
+            type: "uint256",
+            internalType: "uint256",
+          },
+        ],
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "hostOf",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "uint8",
+        internalType: "uint8",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "hotVerifierAllowed",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "caller",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "bool",
+        internalType: "bool",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "hotView",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    outputs: [
+      {
+        name: "v",
+        type: "tuple",
+        internalType: "struct ILeakedModules.HotView",
+        components: [
+          {
+            name: "hotKey",
+            type: "address",
+            internalType: "address",
+          },
+          {
+            name: "initialized",
+            type: "bool",
+            internalType: "bool",
+          },
+          {
+            name: "frozen",
+            type: "bool",
+            internalType: "bool",
+          },
+          {
+            name: "bunker",
+            type: "bool",
+            internalType: "bool",
+          },
+          {
+            name: "perTxMaxUsd",
+            type: "uint256",
+            internalType: "uint256",
+          },
+          {
+            name: "maxFeeWei",
+            type: "uint256",
+            internalType: "uint256",
+          },
+          {
+            name: "maxPriorityFeePerGas",
+            type: "uint256",
+            internalType: "uint256",
+          },
+          {
+            name: "capUsdPerDay",
+            type: "uint256",
+            internalType: "uint256",
+          },
+          {
+            name: "host",
+            type: "uint8",
+            internalType: "uint8",
+          },
+        ],
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "inHotBatch",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "bool",
+        internalType: "bool",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "isInitialized",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "bool",
+        internalType: "bool",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "isModuleType",
+    inputs: [
+      {
+        name: "moduleTypeId",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "bool",
+        internalType: "bool",
+      },
+    ],
+    stateMutability: "pure",
+  },
+  {
+    type: "function",
+    name: "isRegistered",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "hash",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "bool",
+        internalType: "bool",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "isTarget",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "target",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "bool",
+        internalType: "bool",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "isTrustedVerifier",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "verifier",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "bool",
+        internalType: "bool",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "monitoredTokens",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "address[]",
+        internalType: "address[]",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "onInstall",
+    inputs: [
+      {
+        name: "data",
+        type: "bytes",
+        internalType: "bytes",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "onUninstall",
+    inputs: [
+      {
+        name: "",
+        type: "bytes",
+        internalType: "bytes",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "postCheck",
+    inputs: [
+      {
+        name: "hookData",
+        type: "bytes",
+        internalType: "bytes",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "preCheck",
+    inputs: [
+      {
+        name: "msgSender",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "msgData",
+        type: "bytes",
+        internalType: "bytes",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "bytes",
+        internalType: "bytes",
+      },
+    ],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "quoteUsd",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "token",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "amount",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "recipientMode",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "uint8",
+        internalType: "enum ILeakedModules.RecipientMode",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "registerHash",
+    inputs: [
+      {
+        name: "hash",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+      {
+        name: "token",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "amount",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "expiry",
+        type: "uint48",
+        internalType: "uint48",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "registerPermit",
+    inputs: [
+      {
+        name: "token",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "spender",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "value",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "deadline",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "registerPermit2",
+    inputs: [
+      {
+        name: "token",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "amount",
+        type: "uint160",
+        internalType: "uint160",
+      },
+      {
+        name: "expiration",
+        type: "uint48",
+        internalType: "uint48",
+      },
+      {
+        name: "spender",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "sigDeadline",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "sessionSelector",
+        type: "bytes4",
+        internalType: "bytes4",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "registerPermit2Transfer",
+    inputs: [
+      {
+        name: "token",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "amount",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "spender",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "nonce",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "deadline",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "sessionSelector",
+        type: "bytes4",
+        internalType: "bytes4",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "registerTransferAuthorization",
+    inputs: [
+      {
+        name: "token",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "value",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "to",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "validAfter",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "validBefore",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "nonce",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+      {
+        name: "receiveAuth",
+        type: "bool",
+        internalType: "bool",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "registeredHashAllowed",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "caller",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "bool",
+        internalType: "bool",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "registeredHashConsumer",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "hash",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "registeredHashExpiry",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "hash",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "uint48",
+        internalType: "uint48",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "releaseExpiredFreeze",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "sessionId",
+    inputs: [
+      {
+        name: "target",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "selector",
+        type: "bytes4",
+        internalType: "bytes4",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+    stateMutability: "pure",
+  },
+  {
+    type: "function",
+    name: "setCap",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "capUsdPerDay",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "perTxMaxUsd",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "maxFeeWei",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "maxPrio",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "setHotKey",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "newHotKey",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "setRecipientMode",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "mode",
+        type: "uint8",
+        internalType: "enum ILeakedModules.RecipientMode",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "setSession",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "target",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "selector",
+        type: "bytes4",
+        internalType: "bytes4",
+      },
+      {
+        name: "allowanceUsd",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "expiry",
+        type: "uint48",
+        internalType: "uint48",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "setTarget",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "target",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "allowed",
+        type: "bool",
+        internalType: "bool",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "setToken",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "token",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "allowed",
+        type: "bool",
+        internalType: "bool",
+      },
+      {
+        name: "decimals",
+        type: "uint8",
+        internalType: "uint8",
+      },
+      {
+        name: "usdPerToken",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "setTrustedVerifier",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "verifier",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "trusted",
+        type: "bool",
+        internalType: "bool",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "setValueVerifier",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "verifier",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "denied",
+        type: "bool",
+        internalType: "bool",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "unfreeze",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "event",
+    name: "BunkerDisabled",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "BunkerEnabled",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "CapUpdated",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "capUsdPerDay",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "perTxMaxUsd",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "maxFeeWei",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "maxPrioFee",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "Frozen",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "by",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "until",
+        type: "uint48",
+        indexed: false,
+        internalType: "uint48",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "GuardianSet",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "guardian",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "enabled",
+        type: "bool",
+        indexed: false,
+        internalType: "bool",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "HashRegistered",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "hash",
+        type: "bytes32",
+        indexed: true,
+        internalType: "bytes32",
+      },
+      {
+        name: "token",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "amount",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "expiry",
+        type: "uint48",
+        indexed: false,
+        internalType: "uint48",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "HotExecuted",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "usdDebited",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "available",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "callCount",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "HotKeyRotated",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "oldKey",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "newKey",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "QueueCancelled",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "opId",
+        type: "bytes32",
+        indexed: true,
+        internalType: "bytes32",
+      },
+      {
+        name: "byRecovery",
+        type: "bool",
+        indexed: false,
+        internalType: "bool",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "QueueExecuted",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "opId",
+        type: "bytes32",
+        indexed: true,
+        internalType: "bytes32",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "Queued",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "opId",
+        type: "bytes32",
+        indexed: true,
+        internalType: "bytes32",
+      },
+      {
+        name: "kind",
+        type: "uint8",
+        indexed: false,
+        internalType: "uint8",
+      },
+      {
+        name: "eta",
+        type: "uint48",
+        indexed: false,
+        internalType: "uint48",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "RecipientModeSet",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "mode",
+        type: "uint8",
+        indexed: false,
+        internalType: "enum ILeakedModules.RecipientMode",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "RecoveryKeySet",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "pk",
+        type: "bytes32",
+        indexed: false,
+        internalType: "bytes32",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "SessionConfigured",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "target",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "selector",
+        type: "bytes4",
+        indexed: true,
+        internalType: "bytes4",
+      },
+      {
+        name: "allowanceUsd",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "expiry",
+        type: "uint48",
+        indexed: false,
+        internalType: "uint48",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "SessionUsed",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "sessionId",
+        type: "bytes32",
+        indexed: true,
+        internalType: "bytes32",
+      },
+      {
+        name: "usdDebited",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "allowanceLeft",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "TargetConfigured",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "target",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "allowed",
+        type: "bool",
+        indexed: false,
+        internalType: "bool",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "TimelockUpdated",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "delay",
+        type: "uint48",
+        indexed: false,
+        internalType: "uint48",
+      },
+      {
+        name: "thresholdUsd",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "TokenConfigured",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "token",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "allowed",
+        type: "bool",
+        indexed: false,
+        internalType: "bool",
+      },
+      {
+        name: "decimals",
+        type: "uint8",
+        indexed: false,
+        internalType: "uint8",
+      },
+      {
+        name: "usd",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "TrustedVerifierSet",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "verifier",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "trusted",
+        type: "bool",
+        indexed: false,
+        internalType: "bool",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "Unfrozen",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "by",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "ValueVerifierSet",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "verifier",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "denied",
+        type: "bool",
+        indexed: false,
+        internalType: "bool",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "VaultBound",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "vaultPk",
+        type: "bytes32",
+        indexed: false,
+        internalType: "bytes32",
+      },
+      {
+        name: "verifier",
+        type: "address",
+        indexed: false,
+        internalType: "address",
+      },
+      {
+        name: "sigLength",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "VaultExecuted",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "usdDebited",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "vaultAvailable",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "callCount",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "VaultRotationCancelled",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "newVaultPk",
+        type: "bytes32",
+        indexed: false,
+        internalType: "bytes32",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "VaultRotationFinalized",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "newVaultPk",
+        type: "bytes32",
+        indexed: false,
+        internalType: "bytes32",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "VaultRotationStarted",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "newVaultPk",
+        type: "bytes32",
+        indexed: false,
+        internalType: "bytes32",
+      },
+      {
+        name: "eta",
+        type: "uint48",
+        indexed: false,
+        internalType: "uint48",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "error",
+    name: "AlreadyInitialized",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "BadAddress",
+    inputs: [
+      {
+        name: "a",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "BadCallCount",
+    inputs: [
+      {
+        name: "count",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "BadCallData",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "BadConfig",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "BadExpiry",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "BadKind",
+    inputs: [
+      {
+        name: "kind",
+        type: "uint8",
+        internalType: "uint8",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "BadNonce",
+    inputs: [
+      {
+        name: "expected",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "got",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "BadOp",
+    inputs: [
+      {
+        name: "opId",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "BadSignature",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "BunkerActive",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "BunkerNeedsRecovery",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "CallFailed",
+    inputs: [
+      {
+        name: "index",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "reason",
+        type: "bytes",
+        internalType: "bytes",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "CapTooLarge",
+    inputs: [
+      {
+        name: "cap",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "DuplicateToken",
+    inputs: [
+      {
+        name: "token",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "FeeTooHigh",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "FreezeNotExpired",
+    inputs: [
+      {
+        name: "until",
+        type: "uint48",
+        internalType: "uint48",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "FrozenOnlyClear",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "GuardianCooldown",
+    inputs: [
+      {
+        name: "nextAt",
+        type: "uint48",
+        internalType: "uint48",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "HookNotInstalled",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "HostOwnerNotKeyless",
+    inputs: [
+      {
+        name: "owner",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "HotDisabled",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "HotFrozen",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "MustQueue",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "NoRotationPending",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "NonceUsed",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "NotAllowed",
+    inputs: [
+      {
+        name: "target",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "selector",
+        type: "bytes4",
+        internalType: "bytes4",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "NotFrozen",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "NotInHotBatch",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "NotInitialized",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "OpNotReady",
+    inputs: [
+      {
+        name: "opId",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+      {
+        name: "eta",
+        type: "uint48",
+        internalType: "uint48",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "OverCap",
+    inputs: [
+      {
+        name: "requested",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "available",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "OverDailyCap",
+    inputs: [
+      {
+        name: "usd",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "cap",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "PayloadMismatch",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "PerTxMaxExceeded",
+    inputs: [
+      {
+        name: "usd",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "max",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "Reentrancy",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "RotationNotReady",
+    inputs: [
+      {
+        name: "eta",
+        type: "uint48",
+        internalType: "uint48",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "RotationPending",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "SameRoleKey",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "SessionAllowanceExceeded",
+    inputs: [
+      {
+        name: "sessionId",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+      {
+        name: "used",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "allowance",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "StandingApproval",
+    inputs: [
+      {
+        name: "token",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "spender",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "TokenNotAllowed",
+    inputs: [
+      {
+        name: "token",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "TooManyTokens",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "Unauthorized",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "UnsupportedMode",
+    inputs: [
+      {
+        name: "mode",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "VaultOverDailyThreshold",
+    inputs: [
+      {
+        name: "usd",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "available",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+  },
+] as const;
+
+/** `LeakedHotValidator` (ERC-7579 validator): the hot key's userOp and scoped ERC-1271 checks. */
+export const hotValidatorAbi = [
+  {
+    type: "function",
+    name: "HOOK",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "address",
+        internalType: "contract LeakedPolicyHook",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "REGISTERED_MARKER",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "bytes4",
+        internalType: "bytes4",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "accountDomainSeparator",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "hookBound",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "bool",
+        internalType: "bool",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "hostDomainSeparator",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "host",
+        type: "uint8",
+        internalType: "uint8",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "isInitialized",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "bool",
+        internalType: "bool",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "isModuleType",
+    inputs: [
+      {
+        name: "moduleTypeId",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "bool",
+        internalType: "bool",
+      },
+    ],
+    stateMutability: "pure",
+  },
+  {
+    type: "function",
+    name: "isValidSignatureWithSender",
+    inputs: [
+      {
+        name: "sender",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "hash",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+      {
+        name: "signature",
+        type: "bytes",
+        internalType: "bytes",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "bytes4",
+        internalType: "bytes4",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "onInstall",
+    inputs: [
+      {
+        name: "",
+        type: "bytes",
+        internalType: "bytes",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "onUninstall",
+    inputs: [
+      {
+        name: "",
+        type: "bytes",
+        internalType: "bytes",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "validateUserOp",
+    inputs: [
+      {
+        name: "userOp",
+        type: "tuple",
+        internalType: "struct PackedUserOperation",
+        components: [
+          {
+            name: "sender",
+            type: "address",
+            internalType: "address",
+          },
+          {
+            name: "nonce",
+            type: "uint256",
+            internalType: "uint256",
+          },
+          {
+            name: "initCode",
+            type: "bytes",
+            internalType: "bytes",
+          },
+          {
+            name: "callData",
+            type: "bytes",
+            internalType: "bytes",
+          },
+          {
+            name: "accountGasLimits",
+            type: "bytes32",
+            internalType: "bytes32",
+          },
+          {
+            name: "preVerificationGas",
+            type: "uint256",
+            internalType: "uint256",
+          },
+          {
+            name: "gasFees",
+            type: "bytes32",
+            internalType: "bytes32",
+          },
+          {
+            name: "paymasterAndData",
+            type: "bytes",
+            internalType: "bytes",
+          },
+          {
+            name: "signature",
+            type: "bytes",
+            internalType: "bytes",
+          },
+        ],
+      },
+      {
+        name: "userOpHash",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "event",
+    name: "BunkerDisabled",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "BunkerEnabled",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "CapUpdated",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "capUsdPerDay",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "perTxMaxUsd",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "maxFeeWei",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "maxPrioFee",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "Frozen",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "by",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "until",
+        type: "uint48",
+        indexed: false,
+        internalType: "uint48",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "GuardianSet",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "guardian",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "enabled",
+        type: "bool",
+        indexed: false,
+        internalType: "bool",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "HashRegistered",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "hash",
+        type: "bytes32",
+        indexed: true,
+        internalType: "bytes32",
+      },
+      {
+        name: "token",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "amount",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "expiry",
+        type: "uint48",
+        indexed: false,
+        internalType: "uint48",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "HotExecuted",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "usdDebited",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "available",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "callCount",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "HotKeyRotated",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "oldKey",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "newKey",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "QueueCancelled",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "opId",
+        type: "bytes32",
+        indexed: true,
+        internalType: "bytes32",
+      },
+      {
+        name: "byRecovery",
+        type: "bool",
+        indexed: false,
+        internalType: "bool",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "QueueExecuted",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "opId",
+        type: "bytes32",
+        indexed: true,
+        internalType: "bytes32",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "Queued",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "opId",
+        type: "bytes32",
+        indexed: true,
+        internalType: "bytes32",
+      },
+      {
+        name: "kind",
+        type: "uint8",
+        indexed: false,
+        internalType: "uint8",
+      },
+      {
+        name: "eta",
+        type: "uint48",
+        indexed: false,
+        internalType: "uint48",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "RecipientModeSet",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "mode",
+        type: "uint8",
+        indexed: false,
+        internalType: "enum ILeakedModules.RecipientMode",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "RecoveryKeySet",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "pk",
+        type: "bytes32",
+        indexed: false,
+        internalType: "bytes32",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "SessionConfigured",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "target",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "selector",
+        type: "bytes4",
+        indexed: true,
+        internalType: "bytes4",
+      },
+      {
+        name: "allowanceUsd",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "expiry",
+        type: "uint48",
+        indexed: false,
+        internalType: "uint48",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "SessionUsed",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "sessionId",
+        type: "bytes32",
+        indexed: true,
+        internalType: "bytes32",
+      },
+      {
+        name: "usdDebited",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "allowanceLeft",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "TargetConfigured",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "target",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "allowed",
+        type: "bool",
+        indexed: false,
+        internalType: "bool",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "TimelockUpdated",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "delay",
+        type: "uint48",
+        indexed: false,
+        internalType: "uint48",
+      },
+      {
+        name: "thresholdUsd",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "TokenConfigured",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "token",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "allowed",
+        type: "bool",
+        indexed: false,
+        internalType: "bool",
+      },
+      {
+        name: "decimals",
+        type: "uint8",
+        indexed: false,
+        internalType: "uint8",
+      },
+      {
+        name: "usd",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "TrustedVerifierSet",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "verifier",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "trusted",
+        type: "bool",
+        indexed: false,
+        internalType: "bool",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "Unfrozen",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "by",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "ValueVerifierSet",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "verifier",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "denied",
+        type: "bool",
+        indexed: false,
+        internalType: "bool",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "VaultBound",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "vaultPk",
+        type: "bytes32",
+        indexed: false,
+        internalType: "bytes32",
+      },
+      {
+        name: "verifier",
+        type: "address",
+        indexed: false,
+        internalType: "address",
+      },
+      {
+        name: "sigLength",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "VaultExecuted",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "usdDebited",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "vaultAvailable",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "callCount",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "VaultRotationCancelled",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "newVaultPk",
+        type: "bytes32",
+        indexed: false,
+        internalType: "bytes32",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "VaultRotationFinalized",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "newVaultPk",
+        type: "bytes32",
+        indexed: false,
+        internalType: "bytes32",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "VaultRotationStarted",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "newVaultPk",
+        type: "bytes32",
+        indexed: false,
+        internalType: "bytes32",
+      },
+      {
+        name: "eta",
+        type: "uint48",
+        indexed: false,
+        internalType: "uint48",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "error",
+    name: "AlreadyInitialized",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "BadAddress",
+    inputs: [
+      {
+        name: "a",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "BadCallCount",
+    inputs: [
+      {
+        name: "count",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "BadCallData",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "BadConfig",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "BadExpiry",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "BadKind",
+    inputs: [
+      {
+        name: "kind",
+        type: "uint8",
+        internalType: "uint8",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "BadNonce",
+    inputs: [
+      {
+        name: "expected",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "got",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "BadOp",
+    inputs: [
+      {
+        name: "opId",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "BadSignature",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "BunkerActive",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "BunkerNeedsRecovery",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "CallFailed",
+    inputs: [
+      {
+        name: "index",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "reason",
+        type: "bytes",
+        internalType: "bytes",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "DuplicateToken",
+    inputs: [
+      {
+        name: "token",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "FeeTooHigh",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "FreezeNotExpired",
+    inputs: [
+      {
+        name: "until",
+        type: "uint48",
+        internalType: "uint48",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "FrozenOnlyClear",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "GuardianCooldown",
+    inputs: [
+      {
+        name: "nextAt",
+        type: "uint48",
+        internalType: "uint48",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "HookNotInstalled",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "HostOwnerNotKeyless",
+    inputs: [
+      {
+        name: "owner",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "HotDisabled",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "HotFrozen",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "MustQueue",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "NoRotationPending",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "NonceUsed",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "NotAllowed",
+    inputs: [
+      {
+        name: "target",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "selector",
+        type: "bytes4",
+        internalType: "bytes4",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "NotFrozen",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "NotInHotBatch",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "NotInitialized",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "OpNotReady",
+    inputs: [
+      {
+        name: "opId",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+      {
+        name: "eta",
+        type: "uint48",
+        internalType: "uint48",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "OverDailyCap",
+    inputs: [
+      {
+        name: "usd",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "cap",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "PayloadMismatch",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "PerTxMaxExceeded",
+    inputs: [
+      {
+        name: "usd",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "max",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "Reentrancy",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "RotationNotReady",
+    inputs: [
+      {
+        name: "eta",
+        type: "uint48",
+        internalType: "uint48",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "RotationPending",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "SameRoleKey",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "SessionAllowanceExceeded",
+    inputs: [
+      {
+        name: "sessionId",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+      {
+        name: "used",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "allowance",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "StandingApproval",
+    inputs: [
+      {
+        name: "token",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "spender",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "TokenNotAllowed",
+    inputs: [
+      {
+        name: "token",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "TooManyTokens",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "Unauthorized",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "UnsupportedMode",
+    inputs: [
+      {
+        name: "mode",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "VaultOverDailyThreshold",
+    inputs: [
+      {
+        name: "usd",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "available",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+  },
+] as const;
+
+/** `LeakedRoleExecutor` (ERC-7579 executor): the Vault / Recovery PQ roles, timelock queue and EIP-712 digests. */
+export const roleExecutorAbi = [
+  {
+    type: "function",
+    name: "DEFAULT_TIMELOCK",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "uint48",
+        internalType: "uint48",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "GUARDIAN_COOLDOWN",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "uint48",
+        internalType: "uint48",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "GUARDIAN_FREEZE",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "uint48",
+        internalType: "uint48",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "KIND_LOOSEN",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "uint8",
+        internalType: "uint8",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "KIND_SPEND",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "uint8",
+        internalType: "uint8",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "MAX_TIMELOCK",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "uint48",
+        internalType: "uint48",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "MAX_VAULT_CALLS",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "MIN_TIMELOCK",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "uint48",
+        internalType: "uint48",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "RECOVERY_CANCEL_ROTATION_TYPEHASH",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "RECOVERY_CANCEL_TYPEHASH",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "RECOVERY_ROTATE_TYPEHASH",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "ROTATION_DELAY",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "uint48",
+        internalType: "uint48",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "VAULT_CANCEL_TYPEHASH",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "VAULT_EXEC_TYPEHASH",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "VAULT_QUEUE_TYPEHASH",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "callsHash",
+    inputs: [
+      {
+        name: "calls",
+        type: "tuple[]",
+        internalType: "struct ILeakedModules.Call[]",
+        components: [
+          {
+            name: "target",
+            type: "address",
+            internalType: "address",
+          },
+          {
+            name: "value",
+            type: "uint256",
+            internalType: "uint256",
+          },
+          {
+            name: "data",
+            type: "bytes",
+            internalType: "bytes",
+          },
+        ],
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+    stateMutability: "pure",
+  },
+  {
+    type: "function",
+    name: "domainSeparator",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "eip712Domain",
+    inputs: [],
+    outputs: [
+      {
+        name: "fields",
+        type: "bytes1",
+        internalType: "bytes1",
+      },
+      {
+        name: "name",
+        type: "string",
+        internalType: "string",
+      },
+      {
+        name: "version",
+        type: "string",
+        internalType: "string",
+      },
+      {
+        name: "chainId",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "verifyingContract",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "salt",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+      {
+        name: "extensions",
+        type: "uint256[]",
+        internalType: "uint256[]",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "executeQueued",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "opId",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+      {
+        name: "calls",
+        type: "tuple[]",
+        internalType: "struct ILeakedModules.Call[]",
+        components: [
+          {
+            name: "target",
+            type: "address",
+            internalType: "address",
+          },
+          {
+            name: "value",
+            type: "uint256",
+            internalType: "uint256",
+          },
+          {
+            name: "data",
+            type: "bytes",
+            internalType: "bytes",
+          },
+        ],
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "getGuardian",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "guardian",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "tuple",
+        internalType: "struct ILeakedModules.GuardianCfg",
+        components: [
+          {
+            name: "enabled",
+            type: "bool",
+            internalType: "bool",
+          },
+          {
+            name: "lastFreezeAt",
+            type: "uint48",
+            internalType: "uint48",
+          },
+        ],
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "getQueued",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "opId",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "tuple",
+        internalType: "struct ILeakedModules.QueuedOp",
+        components: [
+          {
+            name: "eta",
+            type: "uint48",
+            internalType: "uint48",
+          },
+          {
+            name: "kind",
+            type: "uint8",
+            internalType: "uint8",
+          },
+          {
+            name: "state",
+            type: "uint8",
+            internalType: "enum ILeakedModules.OpState",
+          },
+          {
+            name: "vaultEpoch",
+            type: "uint32",
+            internalType: "uint32",
+          },
+          {
+            name: "callsHash",
+            type: "bytes32",
+            internalType: "bytes32",
+          },
+        ],
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "getRoles",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    outputs: [
+      {
+        name: "hook",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "verifier",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "vaultPk",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+      {
+        name: "recoveryPk",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+      {
+        name: "vaultNonce",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "recoveryNonce",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "vaultEpoch",
+        type: "uint32",
+        internalType: "uint32",
+      },
+      {
+        name: "pendingVaultPk",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+      {
+        name: "pendingVaultEta",
+        type: "uint48",
+        internalType: "uint48",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "getVaultBucket",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    outputs: [
+      {
+        name: "available",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "cap",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "delay",
+        type: "uint48",
+        internalType: "uint48",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "guardianFreeze",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "hasRecovery",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "bool",
+        internalType: "bool",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "hashRecoveryCancel",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "nonce",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "opId",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "hashRecoveryCancelRotation",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "nonce",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "hashRecoveryRotate",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "nonce",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "newVaultPk",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "hashVaultCancel",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "nonce",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "opId",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "hashVaultExec",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "nonce",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "calls",
+        type: "tuple[]",
+        internalType: "struct ILeakedModules.Call[]",
+        components: [
+          {
+            name: "target",
+            type: "address",
+            internalType: "address",
+          },
+          {
+            name: "value",
+            type: "uint256",
+            internalType: "uint256",
+          },
+          {
+            name: "data",
+            type: "bytes",
+            internalType: "bytes",
+          },
+        ],
+      },
+      {
+        name: "usdValue",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "hashVaultQueue",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "nonce",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "calls",
+        type: "tuple[]",
+        internalType: "struct ILeakedModules.Call[]",
+        components: [
+          {
+            name: "target",
+            type: "address",
+            internalType: "address",
+          },
+          {
+            name: "value",
+            type: "uint256",
+            internalType: "uint256",
+          },
+          {
+            name: "data",
+            type: "bytes",
+            internalType: "bytes",
+          },
+        ],
+      },
+      {
+        name: "kind",
+        type: "uint8",
+        internalType: "uint8",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "isGuardian",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "who",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "bool",
+        internalType: "bool",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "isInitialized",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "bool",
+        internalType: "bool",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "isModuleType",
+    inputs: [
+      {
+        name: "moduleTypeId",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "bool",
+        internalType: "bool",
+      },
+    ],
+    stateMutability: "pure",
+  },
+  {
+    type: "function",
+    name: "isQueuedContext",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "bool",
+        internalType: "bool",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "onInstall",
+    inputs: [
+      {
+        name: "data",
+        type: "bytes",
+        internalType: "bytes",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "onUninstall",
+    inputs: [
+      {
+        name: "",
+        type: "bytes",
+        internalType: "bytes",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "recoveryCancel",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "opId",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+      {
+        name: "nonce",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "pqSig",
+        type: "bytes",
+        internalType: "bytes",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "recoveryCancelVaultRotation",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "nonce",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "pqSig",
+        type: "bytes",
+        internalType: "bytes",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "recoveryFinalizeVaultRotation",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "recoveryStartVaultRotation",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "newVaultPk",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+      {
+        name: "nonce",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "pqSig",
+        type: "bytes",
+        internalType: "bytes",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "rotationPending",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "bool",
+        internalType: "bool",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "setGuardian",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "guardian",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "enabled",
+        type: "bool",
+        internalType: "bool",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "setRecoveryKey",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "pk",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "setTimelock",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "delay",
+        type: "uint48",
+        internalType: "uint48",
+      },
+      {
+        name: "thresholdUsd",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "sigLengthOf",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "vaultCancel",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "opId",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+      {
+        name: "nonce",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "pqSig",
+        type: "bytes",
+        internalType: "bytes",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "vaultExec",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "calls",
+        type: "tuple[]",
+        internalType: "struct ILeakedModules.Call[]",
+        components: [
+          {
+            name: "target",
+            type: "address",
+            internalType: "address",
+          },
+          {
+            name: "value",
+            type: "uint256",
+            internalType: "uint256",
+          },
+          {
+            name: "data",
+            type: "bytes",
+            internalType: "bytes",
+          },
+        ],
+      },
+      {
+        name: "usdValue",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "nonce",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "pqSig",
+        type: "bytes",
+        internalType: "bytes",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "vaultQueue",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "calls",
+        type: "tuple[]",
+        internalType: "struct ILeakedModules.Call[]",
+        components: [
+          {
+            name: "target",
+            type: "address",
+            internalType: "address",
+          },
+          {
+            name: "value",
+            type: "uint256",
+            internalType: "uint256",
+          },
+          {
+            name: "data",
+            type: "bytes",
+            internalType: "bytes",
+          },
+        ],
+      },
+      {
+        name: "kind",
+        type: "uint8",
+        internalType: "uint8",
+      },
+      {
+        name: "nonce",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "pqSig",
+        type: "bytes",
+        internalType: "bytes",
+      },
+    ],
+    outputs: [
+      {
+        name: "opId",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "event",
+    name: "BunkerDisabled",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "BunkerEnabled",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "CapUpdated",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "capUsdPerDay",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "perTxMaxUsd",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "maxFeeWei",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "maxPrioFee",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "EIP712DomainChanged",
+    inputs: [],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "Frozen",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "by",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "until",
+        type: "uint48",
+        indexed: false,
+        internalType: "uint48",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "GuardianSet",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "guardian",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "enabled",
+        type: "bool",
+        indexed: false,
+        internalType: "bool",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "HashRegistered",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "hash",
+        type: "bytes32",
+        indexed: true,
+        internalType: "bytes32",
+      },
+      {
+        name: "token",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "amount",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "expiry",
+        type: "uint48",
+        indexed: false,
+        internalType: "uint48",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "HotExecuted",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "usdDebited",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "available",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "callCount",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "HotKeyRotated",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "oldKey",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "newKey",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "QueueCancelled",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "opId",
+        type: "bytes32",
+        indexed: true,
+        internalType: "bytes32",
+      },
+      {
+        name: "byRecovery",
+        type: "bool",
+        indexed: false,
+        internalType: "bool",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "QueueExecuted",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "opId",
+        type: "bytes32",
+        indexed: true,
+        internalType: "bytes32",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "Queued",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "opId",
+        type: "bytes32",
+        indexed: true,
+        internalType: "bytes32",
+      },
+      {
+        name: "kind",
+        type: "uint8",
+        indexed: false,
+        internalType: "uint8",
+      },
+      {
+        name: "eta",
+        type: "uint48",
+        indexed: false,
+        internalType: "uint48",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "RecipientModeSet",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "mode",
+        type: "uint8",
+        indexed: false,
+        internalType: "enum ILeakedModules.RecipientMode",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "RecoveryKeySet",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "pk",
+        type: "bytes32",
+        indexed: false,
+        internalType: "bytes32",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "SessionConfigured",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "target",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "selector",
+        type: "bytes4",
+        indexed: true,
+        internalType: "bytes4",
+      },
+      {
+        name: "allowanceUsd",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "expiry",
+        type: "uint48",
+        indexed: false,
+        internalType: "uint48",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "SessionUsed",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "sessionId",
+        type: "bytes32",
+        indexed: true,
+        internalType: "bytes32",
+      },
+      {
+        name: "usdDebited",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "allowanceLeft",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "TargetConfigured",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "target",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "allowed",
+        type: "bool",
+        indexed: false,
+        internalType: "bool",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "TimelockUpdated",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "delay",
+        type: "uint48",
+        indexed: false,
+        internalType: "uint48",
+      },
+      {
+        name: "thresholdUsd",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "TokenConfigured",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "token",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "allowed",
+        type: "bool",
+        indexed: false,
+        internalType: "bool",
+      },
+      {
+        name: "decimals",
+        type: "uint8",
+        indexed: false,
+        internalType: "uint8",
+      },
+      {
+        name: "usd",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "TrustedVerifierSet",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "verifier",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "trusted",
+        type: "bool",
+        indexed: false,
+        internalType: "bool",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "Unfrozen",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "by",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "ValueVerifierSet",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "verifier",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "denied",
+        type: "bool",
+        indexed: false,
+        internalType: "bool",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "VaultBound",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "vaultPk",
+        type: "bytes32",
+        indexed: false,
+        internalType: "bytes32",
+      },
+      {
+        name: "verifier",
+        type: "address",
+        indexed: false,
+        internalType: "address",
+      },
+      {
+        name: "sigLength",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "VaultExecuted",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "usdDebited",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "vaultAvailable",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "callCount",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "VaultRotationCancelled",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "newVaultPk",
+        type: "bytes32",
+        indexed: false,
+        internalType: "bytes32",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "VaultRotationFinalized",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "newVaultPk",
+        type: "bytes32",
+        indexed: false,
+        internalType: "bytes32",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "VaultRotationStarted",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "newVaultPk",
+        type: "bytes32",
+        indexed: false,
+        internalType: "bytes32",
+      },
+      {
+        name: "eta",
+        type: "uint48",
+        indexed: false,
+        internalType: "uint48",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "error",
+    name: "AlreadyInitialized",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "BadAddress",
+    inputs: [
+      {
+        name: "a",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "BadCallCount",
+    inputs: [
+      {
+        name: "count",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "BadCallData",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "BadConfig",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "BadExpiry",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "BadKind",
+    inputs: [
+      {
+        name: "kind",
+        type: "uint8",
+        internalType: "uint8",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "BadNonce",
+    inputs: [
+      {
+        name: "expected",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "got",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "BadOp",
+    inputs: [
+      {
+        name: "opId",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "BadSignature",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "BunkerActive",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "BunkerNeedsRecovery",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "CallFailed",
+    inputs: [
+      {
+        name: "index",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "reason",
+        type: "bytes",
+        internalType: "bytes",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "CapTooLarge",
+    inputs: [
+      {
+        name: "cap",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "DuplicateToken",
+    inputs: [
+      {
+        name: "token",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "FeeTooHigh",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "FreezeNotExpired",
+    inputs: [
+      {
+        name: "until",
+        type: "uint48",
+        internalType: "uint48",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "FrozenOnlyClear",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "GuardianCooldown",
+    inputs: [
+      {
+        name: "nextAt",
+        type: "uint48",
+        internalType: "uint48",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "HookNotInstalled",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "HostOwnerNotKeyless",
+    inputs: [
+      {
+        name: "owner",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "HotDisabled",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "HotFrozen",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "InvalidShortString",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "MustQueue",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "NoRotationPending",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "NonceUsed",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "NotAllowed",
+    inputs: [
+      {
+        name: "target",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "selector",
+        type: "bytes4",
+        internalType: "bytes4",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "NotFrozen",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "NotInHotBatch",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "NotInitialized",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "OpNotReady",
+    inputs: [
+      {
+        name: "opId",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+      {
+        name: "eta",
+        type: "uint48",
+        internalType: "uint48",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "OverCap",
+    inputs: [
+      {
+        name: "requested",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "available",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "OverDailyCap",
+    inputs: [
+      {
+        name: "usd",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "cap",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "PayloadMismatch",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "PerTxMaxExceeded",
+    inputs: [
+      {
+        name: "usd",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "max",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "Reentrancy",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "RotationNotReady",
+    inputs: [
+      {
+        name: "eta",
+        type: "uint48",
+        internalType: "uint48",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "RotationPending",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "SameRoleKey",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "SessionAllowanceExceeded",
+    inputs: [
+      {
+        name: "sessionId",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+      {
+        name: "used",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "allowance",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "StandingApproval",
+    inputs: [
+      {
+        name: "token",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "spender",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "StringTooLong",
+    inputs: [
+      {
+        name: "str",
+        type: "string",
+        internalType: "string",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "TokenNotAllowed",
+    inputs: [
+      {
+        name: "token",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "TooManyTokens",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "Unauthorized",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "UnsupportedMode",
+    inputs: [
+      {
+        name: "mode",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "VaultOverDailyThreshold",
+    inputs: [
+      {
+        name: "usd",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "available",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+  },
+] as const;
+
+/** Reference ERC-7579 `MSAFactory`: `createAccount(salt, initCode)`, `getAddress(salt, initCode)`. */
+export const msaFactoryAbi = [
+  {
+    type: "function",
+    name: "createAccount",
+    inputs: [
+      {
+        name: "salt",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+      {
+        name: "initCode",
+        type: "bytes",
+        internalType: "bytes",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    stateMutability: "payable",
+  },
+  {
+    type: "function",
+    name: "getAddress",
+    inputs: [
+      {
+        name: "salt",
+        type: "bytes32",
+        internalType: "bytes32",
+      },
+      {
+        name: "initcode",
+        type: "bytes",
+        internalType: "bytes",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "implementation",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    stateMutability: "view",
+  },
+] as const;
+
+/** Reference ERC-7579 `Bootstrap`: `initMSA(validators, executors, hook, fallbacks)`. */
+export const msaBootstrapAbi = [
+  {
+    type: "fallback",
+    stateMutability: "payable",
+  },
+  {
+    type: "receive",
+    stateMutability: "payable",
+  },
+  {
+    type: "function",
+    name: "_getInitMSACalldata",
+    inputs: [
+      {
+        name: "$valdiators",
+        type: "tuple[]",
+        internalType: "struct BootstrapConfig[]",
+        components: [
+          {
+            name: "module",
+            type: "address",
+            internalType: "address",
+          },
+          {
+            name: "data",
+            type: "bytes",
+            internalType: "bytes",
+          },
+        ],
+      },
+      {
+        name: "$executors",
+        type: "tuple[]",
+        internalType: "struct BootstrapConfig[]",
+        components: [
+          {
+            name: "module",
+            type: "address",
+            internalType: "address",
+          },
+          {
+            name: "data",
+            type: "bytes",
+            internalType: "bytes",
+          },
+        ],
+      },
+      {
+        name: "_hook",
+        type: "tuple",
+        internalType: "struct BootstrapConfig",
+        components: [
+          {
+            name: "module",
+            type: "address",
+            internalType: "address",
+          },
+          {
+            name: "data",
+            type: "bytes",
+            internalType: "bytes",
+          },
+        ],
+      },
+      {
+        name: "_fallbacks",
+        type: "tuple[]",
+        internalType: "struct BootstrapConfig[]",
+        components: [
+          {
+            name: "module",
+            type: "address",
+            internalType: "address",
+          },
+          {
+            name: "data",
+            type: "bytes",
+            internalType: "bytes",
+          },
+        ],
+      },
+    ],
+    outputs: [
+      {
+        name: "init",
+        type: "bytes",
+        internalType: "bytes",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "entryPoint",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "getActiveFallbackHandler",
+    inputs: [
+      {
+        name: "functionSig",
+        type: "bytes4",
+        internalType: "bytes4",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "tuple",
+        internalType: "struct ModuleManager.FallbackHandler",
+        components: [
+          {
+            name: "handler",
+            type: "address",
+            internalType: "address",
+          },
+          {
+            name: "calltype",
+            type: "bytes1",
+            internalType: "CallType",
+          },
+        ],
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "getActiveHook",
+    inputs: [],
+    outputs: [
+      {
+        name: "hook",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "getExecutorsPaginated",
+    inputs: [
+      {
+        name: "cursor",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "size",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+    outputs: [
+      {
+        name: "array",
+        type: "address[]",
+        internalType: "address[]",
+      },
+      {
+        name: "next",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "getValidatorsPaginated",
+    inputs: [
+      {
+        name: "cursor",
+        type: "address",
+        internalType: "address",
+      },
+      {
+        name: "size",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+    outputs: [
+      {
+        name: "array",
+        type: "address[]",
+        internalType: "address[]",
+      },
+      {
+        name: "next",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "initMSA",
+    inputs: [
+      {
+        name: "$valdiators",
+        type: "tuple[]",
+        internalType: "struct BootstrapConfig[]",
+        components: [
+          {
+            name: "module",
+            type: "address",
+            internalType: "address",
+          },
+          {
+            name: "data",
+            type: "bytes",
+            internalType: "bytes",
+          },
+        ],
+      },
+      {
+        name: "$executors",
+        type: "tuple[]",
+        internalType: "struct BootstrapConfig[]",
+        components: [
+          {
+            name: "module",
+            type: "address",
+            internalType: "address",
+          },
+          {
+            name: "data",
+            type: "bytes",
+            internalType: "bytes",
+          },
+        ],
+      },
+      {
+        name: "_hook",
+        type: "tuple",
+        internalType: "struct BootstrapConfig",
+        components: [
+          {
+            name: "module",
+            type: "address",
+            internalType: "address",
+          },
+          {
+            name: "data",
+            type: "bytes",
+            internalType: "bytes",
+          },
+        ],
+      },
+      {
+        name: "_fallbacks",
+        type: "tuple[]",
+        internalType: "struct BootstrapConfig[]",
+        components: [
+          {
+            name: "module",
+            type: "address",
+            internalType: "address",
+          },
+          {
+            name: "data",
+            type: "bytes",
+            internalType: "bytes",
+          },
+        ],
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "singleInitMSA",
+    inputs: [
+      {
+        name: "validator",
+        type: "address",
+        internalType: "contract IModule",
+      },
+      {
+        name: "data",
+        type: "bytes",
+        internalType: "bytes",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "event",
+    name: "ExecutorUninstallFailed",
+    inputs: [
+      {
+        name: "executor",
+        type: "address",
+        indexed: false,
+        internalType: "address",
+      },
+      {
+        name: "data",
+        type: "bytes",
+        indexed: false,
+        internalType: "bytes",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "HookUninstallFailed",
+    inputs: [
+      {
+        name: "hook",
+        type: "address",
+        indexed: false,
+        internalType: "address",
+      },
+      {
+        name: "data",
+        type: "bytes",
+        indexed: false,
+        internalType: "bytes",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "ValidatorUninstallFailed",
+    inputs: [
+      {
+        name: "validator",
+        type: "address",
+        indexed: false,
+        internalType: "address",
+      },
+      {
+        name: "data",
+        type: "bytes",
+        indexed: false,
+        internalType: "bytes",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "error",
+    name: "AccountAccessUnauthorized",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "CannotRemoveLastValidator",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "HookAlreadyInstalled",
+    inputs: [
+      {
+        name: "currentHook",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "HookPostCheckFailed",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "InvalidModule",
+    inputs: [
+      {
+        name: "module",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "LinkedList_EntryAlreadyInList",
+    inputs: [
+      {
+        name: "entry",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "LinkedList_InvalidEntry",
+    inputs: [
+      {
+        name: "entry",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+  },
+  {
+    type: "error",
+    name: "LinkedList_InvalidPage",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "NoFallbackHandler",
+    inputs: [
+      {
+        name: "selector",
+        type: "bytes4",
+        internalType: "bytes4",
+      },
+    ],
+  },
+] as const;
+
+/** A devnet test token devnet/deploy put on a local chain (with the static price onboarding proposes). */
+export interface LocalToken {
+  address: `0x${string}`;
+  symbol: string;
+  decimals: number;
+  /** USD-6 per whole token, decimal string. */
+  usdPerToken: string;
+  permit: boolean;
+}
+
+/** The local anvil 4337 deployment (devnet/deploy/deploy-4337.ts), or null when none was recorded. */
+export const local4337Deployment: {
+  chainId: number;
+  entryPoint: `0x${string}`;
+  factory: `0x${string}`;
+  msaImpl: `0x${string}`;
+  bootstrap: `0x${string}`;
+  validator: `0x${string}`;
+  hook: `0x${string}`;
+  hookInitCodeHash: `0x${string}`;
+  executor: `0x${string}`;
+  c13Verifier: `0x${string}`;
+  tokens: LocalToken[];
+} | null = {
+  chainId: 31337,
+  entryPoint: "0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108",
+  factory: "0x90cf141D2a49FBE9Af1BF34DDff99E3CA2e2AF05",
+  msaImpl: "0x4165661A01cf071b05167E325f276dE43D63C083",
+  bootstrap: "0x99c930235bA710e1Aec88A5Cd3bE6d28AF606656",
+  validator: "0xc41FC70648563A7E719FF4D9A0064ef387e7E979",
+  hook: "0x8400e96a45928a473bD18C153a7609669413BB32",
+  hookInitCodeHash: "0x0fcb5e2cb60bc04e7f8a044bd089a10d4d4af9e21925583f32925944f0a491ea",
+  executor: "0x94656178267d434D9103018339E5aD43a170f4B4",
+  c13Verifier: "0xf67f51B70d6e751db52E9Ab8C20e5430dBB04715",
+  tokens: [
+    {
+      address: "0x814F7A72b8579040d99d0882681281851C076986",
+      symbol: "DAI",
+      decimals: 18,
+      usdPerToken: "1000000",
+      permit: false,
+    },
+    {
+      address: "0x78285198eD7Ae004ae654f2Da44338D6e0785Fdf",
+      symbol: "USDC",
+      decimals: 18,
+      usdPerToken: "1000000",
+      permit: true,
+    },
+  ],
+};
+
 /** The local devnet deployment (devnet/deploy), or null when none was recorded. */
 export const localDeployment: {
   chainId: number;
@@ -3922,14 +10507,31 @@ export const localDeployment: {
   stakingRegistry: `0x${string}`;
   /** Legacy public devnet key for explicit-mode test accounts only; the extension never uses it. */
   testVault: `0x${string}`;
+  tokens: LocalToken[];
 } | null = {
   chainId: 1337,
-  accountImpl: "0xF9e611c4c168b6Ab6A41E6fe4a6e52e8D2fceeC9",
-  accountImplInitCodeHash: "0x6f913bd79dbeca914c385e727e291551d9ea808582777bfcf2713fb54dd02099",
+  accountImpl: "0x4306F6A38F5E8939a89Fc5f8331E0538BB4fe8fb",
+  accountImplInitCodeHash: "0xd8cd6e35c9b8be58195e78e54b634d2db915d745cd660d0fb5778ba44f1ff07c",
   rolesModule: "0x0DA4a2e6FABac2EEb55dC3cfa48a8aEed2bAEefc",
   factory: "0x12e7A64982e85868C345165bD149d6bE55fcA345",
   c13Verifier: "0xf67f51B70d6e751db52E9Ab8C20e5430dBB04715",
   roleSignerFactory: "0x6E721ac3171b611eE9E2FD3e989B7B2563B3A578",
   stakingRegistry: "0x8464135c8F25Da09e49BC8782676a84730C318bC",
   testVault: "0xd2A752cbA5c92DfEEa06957819F229a6fdC1107a",
+  tokens: [
+    {
+      address: "0x814F7A72b8579040d99d0882681281851C076986",
+      symbol: "DAI",
+      decimals: 18,
+      usdPerToken: "1000000",
+      permit: false,
+    },
+    {
+      address: "0x78285198eD7Ae004ae654f2Da44338D6e0785Fdf",
+      symbol: "USDC",
+      decimals: 18,
+      usdPerToken: "1000000",
+      permit: true,
+    },
+  ],
 };

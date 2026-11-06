@@ -70,19 +70,69 @@ export interface InitConfig {
   timelockThresholdUsd: bigint;
   ethUsdPrice: bigint;
   recipientMode: number;
+  /** Appended (2026-11-06): ≤ 16 priced ERC-20s allowed from initialize (the account's `TokenInit`). */
+  tokens: TokenInit[];
+}
+
+/** `ILeakedAccount.TokenInit` / `ILeakedModules.TokenInit`: USD-6 per whole token, as `vaultSetToken`. */
+export interface TokenInit {
+  token: Address;
+  decimals: number;
+  usdPerToken: bigint;
+}
+
+/** The account (and the hook) refuse more than this at initialize (`TooManyTokens`). */
+export const MAX_INIT_TOKENS = 16;
+
+/**
+ * The initialize rules for the role payer keys (IMPLEMENTATION-NOTES "Account: initial tokens, recovery payer key"):
+ * a payer is never the hot key or the tank, and the Vault's and the Recovery's differ. Returns user-facing copy.
+ */
+export function payerConflict(o: { hotKey: Address; tank: Address; vaultPayer?: Address; recoveryPayer?: Address }) {
+  const eq = (a?: Address, b?: Address) => !!a && !!b && a.toLowerCase() === b.toLowerCase();
+  for (const [p, who] of [
+    [o.vaultPayer, "Vault"],
+    [o.recoveryPayer, "Recovery key"],
+  ] as const) {
+    if (eq(p, o.hotKey) || eq(p, o.tank))
+      return `The ${who}'s fee-payment key is one of this browser's keys. Pair the ${who} again from its own device.`;
+  }
+  if (eq(o.vaultPayer, o.recoveryPayer))
+    return "The Vault and the Recovery key use the same fee-payment key. Set up the Recovery key from its own words.";
+  return undefined;
+}
+
+/** Tokens for initialize from the onboarding choice: sorted, de-duplicated, at most 16, prices > 0. */
+export function initTokens(
+  list: ReadonlyArray<{ token: Address; decimals: number; usdPerToken: string | bigint }>,
+): TokenInit[] {
+  const seen = new Set<string>();
+  const out: TokenInit[] = [];
+  for (const t of list) {
+    const k = t.token.toLowerCase();
+    if (seen.has(k)) continue;
+    seen.add(k);
+    const usdPerToken = BigInt(t.usdPerToken);
+    if (usdPerToken <= 0n || t.decimals < 0 || t.decimals > 36) throw new Error(`Bad token price for ${t.token}`);
+    out.push({ token: t.token, decimals: t.decimals, usdPerToken });
+  }
+  if (out.length > MAX_INIT_TOKENS) throw new Error(`At most ${MAX_INIT_TOKENS} tokens.`);
+  return out;
 }
 
 /** A quantum-safe key a phone announced (`ur:leaked-pq-key`), as the extension stores it. */
 export interface PairedKey {
   schemeId: Hex;
   pk: Hex;
-  /** Vault only: the Path-B fee-payment key on the phone. */
+  /** The role's Path-B fee-payment key on its device (Vault: pairing code; Recovery: v2 test code). */
   payer?: Address;
 }
 
 /** What the account address is computed from; stored per chain (bigints as decimal strings). */
 export interface AccountPlan {
   chainId: number;
+  /** "4337": a compatible (ERC-7579) account; absent = the native frame account. */
+  backend?: "4337";
   address: Address;
   factory: Address;
   implementation: Address;
@@ -148,13 +198,16 @@ export function initConfigFor(opts: {
   perPaymentUsd: number;
   recipientMode?: RecipientModeName;
   timelockDelay?: number;
+  tokens?: TokenInit[];
 }): InitConfig {
   const verifier = opts.deployment.c13Verifier;
   return {
     hotKey: opts.hotKey,
     roleSignerFactory: opts.deployment.roleSignerFactory,
     vault: { salt: opts.salt, pk: opts.vault.pk, verifier, payerKey: opts.vault.payer ?? ZERO },
-    recovery: opts.recovery ? { salt: opts.salt, pk: opts.recovery.pk, verifier, payerKey: ZERO } : NO_SIGNER,
+    recovery: opts.recovery
+      ? { salt: opts.salt, pk: opts.recovery.pk, verifier, payerKey: opts.recovery.payer ?? ZERO }
+      : NO_SIGNER,
     vaultSigner: ZERO,
     recoverySigner: ZERO,
     tank: opts.tank,
@@ -168,6 +221,7 @@ export function initConfigFor(opts: {
     timelockThresholdUsd: ACCOUNT_DEFAULTS.timelockThresholdUsd,
     ethUsdPrice: ACCOUNT_DEFAULTS.ethUsdPrice,
     recipientMode: RECIPIENT_MODE[opts.recipientMode ?? "open"],
+    tokens: opts.tokens ?? [],
   };
 }
 
@@ -262,5 +316,8 @@ export const ACTIVATION_GAS = 3_500_000n;
 export const CLONE_GAS = 1_000_000n;
 /** ETH the tank gives the Vault signer at deployment: it pays its own network fees (about 0.001 ETH per approval). */
 export const VAULT_SIGNER_FLOAT = parseEther("0.02");
-/** ETH for a Recovery signer: its fees plus the 0.01 ETH minimum stake of the staked lane (Path A only). */
+/**
+ * ETH for a Recovery signer: its fees (Path B with the Recovery's own payer key), or the 0.01 ETH minimum stake of
+ * the staked lane when it has no payer key (Path A only).
+ */
 export const RECOVERY_SIGNER_FLOAT = parseEther("0.03");

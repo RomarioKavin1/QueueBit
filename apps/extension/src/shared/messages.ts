@@ -66,7 +66,14 @@ export interface UiApi {
   "pair:vault": { req: { text: string; confirm: boolean }; res: PairPreview };
   "pair:recovery": { req: { text: string; confirm: boolean }; res: PairPreview };
   /** The phone's recovery-test code: its signature must verify against the Recovery key scanned before (E-23). */
-  "pair:recoveryTest": { req: { text: string }; res: { ok: true; last8: string } };
+  "pair:recoveryTest": { req: { text: string }; res: { ok: true; last8: string; payer?: `0x${string}` } };
+  /** A fresh, single-use request id for the recovery test, as a `ur:leaked-recovery-challenge` code for the phone. */
+  "pair:recoveryChallenge": { req: undefined; res: { text: string; requestId: string } };
+  /** "Tokens you'll spend": validate (decimals on-chain) and store the choice for `chainId`. */
+  "setup:setTokens": {
+    req: { chainId: number; tokens: Array<{ token: `0x${string}`; usd: number; decimals: number; symbol: string }> };
+    res: SetupState;
+  };
   "pair:forgetRecovery": { req: undefined; res: null };
   /** Computes the counterfactual account from the paired Vault, the Recovery key and the limits (end of onboarding). */
   "account:computePlan": { req: { chainId?: number }; res: AccountStatus };

@@ -1,4 +1,4 @@
-import { parseGwei, type Address, type Hex, type PublicClient } from "viem";
+import { erc20Abi, parseGwei, type Address, type Hex, type PublicClient } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { fromWire, signTx, type Profile } from "@leaked/frames";
 import type { NodeClient } from "@leaked/rpc";
@@ -15,8 +15,11 @@ import {
   buildPlan,
   createRoleSignerCalldata,
   initConfigFor,
+  initTokens,
+  payerConflict,
   roleSalt,
   type AccountPlan,
+  type TokenInit,
 } from "./account";
 import { roleSignerFactoryAbi } from "../generated/contracts";
 import type { SetupState } from "../shared/types";
@@ -34,10 +37,14 @@ import { bumpFees, FrameEngine, type EngineRpc } from "./engine";
 import type { KeyringController } from "./keyring";
 import { PolicyReader, type AccountChainState } from "./policy";
 import { decideRoute, routeCopy, usdNumber, type Call, type RouteDecision } from "./routing";
+import { AaError, AaPayments, aaNetwork } from "./aa/payments";
+import { BundlerClient } from "./aa/userop";
 
 export interface ChainIo {
   publicClient(chainId: number): PublicClient;
   node(chainId: number): NodeClient;
+  /** 4337 backend: the chain's bundler (defaults to the network's `bundlerUrl`). */
+  bundler?(chainId: number): BundlerClient;
 }
 
 export interface PaymentsDeps {
@@ -47,6 +54,30 @@ export interface PaymentsDeps {
   activity: ActivityStore;
   getLimits(): Promise<SetupState>;
   now: () => number;
+}
+
+/**
+ * The chosen tokens for `chainId`, checked against the chain before they are frozen into the address: each must be a
+ * contract whose `decimals()` matches what the user saw (a wrong decimals would misprice every payment).
+ */
+export async function checkedInitTokens(
+  client: PublicClient,
+  setup: SetupState,
+  chainId: number,
+): Promise<TokenInit[]> {
+  const list = initTokens(setup.tokens?.[String(chainId)] ?? []);
+  for (const t of list) {
+    const d = await client
+      .readContract({ address: t.token, abi: erc20Abi, functionName: "decimals" })
+      .catch(() => undefined);
+    if (d === undefined || Number(d) !== t.decimals) {
+      throw new PaymentsError(
+        "bad-token",
+        `The token ${t.token.slice(0, 6)}…${t.token.slice(-4)} isn't what LEAKED expected on this network (its decimals don't match). Remove it from "Tokens you'll spend".`,
+      );
+    }
+  }
+  return list;
 }
 
 /** A request the routing engine did not clear for the everyday key; carries the copy for the UI and the dapp. */
@@ -71,6 +102,8 @@ export class PaymentsError extends Error {
       | "not-pending"
       | "no-vault"
       | "no-plan"
+      | "bad-token"
+      | "payer-conflict"
       | "frozen",
     message: string,
   ) {
@@ -104,8 +137,51 @@ export class Payments {
   private readonly engines = new Map<number, FrameEngine>();
   private readonly policies = new Map<number, PolicyReader>();
   private queue: Promise<unknown> = Promise.resolve();
+  /** The 4337 backend (chains whose network entry says `backend: "4337"`). */
+  readonly aa: AaPayments;
+  private readonly bundlers = new Map<number, BundlerClient>();
 
-  constructor(private readonly d: PaymentsDeps) {}
+  constructor(private readonly d: PaymentsDeps) {
+    this.aa = new AaPayments({
+      io: {
+        publicClient: (c) => d.io.publicClient(c),
+        sendRawTransaction: (c, raw) => d.io.publicClient(c).sendRawTransaction({ serializedTransaction: raw }),
+        bundler: (c) => this.bundler(c),
+      },
+      keyring: d.keyring,
+      plans: d.plans,
+      activity: d.activity,
+      getLimits: d.getLimits,
+      now: d.now,
+      tokens: (client, setup, chainId) => checkedInitTokens(client, setup, chainId),
+    });
+  }
+
+  bundler(chainId: number): BundlerClient {
+    const custom = this.d.io.bundler?.(chainId);
+    if (custom) return custom;
+    let b = this.bundlers.get(chainId);
+    if (!b) {
+      const url = aaNetwork(chainId)?.bundlerUrl;
+      if (!url) throw new PaymentsError("unsupported", "This network has no bundler.");
+      b = new BundlerClient(url);
+      this.bundlers.set(chainId, b);
+    }
+    return b;
+  }
+
+  /** Runs `fn`, turning a 4337-backend error into the PaymentsError the UI and the router already handle. */
+  private async aaCall<T>(fn: () => Promise<T>): Promise<T> {
+    try {
+      return await fn();
+    } catch (e) {
+      if (e instanceof AaError) {
+        const reason = e.reason === "account-low" ? "tank-low" : e.reason;
+        throw new PaymentsError(reason as PaymentsError["reason"], e.message);
+      }
+      throw e;
+    }
+  }
 
   private serialized<T>(fn: () => Promise<T>): Promise<T> {
     const run = this.queue.then(fn, fn);
@@ -178,6 +254,8 @@ export class Payments {
    * being activated.
    */
   async computePlan(chainId: number): Promise<AccountPlan> {
+    if (aaNetwork(chainId) || findNetwork(chainId)?.backend === "4337")
+      return this.aaCall(() => this.aa.computePlan(chainId));
     const net = this.network(chainId);
     const accounts = await this.d.keyring.accounts();
     if (!accounts) throw new PaymentsError("unsupported", "No account yet.");
@@ -189,6 +267,15 @@ export class Payments {
     const recovery = setup.recovery?.testedAt ? setup.recovery : undefined;
     const salt = accountSalt(accounts.everyday, setup.vault.pk, recovery?.pk, chainId);
     const rsalt = roleSalt(salt);
+    // initialize refuses these (BadAddress): say why before an address is shown.
+    const conflict = payerConflict({
+      hotKey: accounts.everyday,
+      tank: accounts.feeTank,
+      ...(setup.vault.payer ? { vaultPayer: setup.vault.payer } : {}),
+      ...(recovery?.payer ? { recoveryPayer: recovery.payer } : {}),
+    });
+    if (conflict) throw new PaymentsError("payer-conflict", conflict);
+    const tokens = await checkedInitTokens(this.d.io.publicClient(chainId), setup, chainId);
     const config = initConfigFor({
       hotKey: accounts.everyday,
       tank: accounts.feeTank,
@@ -199,6 +286,7 @@ export class Payments {
       dailyLimitUsd: setup.dailyLimitUsd,
       perPaymentUsd: setup.perPaymentUsd,
       recipientMode: setup.recipientMode ?? "open",
+      tokens,
     });
     const draft = buildPlan(chainId, net.deployment, config, { vaultSigner: ZERO }, salt, this.d.now());
     if (existing && existing.address === draft.address) return existing;
@@ -238,7 +326,14 @@ export class Payments {
   }
 
   private async requirePlan(chainId: number): Promise<AccountPlan> {
-    this.network(chainId);
+    if (findNetwork(chainId)?.backend === "4337") {
+      if (!aaNetwork(chainId)) {
+        throw new PaymentsError(
+          "unsupported",
+          `LEAKED's compatible-account contracts aren't on ${findNetwork(chainId)!.name} yet.`,
+        );
+      }
+    } else this.network(chainId);
     const plan = await this.plan(chainId);
     if (!plan)
       throw new PaymentsError("no-plan", "Finish setting up LEAKED first: pair your Vault and choose your limits.");
@@ -293,6 +388,7 @@ export class Payments {
       base.tankWei = tankWei.toString();
       base.accountWei = accountWei.toString();
       if (!plan) return base;
+      if (plan.backend === "4337") return await this.aa.status(chainId, base, plan);
       const state = await this.policy(chainId).state(plan);
       base.deployed = state.deployed;
       base.limits = {
@@ -322,6 +418,8 @@ export class Payments {
    * (the factory is permissionless and the init data is in the CREATE2 hash, so who sends it does not matter).
    */
   activate(chainId: number): Promise<ActivityEntry> {
+    if (findNetwork(chainId)?.backend === "4337")
+      return this.serialized(() => this.aaCall(() => this.aa.activate(chainId)));
     return this.serialized(async () => {
       const plan = await this.requirePlan(chainId);
       const client = this.d.io.publicClient(chainId);
@@ -446,6 +544,24 @@ export class Payments {
   }
 
   async preview(chainId: number, calls: Call[]): Promise<SendPreview> {
+    const plan = await this.requirePlan(chainId);
+    if (plan.backend === "4337") {
+      const { state, decision, prepared } = await this.aaCall(() => this.aa.evaluate(plan, calls));
+      const bal = prepared ? await this.aa.accountBalance(plan) : 0n;
+      return {
+        chainId,
+        backend: "4337",
+        route: routeView(decision, state),
+        ...(prepared && prepared.maxCostWei > 0n
+          ? { feeWei: prepared.feeWei.toString(), maxCostWei: prepared.maxCostWei.toString() }
+          : {}),
+        effects: this.effects(calls, state.tank),
+        ...(prepared && bal < prepared.maxCostWei + calls.reduce((a, c) => a + c.value, 0n)
+          ? { tankTooLow: true }
+          : {}),
+        ethUsdPrice: usdNumber(state.ethUsdPrice),
+      };
+    }
     const { state, decision, prepared } = await this.evaluate(chainId, calls);
     const tankWei = await this.d.io.publicClient(chainId).getBalance({ address: state.tank });
     return {
@@ -460,6 +576,16 @@ export class Payments {
 
   /** Sends an everyday payment. Refuses anything the router does not clear (RouteError) and never sends unsimulated. */
   send(chainId: number, calls: Call[], meta: { origin?: string; batchId?: string } = {}): Promise<ActivityEntry> {
+    if (findNetwork(chainId)?.backend === "4337") {
+      return this.serialized(() =>
+        this.aaCall(async () => {
+          const plan = await this.requirePlan(chainId);
+          const { state, decision, prepared } = await this.aa.evaluate(plan, calls);
+          if (decision.route !== "hot" || !prepared) throw new RouteError(decision, routeView(decision, state));
+          return this.aa.submit(plan, state, decision, prepared, calls, meta, this.labels(state.tank));
+        }),
+      );
+    }
     return this.serialized(async () => {
       const { plan, state, decision, prepared } = await this.evaluate(chainId, calls);
       if (decision.route !== "hot" || !prepared) throw new RouteError(decision, routeView(decision, state));
@@ -509,6 +635,12 @@ export class Payments {
     return this.serialized(async () => {
       const entry = await this.d.activity.get(id);
       if (!entry) throw new PaymentsError("unknown-entry", "That payment isn't in your activity.");
+      if (entry.backend === "4337") {
+        throw new PaymentsError(
+          "unsupported",
+          "Speed up and cancel aren't available for compatible accounts yet: the bundler retries on its own.",
+        );
+      }
       if (entry.kind === "activation" || !entry.fees || (entry.status !== "confirming" && entry.status !== "sending")) {
         throw new PaymentsError("not-pending", "This payment is no longer waiting.");
       }
@@ -581,6 +713,10 @@ export class Payments {
   private async refreshOne(e: ActivityEntry): Promise<ActivityEntry | undefined> {
     const client = this.d.io.publicClient(e.chainId);
     if (e.kind === "vault") return undefined; // tracked by the Vault flow
+    if (e.backend === "4337" && e.kind !== "activation") {
+      const u = await this.aa.refreshOne(e, this.labels(e.tank));
+      return u ? this.d.activity.update(e.id, u) : undefined;
+    }
     if (e.kind === "activation") {
       const r = await client.getTransactionReceipt({ hash: e.hash }).catch(() => null);
       if (!r) return undefined;
@@ -603,10 +739,13 @@ export class Payments {
             ? "Your daily limit is now enforced by the network, and your Vault can approve."
             : "The Vault signer wasn't deployed. LEAKED retries before your first Vault approval."
           : "Your fee tank paid the network fee. Try again.",
-        steps: [
-          { label: "Create account with your limits", status: ok ? "done" : "failed" },
-          { label: "Set up your Vault on the network", status: signerOk ? "done" : "failed" },
-        ],
+        steps:
+          e.backend === "4337"
+            ? [{ label: "Create account with your limits and your Vault", status: ok ? "done" : "failed" }]
+            : [
+                { label: "Create account with your limits", status: ok ? "done" : "failed" },
+                { label: "Set up your Vault on the network", status: signerOk ? "done" : "failed" },
+              ],
         feeWei: (r.gasUsed * r.effectiveGasPrice + (rs ? rs.gasUsed * rs.effectiveGasPrice : 0n)).toString(),
         blockNumber: r.blockNumber.toString(),
       });

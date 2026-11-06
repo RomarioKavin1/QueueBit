@@ -94,7 +94,15 @@ export async function pasteCode(page: Page, text: string): Promise<void> {
 export async function onboard(
   context: BrowserContext,
   extensionId: string,
-  opts: { phone?: Phone; recovery?: boolean; shots?: (name: string, page: Page) => Promise<void> } = {},
+  opts: {
+    phone?: Phone;
+    recovery?: boolean;
+    shots?: (name: string, page: Page) => Promise<void>;
+    /** The network picked in onboarding (default: the local devnet 1337). */
+    chainId?: number;
+    /** Tokens to tick on "Tokens you'll spend" (default: the presets as offered, USDC ticked). */
+    tokens?: string[];
+  } = {},
 ) {
   const shots = opts.shots;
   const phone = opts.phone ?? (await (await companion()).newPhone());
@@ -124,7 +132,11 @@ export async function onboard(
     await expect(page.getByTestId("key-check")).toHaveText(`…${phone.recoveryPk.slice(-8).toLowerCase()}`);
     await page.getByRole("button", { name: "This matches" }).click();
     await expect(page.getByText(/Now the test/u)).toBeVisible();
-    await pasteCode(page, await phone.recoveryTestText());
+    // The browser's single-use challenge: the phone signs over its request id.
+    const challenge = page.getByTestId("recovery-challenge-text");
+    await expect(challenge).toHaveValue(/^UR:LEAKED-RECOVERY-CHALLENGE\//iu);
+    await shots?.("onboarding-4a-recovery-test", page);
+    await pasteCode(page, await phone.recoveryTestText(await challenge.inputValue()));
     await expect(page.getByText("Recovery key is set. Store the paper away from your phone.")).toBeVisible({
       timeout: 30_000,
     });
@@ -143,8 +155,20 @@ export async function onboard(
   await shots?.("onboarding-6-daily-limit", page);
   await page.getByRole("button", { name: "Set limit" }).click();
   await expect(page.getByRole("heading", { name: "Choose a network" })).toBeVisible();
+  if (opts.chainId !== undefined) await page.getByTestId(`network-${opts.chainId}`).locator("input").check();
   await shots?.("onboarding-7-network", page);
   await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByRole("heading", { name: "Tokens you'll spend" })).toBeVisible();
+  if (opts.tokens) {
+    for (const li of await page.locator("li[data-testid^='token-']").all()) {
+      const sym = (await li.getAttribute("data-testid"))!.slice("token-".length);
+      const box = li.locator("input[type=checkbox]");
+      if (opts.tokens.includes(sym)) await box.check();
+      else await box.uncheck();
+    }
+  }
+  await shots?.("onboarding-7b-tokens", page);
+  await page.getByRole("button", { name: /^(Confirm|Continue without tokens)/u }).click();
   await expect(page.getByRole("heading", { name: "Almost there" })).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId("activate-card")).toBeVisible({ timeout: 30_000 });
   await shots?.("onboarding-8-activate", page);

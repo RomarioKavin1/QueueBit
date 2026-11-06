@@ -35,7 +35,10 @@ export function SettingsScreen({ state, onBack }: { state: WalletState; onBack: 
           <SelectField
             label="Network"
             value={String(s.selectedChainId)}
-            options={NETWORKS.map((n) => ({ value: String(n.chainId), label: `${n.name} · ${n.accountKind}` }))}
+            options={NETWORKS.map((n) => ({
+              value: String(n.chainId),
+              label: `${n.name} · ${n.accountKind}${n.enabled ? "" : " (not available yet)"}`,
+            }))}
             onChange={(e) => void call("settings:update", { selectedChainId: Number(e.target.value) })}
             description={`${net?.note ?? ""} LEAKED uses a fixed list so a site can't point you at a fake network.`}
           />

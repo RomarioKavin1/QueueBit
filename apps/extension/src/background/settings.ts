@@ -7,6 +7,7 @@ import {
   type Settings,
   type SetupState,
   type Theme,
+  type TokenChoice,
 } from "../shared/types";
 
 /** Settings and the onboarding choices, write-through to storage.local (plan §30 §2.2 SettingsController). */
@@ -62,6 +63,25 @@ export class SettingsStore {
     if (patch.guardian !== undefined) next.guardian = patch.guardian;
     await this.kv.set(StorageKeys.setup, next);
     return next;
+  }
+
+  /** The tokens chosen for `chainId` (validated by the service worker: `setTokens`). */
+  async tokens(chainId: number): Promise<TokenChoice[]> {
+    return (await this.getSetup()).tokens?.[String(chainId)] ?? [];
+  }
+
+  async setTokens(chainId: number, list: TokenChoice[]): Promise<SetupState> {
+    const next = { ...(await this.getSetup()) };
+    next.tokens = { ...next.tokens, [String(chainId)]: list };
+    await this.kv.set(StorageKeys.setup, next);
+    return next;
+  }
+
+  async setRecoveryChallenge(c: SetupState["recoveryChallenge"]): Promise<void> {
+    const next = { ...(await this.getSetup()) };
+    if (c) next.recoveryChallenge = c;
+    else delete next.recoveryChallenge;
+    await this.kv.set(StorageKeys.setup, next);
   }
 
   /** Pairing results are written only by the service worker after it decoded and checked the code itself. */

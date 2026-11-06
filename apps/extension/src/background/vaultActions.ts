@@ -26,6 +26,8 @@ export type VaultActionRequest =
   | { type: "setHotKey"; hotKey: Address; index: number }
   | { type: "setGuardian"; guardian: Address; enabled: boolean; name?: string }
   | { type: "setRecoverySigner"; signer: Address }
+  /** 4337 backend: the executor stores the Recovery key's PQ public key itself (no signer contract). */
+  | { type: "setRecoveryKey"; pk: Hex }
   | { type: "cancel"; opId: Hex; title: string; by: VaultRole };
 
 /** The account's current policy, as read from chain (for "from → to" and tighten/loosen decisions). */
@@ -34,6 +36,8 @@ export interface CurrentPolicy {
   perTxMaxUsd: bigint;
   maxFeeWeiPerTx: bigint;
   maxHotFrames: number;
+  /** 4337 backend: the hook's `maxPriorityFeePerGas` (kept as is by a limits change). */
+  maxPriorityFeePerGas?: bigint;
   recipientMode: "open" | "strict";
   /** Instant Vault spends left today (`getVaultBucket().available`). */
   vaultAvailableUsd: bigint;
@@ -240,6 +244,8 @@ export function buildVaultAction(account: Address, req: VaultActionRequest, cur:
       return now("vaultSetRecoverySigner", "Link your Recovery key to this account", "Instant (first Recovery key).", [
         req.signer,
       ]);
+    case "setRecoveryKey":
+      throw new Error("setRecoveryKey is a compatible-account (4337) action");
     case "cancel":
       return {
         role: req.by,

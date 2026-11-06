@@ -113,8 +113,13 @@ export function VaultHandoff({ id, onDone }: { id: string; onDone: (to: string) 
                 <ReasonCode key={r} id={r} />
               ))}
             </div>
-            <p>Lane: {rec.lane === "staked" ? "Staked lane" : "Standard lane"}</p>
-            {rec.path === "B" ? (
+            {rec.lane !== "direct" && <p>Lane: {rec.lane === "staked" ? "Staked lane" : "Standard lane"}</p>}
+            {rec.path === "direct" ? (
+              <p>
+                Your account's Vault module checks the quantum-safe signature on-chain; your fee tank sends it. No
+                classical key on your phone is involved.
+              </p>
+            ) : rec.path === "B" ? (
               <p>
                 Your Vault's quantum-safe signature is checked on-chain. The fee-payer step still uses a classical key
                 on your phone; this is a known limit until the staked lane is available.
@@ -214,9 +219,17 @@ function Outcome({ rec, onDone }: { rec: VaultRequestRecord; onDone: (to: string
       ...(rec.error?.code === "superseded" ? { body: rec.error.message } : {}),
     },
   };
-  const o = map[rec.status] ?? map.failed!;
+  let o = map[rec.status] ?? map.failed!;
+  // hash-mismatch after broadcast: sent, but tracked by our own hash; recoverable, never "waiting" again.
+  if (rec.status === "sending" && rec.error?.code === "hash-mismatch") {
+    o = { level: "limit", title: "Sent, but the network's answer didn't match", body: rec.error.message };
+  }
   return (
-    <div className="flex flex-col gap-3" data-testid="vault-outcome">
+    <div
+      className="flex flex-col gap-3"
+      data-testid="vault-outcome"
+      {...(rec.error?.code ? { "data-error": rec.error.code } : {})}
+    >
       <RiskBanner level={o.level} title={o.title} {...(o.body ? { body: o.body } : {})} />
       {rec.status === "sending" && (
         <p className="t-small inline-flex items-center gap-2 text-muted">

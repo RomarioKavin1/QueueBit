@@ -118,7 +118,7 @@ describe("provider router", () => {
     await d.permissions.grant(ORIGIN, [ACCOUNT]);
     expect(await call(d, "wallet_switchEthereumChain", [{ chainId: "0xaa36a7" }])).toBeNull();
     expect(await call(d, "eth_chainId")).toBe("0xaa36a7");
-    expect((await rpcError(call(d, "wallet_switchEthereumChain", [{ chainId: "0x1" }]))).code).toBe(4902);
+    expect((await rpcError(call(d, "wallet_switchEthereumChain", [{ chainId: "0x2a" }]))).code).toBe(4902);
     for (const bad of [[], [{}], [{ chainId: 1 }], [{ chainId: "0x01" }], [{ chainId: "zz" }]]) {
       expect((await rpcError(call(d, "wallet_switchEthereumChain", bad))).code).toBe(-32602);
     }

@@ -34,6 +34,7 @@ const STEPS: Step[] = [
   "guardian",
   "limit",
   "network",
+  "tokens",
   "done",
 ];
 

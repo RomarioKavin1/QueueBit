@@ -37,7 +37,8 @@ import {
   type AdvisoryPolicy,
   type SignRequest,
 } from "@leaked/ur";
-import { accountAbi, pqRoleSignerAbi, pqVerifierAbi } from "../generated/contracts";
+import { accountAbi, pqRoleSignerAbi, pqVerifierAbi, roleExecutorAbi } from "../generated/contracts";
+import { AaVault } from "./aa/vault";
 import { findNetwork, type Network } from "../shared/chains";
 import { StorageKeys, type KV } from "../shared/kv";
 import {
@@ -71,6 +72,8 @@ import {
  */
 
 export const REQUEST_TTL_MS = 10 * 60_000;
+/** After a `hash-mismatch` broadcast, how long to wait for either hash before giving up (recoverable). */
+export const MISMATCH_GIVE_UP_MS = 15 * 60_000;
 /** Role-signer body limits (G1 ROLE_BODY); the signer's `maxFee` bounds the worst case. */
 const ROLE_BODY = { execution: 700_000n, state: 400_000n };
 const GWEI = 1_000_000_000n;
@@ -91,13 +94,17 @@ export interface VaultRequestRecord {
   role: VaultRole;
   account: Address;
   signer: Address;
-  path: "A" | "B";
-  lane: "standard" | "staked";
+  /** "direct": 4337 backend, a `LeakedRoleExecutor` call relayed by the fee tank (PQ check in execution). */
+  path: "A" | "B" | "direct";
+  lane: "standard" | "staked" | "direct";
+  backend?: "4337";
+  /** 4337: the unsigned executor call (empty pqSig) and its EIP-712 digest. */
+  exec?: { calldata: Hex; digest: Hex; executor: Address };
   rules: string[];
   profileId: string;
   action: Omit<BuiltVaultAction, "data" | "usd6" | "intent"> & { usd6?: string };
-  /** The unsigned transaction (PQ placeholder in entry 0, payer placeholder in entry 1 on Path B). */
-  wire: WireFrameTx;
+  /** Native account: the unsigned frame transaction (PQ placeholder in entry 0, payer placeholder in entry 1 on Path B). */
+  wire?: WireFrameTx;
   digest: Hex;
   /** `ur:leaked-sign-request` CBOR (hex); the page renders the animated QR from it. */
   cbor: Hex;
@@ -113,6 +120,9 @@ export interface VaultRequestRecord {
   /** An approval-window request waiting on this (dapp asked; resolved when sent). */
   approvalId?: string;
   feeWei?: string;
+  /** `hash-mismatch after broadcast`: what the node returned (we track `hash`, the hash of the bytes we sent). */
+  nodeHash?: Hex;
+  sentAt?: number;
   /** "Replace everyday key": the new key's derivation index, adopted once the change is confirmed. */
   hotIndex?: number;
   updatedAt: number;
@@ -161,7 +171,14 @@ interface SignerState {
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 
 export class VaultFlow {
-  constructor(private readonly d: VaultDeps) {}
+  readonly aa: AaVault;
+  constructor(private readonly d: VaultDeps) {
+    this.aa = new AaVault((c) => d.io.publicClient(c), d.keyring);
+  }
+
+  private async isAa(chainId: number): Promise<boolean> {
+    return (await this.d.plans.get(chainId))?.backend === "4337";
+  }
 
   // ---- storage ----
 
@@ -288,6 +305,7 @@ export class VaultFlow {
   /** The account's current policy (for tighten / loosen decisions and the request's advisory key 12). */
   async currentPolicy(chainId: number): Promise<CurrentPolicy> {
     const plan = await this.plan(chainId);
+    if (plan.backend === "4337") return this.aa.currentPolicy(chainId, plan.address);
     const client = this.d.io.publicClient(chainId);
     const read = <T>(fn: string, args: readonly unknown[] = []) =>
       client.readContract({
@@ -383,6 +401,7 @@ export class VaultFlow {
     req: VaultActionRequest,
     meta: { origin?: string; approvalId?: string } = {},
   ): Promise<VaultRequestRecord> {
+    if (await this.isAa(chainId)) return this.createAa(chainId, req, meta);
     const net = this.network(chainId);
     const plan = await this.plan(chainId);
     const client = this.d.io.publicClient(chainId);
@@ -498,6 +517,87 @@ export class VaultFlow {
     return record;
   }
 
+  /** 4337: the executor call + tx-type 3 request (no role-signer contract, no lane choice: any relayer pays). */
+  private async createAa(
+    chainId: number,
+    req: VaultActionRequest,
+    meta: { origin?: string; approvalId?: string },
+  ): Promise<VaultRequestRecord> {
+    const plan = await this.plan(chainId);
+    const client = this.d.io.publicClient(chainId);
+    const code = await client.getCode({ address: plan.address });
+    if (!code || code === "0x") throw new VaultError("not-activated", "Activate your account before using the Vault.");
+    const policy = await this.currentPolicy(chainId);
+    let b: Awaited<ReturnType<AaVault["build"]>>;
+    try {
+      b = await this.aa.build(chainId, plan, req, policy, meta, advisoryPolicy(plan.address, policy));
+    } catch (e) {
+      throw new VaultError("unsupported", (e as Error).message);
+    }
+    const now = this.d.now();
+    const record: VaultRequestRecord = {
+      id: b.id,
+      chainId,
+      role: b.role,
+      account: plan.address,
+      signer: b.executor,
+      path: "direct",
+      lane: "direct",
+      backend: "4337",
+      rules: ["ROUTE-VAULT-EXECUTOR"],
+      profileId: "",
+      action: {
+        role: b.built.role,
+        action: b.built.action,
+        title: b.built.title,
+        effect: b.built.effect,
+        timing: b.built.timing,
+        ...(b.built.queued ? { queued: b.built.queued } : {}),
+        ...(b.built.usd6 !== undefined ? { usd6: b.built.usd6.toString() } : {}),
+      },
+      exec: { calldata: b.built.calldata, digest: b.digest, executor: b.executor },
+      digest: b.digest,
+      cbor: b.cbor,
+      createdAt: now,
+      expiresAt: now + REQUEST_TTL_MS,
+      status: "waiting",
+      ...(meta.origin ? { origin: meta.origin } : {}),
+      ...(meta.approvalId ? { approvalId: meta.approvalId } : {}),
+      ...(req.type === "setHotKey" ? { hotIndex: req.index } : {}),
+      updatedAt: now,
+    };
+    // One live request per (account, role): they share the role's executor nonce (plan §30 §6.3).
+    for (const r of await this.list()) {
+      if (
+        r.status === "waiting" &&
+        r.chainId === chainId &&
+        r.backend === "4337" &&
+        r.role === b.role &&
+        isAddressEqual(r.account, plan.address)
+      ) {
+        await this.update(r.id, {
+          status: "cancelled",
+          error: { code: "superseded", message: "A newer request for this key replaced it. Nothing was sent." },
+        });
+      }
+    }
+    await this.put(record);
+    return record;
+  }
+
+  private async submitAa(rec: VaultRequestRecord, signatureCbor: Hex): Promise<VaultRequestRecord> {
+    const r = await this.aa.signed(
+      { id: rec.id, chainId: rec.chainId, account: rec.account, role: rec.role, exec: rec.exec! },
+      signatureCbor,
+    );
+    if ("error" in r) {
+      if (r.failed) await this.update(rec.id, { status: "failed", error: { code: r.code, message: r.error } });
+      throw new VaultError(r.code, r.error);
+    }
+    const hash = await this.d.io.publicClient(rec.chainId).sendRawTransaction({ serializedTransaction: r.raw });
+    return this.recordSent(rec, r.hash, r.nonce, hash.toLowerCase() !== r.hash.toLowerCase() ? hash : undefined);
+  }
+
   /**
    * The phone's answer: check, verify, simulate, submit. Throws a `VaultError` with the ux-spec code (E-60/61/62/…)
    * and leaves the request waiting, so the user can scan again; nothing is sent unless every check passes.
@@ -516,6 +616,7 @@ export class VaultFlow {
       );
     }
     if (rec.status !== "waiting") throw new VaultError("not-waiting", "This request was already handled.");
+    if (rec.backend === "4337") return this.submitAa(rec, signatureCbor);
 
     let sig;
     try {
@@ -532,7 +633,7 @@ export class VaultFlow {
     if (!sig.witness || !sig.schemeId) throw new VaultError("E-62", "The phone sent no quantum-safe signature.");
 
     const profile = getProfile(rec.profileId);
-    const unsigned = fromWire(rec.wire);
+    const unsigned = fromWire(rec.wire!);
     const digest = sigHash(profile, unsigned);
     if (digest !== rec.digest) throw new VaultError("E-62", "Internal check failed: the request changed.");
     const signer = await this.signerState(rec.chainId, rec.role);
@@ -598,9 +699,20 @@ export class VaultFlow {
       rec.lane === "staked"
         ? await this.sidecar(this.network(rec.chainId).stakedSidecarUrl!).sendFrameTransaction(tx)
         : await this.d.io.node(rec.chainId).sendRawTransaction(raw);
-    if (hash.toLowerCase() !== txHash(profile, tx).toLowerCase()) {
-      throw new VaultError("hash-mismatch", `The node returned ${hash}.`);
-    }
+    // The bytes are on the network now, whatever the node answered: never leave this request "waiting" (a second
+    // scan would race the first broadcast). Track the hash of the bytes we sent; record the node's answer and say so.
+    const ours = txHash(profile, tx);
+    const mismatch = hash.toLowerCase() !== ours.toLowerCase();
+    return this.recordSent(rec, ours, unsigned.nonceSeq, mismatch ? hash : undefined);
+  }
+
+  /**
+   * Records a sent Vault request: activity entry + status `sending`. `nodeHash` is set when the node answered with a
+   * different hash than the bytes we sent (`hash-mismatch after broadcast`): the request is tracked by our hash and
+   * carries a recoverable error the page shows (wait for it, or check the signer's nonce, then start again).
+   */
+  async recordSent(rec: VaultRequestRecord, hash: Hex, nonce: bigint, nodeHash?: Hex): Promise<VaultRequestRecord> {
+    const id = rec.id;
     const now = this.d.now();
     await this.d.activity.add({
       id: rec.id,
@@ -615,17 +727,34 @@ export class VaultFlow {
       status: "confirming",
       hash,
       replaced: [],
-      nonce: unsigned.nonceSeq.toString(),
+      nonce: nonce.toString(),
       headline: `Approved by your phone: ${rec.action.title}`,
       detail: rec.action.effect,
       steps: [
-        { label: rec.path === "A" ? "Check the quantum-safe signature" : "Check the fee step", status: "pending" },
+        {
+          label: rec.path === "A" || rec.path === "direct" ? "Check the quantum-safe signature" : "Check the fee step",
+          status: "pending",
+        },
         { label: rec.action.title, status: "pending" },
       ],
       createdAt: now,
       updatedAt: now,
     });
-    return (await this.update(id, { status: "sending", hash }))!;
+    return (await this.update(id, {
+      status: "sending",
+      hash,
+      ...(nodeHash
+        ? {
+            nodeHash,
+            error: {
+              code: "hash-mismatch",
+              message:
+                "Sent, but the network answered with a different transaction id than the one LEAKED computed. LEAKED keeps watching for the one it sent. If nothing confirms within a few minutes, start the request again: the old approval can't be used twice.",
+            },
+          }
+        : {}),
+      sentAt: now,
+    }))!;
   }
 
   /** Polls receipts of sent requests; `Queued` events turn into scheduled changes with their eta. */
@@ -633,9 +762,37 @@ export class VaultFlow {
     const changed: VaultRequestRecord[] = [];
     for (const r of await this.list()) {
       if (r.status !== "sending" || !r.hash) continue;
+      if (r.backend === "4337") {
+        try {
+          const u = await this.refreshAa(r);
+          if (u) changed.push(u);
+        } catch {
+          // retry on the next poll
+        }
+        continue;
+      }
       try {
-        const receipt = await this.receipt(r);
-        if (!receipt) continue;
+        const receipt = (await this.receipt(r)) ?? (r.nodeHash ? await this.receipt({ ...r, hash: r.nodeHash }) : null);
+        if (!receipt) {
+          // hash-mismatch after broadcast: give the network 15 minutes, then end it with a recoverable error.
+          if (r.nodeHash && r.sentAt && this.d.now() - r.sentAt > MISMATCH_GIVE_UP_MS) {
+            const u = await this.update(r.id, {
+              status: "failed",
+              error: {
+                code: "hash-mismatch",
+                message:
+                  "Nothing confirmed for this approval. It may have been dropped. Start the request again; if it went through after all, the new one is refused and nothing happens twice.",
+              },
+            });
+            await this.d.activity.update(r.id, {
+              status: "failed",
+              headline: `Not confirmed: ${r.action.title}`,
+              detail: "The network never confirmed it. Start it again from LEAKED.",
+            });
+            if (u) changed.push(u);
+          }
+          continue;
+        }
         const ok = receipt.frameReceipts[1]?.status === "success";
         let opId: Hex | undefined;
         let eta: number | undefined;
@@ -693,6 +850,50 @@ export class VaultFlow {
     return changed;
   }
 
+  private async refreshAa(r: VaultRequestRecord): Promise<VaultRequestRecord | undefined> {
+    const o =
+      (await this.aa.outcome(r.chainId, r.account, r.hash!)) ??
+      (r.nodeHash ? await this.aa.outcome(r.chainId, r.account, r.nodeHash) : null);
+    if (!o) {
+      if (r.nodeHash && r.sentAt && this.d.now() - r.sentAt > MISMATCH_GIVE_UP_MS) {
+        await this.d.activity.update(r.id, { status: "failed", headline: `Not confirmed: ${r.action.title}` });
+        return this.update(r.id, {
+          status: "failed",
+          error: { code: "hash-mismatch", message: "Nothing confirmed for this approval. Start the request again." },
+        });
+      }
+      return undefined;
+    }
+    const status: VaultRequestStatus = !o.ok ? "failed" : o.opId ? "scheduled" : "confirmed";
+    const u = await this.update(r.id, {
+      status,
+      ...(o.opId ? { opId: o.opId } : {}),
+      ...(o.eta ? { eta: o.eta } : {}),
+      feeWei: o.feeWei.toString(),
+      ...(!o.ok ? { error: { code: "REVERTED", message: "Your account refused the approved change." } } : {}),
+    });
+    await this.d.activity.update(r.id, {
+      status: o.ok ? "confirmed" : "failed",
+      headline: o.ok
+        ? o.opId
+          ? `Scheduled: ${r.action.title}`
+          : `Done: ${r.action.title}`
+        : `Failed: ${r.action.title}`,
+      detail: o.ok
+        ? o.opId
+          ? `Happens after the waiting period (${new Date(o.eta! * 1000).toLocaleString("en-GB")}). You can cancel it from Pending.`
+          : r.action.effect
+        : "Your account refused it. Your fee tank paid the network fee.",
+      steps: [
+        { label: "Check the quantum-safe signature", status: o.ok ? "done" : "failed" },
+        { label: r.action.title, status: o.ok ? "done" : "failed" },
+      ],
+      blockNumber: o.blockNumber.toString(),
+      feeWei: o.feeWei.toString(),
+    });
+    return u;
+  }
+
   private async receipt(r: VaultRequestRecord): Promise<FrameTxReceipt | null> {
     const fromNode = await this.d.io
       .node(r.chainId)
@@ -717,6 +918,26 @@ export class VaultFlow {
     const client = this.d.io.publicClient(chainId);
     const code = await client.getCode({ address: plan.address });
     if (!code || code === "0x") return [];
+    if (plan.backend === "4337") {
+      const records = await this.list();
+      const block = await client.getBlock({ blockTag: "latest" });
+      return (await this.aa.queue(chainId, plan.address))
+        .map((q) => {
+          const rec = records.find((r) => r.opId?.toLowerCase() === q.opId.toLowerCase());
+          return {
+            opId: q.opId,
+            kind: q.kind,
+            eta: q.eta,
+            state: (["none", "pending", "executed", "cancelled"] as const)[q.state] ?? "none",
+            title: rec?.action.title ?? (q.kind === 0 ? "A large payment" : "A change that raises your limits"),
+            ...(rec
+              ? { requestId: rec.id, queuedAt: rec.updatedAt, executable: !!rec.action.queued }
+              : { executable: false }),
+            chainNow: Number(block.timestamp),
+          } satisfies QueuedView;
+        })
+        .sort((a, b) => b.eta - a.eta);
+    }
     const logs = await client.getContractEvents({
       address: plan.address,
       abi: accountAbi,
@@ -758,12 +979,16 @@ export class VaultFlow {
     if (!rec?.action.queued)
       throw new VaultError("unknown-op", "LEAKED doesn't have the details of this change, so it can't send it.");
     const calls = rec.action.queued.calls.map((c) => ({ target: c.target, value: BigInt(c.value), data: c.data }));
-    const data = encodeFunctionData({ abi: accountAbi, functionName: "executeQueued", args: [opId, calls] });
+    const aa = plan.backend === "4337" ? this.aa.dep(chainId) : undefined;
+    const data = aa
+      ? encodeFunctionData({ abi: roleExecutorAbi, functionName: "executeQueued", args: [plan.address, opId, calls] })
+      : encodeFunctionData({ abi: accountAbi, functionName: "executeQueued", args: [opId, calls] });
+    const to = aa ? aa.executor : plan.address;
     const client = this.d.io.publicClient(chainId);
     const accounts = (await this.d.keyring.accounts())!;
     const gas = 1_500_000n;
     try {
-      await client.call({ account: accounts.feeTank, to: plan.address, data, gas });
+      await client.call({ account: accounts.feeTank, to, data, gas });
     } catch (e) {
       throw new VaultError("not-ready", `It can't be sent yet (${(e as Error).message.split("\n")[0]}).`);
     }
@@ -776,11 +1001,12 @@ export class VaultFlow {
         nonce,
         gasPrice,
         gas,
-        to: plan.address,
+        to,
         data,
         value: 0n,
       }),
     );
+    if (aa) return client.sendRawTransaction({ serializedTransaction: raw });
     return this.d.io.node(chainId).sendRawTransaction(raw);
   }
 }

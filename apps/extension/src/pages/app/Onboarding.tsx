@@ -28,7 +28,17 @@ import { GuardianForm } from "./Security";
 import { startVault } from "./vaultStart";
 
 export type Step =
-  "welcome" | "create" | "import" | "words" | "vault" | "recovery" | "guardian" | "limit" | "network" | "done";
+  | "welcome"
+  | "create"
+  | "import"
+  | "words"
+  | "vault"
+  | "recovery"
+  | "guardian"
+  | "limit"
+  | "network"
+  | "tokens"
+  | "done";
 
 /** The order of the task brief: the Vault is paired before anything that depends on the account address. */
 const RAIL: Array<{ label: string; steps: Step[]; optional?: boolean }> = [
@@ -38,6 +48,7 @@ const RAIL: Array<{ label: string; steps: Step[]; optional?: boolean }> = [
   { label: "Guardian", steps: ["guardian"], optional: true },
   { label: "Daily limit", steps: ["limit"] },
   { label: "Network", steps: ["network"] },
+  { label: "Tokens", steps: ["tokens"] },
   { label: "Activate", steps: ["done"] },
 ];
 
@@ -83,6 +94,7 @@ export function Onboarding({ state, step, go }: { state: WalletState; step: Step
           {step === "guardian" && <GuardianStep headingRef={heading} state={state} go={go} />}
           {step === "limit" && <Limit headingRef={heading} state={state} go={go} />}
           {step === "network" && <Network headingRef={heading} state={state} go={go} />}
+          {step === "tokens" && <Tokens headingRef={heading} state={state} go={go} />}
           {step === "done" && <Done headingRef={heading} state={state} go={go} />}
         </main>
       </div>
@@ -549,21 +561,30 @@ function Network({ headingRef, state, go }: StepProps & { state: WalletState }) 
             <label
               key={n.chainId}
               className={cx(
-                "flex cursor-pointer gap-3 rounded-md border p-4 has-[:focus-visible]:shadow-[var(--focus-ring)]",
-                chainId === n.chainId ? "border-brand bg-surface" : "border-line hover:bg-surface",
+                "flex gap-3 rounded-md border p-4 has-[:focus-visible]:shadow-[var(--focus-ring)]",
+                !n.enabled
+                  ? "cursor-not-allowed border-line opacity-60"
+                  : chainId === n.chainId
+                    ? "cursor-pointer border-brand bg-surface"
+                    : "cursor-pointer border-line hover:bg-surface",
               )}
+              data-testid={`network-${n.chainId}`}
             >
               <input
                 type="radio"
                 name="network"
                 className="mt-1 size-4 accent-[var(--brand)]"
                 checked={chainId === n.chainId}
+                disabled={!n.enabled}
                 onChange={() => setChainId(n.chainId)}
               />
               <span>
                 <span className="t-strong">{n.name}</span>
                 <span className="t-small ml-2 rounded-sm bg-surface-2 px-1.5 py-0.5 text-muted">{n.accountKind}</span>
                 <span className="t-body mt-1 block text-muted">{n.note}</span>
+                {!n.enabled && n.disabledReason && (
+                  <span className="t-small mt-1 block text-muted">Not available yet: {n.disabledReason}</span>
+                )}
               </span>
             </label>
           ))}
@@ -577,10 +598,147 @@ function Network({ headingRef, state, go }: StepProps & { state: WalletState }) 
           className="min-w-48"
           onClick={async () => {
             await call("settings:update", { selectedChainId: chainId });
-            go("done");
+            go("tokens");
           }}
         >
           Continue
+        </Button>
+      </div>
+    </>
+  );
+}
+
+// ---- Tokens you'll spend (InitConfig.tokens) ------------------------------------------------------------------
+
+const usdText = (v: number) => `$${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`;
+
+/**
+ * The tokens the account allows from the first day, with the static price LEAKED counts them at toward the daily
+ * limit. The price is pinned by the account (never read from an API), so the user confirms it in plain words; it can
+ * be changed later with the Vault (Limits).
+ */
+function Tokens({ headingRef, state, go }: StepProps & { state: WalletState }) {
+  const net = getNetwork(state.settings.selectedChainId);
+  const saved = state.setup.tokens?.[String(net.chainId)];
+  const [rows, setRows] = useState(() =>
+    net.tokenPresets.map((p) => {
+      const s = saved?.find((t) => t.token.toLowerCase() === p.token.toLowerCase());
+      return {
+        preset: p,
+        on: saved ? Boolean(s) : Boolean(p.preselected),
+        price: s ? String(Number(s.usdPerToken) / 1e6) : String(p.usd),
+      };
+    }),
+  );
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const chosen = rows.filter((r) => r.on);
+  const bad = chosen.find((r) => !(Number(r.price) > 0));
+  return (
+    <>
+      <Title
+        headingRef={headingRef}
+        sub="Everyday payments and site pre-approvals in these tokens work from day one. Each counts toward your daily limit at a fixed price your account keeps."
+      >
+        Tokens you'll spend
+      </Title>
+      {rows.length === 0 ? (
+        <p className="t-body mb-6 text-muted" data-testid="tokens-none">
+          LEAKED has no token suggestions for {net.name}. ETH works as usual; your Vault can add tokens later.
+        </p>
+      ) : (
+        <ul className="mb-6 flex flex-col gap-3" aria-label="Tokens">
+          {rows.map((r, i) => {
+            const price = Number(r.price);
+            return (
+              <li
+                key={r.preset.token}
+                className={cx("rounded-md border p-4", r.on ? "border-brand bg-surface" : "border-line")}
+                data-testid={`token-${r.preset.symbol}`}
+              >
+                <label className="flex cursor-pointer items-start gap-3">
+                  <input
+                    type="checkbox"
+                    className="mt-1 size-5 accent-[var(--brand)]"
+                    checked={r.on}
+                    onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, on: e.target.checked } : x)))}
+                  />
+                  <span className="flex-1">
+                    <span className="t-strong">{r.preset.symbol}</span>
+                    <span className="t-small ml-2 text-muted">{r.preset.name}</span>
+                    {r.preset.permit && (
+                      <span className="t-small ml-2 rounded-sm bg-surface-2 px-1.5 py-0.5 text-muted">
+                        pre-approvals
+                      </span>
+                    )}
+                    <span className="t-small mt-1 block text-muted">
+                      {r.preset.token.slice(0, 6)}…{r.preset.token.slice(-4)}
+                    </span>
+                  </span>
+                </label>
+                {r.on && (
+                  <div className="mt-3 flex flex-col gap-2 pl-8">
+                    <p className="t-body" data-testid={`token-${r.preset.symbol}-sentence`}>
+                      LEAKED counts {r.preset.symbol} as {price > 0 ? usdText(price) : "—"} toward your daily limit.
+                    </p>
+                    <MoneyInput
+                      id={`price-${r.preset.symbol}`}
+                      label={`Price of 1 ${r.preset.symbol}`}
+                      value={r.price}
+                      onChange={(v) => setRows(rows.map((x, j) => (j === i ? { ...x, price: v } : x)))}
+                    />
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      <Card tone="neutral" className="mb-6 bg-surface" heading="Why a fixed price">
+        <p className="t-body">
+          Your account never asks a price feed, so nobody can move your limit by moving a price. If a token's real price
+          drifts, your Vault can update it later from Limits (lowering a price waits 48 hours).
+        </p>
+      </Card>
+      {(error || bad) && (
+        <RiskBanner
+          className="mb-4"
+          level="danger"
+          title={error ?? `Set a price above $0 for ${bad!.preset.symbol}.`}
+        />
+      )}
+      <div className="flex gap-3">
+        <Button variant="secondary" onClick={() => go("network")}>
+          Back
+        </Button>
+        <Button
+          className="min-w-48"
+          loading={busy}
+          disabled={Boolean(bad)}
+          onClick={async () => {
+            setBusy(true);
+            setError(null);
+            try {
+              await call("setup:setTokens", {
+                chainId: net.chainId,
+                tokens: chosen.map((r) => ({
+                  token: r.preset.token,
+                  usd: Number(r.price),
+                  decimals: r.preset.decimals,
+                  symbol: r.preset.symbol,
+                })),
+              });
+              go("done");
+            } catch (e) {
+              setError(e instanceof UiCallError ? e.message : "Couldn't save the tokens.");
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          {chosen.length > 0
+            ? `Confirm ${chosen.length === 1 ? chosen[0]!.preset.symbol : `${chosen.length} tokens`}`
+            : "Continue without tokens"}
         </Button>
       </div>
     </>
@@ -822,7 +980,10 @@ function RecoveryStep({ headingRef, state, go }: StepProps & { state: WalletStat
       {scanned && !tested && (
         <div className="mt-6 flex max-w-[420px] flex-col gap-2">
           <p className="t-strong">Recovery key ends in …{rec!.pk.slice(-8).toLowerCase()}. Now the test:</p>
-          <p className="t-small text-muted">The phone shows a test code after you re-enter 6 of the words.</p>
+          <RecoveryChallenge key={`challenge-${scanKey}`} />
+          <p className="t-small text-muted">
+            Then the phone shows its test code, after you re-enter 6 of the words. Show it here:
+          </p>
           <UrScanner
             key={scanKey}
             accept={[UR_TYPES.recoveryTest]}
@@ -898,6 +1059,35 @@ function RecoveryStep({ headingRef, state, go }: StepProps & { state: WalletStat
         </div>
       </Sheet>
     </>
+  );
+}
+
+/**
+ * The browser's single-use test code (`ur:leaked-recovery-challenge`): the phone signs over its request id, so only a
+ * test made just now, for this screen, is accepted.
+ */
+function RecoveryChallenge() {
+  const ch = useAsync(() => call("pair:recoveryChallenge"), []);
+  if (ch.error) return <RiskBanner level="danger" title={ch.error} />;
+  if (!ch.data) return null;
+  return (
+    <div className="flex items-center gap-4 rounded-md border border-line p-3" data-testid="recovery-challenge">
+      <QrCode value={ch.data.text} size={132} label="Recovery test code for the phone" />
+      <div className="flex flex-1 flex-col gap-1">
+        <p className="t-body">
+          On the phone: Recovery › <strong>Test my words</strong>, and scan this code.
+        </p>
+        <p className="t-small text-muted">It works once, for the next 30 minutes.</p>
+        <textarea
+          readOnly
+          rows={2}
+          aria-label="The test code as text"
+          data-testid="recovery-challenge-text"
+          className="t-mono w-full rounded-md border border-line bg-surface p-1 text-[10px]"
+          value={ch.data.text}
+        />
+      </div>
+    </div>
   );
 }
 
@@ -985,6 +1175,14 @@ function Done({ headingRef, state, go }: StepProps & { state: WalletState }) {
       state.setup.guardian ? `${state.setup.guardian.name ?? "Set"} (added with your phone after activation)` : "None",
     ],
     ["Network", `${net.name} · ${net.accountKind}`],
+    [
+      "Tokens",
+      (state.setup.tokens?.[String(net.chainId)] ?? []).length > 0
+        ? state.setup
+            .tokens![String(net.chainId)]!.map((t) => `${t.symbol} at ${usdText(Number(t.usdPerToken) / 1e6)}`)
+            .join(" · ")
+        : "ETH only",
+    ],
   ];
   return (
     <>
@@ -1021,9 +1219,19 @@ function Done({ headingRef, state, go }: StepProps & { state: WalletState }) {
       {s && !s.deployed && (
         <Card heading="Activate your account" className="mb-6" data-testid="activate-card">
           <p className="t-body">
-            Activation puts your limits and your Vault on {net.name}. Your <strong>fee tank</strong> pays the one-time
-            network fee and gives your Vault a little ETH for its own fees. The fee tank only pays network fees: a thief
-            can only burn what's in it.
+            {net.backend === "4337" ? (
+              <>
+                Activation creates your account on {net.name} with your limits and your Vault (LEAKED's modules). Your{" "}
+                <strong>fee tank</strong> pays the one-time network fee and later sends your phone's approvals. Everyday
+                payments pay their small network fee from your account itself, never more than a fixed cap.
+              </>
+            ) : (
+              <>
+                Activation puts your limits and your Vault on {net.name}. Your <strong>fee tank</strong> pays the
+                one-time network fee and gives your Vault a little ETH for its own fees. The fee tank only pays network
+                fees: a thief can only burn what's in it.
+              </>
+            )}
           </p>
           <ol className="t-body mt-3 flex list-decimal flex-col gap-1 pl-5">
             <li className={tankOk ? "text-muted line-through" : ""}>
@@ -1102,7 +1310,7 @@ function Done({ headingRef, state, go }: StepProps & { state: WalletState }) {
       )}
       {!s?.deployed && (
         <div className="flex gap-3">
-          <Button variant="secondary" onClick={() => go("network")}>
+          <Button variant="secondary" onClick={() => go("tokens")}>
             Back
           </Button>
         </div>

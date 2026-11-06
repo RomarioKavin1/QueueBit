@@ -24,6 +24,23 @@ export function accountDomain(account: Address, chainId: number) {
   } as const;
 }
 
+/**
+ * The 7579 backend's 7739 domain: LeakedHotValidator's `EIP712Domain(name "LeakedHotValidator", version "1",
+ * chainId, verifyingContract = account)` without a salt (its `accountDomainSeparator`); the nested TypedDataSign
+ * carries `salt = 0` (its `domainBytes`). The host routes 1271 to the validator by a 20-byte prefix.
+ */
+export type VerifierDomain = { name: string; version: string; chainId: bigint; verifyingContract: Address; salt?: Hex };
+
+export function validatorDomain(account: Address, chainId: number, withSalt: boolean): VerifierDomain {
+  return {
+    name: "LeakedHotValidator",
+    version: "1",
+    chainId: BigInt(chainId),
+    verifyingContract: account,
+    ...(withSalt ? { salt: "0x0000000000000000000000000000000000000000000000000000000000000000" as Hex } : {}),
+  };
+}
+
 /** `personal_sign` params[0] (hex bytes or plain text) as the message viem hashes. */
 export function personalMessage(raw: string): string | { raw: Hex } {
   return isHex(raw) ? { raw } : raw;
@@ -48,8 +65,9 @@ export async function signPersonal7739(
   account: Address,
   chainId: number,
   message: string | { raw: Hex },
+  verifierDomain: VerifierDomain = accountDomain(account, chainId),
 ): Promise<Hex> {
-  const hash = hash7739Message({ message, verifierDomain: accountDomain(account, chainId) });
+  const hash = hash7739Message({ message, verifierDomain });
   return serializeSignature(await sign({ hash, privateKey }));
 }
 
@@ -59,6 +77,7 @@ export async function signTyped7739(
   account: Address,
   chainId: number,
   typed: TypedDataDefinition,
+  verifierDomain: VerifierDomain = accountDomain(account, chainId),
 ): Promise<Hex> {
   const { domain, types, primaryType, message } = typed as unknown as {
     domain: Record<string, unknown>;
@@ -72,7 +91,7 @@ export async function signTyped7739(
     types: cleanTypes,
     primaryType,
     message,
-    verifierDomain: accountDomain(account, chainId),
+    verifierDomain,
   } as never);
   const signature = serializeSignature(await sign({ hash, privateKey }));
   return wrapTypedDataSignature({ domain, types: cleanTypes, primaryType, message, signature } as never);

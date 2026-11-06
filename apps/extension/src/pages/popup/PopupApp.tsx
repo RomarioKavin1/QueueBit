@@ -173,6 +173,7 @@ function NetworkSwitcher({ chainId }: { chainId: number }) {
         {NETWORKS.map((n) => (
           <option key={n.chainId} value={n.chainId}>
             {n.shortName}
+            {n.enabled ? "" : " (not yet)"}
           </option>
         ))}
       </select>

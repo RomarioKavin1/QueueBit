@@ -1,6 +1,7 @@
 import { formatEther, type Address, type Hex } from "viem";
 import type { FrameStatus, FrameTxReceipt, WireFrameTx } from "@leaked/frames";
 import { StorageKeys, type KV } from "../shared/kv";
+import type { SerializedOp } from "./aa/userop";
 import type { RuleId } from "./routing";
 
 /**
@@ -43,6 +44,10 @@ export interface ActivityEntry {
   replaced: Hex[];
   nonce: string;
   wire?: WireFrameTx;
+  /** "4337": `hash` is the userOpHash; `txHash` the bundle transaction once mined. */
+  backend?: "4337";
+  userOp?: SerializedOp;
+  txHash?: Hex;
   fees?: { maxFeePerGas: string; maxPriorityFeePerGas: string };
   /** Block number when the transaction was sent (for "stuck after 3 blocks", plan §30 §4.7). */
   sentAtBlock?: string;
