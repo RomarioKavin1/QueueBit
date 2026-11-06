@@ -1,25 +1,35 @@
-import { formatEther, parseEther } from "viem";
+import { formatUnits, parseUnits } from "viem";
 
-/** ETH with at most `digits` decimals, trailing zeros trimmed ("0", "1.204", "0.00012"). */
-export function eth(wei: string | bigint | undefined, digits = 5): string {
-  const v = typeof wei === "bigint" ? wei : BigInt(wei ?? "0");
-  const s = formatEther(v);
+/** An amount in a token's units with at most `digits` decimals, trailing zeros trimmed ("0", "1.204", "0.00012"). */
+export function units(amount: string | bigint | undefined, decimals: number, digits = 5): string {
+  const v = typeof amount === "bigint" ? amount : BigInt(amount ?? "0");
+  const s = formatUnits(v, decimals);
   const [i, f = ""] = s.split(".");
-  const cut = f.slice(0, digits).replace(/0+$/u, "");
-  if (!cut && v > 0n && i === "0") return `<0.${"0".repeat(digits - 1)}1`;
+  const d = Math.min(digits, decimals);
+  const cut = f.slice(0, d).replace(/0+$/u, "");
+  if (!cut && v > 0n && i === "0" && d > 0) return `<0.${"0".repeat(d - 1)}1`;
   return cut ? `${i}.${cut}` : i!;
 }
 
-/** An amount typed in ETH, or an error a person can act on. */
-export function parseEthInput(raw: string): { wei: bigint } | { error: string } {
+/** ETH with at most `digits` decimals, trailing zeros trimmed ("0", "1.204", "0.00012"). */
+export function eth(wei: string | bigint | undefined, digits = 5): string {
+  return units(wei, 18, digits);
+}
+
+/** An amount typed in a token's units (ETH: 18 decimals), or an error a person can act on. */
+export function parseAmountInput(raw: string, decimals = 18, symbol = "ETH"): { wei: bigint } | { error: string } {
   const s = raw.trim().replace(",", ".");
   if (!s) return { error: "Enter an amount." };
   if (!/^\d*\.?\d*$/u.test(s) || s === ".") return { error: "Enter a number, like 0.05." };
-  if ((s.split(".")[1] ?? "").length > 18) return { error: "ETH has at most 18 decimals." };
-  const wei = parseEther(s);
+  if ((s.split(".")[1] ?? "").length > decimals)
+    return { error: decimals ? `${symbol} has at most ${decimals} decimals.` : `${symbol} comes in whole units.` };
+  const wei = parseUnits(s, decimals);
   if (wei === 0n) return { error: "Enter more than zero." };
   return { wei };
 }
+
+/** An amount typed in ETH. */
+export const parseEthInput = (raw: string) => parseAmountInput(raw);
 
 export const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 

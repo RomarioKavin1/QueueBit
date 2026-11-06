@@ -608,6 +608,68 @@ describe("the first payment creates the account (no separate activation step)", 
     expect(e).toMatchObject({ signer: "owner" });
   });
 
+  it("with confirmEachSignature, the engine refuses to sign without the password again", async () => {
+    const { wallet, chain } = makeWallet({ confirmEachSignature: true });
+    await wallet.keyring.import(MNEMONIC, "password-1");
+    const st = await wallet.handleUi("account:status", { chainId: 1337 });
+    chain.fund(st.setupKey, parseEther("1"));
+    chain.fund(st.address!, parseEther("1"));
+    chain.knobs.deployOnLegacy = st.address!;
+    const req = { chainId: 1337, to: TO, valueWei: "1000" } as const;
+    // Unlocked, but no proof: nothing is signed, nothing is sent.
+    await expect(wallet.handleUi("send:submit", req)).rejects.toMatchObject({ reason: "confirm" });
+    await expect(
+      wallet.handleUi("send:submit", { ...req, proof: { password: "not-it-at-all" } }),
+    ).rejects.toMatchObject({ reason: "wrong-password" });
+    await expect(wallet.handleUi("keys:prune", { chainId: 1337, ids: ["0x01"] })).rejects.toMatchObject({
+      reason: "confirm",
+    });
+    expect(chain.legacy).toHaveLength(0);
+    expect(chain.pooled).toHaveLength(0);
+    // The password again: it signs.
+    const e = await wallet.handleUi("send:submit", { ...req, proof: { password: "password-1" } });
+    expect(e).toMatchObject({ signer: "owner" });
+    expect(chain.pooled).toHaveLength(1);
+  });
+
+  it("sends any ERC-20: a transfer call from the account, checked against its token balance", async () => {
+    const { wallet, chain } = makeWallet();
+    await wallet.keyring.import(MNEMONIC, "password-1");
+    const st = await wallet.handleUi("account:status", { chainId: 1337 });
+    chain.fund(st.setupKey, parseEther("1"));
+    chain.fund(st.address!, parseEther("1"));
+    chain.knobs.deployOnLegacy = st.address!;
+    const TKN = "0x00000000000000000000000000000000000070cE" as const;
+    chain.token(TKN, "TKN", 6, { [st.address!]: 2_500_000n });
+
+    await expect(
+      wallet.handleUi("tokens:add", { chainId: 1337, token: "0x0000000000000000000000000000000000000bad" }),
+    ).rejects.toThrow(/No ERC-20/u);
+    expect(await wallet.handleUi("tokens:add", { chainId: 1337, token: TKN })).toMatchObject({
+      symbol: "TKN",
+      decimals: 6,
+      balance: "2500000",
+      custom: true,
+    });
+    expect((await wallet.handleUi("tokens:list", { chainId: 1337 })).find((t) => t.symbol === "TKN")).toBeTruthy();
+
+    const req = { chainId: 1337, to: TO, valueWei: "3000000", token: TKN } as const;
+    expect(await wallet.handleUi("send:preview", req)).toMatchObject({ enough: false, token: { balance: "2500000" } });
+    await expect(wallet.handleUi("send:submit", req)).rejects.toMatchObject({ reason: "funds" });
+
+    const e = await wallet.handleUi("send:submit", { ...req, valueWei: "1500000" });
+    expect(e.headline).toBe("1.5 TKN to 0x0000…dEaD");
+    expect(e.calls[0]!.target.toLowerCase()).toBe(TKN.toLowerCase());
+    expect(e.calls[0]!.value).toBe("0");
+    expect(decodeFunctionData({ abi: erc20Abi, data: e.calls[0]!.data as Hex })).toMatchObject({
+      functionName: "transfer",
+      args: [TO, 1_500_000n],
+    });
+
+    await wallet.handleUi("tokens:remove", { chainId: 1337, token: TKN });
+    expect((await wallet.handleUi("tokens:list", { chainId: 1337 })).find((t) => t.symbol === "TKN")).toBeUndefined();
+  });
+
   it("checks the account's own funds before spending anything on creating it", async () => {
     const { wallet, chain } = makeWallet();
     await wallet.keyring.import(MNEMONIC, "password-1");

@@ -3,10 +3,12 @@
 import { useRouter } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { engine, EngineCallError } from "@/lib/engine/client";
-import type { NetworkInfo, UiApi } from "@/lib/engine/protocol";
+import type { NetworkInfo, UiApi, WalletsView } from "@/lib/engine/protocol";
 
 export type AccountStatus = UiApi["account:status"]["res"];
 export type ActivityEntry = UiApi["activity:list"]["res"][number];
+export type TokenBalance = UiApi["tokens:list"]["res"][number];
+export type WalletRow = WalletsView["wallets"][number];
 
 interface WalletData {
   net: NetworkInfo | undefined;
@@ -16,6 +18,11 @@ interface WalletData {
   budget: number | null;
   backedUp: boolean | null;
   lockedWith: "passkey" | "password" | null;
+  /** The account's tokens (the network's and any added), with balances. */
+  tokens: TokenBalance[];
+  /** The wallets on this device; `wallet` is the open one. */
+  wallets: WalletsView | null;
+  wallet: WalletRow | null;
   error: string | null;
   refresh: () => Promise<void>;
   /** Runs an engine call; a locked wallet sends the person back to unlock. */
@@ -45,6 +52,8 @@ export function WalletProvider({ net, children }: { net: NetworkInfo | undefined
   const [budget, setBudget] = useState<number | null>(null);
   const [backedUp, setBackedUp] = useState<boolean | null>(null);
   const [lockedWith, setLockedWith] = useState<"passkey" | "password" | null>(null);
+  const [tokens, setTokens] = useState<TokenBalance[]>([]);
+  const [wallets, setWallets] = useState<WalletsView | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const guard = useCallback(
@@ -69,6 +78,15 @@ export function WalletProvider({ net, children }: { net: NetworkInfo | undefined
       setActivity(a);
       setBackedUp(Boolean(st.setup.backupConfirmedAt));
       setError(s.error ?? null);
+      // Token balances and the wallet list are extras: a slow token never holds the balance back.
+      void e
+        .call("tokens:list", {})
+        .then(setTokens)
+        .catch(() => undefined);
+      void e
+        .wallets()
+        .then(setWallets)
+        .catch(() => undefined);
     } catch (err) {
       setError(errText(err));
     }
@@ -97,9 +115,10 @@ export function WalletProvider({ net, children }: { net: NetworkInfo | undefined
     return () => clearInterval(timer.current);
   }, [busy, refresh]);
 
+  const wallet = wallets?.wallets.find((w) => w.id === wallets.active) ?? null;
   const value = useMemo(
-    () => ({ net, status, activity, budget, backedUp, lockedWith, error, refresh, guard }),
-    [net, status, activity, budget, backedUp, lockedWith, error, refresh, guard],
+    () => ({ net, status, activity, budget, backedUp, lockedWith, tokens, wallets, wallet, error, refresh, guard }),
+    [net, status, activity, budget, backedUp, lockedWith, tokens, wallets, wallet, error, refresh, guard],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

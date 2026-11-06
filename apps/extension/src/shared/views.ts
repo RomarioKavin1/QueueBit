@@ -40,8 +40,11 @@ export interface SendPreview {
   /** The most the network fee can be (the account must hold value + this). */
   maxFeeWei: string;
   balanceWei: string;
+  /** ETH for value + fee, and (sending a token) the token's balance for the amount. */
   enough: boolean;
   deployed: boolean;
+  /** Sending a token: which, and how much of it the account holds. */
+  token?: { token: `0x${string}`; symbol: string; decimals: number; balance: string };
   /** Plain-language lines describing what the payment does (one per call). */
   effects: string[];
 }

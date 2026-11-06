@@ -95,7 +95,8 @@ export class KeyringError extends Error {
       | "bad-passkey"
       | "wrong-passkey"
       | "passkey"
-      | "not-passkey",
+      | "not-passkey"
+      | "confirm",
     message: string,
   ) {
     super(message);

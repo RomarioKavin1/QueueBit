@@ -12,6 +12,8 @@ import { Home } from "./Home";
 import { Receive } from "./Receive";
 import { Send } from "./Send";
 import { WalletProvider } from "./state";
+import { AddToken } from "./Tokens";
+import { NetworkMenu, WalletsScreen } from "./Wallets";
 
 /**
  * The wallet, after onboarding: three tabs (Home, Activity, Account) and full screens on top of them (Send, Receive,
@@ -20,7 +22,12 @@ import { WalletProvider } from "./state";
  */
 
 export type Tab = "home" | "activity" | "account";
-export type View = { id: "send" } | { id: "receive" } | { id: "entry"; entryId: string };
+export type View =
+  | { id: "send"; token?: `0x${string}` }
+  | { id: "receive" }
+  | { id: "entry"; entryId: string }
+  | { id: "wallets" }
+  | { id: "add-token" };
 
 export interface Nav {
   tab: Tab;
@@ -97,7 +104,9 @@ function Shell() {
   }, [view]);
 
   const nav: Nav = { tab, setTab, open, back };
-  if (view?.id === "send") return <Send nav={nav} />;
+  if (view?.id === "send") return <Send nav={nav} {...(view.token ? { token: view.token } : {})} />;
+  if (view?.id === "wallets") return <WalletsScreen nav={nav} />;
+  if (view?.id === "add-token") return <AddToken nav={nav} />;
   if (view?.id === "receive") return <Receive nav={nav} />;
   if (view?.id === "entry") return <EntryDetail nav={nav} entryId={view.entryId} />;
 
@@ -105,7 +114,7 @@ function Shell() {
     <TabFrame tab={tab} setTab={setTab}>
       {tab === "home" && <Home nav={nav} />}
       {tab === "activity" && <ActivityTab nav={nav} />}
-      {tab === "account" && <AccountTab />}
+      {tab === "account" && <AccountTab nav={nav} />}
     </TabFrame>
   );
 }
@@ -126,7 +135,7 @@ function TabFrame({ tab, setTab, children }: { tab: Tab; setTab: (t: Tab) => voi
               QueueBit
             </span>
           </button>
-          <span className="ml-auto mono-label text-[11px] text-ink-3">Test network</span>
+          <NetworkMenu />
           <LockButton />
         </div>
       </header>

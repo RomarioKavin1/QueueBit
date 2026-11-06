@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import { Address, Notice, Screen, Secondary, Title } from "@/components/onboarding/ui";
-import { eth, explorerLink, short } from "@/lib/format";
+import { eth, explorerLink, short, units } from "@/lib/format";
 import { OnChain } from "./OnChain";
-import { EntryRow, Row, entryOut, entryState, entryTitle } from "./bits";
+import { EntryRow, Row, entryState, entryTitle, payout } from "./bits";
 import { useWallet, type ActivityEntry } from "./state";
 import type { Nav } from "./Wallet";
 
@@ -53,7 +53,7 @@ function journey(e: ActivityEntry): Array<{ label: string; done: boolean }> | nu
 }
 
 export function EntryDetail({ nav, entryId }: { nav: Nav; entryId: string }) {
-  const { activity, net } = useWallet();
+  const { activity, net, tokens } = useWallet();
   const e = activity.find((x) => x.id === entryId);
   if (!e)
     return (
@@ -62,8 +62,8 @@ export function EntryDetail({ nav, entryId }: { nav: Nav; entryId: string }) {
       </Screen>
     );
   const st = entryState(e);
-  const out = entryOut(e);
-  const to = e.kind === "payment" && e.calls.length === 1 ? e.calls[0]!.target : undefined;
+  const out = payout(e, tokens);
+  const to = out?.to ?? (e.kind === "payment" && e.calls.length === 1 ? e.calls[0]!.target : undefined);
   // The devnet's explorer is the alt mempool's: it lists what went through the alt mempool (payments), not the
   // ordinary transactions the setup key or an old wallet sent straight to the node (creating the account, moves).
   const link = e.via === "legacy" ? undefined : explorerLink(net?.explorerTxUrl, e.txHash);
@@ -96,7 +96,16 @@ export function EntryDetail({ nav, entryId }: { nav: Nav; entryId: string }) {
           <span className={st.tone === "red" ? "text-red" : st.tone === "blue" ? "text-blue" : ""}>{st.label}</span>
         </Row>
         <Row k="Kind">{KIND[e.kind]}</Row>
-        {out !== null && <Row k="Amount">{eth(out, 8)} ETH</Row>}
+        {out && (
+          <Row k="Amount">
+            {units(out.amount, out.decimals, 8)} {out.symbol}
+          </Row>
+        )}
+        {out?.token && (
+          <Row k="Token contract">
+            <span className="font-mono text-[14px]">{short(out.token)}</span>
+          </Row>
+        )}
         {e.feeWei && <Row k="Network fee">{eth(e.feeWei, 8)} ETH</Row>}
         <Row k="Signed by">{SIGNER[e.signer]}</Row>
         {e.origin && <Row k="Asked by">{e.origin}</Row>}

@@ -9,6 +9,7 @@ import { engine } from "@/lib/engine/client";
 import { EntryRow, GhostSeal, Section, SignatureGauge } from "./bits";
 import { Identicon } from "./Identicon";
 import { errText, useWallet } from "./state";
+import { Assets } from "./Tokens";
 import type { Nav } from "./Wallet";
 
 /**
@@ -18,7 +19,7 @@ import type { Nav } from "./Wallet";
  */
 export function Home({ nav }: { nav: Nav }) {
   const router = useRouter();
-  const { status, activity, budget, backedUp, net, error, refresh } = useWallet();
+  const { status, activity, budget, backedUp, net, error, refresh, wallet, wallets } = useWallet();
   const [faucet, setFaucet] = useState<"idle" | "asking">("idle");
   const [faucetErr, setFaucetErr] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -52,22 +53,45 @@ export function Home({ nav }: { nav: Nav }) {
 
   return (
     <>
-      {/* Who: the account's face, its address, one tap to copy */}
-      <button
-        type="button"
-        onClick={copy}
-        disabled={!address}
-        className="flex w-full items-center gap-3 text-left active:opacity-70"
-        aria-label={address ? `Copy address ${address}` : "Reading your account"}
-      >
-        {address ? <Identicon address={address} size={40} /> : <span className="size-10 bg-paper-3" />}
+      {/* Who: the wallet's face and name (tap: switch or add a wallet), its address (tap: copy) */}
+      <div className="flex w-full items-center gap-3">
+        <button
+          type="button"
+          onClick={() => nav.open({ id: "wallets" })}
+          tabIndex={-1}
+          aria-hidden
+          className="shrink-0 active:opacity-70"
+        >
+          {address ? <Identicon address={address} size={40} /> : <span className="block size-10 bg-paper-3" />}
+        </button>
         <span className="min-w-0 flex-1">
-          <span className="block text-[1.05rem] leading-tight font-medium">My account</span>
-          <span className="mt-0.5 flex items-center gap-1.5 font-mono text-[13px] text-ink-2">
+          <button
+            type="button"
+            onClick={() => nav.open({ id: "wallets" })}
+            aria-label={`${wallet?.name ?? "This wallet"}. Switch or add a wallet`}
+            className="flex max-w-full items-center gap-1.5 text-left text-[1.05rem] leading-tight font-medium active:opacity-70"
+          >
+            <span className="truncate">{wallet?.name ?? "My account"}</span>
+            <svg viewBox="0 0 10 6" aria-hidden className="w-2.5 shrink-0 text-ink-2">
+              <path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.3" />
+            </svg>
+            {(wallets?.wallets.length ?? 0) > 1 && (
+              <span className="mono-label shrink-0 text-[10.5px] font-normal text-ink-3">
+                · {wallets!.wallets.length} wallets
+              </span>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={copy}
+            disabled={!address}
+            aria-label={address ? `Copy address ${address}` : "Reading your account"}
+            className="mt-0.5 flex items-center gap-1.5 font-mono text-[13px] text-ink-2 active:opacity-70"
+          >
             {address ? short(address) : "…"}
             <CopyIcon />
             {copied && <span className="mono-label text-[11px] text-blue">Copied</span>}
-          </span>
+          </button>
         </span>
         {status && (
           <span
@@ -78,7 +102,7 @@ export function Home({ nav }: { nav: Nav }) {
             {status.deployed ? "Quantum-safe" : "Not created"}
           </span>
         )}
-      </button>
+      </div>
 
       {/* What you have */}
       <section aria-label="Balance" className="mt-9 text-center">
@@ -135,16 +159,7 @@ export function Home({ nav }: { nav: Nav }) {
       )}
 
       <Section title="Assets">
-        <ul className="border-t border-ink">
-          <li className="flex min-h-[64px] items-center gap-3.5 border-b border-rule py-3">
-            <EthGlyph />
-            <span className="flex-1">
-              <span className="block text-[1.02rem] leading-snug">Ether</span>
-              <span className="mono-label block text-[11px] text-ink-3">ETH · test</span>
-            </span>
-            <span className="text-[1.05rem] tnum">{status ? eth(wei, 6) : "…"}</span>
-          </li>
-        </ul>
+        <Assets nav={nav} />
       </Section>
 
       {status && (
@@ -239,29 +254,6 @@ function CopyIcon() {
     <svg viewBox="0 0 14 14" aria-hidden className="size-3.5 fill-none stroke-current [stroke-width:1.2]">
       <rect x="4.5" y="4.5" width="8" height="8" />
       <path d="M2 9.5V2h7.5" />
-    </svg>
-  );
-}
-
-/** Ether's octahedron, drawn as a line figure in the plates' blue. */
-function EthGlyph() {
-  return (
-    <svg viewBox="0 0 40 40" width={38} height={38} aria-hidden className="shrink-0">
-      <circle cx="20" cy="20" r="19" fill="var(--blue-t1)" stroke="var(--blue)" strokeWidth="1.2" />
-      <path
-        d="M20 8l-7 12.2L20 24l7-3.8z"
-        fill="var(--blue-t2)"
-        stroke="var(--blue)"
-        strokeWidth="1"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M13 21.8L20 32l7-10.2L20 25.6z"
-        fill="var(--blue-t3)"
-        stroke="var(--blue)"
-        strokeWidth="1"
-        strokeLinejoin="round"
-      />
     </svg>
   );
 }

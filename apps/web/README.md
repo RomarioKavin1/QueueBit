@@ -77,8 +77,19 @@ lives as long as the tab:
   for the setup key's fee when it needs it. Addresses carry a dot-pattern avatar drawn from the address itself.
 - **Receive**: the address as a QR code and in groups of four; copy and share.
 - **Activity**: everything this wallet sent; each entry shows its status, amount, fee, signer, steps and explorer link.
-- **Account**: address, lock method, backup state, signatures, network; back up (`/start#backup`, which returns here)
-  and lock.
+- **Account**: the wallet's name (rename it), address, lock method, backup state, signatures, network; move funds in
+  from another wallet or a Safe (`/start#move-in`), switch or add a wallet, back up (`/start#backup`, which returns
+  here) and lock.
+- **Tokens**: ETH and the network's ERC-20s are listed under Assets; any other ERC-20 can be added by contract address
+  (symbol, name and decimals are read from the chain). Send has an asset picker; a token goes as a `transfer` call from
+  the account, with the fee paid in ETH.
+- **Several wallets**: each is a whole engine over its own slice of IndexedDB (`w/<id>/…`; the first keeps the
+  unprefixed keys), with its own passkey or password and a name. One is open at a time; opening another locks this one.
+- **Network** (top bar): a drop-down with the networks (the alt-mempool devnet only, for now) and the chain's details:
+  chain ID, currency, latest block, RPC, LeanPool node, alt-mempool sidecar, aggregator and explorer.
+
+Every signature asks for the passkey or password again, and the engine checks it too: the worker runs the `Wallet` with
+`confirmEachSignature`, so `send:submit` and the other signing requests carry a `proof` and are refused without one.
 
 Owner-signed payments need a LeanPool node (see below). Without one, Send stops at the signing step with the node's
 error and nothing is sent.

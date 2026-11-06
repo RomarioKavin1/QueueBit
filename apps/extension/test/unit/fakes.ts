@@ -43,7 +43,24 @@ export function fakeChain() {
     deployOnLegacy?: Address;
   } = {};
   const k = (a: string) => a.toLowerCase();
+  /** ERC-20s on the chain: metadata and balances. */
+  const tokens = new Map<string, { symbol: string; name: string; decimals: number; balances: Map<string, bigint> }>();
   const publicClient = {
+    readContract: async ({
+      address,
+      functionName,
+      args,
+    }: {
+      address: Address;
+      functionName: string;
+      args?: [Address];
+    }) => {
+      const t = tokens.get(k(address));
+      if (!t) throw new Error("execution reverted");
+      if (functionName === "balanceOf") return t.balances.get(k(args![0])) ?? 0n;
+      if (functionName === "symbol" || functionName === "name" || functionName === "decimals") return t[functionName];
+      throw new Error(`unexpected ${functionName}`);
+    },
     getCode: async ({ address }: { address: Address }) => code.get(k(address)),
     getBalance: async ({ address }: { address: Address }) => balances.get(k(address)) ?? 0n,
     getGasPrice: async () => parseGwei("1"),
@@ -105,6 +122,15 @@ export function fakeChain() {
     receipts,
     txCount,
     knobs,
+    tokens,
+    /** A token at `a` holding `balances`. */
+    token: (a: Address, symbol: string, decimals: number, balances: Record<string, bigint> = {}) =>
+      tokens.set(k(a), {
+        symbol,
+        name: `${symbol} token`,
+        decimals,
+        balances: new Map(Object.entries(balances).map(([o, v]) => [k(o), v])),
+      }),
     deploy: (a: Address) => code.set(k(a), "0x6001"),
     fund: (a: Address, wei: bigint) => balances.set(k(a), wei),
     /** The next nonce_seq of (account, key) on a keyed lane (key 0 is txCount). */
@@ -133,6 +159,7 @@ export function makeWallet(
     session?: MemoryKV;
     w?: ReturnType<typeof windows>;
     chain?: ReturnType<typeof fakeChain>;
+    confirmEachSignature?: boolean;
   } = {},
 ) {
   const local = o.local ?? new MemoryKV();
@@ -150,6 +177,7 @@ export function makeWallet(
     io: chain.io,
     pqKey: fakePq,
     keyring: { scrypt: FAST },
+    ...(o.confirmEachSignature ? { confirmEachSignature: true } : {}),
   });
   return { wallet, local, session, w, emit, chain };
 }

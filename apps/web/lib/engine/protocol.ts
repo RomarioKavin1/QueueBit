@@ -19,7 +19,28 @@ export type ToEngine =
   | { id: number; kind: "config:set"; config: EngineConfig }
   | { id: number; kind: "network" }
   | { id: number; kind: "storage:dump" }
-  | { id: number; kind: "storage:wipe" };
+  | { id: number; kind: "storage:wipe" }
+  | { id: number; kind: "wallets" }
+  /** A new, empty wallet becomes the active one; onboarding sets it up. */
+  | { id: number; kind: "wallets:add"; name?: string }
+  | { id: number; kind: "wallets:switch"; walletId: string }
+  | { id: number; kind: "wallets:rename"; walletId: string; name: string }
+  /** Only a wallet that was never set up. */
+  | { id: number; kind: "wallets:remove"; walletId: string };
+
+/** One wallet on this device: its own keys and account, with a name the person gives it. */
+export interface WalletSlot {
+  id: string;
+  name: string;
+  createdAt: number;
+  /** Its account's address, once read (the list shows it while the wallet is locked). */
+  address?: `0x${string}`;
+}
+
+export interface WalletsView {
+  active: string;
+  wallets: Array<WalletSlot & { initialized: boolean; lockedWith?: "passkey" | "password" }>;
+}
 
 export interface EngineError {
   message: string;

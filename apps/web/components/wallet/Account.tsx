@@ -6,13 +6,16 @@ import { Address, Choices, Notice, Title } from "@/components/onboarding/ui";
 import { engine } from "@/lib/engine/client";
 import { Row, Section } from "./bits";
 import { errText, useWallet } from "./state";
+import type { Nav } from "./Wallet";
+import { RenameField } from "./Wallets";
 
-/** The account at a glance, plus the few things a person does rarely: back up, lock. */
-export function AccountTab() {
+/** The account at a glance, plus the few things a person does rarely: name it, move funds in, back up, lock. */
+export function AccountTab({ nav }: { nav: Nav }) {
   const router = useRouter();
-  const { status, net, lockedWith, backedUp, budget } = useWallet();
+  const { status, net, lockedWith, backedUp, budget, wallet, wallets, refresh } = useWallet();
   const [err, setErr] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [renaming, setRenaming] = useState(false);
 
   const lock = async () => {
     try {
@@ -25,7 +28,29 @@ export function AccountTab() {
 
   return (
     <>
-      <Title sub="Owned by a quantum-safe key. Test network.">Account</Title>
+      {renaming && wallet ? (
+        <div className="mb-4">
+          <RenameField
+            wallet={wallet}
+            onDone={async () => {
+              setRenaming(false);
+              await refresh();
+            }}
+          />
+        </div>
+      ) : (
+        <div className="flex items-start justify-between gap-3">
+          <Title sub="Owned by a quantum-safe key. Test network.">{wallet?.name ?? "Account"}</Title>
+          <button
+            type="button"
+            onClick={() => setRenaming(true)}
+            disabled={!wallet}
+            className="mono-label mt-1 h-10 shrink-0 border border-ink px-2.5 text-[11px] active:bg-paper-3 disabled:text-ink-3"
+          >
+            Rename
+          </button>
+        </div>
+      )}
       {status?.address && (
         <div className="plate-grid relative px-5 pt-7 pb-5">
           <span aria-hidden className="fig-tag absolute top-3 right-2">
@@ -62,6 +87,18 @@ export function AccountTab() {
       <Section title="Do">
         <Choices
           items={[
+            {
+              key: "move-in",
+              title: "Move funds in",
+              body: "From MetaMask or another wallet address, or from a Safe, into this account.",
+              onSelect: () => router.push("/start#move-in"),
+            },
+            {
+              key: "wallets",
+              title: (wallets?.wallets.length ?? 1) > 1 ? "Switch or add a wallet" : "Add a wallet",
+              body: "Another wallet on this phone, with its own passkey or password. This one stays as it is.",
+              onSelect: () => nav.open({ id: "wallets" }),
+            },
             {
               key: "backup",
               title: backedUp ? "Show your 24 words" : "Back up your 24 words",
