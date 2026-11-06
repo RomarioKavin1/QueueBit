@@ -315,6 +315,9 @@ describe("pairing with a self-hosted watcher", () => {
               { seq: 3, type: "alert", ...good },
               { seq: 4, type: "alert", ...forged },
               { seq: 5, type: "retract", ...retract },
+              // A forged entry cannot move the cursor (it would hide every later genuine alert), nor crash the poll.
+              { seq: 2 ** 52, type: "alert", ...forged },
+              null,
             ],
           }),
         };
@@ -325,10 +328,19 @@ describe("pairing with a self-hosted watcher", () => {
     expect(seen[0]!.auth).toMatch(/^LEAKED-HMAC id=laptop,t=1000,sig=[0-9a-f]{64}$/u);
     expect(r.alerts.map((a) => a.id)).toEqual(["w1"]);
     expect(r.retracted).toEqual(["w0"]);
-    expect(r.rejected).toBe(1);
+    expect(r.rejected).toBe(3);
     expect(r.since).toBe(5);
     await expect(
       readPairedWatcher(p, async () => ({ ok: false, status: 401, json: async () => ({}) })),
     ).rejects.toThrow(/refused this browser's key/);
+  });
+
+  it("a watcher's retraction cannot hide an alert this browser raised itself (the type is not signed)", async () => {
+    const store = new AlertStore(new MemoryKV(), () => 1);
+    await store.add([alert({ id: "mine", severity: "urgent" })], "browser");
+    await store.add([alert({ id: "theirs" })], "watcher");
+    await store.retract(["mine", "theirs"], "watcher");
+    const byId = Object.fromEntries((await store.list()).map((r) => [r.alert.id, r.retracted ?? false]));
+    expect(byId).toEqual({ mine: false, theirs: true });
   });
 });

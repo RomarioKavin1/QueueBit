@@ -103,12 +103,15 @@ export class AlertStore {
     return added;
   }
 
-  async retract(ids: readonly string[]): Promise<void> {
+  /** Retracts `ids`; with `source`, only records that source raised (a watcher cannot hide what this browser saw). */
+  async retract(ids: readonly string[], source?: AlertRecord["source"]): Promise<void> {
     if (ids.length === 0) return;
     const set = new Set(ids);
     await this.kv.set(
       ALERTS_KEY,
-      (await this.list()).map((r) => (set.has(r.alert.id) ? { ...r, retracted: true } : r)),
+      (await this.list()).map((r) =>
+        set.has(r.alert.id) && (source === undefined || r.source === source) ? { ...r, retracted: true } : r,
+      ),
     );
   }
 

@@ -228,7 +228,7 @@ export class Wallet {
       try {
         const r = await readPairedWatcher(p, this.env.watcherFetch, Math.floor(this.now() / 1000));
         added.push(...(await this.alerts.add(r.alerts, "watcher")));
-        await this.alerts.retract(r.retracted);
+        await this.alerts.retract(r.retracted, "watcher");
         await this.pairing.update({
           since: r.since,
           lastOkAt: this.now(),
