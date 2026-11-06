@@ -53,8 +53,29 @@ export class SettingsStore {
       next.perPaymentUsd = perPayment;
     }
     if (patch.completedAt !== undefined) next.completedAt = patch.completedAt;
-    if (patch.vaultSkippedAt !== undefined) next.vaultSkippedAt = patch.vaultSkippedAt;
     if (patch.recoverySkippedAt !== undefined) next.recoverySkippedAt = patch.recoverySkippedAt;
+    if (patch.guardianSkippedAt !== undefined) next.guardianSkippedAt = patch.guardianSkippedAt;
+    if (patch.recipientMode !== undefined) {
+      if (patch.recipientMode !== "open" && patch.recipientMode !== "strict") throw new Error("Unknown recipient mode");
+      next.recipientMode = patch.recipientMode;
+    }
+    if (patch.guardian !== undefined) next.guardian = patch.guardian;
+    await this.kv.set(StorageKeys.setup, next);
+    return next;
+  }
+
+  /** Pairing results are written only by the service worker after it decoded and checked the code itself. */
+  async setPaired(
+    role: "vault" | "recovery",
+    rec: SetupState["vault"] | undefined,
+    testedAt?: number,
+  ): Promise<SetupState> {
+    const next = { ...(await this.getSetup()) };
+    if (role === "vault") {
+      if (rec) next.vault = rec;
+      else delete next.vault;
+    } else if (rec) next.recovery = { ...rec, ...(testedAt ? { testedAt } : {}) };
+    else delete next.recovery;
     await this.kv.set(StorageKeys.setup, next);
     return next;
   }

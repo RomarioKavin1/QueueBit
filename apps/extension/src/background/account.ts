@@ -8,7 +8,7 @@ import {
   type Address,
   type Hex,
 } from "viem";
-import { accountAbi, accountFactoryAbi, erc1967ProxyCreationCode } from "../generated/contracts";
+import { accountAbi, accountFactoryAbi, erc1967ProxyCreationCode, roleSignerFactoryAbi } from "../generated/contracts";
 import type { AccountDeployment } from "../shared/chains";
 import { StorageKeys, type KV } from "../shared/kv";
 
@@ -16,9 +16,10 @@ import { StorageKeys, type KV } from "../shared/kv";
 export const USD = 1_000_000n;
 
 /**
- * Account defaults (ux-spec §3.1.3 and plan §10.3.2 `InitConfig`), fixed when the counterfactual address is first
- * computed. The address is a CREATE2 function of the whole init config, so it is frozen then and never recomputed
- * from later setting changes (a changed limit after that point is a Vault action, plan §30 §7).
+ * Account defaults (ux-spec §3.1.3 and plan §10.3.2 `InitConfig`), fixed when the counterfactual address is
+ * computed at the end of onboarding. The address is a CREATE2 function of the whole init config (including the
+ * Vault's and the Recovery key's quantum-safe public keys), so it is frozen then; a limit changed after that point is
+ * a Vault action (plan §30 §7).
  */
 export const ACCOUNT_DEFAULTS = {
   /** USD-6 per 1 ETH, the account's own static price (risk R12: the pre-check uses the account's price, never an API). */
@@ -33,10 +34,29 @@ export const ACCOUNT_DEFAULTS = {
   timelockDelay: 0,
 } as const;
 
-export const ACCOUNT_VERSION = "leaked.account.1";
+export const ACCOUNT_VERSION = "leaked.account.2";
 
+/** `RecipientMode` (ILeakedAccount): Open = everyday payments to anyone within the limit; Strict = allowlist only. */
+export const RECIPIENT_MODE = { open: 0, strict: 1 } as const;
+export type RecipientModeName = keyof typeof RECIPIENT_MODE;
+
+/** Role ids of `RoleSignerFactory` / `PQRoleSigner`. */
+export const ROLE_ID = { vault: 1, recovery: 2 } as const;
+
+/** `ILeakedAccount.RoleSignerParams`: the `createRoleSigner` arguments of a bound role signer, minus role/account. */
+export interface RoleSignerParams {
+  salt: Hex;
+  pk: Hex;
+  verifier: Address;
+  payerKey: Address;
+}
+
+/** `ILeakedAccount.InitConfig` (field order = the Solidity struct). */
 export interface InitConfig {
   hotKey: Address;
+  roleSignerFactory: Address;
+  vault: RoleSignerParams;
+  recovery: RoleSignerParams;
   vaultSigner: Address;
   recoverySigner: Address;
   tank: Address;
@@ -49,6 +69,15 @@ export interface InitConfig {
   timelockDelay: number;
   timelockThresholdUsd: bigint;
   ethUsdPrice: bigint;
+  recipientMode: number;
+}
+
+/** A quantum-safe key a phone announced (`ur:leaked-pq-key`), as the extension stores it. */
+export interface PairedKey {
+  schemeId: Hex;
+  pk: Hex;
+  /** Vault only: the Path-B fee-payment key on the phone. */
+  payer?: Address;
 }
 
 /** What the account address is computed from; stored per chain (bigints as decimal strings). */
@@ -59,22 +88,38 @@ export interface AccountPlan {
   implementation: Address;
   salt: Hex;
   initData: Hex;
-  config: Record<keyof InitConfig, string | number | boolean>;
+  /** JSON of the InitConfig (bigints as strings), see `planConfig`. */
+  config: string;
+  /** The role signers `initialize` derives (RoleSignerFactory.predictRoleSigner), for the clone deployment. */
+  vaultSigner: Address;
+  recoverySigner?: Address;
+  /** A Recovery key linked after activation (`vaultSetRecoverySigner`): its clone's arguments (not in InitConfig). */
+  recoveryParams?: RoleSignerParams;
   createdAt: number;
   /** Set once the deployment transaction is known (the account may also be deployed by anyone else). */
-  activation?: { txHash: Hex; sentAt: number };
+  activation?: { txHash: Hex; sentAt: number; vaultSignerTx?: Hex };
 }
 
-const ZERO: Address = "0x0000000000000000000000000000000000000000";
+export const ZERO: Address = "0x0000000000000000000000000000000000000000";
+const ZERO32: Hex = "0x0000000000000000000000000000000000000000000000000000000000000000";
+const NO_SIGNER: RoleSignerParams = { salt: ZERO32, pk: ZERO32, verifier: ZERO, payerKey: ZERO };
 
-/** Salt = keccak(hotKey, vault, recovery, version, chainId) (plan §30 §8 salt scheme, plus the chain id). */
-export function accountSalt(c: Pick<InitConfig, "hotKey" | "vaultSigner" | "recoverySigner">, chainId: number): Hex {
+/**
+ * Salt = keccak(hotKey, vault pk, recovery pk, version, chainId) (plan §30 §8 salt scheme; IMPLEMENTATION-NOTES
+ * "Account: Open recipient mode": the salt hashes the Vault's public key, not a signer address).
+ */
+export function accountSalt(hotKey: Address, vaultPk: Hex, recoveryPk: Hex | undefined, chainId: number): Hex {
   return keccak256(
     encodeAbiParameters(
-      [{ type: "address" }, { type: "address" }, { type: "address" }, { type: "string" }, { type: "uint256" }],
-      [c.hotKey, c.vaultSigner, c.recoverySigner, ACCOUNT_VERSION, BigInt(chainId)],
+      [{ type: "address" }, { type: "bytes32" }, { type: "bytes32" }, { type: "string" }, { type: "uint256" }],
+      [hotKey, vaultPk, recoveryPk ?? ZERO32, ACCOUNT_VERSION, BigInt(chainId)],
     ),
   );
+}
+
+/** The role signers' CREATE2 salt input (any bytes32; one per account so two accounts never share a clone). */
+export function roleSalt(accountSalt: Hex): Hex {
+  return keccak256(encodeAbiParameters([{ type: "string" }, { type: "bytes32" }], ["leaked.roles.1", accountSalt]));
 }
 
 export function encodeInitialize(c: InitConfig): Hex {
@@ -90,37 +135,53 @@ export function predictAccount(factory: Address, salt: Hex, implementation: Addr
   return getContractAddress({ opcode: "CREATE2", from: factory, salt, bytecode });
 }
 
+const usd6 = (usd: number) => BigInt(Math.round(usd * 100)) * (USD / 100n);
+
 export function initConfigFor(opts: {
   hotKey: Address;
   tank: Address;
-  vaultSigner: Address;
+  deployment: AccountDeployment;
+  vault: PairedKey;
+  recovery?: PairedKey;
+  salt: Hex;
   dailyLimitUsd: number;
   perPaymentUsd: number;
+  recipientMode?: RecipientModeName;
+  timelockDelay?: number;
 }): InitConfig {
+  const verifier = opts.deployment.c13Verifier;
   return {
     hotKey: opts.hotKey,
-    vaultSigner: opts.vaultSigner,
+    roleSignerFactory: opts.deployment.roleSignerFactory,
+    vault: { salt: opts.salt, pk: opts.vault.pk, verifier, payerKey: opts.vault.payer ?? ZERO },
+    recovery: opts.recovery ? { salt: opts.salt, pk: opts.recovery.pk, verifier, payerKey: ZERO } : NO_SIGNER,
+    vaultSigner: ZERO,
     recoverySigner: ZERO,
     tank: opts.tank,
-    capUsdPerDay: BigInt(Math.round(opts.dailyLimitUsd * 100)) * (USD / 100n),
-    perTxMaxUsd: BigInt(Math.round(opts.perPaymentUsd * 100)) * (USD / 100n),
+    capUsdPerDay: usd6(opts.dailyLimitUsd),
+    perTxMaxUsd: usd6(opts.perPaymentUsd),
     maxFeeWeiPerTx: ACCOUNT_DEFAULTS.maxFeeWeiPerTx,
     maxPriorityFeePerGas: ACCOUNT_DEFAULTS.maxPriorityFeePerGas,
     maxHotFrames: ACCOUNT_DEFAULTS.maxHotFrames,
     selfPay: false,
-    timelockDelay: ACCOUNT_DEFAULTS.timelockDelay,
+    timelockDelay: opts.timelockDelay ?? ACCOUNT_DEFAULTS.timelockDelay,
     timelockThresholdUsd: ACCOUNT_DEFAULTS.timelockThresholdUsd,
     ethUsdPrice: ACCOUNT_DEFAULTS.ethUsdPrice,
+    recipientMode: RECIPIENT_MODE[opts.recipientMode ?? "open"],
   };
 }
+
+const replacer = (_k: string, v: unknown) => (typeof v === "bigint" ? `${v.toString()}n` : v);
+const reviver = (_k: string, v: unknown) => (typeof v === "string" && /^\d+n$/u.test(v) ? BigInt(v.slice(0, -1)) : v);
 
 export function buildPlan(
   chainId: number,
   deployment: AccountDeployment,
   config: InitConfig,
+  signers: { vaultSigner: Address; recoverySigner?: Address },
+  salt: Hex,
   now: number,
 ): AccountPlan {
-  const salt = accountSalt(config, chainId);
   const initData = encodeInitialize(config);
   return {
     chainId,
@@ -129,30 +190,32 @@ export function buildPlan(
     implementation: deployment.accountImpl,
     salt,
     initData,
-    config: Object.fromEntries(
-      Object.entries(config).map(([k, v]) => [k, typeof v === "bigint" ? v.toString() : v]),
-    ) as AccountPlan["config"],
+    config: JSON.stringify(config, replacer),
+    vaultSigner: signers.vaultSigner,
+    ...(signers.recoverySigner ? { recoverySigner: signers.recoverySigner } : {}),
     createdAt: now,
   };
 }
 
 export function planConfig(plan: AccountPlan): InitConfig {
-  const c = plan.config;
-  return {
-    hotKey: c.hotKey as Address,
-    vaultSigner: c.vaultSigner as Address,
-    recoverySigner: c.recoverySigner as Address,
-    tank: c.tank as Address,
-    capUsdPerDay: BigInt(c.capUsdPerDay as string),
-    perTxMaxUsd: BigInt(c.perTxMaxUsd as string),
-    maxFeeWeiPerTx: BigInt(c.maxFeeWeiPerTx as string),
-    maxPriorityFeePerGas: BigInt(c.maxPriorityFeePerGas as string),
-    maxHotFrames: Number(c.maxHotFrames),
-    selfPay: Boolean(c.selfPay),
-    timelockDelay: Number(c.timelockDelay),
-    timelockThresholdUsd: BigInt(c.timelockThresholdUsd as string),
-    ethUsdPrice: BigInt(c.ethUsdPrice as string),
-  };
+  return JSON.parse(plan.config, reviver) as InitConfig;
+}
+
+/** `RoleSignerFactory.createRoleSigner` for one of the plan's derived signers (anyone may send it; the tank does). */
+/** The `createRoleSigner` arguments (minus role/account) of the plan's Vault or Recovery signer. */
+export function roleParams(plan: AccountPlan, role: keyof typeof ROLE_ID): RoleSignerParams {
+  const c = planConfig(plan);
+  if (role === "vault") return c.vault;
+  return plan.recoveryParams ?? c.recovery;
+}
+
+export function createRoleSignerCalldata(plan: AccountPlan, role: keyof typeof ROLE_ID): Hex {
+  const p = roleParams(plan, role);
+  return encodeFunctionData({
+    abi: roleSignerFactoryAbi,
+    functionName: "createRoleSigner",
+    args: [p.salt, ROLE_ID[role], plan.address, p.pk, p.verifier, p.payerKey],
+  });
 }
 
 /** Account plans per chain id, in storage.local. */
@@ -164,11 +227,19 @@ export class AccountPlans {
   }
 
   async get(chainId: number): Promise<AccountPlan | undefined> {
-    return (await this.all())[String(chainId)];
+    const p = (await this.all())[String(chainId)];
+    // Plans from before the Vault was paired (M1's stand-in) have an object config; they are not usable.
+    return p && typeof p.config === "string" ? p : undefined;
   }
 
   async put(plan: AccountPlan): Promise<void> {
     await this.kv.set(StorageKeys.accountPlans, { ...(await this.all()), [String(plan.chainId)]: plan });
+  }
+
+  async remove(chainId: number): Promise<void> {
+    const all = await this.all();
+    delete all[String(chainId)];
+    await this.kv.set(StorageKeys.accountPlans, all);
   }
 
   async clear(): Promise<void> {
@@ -185,5 +256,11 @@ export function activationCalldata(plan: AccountPlan): Hex {
   });
 }
 
-/** Gas for the activation (measured 2.37M on the local devnet, `contracts/devnet-tests/account`); with headroom. */
+/** Gas for the activation (2,504,524 measured with two derived signers on the local devnet); with headroom. */
 export const ACTIVATION_GAS = 3_500_000n;
+/** Gas for a role-signer clone deployment (575,946 measured, G1); with headroom. */
+export const CLONE_GAS = 1_000_000n;
+/** ETH the tank gives the Vault signer at deployment: it pays its own network fees (about 0.001 ETH per approval). */
+export const VAULT_SIGNER_FLOAT = parseEther("0.02");
+/** ETH for a Recovery signer: its fees plus the 0.01 ETH minimum stake of the staked lane (Path A only). */
+export const RECOVERY_SIGNER_FLOAT = parseEther("0.03");

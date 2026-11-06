@@ -1,7 +1,9 @@
 import type { BucketReading } from "../background/bucket";
 import type { ActivityEntry } from "../background/activity";
 import type { SerializedRpcError } from "./errors";
-import type { AccountStatus, SendPreview } from "./views";
+import type { AccountStatus, SendPreview, PairPreview, PolicyView, SignerView } from "./views";
+import type { QueuedView, VaultRequestRecord } from "../background/vault";
+import type { VaultActionRequest } from "../background/vaultActions";
 import type { Approval, BalanceResult, KnownSite, OriginPermission, Settings, SetupState, WalletState } from "./types";
 
 /**
@@ -48,7 +50,7 @@ export interface UiApi {
   "permissions:list": { req: undefined; res: OriginPermission[] };
   "permissions:revoke": { req: { origin: string }; res: null };
   "approval:get": { req: { id: string }; res: ApprovalView | null };
-  "approval:resolve": { req: { id: string; approved: boolean }; res: null };
+  "approval:resolve": { req: { id: string; approved: boolean; alwaysAllow?: boolean }; res: null };
   /** Transaction approvals: the route and fee for what the site asked (simulates; can take a few seconds). */
   "approval:preview": { req: { id: string }; res: SendPreview };
   "account:status": { req: { chainId?: number }; res: AccountStatus };
@@ -57,6 +59,31 @@ export interface UiApi {
   "send:submit": { req: SendRequest; res: ActivityEntry };
   "activity:list": { req: undefined; res: ActivityEntry[] };
   "activity:replace": { req: { id: string; mode: "speed-up" | "cancel" }; res: ActivityEntry };
+  /**
+   * Pairing (ux-spec §3.1.2, §3.1.4): the service worker decodes the scanned / pasted code itself. `confirm: false`
+   * only previews (the 8-character check); `confirm: true` stores it.
+   */
+  "pair:vault": { req: { text: string; confirm: boolean }; res: PairPreview };
+  "pair:recovery": { req: { text: string; confirm: boolean }; res: PairPreview };
+  /** The phone's recovery-test code: its signature must verify against the Recovery key scanned before (E-23). */
+  "pair:recoveryTest": { req: { text: string }; res: { ok: true; last8: string } };
+  "pair:forgetRecovery": { req: undefined; res: null };
+  /** Computes the counterfactual account from the paired Vault, the Recovery key and the limits (end of onboarding). */
+  "account:computePlan": { req: { chainId?: number }; res: AccountStatus };
+  /** A dapp payment the router sent to the Vault: the request stays pending until the phone's approval is sent. */
+  "approval:toVault": { req: { id: string }; res: VaultRequestRecord };
+  "vault:create": { req: { chainId?: number; action: VaultActionRequest }; res: VaultRequestRecord };
+  "vault:get": { req: { id: string }; res: VaultRequestRecord | null };
+  "vault:list": { req: undefined; res: VaultRequestRecord[] };
+  /** The scanned `ur:leaked-signature` CBOR (hex): verified, simulated and submitted, or an error with its E-code. */
+  "vault:submit": { req: { id: string; signature: `0x${string}` }; res: VaultRequestRecord };
+  "vault:cancel": { req: { id: string }; res: null };
+  "vault:queue": { req: { chainId?: number }; res: QueuedView[] };
+  "vault:executeQueued": { req: { chainId?: number; opId: `0x${string}` }; res: { hash: `0x${string}` } };
+  "vault:policy": { req: { chainId?: number }; res: PolicyView };
+  "vault:signers": { req: { chainId?: number }; res: SignerView[] };
+  /** The next everyday key's address (for "Replace everyday key"). */
+  "security:nextEverydayKey": { req: undefined; res: { index: number; address: `0x${string}` } };
 }
 
 export type UiType = keyof UiApi;
@@ -91,6 +118,8 @@ export interface PortRequest {
   id: string;
   method: string;
   params?: unknown;
+  /** Embedded frames only: the top-level page's origin, from the content script (`location.ancestorOrigins`). */
+  topOrigin?: string;
 }
 
 export type PortResponse = { id: string; result: unknown } | { id: string; error: SerializedRpcError };

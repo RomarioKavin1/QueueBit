@@ -129,9 +129,15 @@ importers:
       '@leaked/frames':
         specifier: workspace:*
         version: link:../../packages/frames
+      '@leaked/pq-signer':
+        specifier: workspace:*
+        version: link:../../packages/pq-signer
       '@leaked/rpc':
         specifier: workspace:*
         version: link:../../packages/rpc
+      '@leaked/ur':
+        specifier: workspace:*
+        version: link:../../packages/ur
       '@noble/hashes':
         specifier: 2.4.0
         version: 2.4.0
@@ -141,6 +147,9 @@ importers:
       '@scure/bip39':
         specifier: 2.4.0
         version: 2.4.0
+      jsqr:
+        specifier: 1.4.0
+        version: 1.4.0
       qrcode:
         specifier: 1.5.4
         version: 1.5.4

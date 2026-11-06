@@ -99,9 +99,9 @@ test("lock and unlock", async ({ context, extensionId }) => {
   const more = popup.getByRole("button", { name: "More" });
   await more.focus();
   await popup.keyboard.press("Enter");
-  await expect(popup.getByRole("menuitem", { name: "Settings" })).toBeFocused();
+  await expect(popup.getByRole("menuitem", { name: "Security" })).toBeFocused();
   await popup.keyboard.press("ArrowDown");
-  await expect(popup.getByRole("menuitem", { name: "Lock now" })).toBeFocused();
+  await expect(popup.getByRole("menuitem", { name: "Limits" })).toBeFocused();
   await popup.keyboard.press("Escape");
   await expect(more).toBeFocused();
 });
@@ -137,9 +137,9 @@ test("a dapp discovers LEAKED via EIP-6963, connects, and gets the account", asy
   await expect.poll(() => dapp.evaluate(() => (window as unknown as Win).__result)).toEqual([account]);
   expect(await rpc(dapp, "eth_accounts")).toEqual({ result: [account] });
 
-  // Method surface: malformed sends are -32602; personal_sign arrives in M3.
+  // Method surface: malformed sends are -32602; blind hash signing is never offered (4200, ux-spec E-53).
   expect((await rpc(dapp, "eth_sendTransaction", [{}])).error?.code).toBe(-32602);
-  const unsupported = await rpc(dapp, "personal_sign", ["0x68656c6c6f", account]);
+  const unsupported = await rpc(dapp, "eth_sign", [account, `0x${"11".repeat(32)}`]);
   expect(unsupported.error?.code).toBe(4200);
   expect((await rpc(dapp, "wallet_switchEthereumChain", [{ chainId: "0x1" }])).error?.code).toBe(4902);
   expect(await rpc(dapp, "wallet_switchEthereumChain", [{ chainId: "0xaa36a7" }])).toEqual({ result: null });
@@ -239,6 +239,8 @@ test("a request from a cross-origin frame is attributed to the frame and flagged
   const approval = await waitForApproval(context);
   await expect(approval.getByTestId("approval-origin")).toHaveText(new URL(frameUrl).host);
   await expect(approval.getByText("This request comes from a frame inside another page")).toBeVisible();
+  // The top-level page is named (M0 review), from the browser's location.ancestorOrigins.
+  await expect(approval.getByText(`Embedded in ${new URL(dappUrl).host}`, { exact: false })).toBeVisible();
   // The whole 360 × 600 window: the footer must be on screen without scrolling (the window size is the outer size).
   const connect = approval.getByRole("button", { name: "Connect" });
   await expect(connect).toBeInViewport();

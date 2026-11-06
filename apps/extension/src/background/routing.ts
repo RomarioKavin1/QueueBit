@@ -19,7 +19,8 @@ export interface Call {
   data: Hex;
 }
 
-export type CallKind = "eth-transfer" | "token-transfer" | "contract-call";
+/** `permit-registration`: the account's own `registerPermit` in a hot batch (an ERC-2612 pre-approval, M3). */
+export type CallKind = "eth-transfer" | "token-transfer" | "contract-call" | "permit-registration";
 
 /** A call with the policy facts the router needs, read from the account (`isTarget`, `getToken`, `quoteUsd`). */
 export interface ClassifiedCall {

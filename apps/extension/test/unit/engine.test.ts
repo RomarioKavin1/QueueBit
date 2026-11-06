@@ -83,8 +83,9 @@ describe("FrameEngine (mocked rpc)", () => {
     expect(tx.frames[0]!.data).toBe(accountVerifyData()); // verifyFrame(), never 0x (would hit receive())
     expect(tx.frames[0]!.limits.execution).toBe(VERIFY_GAS);
     expect(tx.frames[1]!.target?.toLowerCase()).toBe(tank.toLowerCase());
-    // Body limit from the measurement: 53,213 × 1.25 + 20k, not the probe's 600k.
-    expect(tx.frames[2]!.limits.execution).toBe(53_213n + 53_213n / 4n + 20_000n);
+    // Body limit from the measurement: the body's share of the tx gasUsed (125,292 − 45,750 − 3,000 = 76,542, which
+    // includes state gas a fresh recipient burns from the execution limit) × 1.25 + 20k, not the probe's 600k.
+    expect(tx.frames[2]!.limits.execution).toBe(76_542n + 76_542n / 4n + 20_000n);
     expect(tx.signatures[0]!.signer.toLowerCase()).toBe(hot.toLowerCase());
     expect(await verifySecp256k1Entry(profile, tx, 0)).toBe(true);
     expect(await verifySecp256k1Entry(profile, tx, 1)).toBe(true);
@@ -146,10 +147,13 @@ describe("FrameEngine (mocked rpc)", () => {
     expect(await engine.nextNonce(ACCOUNT)).toBe(7n);
   });
 
-  it("parses simulation frames tolerantly", () => {
-    expect(parseSimFrames([{ gasUsed: "0x10", succeeded: false }, { executionGasUsed: 5 }])).toEqual([
+  it("parses simulation frames tolerantly, and a frame without an outcome counts as failed (fail closed)", () => {
+    expect(
+      parseSimFrames([{ gasUsed: "0x10", succeeded: false }, { executionGasUsed: 5 }, { gasUsed: 1, status: "0x1" }]),
+    ).toEqual([
       { gasUsed: 16n, succeeded: false },
-      { gasUsed: 5n, succeeded: true },
+      { gasUsed: 5n, succeeded: false },
+      { gasUsed: 1n, succeeded: true },
     ]);
     expect(parseSimFrames(null)).toEqual([]);
   });

@@ -3,7 +3,17 @@ import { fileURLToPath } from "node:url";
 import type { Page } from "@playwright/test";
 import { createPublicClient, createWalletClient, http, parseEther, type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { expect, extUrl, keyringAccounts, onboard, openPopup, smartAccount, test, waitForApproval } from "./fixtures";
+import {
+  activateFromOnboarding,
+  expect,
+  extUrl,
+  keyringAccounts,
+  onboard,
+  openPopup,
+  smartAccount,
+  test,
+  waitForApproval,
+} from "./fixtures";
 
 /**
  * Captures the key screens into docs/screenshots/ for design review against ux-spec (run: `pnpm screenshots`; needs
@@ -34,29 +44,21 @@ async function fund(to: string, eth: string) {
 
 test("screens", async ({ context, extensionId, serviceWorker, dappUrl }) => {
   test.setTimeout(480_000);
-  await onboard(context, extensionId, shot);
+  const { page } = await onboard(context, extensionId, { shots: shot });
   const account = await smartAccount(serviceWorker);
   const { feeTank } = await keyringAccounts(serviceWorker);
 
   const popup = await openPopup(context, extensionId);
   await expect(popup.getByText("No daily limit yet")).toBeVisible({ timeout: 30_000 });
   await shot("popup-home-not-activated", popup);
-
   await popup.getByRole("button", { name: "Receive" }).click();
   await expect(popup.getByTestId("qr-code")).toBeVisible();
   await shot("popup-receive", popup);
   await popup.keyboard.press("Escape");
 
-  await popup.getByRole("button", { name: "Activate account" }).click();
-  await expect(popup.getByRole("heading", { name: "Activate account" })).toBeVisible();
-  await expect(popup.getByTestId("tank-balance")).toBeVisible({ timeout: 30_000 });
-  await shot("popup-activate-fund-tank", popup);
-  await fund(feeTank, "0.05");
-  await expect(popup.getByRole("button", { name: "Activate account" })).toBeEnabled({ timeout: 30_000 });
-  await shot("popup-activate-ready", popup);
-  await popup.getByRole("button", { name: "Activate account" }).click();
-  await expect(popup.getByText("Your account is active")).toBeVisible({ timeout: 120_000 });
-  await popup.getByRole("button", { name: "Done" }).click();
+  await activateFromOnboarding(page, (t) => fund(t, "0.1"), feeTank);
+  await shot("onboarding-9-done", page);
+  await popup.reload();
   await fund(account, "0.2");
   await popup.getByRole("button", { name: "Refresh balance" }).click();
   await expect(popup.getByTestId("balance")).toHaveText(/^0\.2/u, { timeout: 30_000 });
@@ -137,14 +139,23 @@ test("screens", async ({ context, extensionId, serviceWorker, dappUrl }) => {
   await vault.setViewportSize({ width: 360, height: 600 });
   await expect(vault.getByTestId("route-card")).toContainText("Needs your phone", { timeout: 30_000 });
   await shot("approve-needs-vault", vault);
-  const [placeholder] = await Promise.all([
+  const [handoff] = await Promise.all([
     context.waitForEvent("page"),
-    vault.getByRole("button", { name: "Request Vault approval" }).click(),
+    vault.getByRole("button", { name: "Approve on phone" }).click(),
   ]);
-  await placeholder.setViewportSize({ width: 900, height: 900 });
-  await expect(placeholder.getByRole("heading", { name: "Vault approval" })).toBeVisible();
-  await shot("app-vault-placeholder", placeholder);
-  await vault.getByRole("button", { name: "Close" }).click();
+  await handoff.setViewportSize({ width: 1100, height: 950 });
+  await expect(handoff.getByTestId("request-qr")).toBeVisible({ timeout: 30_000 });
+  await shot("approve-waiting-for-phone", vault);
+  await shot("app-vault-handoff", handoff);
+  await handoff.getByTestId("scan-back").click();
+  await handoff.getByRole("tab", { name: "Paste the code" }).click();
+  await shot("app-vault-scan-back", handoff);
+  for (const route of ["limits", "security", "pending"]) {
+    await handoff.goto(extUrl(extensionId, `app.html#${route}`));
+    await handoff.waitForTimeout(2500);
+    await shot(`app-${route}`, handoff);
+  }
+  await vault.close();
 
   await popup.getByRole("button", { name: "Apps" }).click();
   await expect(popup.getByTestId("app-row")).toBeVisible();

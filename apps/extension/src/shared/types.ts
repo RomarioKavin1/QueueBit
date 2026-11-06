@@ -18,21 +18,42 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: "system",
 };
 
+/** A quantum-safe key a phone showed the browser (`ur:leaked-pq-key`). */
+export interface PairedKeyRecord {
+  schemeId: `0x${string}`;
+  pk: `0x${string}`;
+  /** Vault only: the Path-B fee-payment address on the phone. */
+  payer?: Address;
+  at: number;
+}
+
 /**
- * Choices made during onboarding. In M0 the limits are the user's intent only: they are written to the account by
- * `initialize(...)` on first deployment (M1), so the UI labels them "not active yet".
+ * Choices made during onboarding (ux-spec §3.1). They become the account's `InitConfig` when the address is computed
+ * at the end of onboarding (`account:computePlan`); after that they only describe what was set, and changes are
+ * Vault actions.
  */
 export interface SetupState {
   dailyLimitUsd: number;
   perPaymentUsd: number;
+  /** Open (default): everyday payments may go to any address within the limits; Strict: allowed recipients only. */
+  recipientMode: "open" | "strict";
   /** Fee tank is allowlisted at setup (decision 2026-11-06): top-ups are everyday payments, not Vault approvals. */
   feeTankAllowlisted: true;
-  vaultSkippedAt?: number;
+  vault?: PairedKeyRecord;
+  /** The Recovery key's public key, scanned during the ceremony; `testedAt` once its recovery-test code verified. */
+  recovery?: PairedKeyRecord & { testedAt?: number };
+  guardian?: { address: Address; name?: string; requestedAt: number };
   recoverySkippedAt?: number;
+  guardianSkippedAt?: number;
   completedAt?: number;
 }
 
-export const DEFAULT_SETUP: SetupState = { dailyLimitUsd: 500, perPaymentUsd: 200, feeTankAllowlisted: true };
+export const DEFAULT_SETUP: SetupState = {
+  dailyLimitUsd: 500,
+  perPaymentUsd: 200,
+  recipientMode: "open",
+  feeTankAllowlisted: true,
+};
 
 export interface OriginPermission {
   origin: string;
@@ -51,7 +72,28 @@ export interface KnownSite {
   lastConnectedAt?: number;
 }
 
-export type ApprovalKind = "connect" | "transaction";
+export type ApprovalKind = "connect" | "transaction" | "sign-in" | "permit";
+
+/** A signature request a site made (M3): what the approval window shows and what is signed on approval. */
+export interface ApprovalSignature {
+  method: "personal_sign" | "eth_signTypedData_v4";
+  /** personal_sign: params[0] as sent (hex or text). */
+  raw?: string;
+  /** personal_sign: the readable text. */
+  text?: string;
+  /** eth_signTypedData_v4: the typed data JSON as sent. */
+  typedJson?: string;
+  /** SIWE fields, when the message is EIP-4361. */
+  siwe?: { domain: string; statement?: string; uri?: string; expirationTime?: string; nonce?: string };
+  /** SIWE: the message's domain is the requesting site (else E-50, never signed). */
+  domainOk?: boolean;
+  /** First sign-in from this site (not on the in-extension allowed sign-in list). */
+  firstSignIn?: boolean;
+  /** Typed data: the app's domain name and contract, for the screen. */
+  appDomain?: { name?: string; verifyingContract?: string; chainId?: number };
+  /** ERC-2612 permit: the pre-approval the account will register (bigints as decimal strings). */
+  permit?: { token: Address; spender: Address; value: string; deadline: string; symbol?: string; decimals?: number };
+}
 export type ApprovalStatus = "pending" | "approved" | "rejected";
 
 export interface Approval {
@@ -71,10 +113,14 @@ export interface Approval {
   firstVisit: boolean;
   /** The request came from a frame embedded in another page (`MessageSender.frameId !== 0`), not the page itself. */
   embedded?: boolean;
+  /** Embedded requests: the origin of the page the frame is in (shown next to the requesting origin). */
+  topOrigin?: string;
   /** `transaction` approvals: what the site asked to send. */
   tx?: ApprovalTx;
+  /** `sign-in` / `permit` approvals. */
+  sig?: ApprovalSignature;
   /** Set when an approved transaction was sent (the dapp request returns it). */
-  result?: { activityId: string; hash: `0x${string}`; batchId?: string };
+  result?: { activityId: string; hash: `0x${string}`; batchId?: string; signature?: `0x${string}` };
   /** Set when the request ended without sending because it needs the Vault or is blocked (dapp gets 4100). */
   denial?: { leakedRule: string; explanation: string; remedy?: string };
   /** The route the approval window showed, when it was not an everyday payment: closing it returns this denial. */

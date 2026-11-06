@@ -19,6 +19,7 @@ export function TransactionBody({ view }: { view: ApprovalView }) {
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [handoff, setHandoff] = useState<"idle" | "busy" | "done">("idle");
   const armed = useArmed();
   const total = tx.calls.reduce((s, c) => s + BigInt(c.value), 0n);
   const host = hostOf(view.approval.origin);
@@ -128,18 +129,22 @@ export function TransactionBody({ view }: { view: ApprovalView }) {
               <Button
                 variant="vault"
                 block
-                onClick={() => {
-                  const q = new URLSearchParams({
-                    site: host,
-                    amount: eth(total),
-                    usd: formatUsd(route.amountUsd),
-                    why: route.copy.detail,
-                    rules: route.rules.join(","),
-                  });
-                  void browser.tabs.create({ url: browser.runtime.getURL(`/app.html#vault/request?${q}`) });
+                data-testid="approve-on-phone"
+                loading={handoff === "busy"}
+                disabled={handoff === "done"}
+                onClick={async () => {
+                  setHandoff("busy");
+                  try {
+                    const rec = await call("approval:toVault", { id: view.approval.id });
+                    void browser.tabs.create({ url: browser.runtime.getURL(`/app.html#vault/${rec.id}`) });
+                    setHandoff("done");
+                  } catch (e) {
+                    setHandoff("idle");
+                    setError(e instanceof UiCallError ? e.message : "Couldn't start the Vault approval.");
+                  }
                 }}
               >
-                Request Vault approval
+                {handoff === "done" ? "Waiting for your phone…" : "Approve on phone"}
               </Button>
             )}
             <Button variant="secondary" block onClick={() => void reject()}>

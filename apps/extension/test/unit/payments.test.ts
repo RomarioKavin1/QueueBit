@@ -34,6 +34,12 @@ async function harness() {
   });
   await wallet.keyring.create("password-1");
   const accounts = (await wallet.keyring.accounts())!;
+  await wallet.settings.setPaired("vault", {
+    schemeId: "0xb2062c48f163f38edbf050c4a98b6abbe194acda9a6de525b69b330a739aa054",
+    pk: `0x${"ab".repeat(32)}`,
+    payer: "0x00000000000000000000000000000000000000fa",
+    at: 1,
+  });
 
   const node = {
     getTransactionCount: async () => chain.pendingNonce,
@@ -92,12 +98,17 @@ async function harness() {
           return (args?.[0] as string).toLowerCase() === accounts.feeTank.toLowerCase();
         case "getSession":
           return { allowanceUsd: 0n, expiry: 0 };
+        case "predictRoleSigner":
+          return "0x00000000000000000000000000000000000000c1";
+        case "recipientMode":
+          return 0;
         default:
           throw new Error(`unexpected read ${functionName}`);
       }
     },
   } as unknown as PublicClient;
 
+  await wallet.payments!.computePlan(CHAIN);
   return { wallet, payments: wallet.payments!, accounts, sent, receipts, chain };
 }
 
@@ -178,11 +189,17 @@ describe("the everyday bucket before activation", () => {
     limits: { capUsd: 50, perTxMaxUsd: 20, availableUsd: 50 },
     frozen: false,
     bunker: false,
-    vault: "stand-in",
+    vault: "paired",
+    recipientMode: "open",
     ethUsdPrice: 3000,
     readAt: 0,
   };
-  const setup = { dailyLimitUsd: 500, perPaymentUsd: 200, feeTankAllowlisted: true as const };
+  const setup = {
+    dailyLimitUsd: 500,
+    perPaymentUsd: 200,
+    recipientMode: "open" as const,
+    feeTankAllowlisted: true as const,
+  };
 
   it("shows the limits the frozen plan will deploy, not the setup form's later edits", () => {
     expect(bucketFromStatus(base, setup)).toMatchObject({ source: "none", capUsd: 50, perTxMaxUsd: 20 });

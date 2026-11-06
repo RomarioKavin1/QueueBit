@@ -1,4 +1,4 @@
-import type { Address, Hex, PublicClient } from "viem";
+import { decodeFunctionData, toFunctionSelector, type Address, type Hex, type PublicClient } from "viem";
 import { accountAbi } from "../generated/contracts";
 import { planConfig, type AccountPlan } from "./account";
 import { callShape, type Call, type ClassifiedCall, type PolicySnapshot } from "./routing";
@@ -10,6 +10,7 @@ import { callShape, type Call, type ClassifiedCall, type PolicySnapshot } from "
  */
 
 const ETH: Address = "0x0000000000000000000000000000000000000000";
+const REGISTER_PERMIT = toFunctionSelector("registerPermit(address,address,uint256,uint256)");
 
 export interface AccountChainState {
   deployed: boolean;
@@ -22,6 +23,9 @@ export interface AccountChainState {
   maxPriorityFeePerGas: bigint;
   hotKey: Address;
   tank: Address;
+  /** Open: everyday ETH sends / allowed-token transfers may go to any address (within the limits). */
+  recipientMode: "open" | "strict";
+  frozenUntil?: number;
 }
 
 interface HotConfigResult {
@@ -65,12 +69,14 @@ export class PolicyReader {
         maxPriorityFeePerGas: cfg.maxPriorityFeePerGas,
         hotKey: cfg.hotKey,
         tank: cfg.tank,
+        recipientMode: cfg.recipientMode === 1 ? "strict" : "open",
       };
     }
-    const [hot, bucket, eth] = await Promise.all([
+    const [hot, bucket, eth, mode] = await Promise.all([
       this.read<HotConfigResult>(plan.address, "getHotConfig"),
       this.read<readonly [bigint, number, bigint, number]>(plan.address, "getBucket"),
       this.read<{ allowed: boolean; usdPerToken: bigint }>(plan.address, "getToken", [ETH]),
+      this.read<number>(plan.address, "recipientMode"),
     ]);
     const [available, , cap, fullAt] = bucket;
     return {
@@ -90,6 +96,8 @@ export class PolicyReader {
       maxPriorityFeePerGas: hot.maxPriorityFeePerGas,
       hotKey: hot.hotKey,
       tank: hot.tank,
+      recipientMode: Number(mode) === 0 ? "open" : "strict",
+      ...(hot.hotFrozen ? { frozenUntil: Number(hot.frozenUntil) } : {}),
     };
   }
 
@@ -98,6 +106,10 @@ export class PolicyReader {
     const cfg = planConfig(plan);
     const isTarget = async (a: Address) =>
       state.deployed ? this.read<boolean>(plan.address, "isTarget", [a]) : a.toLowerCase() === cfg.tank.toLowerCase();
+    // Open mode (the default): a plain ETH send or an allowed token's `transfer` may go to any non-zero address
+    // within the limits (IMPLEMENTATION-NOTES "Account: Open recipient mode"); Strict keeps the recipient list.
+    const recipientOk = async (a: Address) =>
+      (state.recipientMode === "open" && a.toLowerCase() !== ETH) || (await isTarget(a));
     const token = async (t: Address) =>
       state.deployed
         ? this.read<{ allowed: boolean; decimals: number; usdPerToken: bigint }>(plan.address, "getToken", [t])
@@ -112,7 +124,7 @@ export class PolicyReader {
           recipient: s.recipient,
           amount: s.amount,
           assetAllowed: state.ethUsdPrice > 0n,
-          recipientAllowed: await isTarget(s.recipient),
+          recipientAllowed: s.amount > 0n ? await recipientOk(s.recipient) : await isTarget(s.recipient),
           sessionMatch: false,
           usd: quote(s.amount, state.ethUsdPrice, 18),
         });
@@ -125,9 +137,28 @@ export class PolicyReader {
           amount: s.amount,
           token: s.token!,
           assetAllowed: t.allowed,
-          recipientAllowed: await isTarget(s.recipient),
+          recipientAllowed: await recipientOk(s.recipient),
           sessionMatch: false,
           usd: t.allowed ? quote(s.amount, t.usdPerToken, Number(t.decimals)) : 0n,
+        });
+      } else if (
+        call.target.toLowerCase() === plan.address.toLowerCase() &&
+        call.data.toLowerCase().startsWith(REGISTER_PERMIT)
+      ) {
+        // An ERC-2612 pre-approval: the account debits the permit's value from the daily limit itself.
+        const { args } = decodeFunctionData({ abi: accountAbi, data: call.data });
+        const [tokenAddr, , value] = args as unknown as readonly [Address, Address, bigint, bigint];
+        const t = await token(tokenAddr);
+        out.push({
+          call,
+          kind: "permit-registration",
+          recipient: tokenAddr,
+          amount: value,
+          token: tokenAddr,
+          assetAllowed: t.allowed,
+          recipientAllowed: true,
+          sessionMatch: false,
+          usd: t.allowed ? quote(value, t.usdPerToken, Number(t.decimals)) : 0n,
         });
       } else {
         let sessionMatch = false;

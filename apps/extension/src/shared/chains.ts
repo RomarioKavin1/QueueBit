@@ -12,8 +12,12 @@ export type Backend = "frame" | "4337";
 export interface AccountDeployment {
   factory: `0x${string}`;
   accountImpl: `0x${string}`;
-  /** The Vault signer used until Vault pairing exists (M4): a public devnet key, so only on test networks. */
-  vaultStandIn: `0x${string}`;
+  /** Deploys and predicts the Vault / Recovery signer clones (`initialize` derives their addresses). */
+  roleSignerFactory: `0x${string}`;
+  /** The SPHINCS- C13 `IPQVerifier` adapter the role signers check signatures with. */
+  c13Verifier: `0x${string}`;
+  /** ERC-8421 staking registry (a staked role signer gets the staked lane's larger budget, Path A). */
+  stakingRegistry: `0x${string}`;
 }
 
 export interface Network {
@@ -24,6 +28,11 @@ export interface Network {
   rpcUrl: string;
   /** ERC-8421 alt-mempool sidecar (frame backend). */
   sidecarUrl?: string;
+  /**
+   * A sidecar that implements BUDGET-010 per-entity verification budgets (the "staked lane"): a staked role signer
+   * may run a C13 signature check inside VERIFY there (Path A). Its `skandha_config.budgets` is read at runtime.
+   */
+  stakedSidecarUrl?: string;
   backend: Backend;
   /** `@leaked/frames` codec profile (frame backend), chosen by chain id. */
   profileId?: string;
@@ -50,6 +59,7 @@ const devnet: Network = BUILD.localDevnet
       shortName: "Local devnet",
       rpcUrl: "http://localhost:8545",
       sidecarUrl: "http://localhost:14337/rpc",
+      stakedSidecarUrl: "http://localhost:14340/rpc",
       backend: "frame",
       profileId: "ethrex-eip8141-tracer",
       ...(localDeployment
@@ -57,7 +67,9 @@ const devnet: Network = BUILD.localDevnet
             deployment: {
               factory: localDeployment.factory,
               accountImpl: localDeployment.accountImpl,
-              vaultStandIn: localDeployment.testVault,
+              roleSignerFactory: localDeployment.roleSignerFactory,
+              c13Verifier: localDeployment.c13Verifier,
+              stakingRegistry: localDeployment.stakingRegistry,
             },
           }
         : {}),

@@ -124,11 +124,11 @@ function AccountSection({ chainId }: { chainId: number }) {
               ["Allowed recipients", "Your fee tank. Adding others needs the Vault."],
               [
                 "Vault",
-                st.vault === "stand-in"
-                  ? "Not paired: on this test network a shared test key stands in for it."
+                st.vault === "paired"
+                  ? `Paired${st.vaultSigner ? ` · signer ${st.vaultSigner.slice(0, 6)}…` : ""}`
                   : "Not paired",
               ],
-              ["Recovery key", "Not set"],
+              ["Recovery key", st.recoverySigner ? "Set" : "Not set"],
               ["Fee tank", eth(st.tankWei, 6)],
             ] as Array<[string, React.ReactNode]>)
           : []),

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { approvalId, reject, useArmed } from "./shared";
 import { TransactionBody } from "./TransactionBody";
+import { SignatureBody } from "./SignatureBody";
 import { browser, type Browser } from "wxt/browser";
 import { getNetwork } from "../../shared/chains";
 import { StorageKeys } from "../../shared/kv";
@@ -68,12 +69,20 @@ export function ApproveApp() {
           <h1 className="t-title break-words">
             <span data-testid="approval-origin">{host}</span>{" "}
             <span className="font-normal text-muted">
-              {view.approval.kind === "transaction" ? "wants to make a payment" : "wants to connect"}
+              {view.approval.kind === "transaction"
+                ? "wants to make a payment"
+                : view.approval.kind === "sign-in"
+                  ? "· Sign in"
+                  : view.approval.kind === "permit"
+                    ? "· Pre-approve"
+                    : "wants to connect"}
             </span>
           </h1>
           <p className="t-small text-muted">
             {view.approval.origin.startsWith("http:") ? "Not secure (http) · " : ""}
-            {view.approval.embedded ? "Embedded in another page · " : ""}
+            {view.approval.embedded
+              ? `Embedded in ${view.approval.topOrigin ? hostOf(view.approval.topOrigin) : "another page"} · `
+              : ""}
             {getNetwork(view.approval.chainId).name}
           </p>
         </div>
@@ -101,6 +110,8 @@ export function ApproveApp() {
         </div>
       ) : view.approval.kind === "transaction" ? (
         <TransactionBody view={view} />
+      ) : view.approval.kind === "sign-in" || view.approval.kind === "permit" ? (
+        <SignatureBody view={view} />
       ) : (
         <ConnectBody view={view} account={view.account ?? state.accounts!.everyday} />
       )}
@@ -131,7 +142,7 @@ function ConnectBody({ view, account }: { view: ApprovalView; account: string })
           <RiskBanner
             level="limit"
             title="This request comes from a frame inside another page"
-            body={`The page you see in the address bar is not ${host}. Only connect if you expect ${host} here.`}
+            body={`The page you see in the address bar${view.approval.topOrigin ? ` (${hostOf(view.approval.topOrigin)})` : ""} is not ${host}. Only connect if you expect ${host} here.`}
           />
         )}
         {error && <RiskBanner level="danger" title={error} />}
@@ -235,7 +246,11 @@ function Finished({
         {status === "approved"
           ? kind === "transaction"
             ? "Sent. You can follow it in Activity."
-            : "Connected"
+            : kind === "sign-in"
+              ? "Signed in"
+              : kind === "permit"
+                ? "Pre-approval recorded"
+                : "Connected"
           : denial
             ? "Not sent"
             : status === "rejected"

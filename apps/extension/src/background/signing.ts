@@ -10,7 +10,7 @@ import { accountAbi } from "../generated/contracts";
  *    the account computes the permit digest itself and debits the permit's value from the daily limit.
  *  - Permit2 and every other value-bearing or unknown typed data → **needs the Vault** (the opaque `registerHash`
  *    is no longer honoured for tokens or Permit2).
- * Pure; the signing itself (sign-in approval window, 7739 envelope) is milestone M3.
+ * Pure; the signing itself (approval window, 7739 envelope, `registerPermit` batch) is in `wallet.ts` / `signin.ts`.
  */
 
 export const PERMIT2: Address = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
@@ -87,7 +87,8 @@ export function classifyTypedData(input: unknown): SignatureClass {
     return {
       kind: "needs-vault",
       rule: "SIG-PERMIT2",
-      reason: "This is a Permit2 approval. Your phone (the Vault) has to approve token approvals through Permit2.",
+      reason:
+        "This is a Permit2 signature, which lets a contract move your tokens. LEAKED's everyday key never signs these, and your Vault's quantum-safe key never signs for sites.",
     };
   }
   if (primary === "Permit" && ERC2612_FIELDS.every((f) => fields.includes(f)) && verifying && isAddress(verifying)) {
@@ -110,7 +111,8 @@ export function classifyTypedData(input: unknown): SignatureClass {
     return {
       kind: "needs-vault",
       rule: "SIG-VALUE-BEARING",
-      reason: "This signature can move your money (an order or a payment). Your phone (the Vault) has to approve it.",
+      reason:
+        "This signature can move your money (an order or a payment), so LEAKED won't sign it with the everyday key.",
     };
   }
   const allTypes = Object.values(td.types).flat();
@@ -119,8 +121,7 @@ export function classifyTypedData(input: unknown): SignatureClass {
     return {
       kind: "needs-vault",
       rule: "SIG-UNKNOWN-SCHEMA",
-      reason:
-        "We don't recognise this kind of signature, so LEAKED won't sign it blind. Your phone (the Vault) can approve it.",
+      reason: "We don't recognise this kind of signature, so LEAKED won't sign it blind.",
     };
   }
   return { kind: "sign-in", rule: "SIG-SIGN-IN", ...(td.domain?.name ? { domain: td.domain.name } : {}) };

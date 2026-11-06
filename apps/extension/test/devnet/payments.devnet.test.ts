@@ -3,9 +3,10 @@
 // Funds from anvil #7 only (the extension e2e key). Activates a fresh account through the Wallet's service-worker
 // code, sends an everyday payment, and checks that over-limit and not-allowed payments are classified before
 // submission and never reach eth_sendRawTransaction.
-import { createWalletClient, http, parseEther, type Address, type Hex } from "viem";
+import { createWalletClient, http, parseEther, toHex, type Address, type Hex } from "viem";
+import { SCHEME_ID, keygen } from "@leaked/pq-signer";
 import { privateKeyToAccount } from "viem/accounts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createFrameRpc } from "@leaked/rpc";
 import { RouteError } from "../../src/background/payments";
 import { publicClient, nodeClient } from "../../src/background/rpc";
@@ -13,13 +14,22 @@ import { Wallet } from "../../src/background/wallet";
 import { accountFactoryAbi, localDeployment } from "../../src/generated/contracts";
 import { MemoryKV } from "../../src/shared/kv";
 
+vi.mock("../../src/shared/build", () => ({ BUILD: { localDevnet: true, designGallery: false } }));
+
 const RUN = process.env.LOCAL_DEVNET === "1";
 const FUNDER: Hex = "0x4bbbf85ce3377467afe5d46f804f221813b2bb87f24d81f60f1fcdbf7cbf4356"; // anvil #7
 const CHAIN = 1337;
 
 async function fund(to: Address, value: bigint) {
   const w = createWalletClient({ transport: http("http://localhost:8545"), account: privateKeyToAccount(FUNDER) });
-  const hash = await w.sendTransaction({ to, value, gas: 250_000n, gasPrice: 2_000_000_000n, type: "legacy", chain: null });
+  const hash = await w.sendTransaction({
+    to,
+    value,
+    gas: 250_000n,
+    gasPrice: 2_000_000_000n,
+    type: "legacy",
+    chain: null,
+  });
   await publicClient(CHAIN).waitForTransactionReceipt({ hash, timeout: 180_000 });
 }
 
@@ -60,7 +70,15 @@ describe.runIf(RUN)("payments on the local devnet", () => {
     });
     await wallet.keyring.create("password-1");
     await wallet.settings.updateSetup({ dailyLimitUsd: 20, perPaymentUsd: 10 });
+    // A paired Vault (test key material; the account's address commits to its public key).
+    await wallet.settings.setPaired("vault", {
+      schemeId: SCHEME_ID,
+      pk: toHex(keygen(new Uint8Array(64).fill(Date.now() % 251), { role: "vault" }).publicKey),
+      payer: "0x00000000000000000000000000000000000000fa",
+      at: Date.now(),
+    });
     const payments = wallet.payments!;
+    await payments.computePlan(CHAIN);
 
     const before = await payments.status(CHAIN);
     expect(before.supported).toBe(true);
@@ -76,7 +94,7 @@ describe.runIf(RUN)("payments on the local devnet", () => {
     expect(predicted).toBe(plan.address);
 
     await expect(payments.activate(CHAIN)).rejects.toMatchObject({ reason: "tank-low" });
-    await fund(before.tank, parseEther("0.05"));
+    await fund(before.tank, parseEther("0.08"));
     await fund(before.address, parseEther("0.05"));
     const act = await payments.activate(CHAIN);
     await until(async () => {
@@ -113,9 +131,19 @@ describe.runIf(RUN)("payments on the local devnet", () => {
     expect(overview.route.route).toBe("needs-vault");
     expect(overview.route.rules).toEqual(["ROUTE-NEEDS-VAULT", "PER-PAYMENT-LIMIT"]);
     await expect(payments.send(CHAIN, big)).rejects.toBeInstanceOf(RouteError);
-    // A recipient that is not allowed.
-    const stranger = [{ target: "0x000000000000000000000000000000000000dEaD" as Address, value: 1n, data: "0x" as Hex }];
-    expect((await payments.preview(CHAIN, stranger)).route.rules).toContain("TARGET-NOT-ALLOWED");
+    // Open recipient mode: a fresh address is an everyday payment; a contract call to it is not.
+    const stranger = "0x000000000000000000000000000000000000dEaD" as Address;
+    const pv = await payments.preview(CHAIN, [
+      {
+        target: "0x1234567890123456789012345678901234567891" as Address,
+        value: parseEther("0.003"),
+        data: "0x" as Hex,
+      },
+    ]);
+    expect(pv.route.route).toBe("hot");
+    expect(
+      (await payments.preview(CHAIN, [{ target: stranger, value: 0n, data: "0x12345678" as Hex }])).route.rules,
+    ).toContain("TARGET-NOT-ALLOWED");
     expect(sent.length).toBe(sentBefore);
   }, 600_000);
 });

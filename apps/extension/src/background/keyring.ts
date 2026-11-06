@@ -40,6 +40,11 @@ export interface KeyringRecord {
   accounts: KeyringAccounts;
   createdAt: number;
   source: "created" | "imported";
+  /**
+   * After "Replace everyday key" (`vaultSetHotKey`): the index and address of the everyday key in use. `accounts`
+   * keeps the original (it binds the encrypted blob), so this is separate.
+   */
+  hot?: { index: number; address: Address };
 }
 
 /** Lives in chrome.storage.session: in memory only, cleared on browser restart, hidden from content scripts. */
@@ -121,7 +126,36 @@ export class KeyringController {
   }
 
   async accounts(): Promise<KeyringAccounts | undefined> {
-    return (await this.record())?.accounts;
+    const r = await this.record();
+    if (!r) return undefined;
+    return r.hot ? { ...r.accounts, everyday: r.hot.address } : r.accounts;
+  }
+
+  /** The everyday key index in use (0 until a "Replace everyday key"). */
+  async everydayIndex(): Promise<number> {
+    return (await this.record())?.hot?.index ?? 0;
+  }
+
+  /** The address of the everyday key at `index` (needs the wallet unlocked). */
+  async everydayAt(index: number): Promise<Address> {
+    return this.withMnemonic((mnemonic) => {
+      const seed = mnemonicToSeedSync(mnemonic);
+      try {
+        const k = derivePrivateKey(seed, EVERYDAY_PATH(index));
+        const a = privateKeyToAccount(`0x${bytesToHex(k)}`).address;
+        k.fill(0);
+        return a;
+      } finally {
+        seed.fill(0);
+      }
+    });
+  }
+
+  /** Switch to the everyday key at `index` once the account accepted it on-chain. */
+  async useEverydayIndex(index: number): Promise<void> {
+    const record = await this.requireRecord();
+    const address = await this.everydayAt(index);
+    await this.local.set(StorageKeys.keyring, { ...record, hot: { index, address } } satisfies KeyringRecord);
   }
 
   /** Create a new 24-word seed. Returns the words once so onboarding can offer to show them. */
@@ -228,9 +262,10 @@ export class KeyringController {
    * zeroed afterwards; they never leave the service worker.
    */
   async withHotKeys<T>(fn: (keys: { everyday: `0x${string}`; feeTank: `0x${string}` }) => T | Promise<T>): Promise<T> {
+    const index = await this.everydayIndex();
     return this.withMnemonic(async (mnemonic) => {
       const seed = mnemonicToSeedSync(mnemonic);
-      const everyday = derivePrivateKey(seed, EVERYDAY_PATH(0));
+      const everyday = derivePrivateKey(seed, EVERYDAY_PATH(index));
       const feeTank = derivePrivateKey(seed, FEE_TANK_PATH(0));
       seed.fill(0);
       try {

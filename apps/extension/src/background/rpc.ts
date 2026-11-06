@@ -1,5 +1,12 @@
 import { createPublicClient, http, type Address, type PublicClient } from "viem";
-import { createFrameRpc, type FrameRpc, type NodeClient } from "@leaked/rpc";
+import {
+  createFrameRpc,
+  createSidecarClient,
+  httpTransport,
+  type FrameRpc,
+  type NodeClient,
+  type SidecarClient,
+} from "@leaked/rpc";
 import { getNetwork } from "../shared/chains";
 
 /**
@@ -41,4 +48,16 @@ export async function readRpc(chainId: number, method: string, params: unknown[]
 
 export async function getBalance(chainId: number, address: Address): Promise<bigint> {
   return publicClient(chainId).getBalance({ address });
+}
+
+const sidecars = new Map<string, SidecarClient>();
+
+/** A sidecar by URL (only the fixed URLs of the network table are ever passed: the staked lane). */
+export function sidecarClient(url: string): SidecarClient {
+  let c = sidecars.get(url);
+  if (!c) {
+    c = createSidecarClient(httpTransport(url, { timeoutMs: 20_000 }));
+    sidecars.set(url, c);
+  }
+  return c;
 }

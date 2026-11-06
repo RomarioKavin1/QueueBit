@@ -5,7 +5,7 @@ import type { ApprovalTx } from "../shared/types";
 import type { ApprovalOutcome } from "./approvals";
 import type { PermissionsStore } from "./permissions";
 import { MAX_HOT_CALLS } from "./routing";
-import { classifyPersonalSign, classifyTypedData, signatureCopy, type SignatureClass } from "./signing";
+import { classifyPersonalSign, classifyTypedData, type SignatureClass } from "./signing";
 
 /**
  * The dapp-facing JSON-RPC method table (plan §30 §3.2), M1 subset: accounts, chains (per origin), reads, and on the
@@ -25,6 +25,8 @@ export interface RequestContext {
   requestId: string;
   /** From `MessageSender.frameId`: true when the request comes from a frame inside another page. */
   embedded?: boolean;
+  /** Embedded requests: the top-level page's origin, when the content script could read it. */
+  topOrigin?: string;
 }
 
 export interface CallsStatus {
@@ -53,6 +55,12 @@ export interface RouterDeps {
     chainId: number,
     tx: ApprovalTx,
   ): Promise<{ hash: `0x${string}`; activityId: string; batchId?: string }>;
+  /** Opens the sign-in / pre-approval window; resolves with the signature bytes, or throws 4001 / 4100. */
+  requestSignature(
+    ctx: RequestContext,
+    chainId: number,
+    req: { method: "personal_sign" | "eth_signTypedData_v4"; raw: unknown; cls: SignatureClass },
+  ): Promise<`0x${string}`>;
   callsStatus(origin: string, id: string): Promise<CallsStatus | null>;
   batchIdTaken(origin: string, id: string): Promise<boolean>;
   capabilities(chainId: number, account: Address): Promise<Record<string, unknown>>;
@@ -353,12 +361,22 @@ export async function routeProviderRequest(
 
     case "personal_sign":
     case "eth_signTypedData_v4": {
-      await requireConnected(ctx, deps);
+      const account = await requireConnected(ctx, deps);
+      // personal_sign: [message, address]; eth_signTypedData_v4: [address, typedData].
+      const [msgParam, addrParam] = method === "personal_sign" ? [params[0], params[1]] : [params[1], params[0]];
+      if (typeof addrParam === "string" && addrParam.toLowerCase() !== account.toLowerCase()) {
+        throw unauthorized(`LEAKED only signs for the connected account ${account}.`);
+      }
+      if (method === "personal_sign" && typeof msgParam !== "string") throw invalid("Expected [message, address].");
+      if (method === "eth_signTypedData_v4" && typeof msgParam !== "string" && typeof msgParam !== "object") {
+        throw invalid("Expected [address, typedData].");
+      }
       const cls =
         method === "personal_sign"
-          ? classifyPersonalSign(typeof params[0] === "string" ? decodeMessage(params[0]) : "")
-          : classifyTypedData(params[1]);
-      throw signatureError(method, cls);
+          ? classifyPersonalSign(decodeMessage(msgParam as string))
+          : classifyTypedData(msgParam);
+      if (cls.kind === "needs-vault") throw signatureError(cls);
+      return deps.requestSignature(ctx, await chainFor(ctx.origin, deps), { method, raw: msgParam, cls });
     }
 
     default:
@@ -379,20 +397,17 @@ function decodeMessage(hex: string): string {
 }
 
 /**
- * Signatures (classifier per the 2026-11-06 account audit, `signing.ts`). Value-bearing requests the everyday key may
- * never sign are refused now with the reason (`4100` + leakedRule); sign-in and ERC-2612 pre-approvals arrive in M3.
+ * Value-bearing typed data the everyday key may never sign (classifier per the 2026-11-06 account audit,
+ * `signing.ts`): `4100` + leakedRule with the reason and what the user can do instead (ux-spec E-52).
  */
-function signatureError(method: string, cls: SignatureClass): ProviderRpcError {
-  if (cls.kind === "needs-vault") {
-    return new ProviderRpcError(RpcErrorCode.unauthorized, cls.reason, {
-      leakedRule: cls.rule,
-      explanation: cls.reason,
-      remedy: "Approve it with your Vault (Vault approvals arrive in a later update).",
-    });
-  }
-  return new ProviderRpcError(
-    RpcErrorCode.unsupportedMethod,
-    `LEAKED does not support ${method} yet; it arrives in M3. ${signatureCopy(cls)}`,
-    { method, leakedRule: cls.rule },
-  );
+function signatureError(cls: Extract<SignatureClass, { kind: "needs-vault" }>): ProviderRpcError {
+  const remedy =
+    cls.rule === "SIG-PERMIT2"
+      ? "Your Vault can't sign it either (its quantum-safe key never signs for sites). Approve the token for this app with a payment instead, or use a site that accepts on-chain approvals."
+      : "LEAKED never signs what can move money without a payment you approve. Ask the site for a regular transaction instead.";
+  return new ProviderRpcError(RpcErrorCode.unauthorized, cls.reason, {
+    leakedRule: cls.rule,
+    explanation: cls.reason,
+    remedy,
+  });
 }

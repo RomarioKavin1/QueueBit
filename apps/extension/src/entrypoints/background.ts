@@ -2,10 +2,12 @@ import { browser, type Browser } from "wxt/browser";
 import { defineBackground } from "wxt/utils/define-background";
 import { chromeApprovalWindows, chromeKV } from "../background/chrome";
 import { KeyringError } from "../background/keyring";
-import { getBalance, nodeClient, publicClient, readRpc } from "../background/rpc";
+import { getBalance, nodeClient, publicClient, readRpc, sidecarClient } from "../background/rpc";
 import { PaymentsError, Wallet } from "../background/wallet";
 import { EngineError } from "../background/engine";
 import { ProviderRpcError, serializeError } from "../shared/errors";
+import { BUILD } from "../shared/build";
+import { schemes } from "@leaked/pq-signer";
 import {
   PROVIDER_PORT,
   isUiMessage,
@@ -22,6 +24,14 @@ export default defineBackground({
     // Every listener is registered synchronously at top level, so events that woke a terminated service worker are
     // delivered (MV3). State is read from storage on demand: nothing important lives only in this instance's memory.
     const ports = new Map<Browser.runtime.Port, string>();
+    // @leaked/pq-signer instantiated its WASM (initSync from the embedded bytes, no fetch) when this module loaded.
+    // A local-devnet build exposes that fact for the e2e, which also checks no .wasm was ever fetched.
+    if (BUILD.localDevnet) {
+      (globalThis as { __leakedPq?: unknown }).__leakedPq = {
+        schemes: Object.values(schemes).map((x) => x.name),
+        rejectsGarbage: !schemes.c13.verify(new Uint8Array(32), new Uint8Array(32), new Uint8Array(3688)),
+      };
+    }
 
     const wallet = new Wallet({
       local: chromeKV(browser.storage.local),
@@ -29,7 +39,7 @@ export default defineBackground({
       windows: chromeApprovalWindows,
       readRpc,
       getBalance,
-      io: { publicClient, node: nodeClient },
+      io: { publicClient, node: nodeClient, sidecar: sidecarClient },
       async openApp(hash) {
         await browser.tabs.create({ url: browser.runtime.getURL(`/app.html${hash}`) });
       },
@@ -62,7 +72,14 @@ export default defineBackground({
         if (typeof msg?.id !== "string" || typeof msg.method !== "string") return;
         wallet
           .handleProvider(
-            { origin, requestId: `${tabKey}:${msg.id}`, embedded },
+            {
+              origin,
+              requestId: `${tabKey}:${msg.id}`,
+              embedded,
+              ...(embedded && typeof msg.topOrigin === "string" && /^https?:\/\/[^/\s]+$/u.test(msg.topOrigin)
+                ? { topOrigin: msg.topOrigin }
+                : {}),
+            },
             { method: msg.method, params: msg.params },
           )
           .then(

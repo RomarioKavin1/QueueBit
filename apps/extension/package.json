@@ -22,10 +22,13 @@
   },
   "dependencies": {
     "@leaked/frames": "workspace:*",
+    "@leaked/pq-signer": "workspace:*",
     "@leaked/rpc": "workspace:*",
+    "@leaked/ur": "workspace:*",
     "@noble/hashes": "2.4.0",
     "@scure/bip32": "2.4.0",
     "@scure/bip39": "2.4.0",
+    "jsqr": "1.4.0",
     "qrcode": "1.5.4",
     "react": "18.3.1",
     "react-dom": "18.3.1",

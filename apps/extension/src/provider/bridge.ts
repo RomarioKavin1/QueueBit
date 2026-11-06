@@ -70,13 +70,20 @@ export function startBridge(): void {
     }, backoff);
   };
 
+  // In a frame, the top-level page's origin (M0 review: show it on embedded requests). `location.ancestorOrigins` is
+  // the browser's, read from this isolated world, so the page cannot forge it; the service worker still takes the
+  // frame's own origin from the port sender.
+  const ancestors =
+    window !== window.top ? (location as Location & { ancestorOrigins?: DOMStringList }).ancestorOrigins : undefined;
+  const topOrigin = ancestors && ancestors.length > 0 ? (ancestors.item(ancestors.length - 1) ?? undefined) : undefined;
+
   window.addEventListener("message", (event: MessageEvent) => {
     if (event.source !== window) return;
     const data = event.data as InpageToContent | undefined;
     if (data?.target !== CONTENT_TARGET) return;
     const req = data.request;
     if (typeof req?.id !== "string" || typeof req.method !== "string") return;
-    pending.set(req.id, { id: req.id, method: req.method, params: req.params });
+    pending.set(req.id, { id: req.id, method: req.method, params: req.params, ...(topOrigin ? { topOrigin } : {}) });
     const p = connect();
     try {
       p?.postMessage(pending.get(req.id));

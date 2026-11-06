@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { isAddress, type Address } from "viem";
+import { AnimatedUr, UR_TYPES, singlePartUr } from "@leaked/ur";
 import { NETWORKS, getNetwork } from "../../shared/chains";
 import type { WalletState } from "../../shared/types";
+import type { PairPreview } from "../../shared/views";
 import {
   AddressChip,
   Button,
   Card,
   PasswordField,
-  QrPlaceholder,
+  QrCode,
   RecoveryIcon,
   RiskBanner,
   Sheet,
@@ -15,32 +18,44 @@ import {
   WalletIcon,
   type TimelineStep,
 } from "../../ui";
+import { UrScanner } from "../../ui/QrHandoff";
 import { cx } from "../../ui/cx";
 import { formatUsd } from "../../ui/format";
 import { call, UiCallError } from "../lib/api";
-import { useAsync } from "../lib/hooks";
-import { SoonBadge } from "../common/EmptyState";
+import { useAsync, usePoll } from "../lib/hooks";
+import { eth } from "../lib/money";
+import { GuardianForm } from "./Security";
+import { startVault } from "./vaultStart";
 
-export type Step = "welcome" | "create" | "import" | "words" | "limit" | "network" | "vault" | "recovery" | "done";
+export type Step =
+  "welcome" | "create" | "import" | "words" | "vault" | "recovery" | "guardian" | "limit" | "network" | "done";
 
-const RAIL: Array<{ label: string; steps: Step[]; soon?: boolean }> = [
+/** The order of the task brief: the Vault is paired before anything that depends on the account address. */
+const RAIL: Array<{ label: string; steps: Step[]; optional?: boolean }> = [
   { label: "Create", steps: ["welcome", "create", "import", "words"] },
+  { label: "Pair Vault", steps: ["vault"] },
+  { label: "Recovery key", steps: ["recovery"] },
+  { label: "Guardian", steps: ["guardian"], optional: true },
   { label: "Daily limit", steps: ["limit"] },
   { label: "Network", steps: ["network"] },
-  { label: "Pair Vault", steps: ["vault"], soon: true },
-  { label: "Recovery key", steps: ["recovery"], soon: true },
+  { label: "Activate", steps: ["done"] },
 ];
 
-function rail(step: Step): TimelineStep[] {
-  const idx = step === "done" ? RAIL.length : RAIL.findIndex((r) => r.steps.includes(step));
-  return RAIL.map((r, i) => ({
-    label: r.label,
-    status: i < idx ? (r.soon ? "skipped" : "done") : i === idx ? "active" : r.soon ? "soon" : "pending",
-    ...(r.soon ? { hint: i < idx ? "skipped" : "soon" } : {}),
-  }));
+function rail(step: Step, state: WalletState): TimelineStep[] {
+  const idx = RAIL.findIndex((r) => r.steps.includes(step));
+  return RAIL.map((r, i) => {
+    const skipped =
+      (r.label === "Recovery key" && i < idx && !state.setup.recovery?.testedAt) ||
+      (r.label === "Guardian" && i < idx && !state.setup.guardian);
+    return {
+      label: r.label,
+      status: i < idx ? (skipped ? "skipped" : "done") : i === idx ? "active" : "pending",
+      ...(skipped ? { hint: "later" } : r.optional && i >= idx ? { hint: "optional" } : {}),
+    };
+  });
 }
 
-/** Full-tab onboarding (ux-spec §3.1). Steps the plan schedules for later milestones are visibly marked as such. */
+/** Full-tab onboarding (ux-spec §3.1). */
 export function Onboarding({ state, step, go }: { state: WalletState; step: Step; go: (s: Step) => void }) {
   const stepNo = Math.min(RAIL.findIndex((r) => r.steps.includes(step)) + 1, RAIL.length);
   const heading = useRef<HTMLHeadingElement>(null);
@@ -48,28 +63,27 @@ export function Onboarding({ state, step, go }: { state: WalletState; step: Step
 
   return (
     <div className="min-h-screen bg-surface">
-      <div className="mx-auto flex max-w-[680px] flex-col gap-6 px-6 py-8">
+      <div className="mx-auto flex max-w-[720px] flex-col gap-6 px-6 py-8">
         <header className="flex flex-col gap-4">
           <div className="flex items-center justify-between">
             <span className="t-title">LEAKED</span>
-            {step !== "done" && (
-              <span className="t-small text-muted">
-                Step {stepNo} of {RAIL.length}
-              </span>
-            )}
+            <span className="t-small text-muted">
+              Step {stepNo} of {RAIL.length}
+            </span>
           </div>
-          <Timeline steps={rail(step)} orientation="horizontal" label="Setup progress" />
+          <Timeline steps={rail(step, state)} orientation="horizontal" label="Setup progress" />
         </header>
         <main className="rounded-lg border border-line bg-bg p-6 sm:p-8">
           {step === "welcome" && <Welcome headingRef={heading} go={go} />}
           {step === "create" && <Create headingRef={heading} go={go} />}
           {step === "import" && <Import headingRef={heading} go={go} />}
           {step === "words" && <Words headingRef={heading} go={go} />}
+          {step === "vault" && <PairVault headingRef={heading} state={state} go={go} />}
+          {step === "recovery" && <RecoveryStep headingRef={heading} state={state} go={go} />}
+          {step === "guardian" && <GuardianStep headingRef={heading} state={state} go={go} />}
           {step === "limit" && <Limit headingRef={heading} state={state} go={go} />}
           {step === "network" && <Network headingRef={heading} state={state} go={go} />}
-          {step === "vault" && <VaultStub headingRef={heading} go={go} />}
-          {step === "recovery" && <RecoveryStub headingRef={heading} go={go} />}
-          {step === "done" && <Done headingRef={heading} state={state} />}
+          {step === "done" && <Done headingRef={heading} state={state} go={go} />}
         </main>
       </div>
     </div>
@@ -215,7 +229,7 @@ function Create({ headingRef, go }: StepProps) {
           try {
             const { mnemonic } = await call("keyring:create", { password: p.pw, revealWords: showWords });
             createdWords = showWords && mnemonic ? mnemonic : null;
-            go(showWords ? "words" : "limit");
+            go(showWords ? "words" : "vault");
           } catch (err) {
             setError(err instanceof UiCallError ? err.message : "Couldn't create the account.");
           } finally {
@@ -278,7 +292,7 @@ function Words({ headingRef, go }: StepProps) {
       <p className="t-small mb-6 text-muted">
         Write them down in order and keep them private. Anyone with them can use your everyday spending.
       </p>
-      <Button onClick={() => go("limit")}>I've written them down</Button>
+      <Button onClick={() => go("vault")}>I've written them down</Button>
     </>
   );
 }
@@ -308,7 +322,7 @@ function Import({ headingRef, go }: StepProps) {
           try {
             await call("keyring:import", { mnemonic: words, password: p.pw });
             setWords("");
-            go("limit");
+            go("vault");
           } catch (err) {
             setError(err instanceof UiCallError ? err.message : "Couldn't restore the account.");
           } finally {
@@ -356,6 +370,7 @@ function Limit({ headingRef, state, go }: StepProps & { state: WalletState }) {
   const [daily, setDaily] = useState(String(state.setup.dailyLimitUsd));
   const [perPayment, setPerPayment] = useState(String(state.setup.perPaymentUsd));
   const [custom, setCustom] = useState(!PRESETS.includes(state.setup.dailyLimitUsd));
+  const [mode, setMode] = useState<"open" | "strict">(state.setup.recipientMode ?? "open");
   const [busy, setBusy] = useState(false);
   const d = Number(daily);
   const pp = Number(perPayment);
@@ -393,7 +408,7 @@ function Limit({ headingRef, state, go }: StepProps & { state: WalletState }) {
           if (error) return;
           setBusy(true);
           try {
-            await call("setup:update", { dailyLimitUsd: d, perPaymentUsd: pp });
+            await call("setup:update", { dailyLimitUsd: d, perPaymentUsd: pp, recipientMode: mode });
             go("network");
           } finally {
             setBusy(false);
@@ -434,12 +449,26 @@ function Limit({ headingRef, state, go }: StepProps & { state: WalletState }) {
             taken.
           </p>
           <p className="t-body mt-2">Lowering these later is instant. Raising them takes 48 hours.</p>
-          <p className="t-small mt-2 text-muted">
-            Your choice is saved now and written to your account when you pair your Vault (coming in the next update).
-            Until then there is no limit.
-          </p>
         </Card>
-        <div className="flex">
+        <fieldset className="flex flex-col gap-2">
+          <legend className="t-strong mb-2">Who can this browser pay without your phone?</legend>
+          <ModeChoice
+            checked={mode === "open"}
+            onSelect={() => setMode("open")}
+            title="Anyone (recommended)"
+            body="Pay any address, within the limits above. A stolen browser can still take at most your daily limit."
+          />
+          <ModeChoice
+            checked={mode === "strict"}
+            onSelect={() => setMode("strict")}
+            title="Only addresses my Vault allowed (Strict)"
+            body="Safer against a stolen browser, but every new recipient needs your phone, and adding one waits 48 hours."
+          />
+        </fieldset>
+        <div className="flex gap-3">
+          <Button variant="secondary" onClick={() => go("guardian")}>
+            Back
+          </Button>
           <Button type="submit" loading={busy} disabled={!!error} className="min-w-48">
             Set limit
           </Button>
@@ -548,7 +577,7 @@ function Network({ headingRef, state, go }: StepProps & { state: WalletState }) 
           className="min-w-48"
           onClick={async () => {
             await call("settings:update", { selectedChainId: chainId });
-            go("vault");
+            go("done");
           }}
         >
           Continue
@@ -558,116 +587,299 @@ function Network({ headingRef, state, go }: StepProps & { state: WalletState }) 
   );
 }
 
-function VaultStub({ headingRef, go }: StepProps) {
-  const [sheet, setSheet] = useState(false);
+function ModeChoice({
+  checked,
+  onSelect,
+  title,
+  body,
+}: {
+  checked: boolean;
+  onSelect: () => void;
+  title: string;
+  body: string;
+}) {
+  return (
+    <label
+      className={cx(
+        "flex cursor-pointer gap-3 rounded-md border p-4 has-[:focus-visible]:shadow-[var(--focus-ring)]",
+        checked ? "border-brand bg-surface" : "border-line hover:bg-surface",
+      )}
+    >
+      <input
+        type="radio"
+        name="recipient-mode"
+        checked={checked}
+        onChange={onSelect}
+        className="mt-1 size-4 accent-[var(--brand)]"
+      />
+      <span>
+        <span className="t-strong block">{title}</span>
+        <span className="t-small text-muted">{body}</span>
+      </span>
+    </label>
+  );
+}
+
+// ---- Pair the Vault (ux-spec §3.1.2) -------------------------------------------------------------------------
+
+function KeyCheck({ value }: { value: string }) {
+  return (
+    <p
+      className="t-mono text-center text-[24px] tracking-[0.2em]"
+      aria-label={`Ends in ${value.split("").join(" ")}`}
+      data-testid="key-check"
+    >
+      …{value}
+    </p>
+  );
+}
+
+/** Scan a pairing code, show the 8-character check, store it on "This matches". */
+function PairScan({
+  role,
+  onPaired,
+  cameraLabel,
+  hint,
+}: {
+  role: "vault" | "recovery";
+  onPaired: (p: PairPreview) => void;
+  cameraLabel: string;
+  hint: string;
+}) {
+  const [preview, setPreview] = useState<{ p: PairPreview; text: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [key, setKey] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const type = role === "vault" ? "pair:vault" : "pair:recovery";
+  if (preview) {
+    return (
+      <Card tone="vault" className="flex flex-col gap-3" role="status" aria-live="polite">
+        <p className="t-strong">{role === "vault" ? "Vault found." : "Recovery key found."} Its key ends in:</p>
+        <KeyCheck value={preview.p.last8} />
+        <p className="t-body">Check that your phone shows the same 8 characters.</p>
+        {preview.p.experimental && <RiskBanner level="limit" title={preview.p.experimental} />}
+        {error && <RiskBanner level="danger" title={error} />}
+        <div className="flex gap-2">
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setPreview(null);
+              setKey((k) => k + 1);
+            }}
+          >
+            Not the same
+          </Button>
+          <Button
+            variant="vault"
+            loading={busy}
+            onClick={async () => {
+              setBusy(true);
+              setError(null);
+              try {
+                onPaired(await call(type, { text: preview.text, confirm: true }));
+              } catch (e) {
+                setError(e instanceof UiCallError ? e.message : "Couldn't save it.");
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            This matches
+          </Button>
+        </div>
+      </Card>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-2">
+      <UrScanner
+        key={key}
+        accept={[UR_TYPES.pqKey]}
+        cameraLabel={cameraLabel}
+        hint={hint}
+        onComplete={async (r) => {
+          setError(null);
+          const text = singlePartUr(UR_TYPES.pqKey, r.cbor);
+          try {
+            setPreview({ p: await call(type, { text, confirm: false }), text });
+          } catch (e) {
+            setError(e instanceof UiCallError ? e.message : "That code can't be used.");
+            setKey((k) => k + 1);
+          }
+        }}
+      />
+      {error && <RiskBanner level="danger" title={error} />}
+    </div>
+  );
+}
+
+function PairVault({ headingRef, state, go }: StepProps & { state: WalletState }) {
+  const paired = state.setup.vault;
+  const [again, setAgain] = useState(false);
   return (
     <>
-      <div className="mb-3">
-        <SoonBadge />
-      </div>
       <Title
         headingRef={headingRef}
-        sub="Your phone becomes the Vault: it approves anything over your daily limit, with a quantum-safe key that never leaves it."
+        sub="Your phone becomes the Vault: it approves anything over your daily limit, with a quantum-safe key that never leaves it. Your account's address is made from this key, so we pair it first."
       >
         Pair your Vault
       </Title>
-      <div className="flex flex-col gap-6 sm:flex-row">
-        <ol className="t-body flex flex-1 list-decimal flex-col gap-2 pl-5 text-muted">
-          <li>On your phone, open LEAKED Vault and choose "Pair with a browser".</li>
-          <li>Point your phone's QR at this camera.</li>
-          <li>Check that your phone shows the same 8 characters as this screen.</li>
-        </ol>
-        <QrPlaceholder label="Camera preview placeholder: Vault pairing is not available in this version" size={180}>
-          Camera preview
-        </QrPlaceholder>
-      </div>
-      <RiskBanner
-        className="mt-6"
-        level="vault"
-        title="Vault pairing isn't available in this version"
-        body="It arrives with the Vault app in the next update. Nothing is paired yet."
-      />
-      <div className="mt-6 flex gap-3">
-        <Button variant="secondary" onClick={() => go("network")}>
-          Back
-        </Button>
-        <Button variant="vault" disabled>
-          Pair Vault
-        </Button>
-        <Button variant="ghost" onClick={() => setSheet(true)}>
-          Skip for now
-        </Button>
-      </div>
-      <Sheet open={sheet} title="Skip the Vault for now?" onClose={() => setSheet(false)}>
-        <p className="t-body">
-          Without a Vault there is no daily limit. Anyone with this browser can spend everything. You can pair later
-          from Security.
-        </p>
-        <div className="mt-4 flex gap-2">
-          <Button variant="secondary" block onClick={() => setSheet(false)}>
-            Go back
-          </Button>
-          <Button
-            block
-            onClick={async () => {
-              await call("setup:update", { vaultSkippedAt: Date.now() });
-              setSheet(false);
-              go("recovery");
-            }}
-          >
-            Skip anyway
-          </Button>
+      {paired && !again ? (
+        <div className="flex flex-col gap-4">
+          <RiskBanner level="vault" title="Vault paired" body={`Key ends in …${paired.pk.slice(-8).toLowerCase()}.`} />
+          <div className="flex gap-3">
+            <Button variant="secondary" onClick={() => setAgain(true)}>
+              Pair a different phone
+            </Button>
+            <Button className="min-w-48" onClick={() => go("recovery")}>
+              Continue
+            </Button>
+          </div>
         </div>
-      </Sheet>
+      ) : (
+        <div className="flex flex-col gap-6 sm:flex-row">
+          <ol className="t-body flex flex-1 list-decimal flex-col gap-2 pl-5">
+            <li>
+              On your phone, open <strong>LEAKED Vault</strong>. New Vault: <em>Create a new Vault</em>; it ends on a
+              pairing code. Existing Vault: Settings › <em>Pair with a browser</em>.
+            </li>
+            <li>Point the phone's code at this camera (or paste it as text).</li>
+            <li>Check that the phone shows the same 8 characters as this screen.</li>
+            <li className="text-muted">
+              Don't have the Vault app yet? Open it on your phone's browser and add it to the home screen.
+            </li>
+          </ol>
+          <div className="w-full sm:w-[340px]">
+            <PairScan
+              role="vault"
+              cameraLabel="Camera preview for scanning the Vault pairing code"
+              hint="Looking for the pairing code…"
+              onPaired={() => {
+                setAgain(false);
+                go("recovery");
+              }}
+            />
+          </div>
+        </div>
+      )}
+      <p className="t-small mt-6 text-muted">
+        There is no "skip": without a Vault there is no daily limit, so LEAKED doesn't create an account without one.
+      </p>
     </>
   );
 }
 
-function RecoveryStub({ headingRef, go }: StepProps) {
+// ---- Recovery key: the guided ceremony (ux-spec §3.1.4) ---------------------------------------------------------
+
+function RecoveryStep({ headingRef, state, go }: StepProps & { state: WalletState }) {
+  const rec = state.setup.recovery;
+  const [ready, setReady] = useState(Boolean(rec));
   const [sheet, setSheet] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [scanKey, setScanKey] = useState(0);
+  const scanned = Boolean(rec);
+  const tested = Boolean(rec?.testedAt);
   const steps: TimelineStep[] = [
-    "Put your phone in airplane mode",
-    'On the phone: Vault › Recovery › "Create Recovery key". Write down the 24 words.',
-    "Scan the Recovery key code shown on the phone",
-    "Approve the link on your phone (Vault approval)",
-    "Test it: re-enter 6 words on the phone",
-    "Phone wipes the key. Keep the paper somewhere else, not with the phone.",
-  ].map((label) => ({ label, status: "soon" }));
+    { label: "Put your phone in airplane mode", status: ready ? "done" : "active" },
+    {
+      label: 'On the phone: Vault › Recovery › "Create Recovery key". Write down the 24 words.',
+      status: scanned ? "done" : ready ? "active" : "pending",
+    },
+    { label: "Scan the Recovery key code shown on the phone", status: scanned ? "done" : ready ? "active" : "pending" },
+    {
+      label: "Test it: re-enter 6 words on the phone, then scan its test code",
+      status: tested ? "done" : scanned ? "active" : "pending",
+    },
+    {
+      label: "The phone wipes the key. Keep the paper somewhere else, not with the phone.",
+      status: tested ? "done" : "pending",
+    },
+  ];
   return (
     <>
-      <div className="mb-3">
-        <SoonBadge />
-      </div>
       <Title
         headingRef={headingRef}
         sub="Takes about 5 minutes. You'll need your phone and pen and paper (or a steel plate)."
       >
         Set up your Recovery key
       </Title>
-      <Timeline steps={steps} label="Recovery key setup steps (not available yet)" />
+      <Timeline steps={steps} label="Recovery key setup steps" />
       <p className="t-body mt-6">
         <strong>Why:</strong> if your phone is lost or stolen, these words let you replace the Vault. Nothing else can.
+        This browser never sees the words.
       </p>
-      <RiskBanner
-        className="mt-4"
-        level="info"
-        title="Recovery setup needs the Vault app"
-        body="It arrives with Vault pairing in a later update."
-      />
+      {error && <RiskBanner className="mt-4" level="danger" title={error} />}
+      {ready && !scanned && (
+        <div className="mt-6 max-w-[420px]">
+          <PairScan
+            role="recovery"
+            cameraLabel="Camera preview for scanning the Recovery key code"
+            hint="Looking for the Recovery key code…"
+            onPaired={() => setError(null)}
+          />
+        </div>
+      )}
+      {scanned && !tested && (
+        <div className="mt-6 flex max-w-[420px] flex-col gap-2">
+          <p className="t-strong">Recovery key ends in …{rec!.pk.slice(-8).toLowerCase()}. Now the test:</p>
+          <p className="t-small text-muted">The phone shows a test code after you re-enter 6 of the words.</p>
+          <UrScanner
+            key={scanKey}
+            accept={[UR_TYPES.recoveryTest]}
+            cameraLabel="Camera preview for scanning the recovery test code"
+            hint="Looking for the test code…"
+            onComplete={async (r) => {
+              setError(null);
+              try {
+                await call("pair:recoveryTest", { text: singlePartUrOrParts(r.cbor) });
+              } catch (e) {
+                setError(e instanceof UiCallError ? e.message : "The test didn't check out.");
+                setScanKey((k) => k + 1);
+              }
+            }}
+          />
+          <Button
+            variant="ghost"
+            onClick={async () => {
+              await call("pair:forgetRecovery");
+              setScanKey((k) => k + 1);
+            }}
+          >
+            Start the Recovery setup again
+          </Button>
+        </div>
+      )}
+      {tested && (
+        <RiskBanner
+          className="mt-6"
+          level="vault"
+          title="Recovery key is set. Store the paper away from your phone."
+          body="It becomes part of your account when you activate it: no extra approval needed."
+        />
+      )}
       <div className="mt-6 flex gap-3">
         <Button variant="secondary" onClick={() => go("vault")}>
           Back
         </Button>
-        <Button disabled>I'm ready</Button>
-        <Button variant="ghost" onClick={() => setSheet(true)}>
-          Later
-        </Button>
+        {tested ? (
+          <Button className="min-w-48" onClick={() => go("guardian")}>
+            Continue
+          </Button>
+        ) : !ready ? (
+          <Button onClick={() => setReady(true)}>I'm ready</Button>
+        ) : null}
+        {!tested && (
+          <Button variant="ghost" onClick={() => setSheet(true)}>
+            Set up later
+          </Button>
+        )}
       </div>
       <Sheet open={sheet} title="Add a Recovery key later?" onClose={() => setSheet(false)}>
-        <p className="t-body">
-          You can add a Recovery key any time from Security. Until then, Lockdown is unavailable and a lost phone means
-          a lost Vault.
-        </p>
+        <RiskBanner
+          level="limit"
+          title="Without a Recovery key, a lost phone means a lost Vault."
+          body="Lockdown stays unavailable until you add one. You can add it any time from Security (one Vault approval)."
+        />
         <div className="mt-4 flex gap-2">
           <Button variant="secondary" block onClick={() => setSheet(false)}>
             Go back
@@ -675,12 +887,13 @@ function RecoveryStub({ headingRef, go }: StepProps) {
           <Button
             block
             onClick={async () => {
-              await call("setup:update", { recoverySkippedAt: Date.now(), completedAt: Date.now() });
+              if (rec && !rec.testedAt) await call("pair:forgetRecovery");
+              await call("setup:update", { recoverySkippedAt: Date.now() });
               setSheet(false);
-              go("done");
+              go("guardian");
             }}
           >
-            Continue
+            Set up later
           </Button>
         </div>
       </Sheet>
@@ -688,52 +901,212 @@ function RecoveryStub({ headingRef, go }: StepProps) {
   );
 }
 
-function Done({ headingRef, state }: { headingRef: StepProps["headingRef"]; state: WalletState }) {
+/** The recovery-test code as one text (all fountain parts), for the service worker to decode on its own. */
+function singlePartUrOrParts(cbor: Uint8Array): string {
+  const enc = new AnimatedUr(UR_TYPES.recoveryTest, cbor);
+  return enc.parts(enc.partCount).join("\n");
+}
+
+// ---- Guardian (ux-spec §3.1.5, optional) -------------------------------------------------------------------------
+
+function GuardianStep({ headingRef, state, go }: StepProps & { state: WalletState }) {
+  const [address, setAddress] = useState(state.setup.guardian?.address ?? "");
+  const [name, setName] = useState(state.setup.guardian?.name ?? "");
+  return (
+    <>
+      <Title headingRef={headingRef}>Add a Guardian (optional)</Title>
+      <div className="max-w-[460px]">
+        <GuardianForm address={address} name={name} onAddress={setAddress} onName={setName} />
+        <p className="t-small mt-3 text-muted">
+          Your phone adds the Guardian right after activation (one Vault approval).
+        </p>
+      </div>
+      <div className="mt-6 flex gap-3">
+        <Button variant="secondary" onClick={() => go("recovery")}>
+          Back
+        </Button>
+        <Button
+          variant="vault"
+          disabled={!isAddress(address)}
+          onClick={async () => {
+            await call("setup:update", {
+              guardian: { address: address as Address, ...(name ? { name } : {}), requestedAt: Date.now() },
+            });
+            go("limit");
+          }}
+        >
+          Add Guardian
+        </Button>
+        <Button
+          variant="ghost"
+          onClick={async () => {
+            await call("setup:update", { guardianSkippedAt: Date.now() });
+            go("limit");
+          }}
+        >
+          Skip
+        </Button>
+      </div>
+    </>
+  );
+}
+
+// ---- Done: the address, then activation (ux-spec §3.1.6) --------------------------------------------------------
+
+function Done({ headingRef, state, go }: StepProps & { state: WalletState }) {
   const net = getNetwork(state.settings.selectedChainId);
-  const status = useAsync(() => call("account:status", { chainId: net.chainId }), [net.chainId]);
-  const address = status.data?.address ?? state.accounts?.everyday;
+  const plan = useAsync(() => call("account:computePlan", { chainId: net.chainId }), [net.chainId]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const s = plan.data;
+  const tankOk = s ? BigInt(s.tankWei) >= BigInt(s.activationCostWei) && BigInt(s.activationCostWei) > 0n : false;
+  usePoll(plan.reload, 3000, Boolean(s && !s.deployed));
+  useEffect(() => {
+    if (s?.deployed && !state.setup.completedAt) void call("setup:update", { completedAt: Date.now() });
+  }, [s?.deployed, state.setup.completedAt]);
   const rows: Array<[string, ReactNode]> = [
     [
       "Daily limit",
-      `${formatUsd(state.setup.dailyLimitUsd)} in any 24 hours · ${formatUsd(state.setup.perPaymentUsd)} per payment (starts when you activate your account)`,
+      `${formatUsd(state.setup.dailyLimitUsd)} in any 24 hours · ${formatUsd(state.setup.perPaymentUsd)} per payment`,
     ],
-    ["Vault", "Not paired yet"],
-    ["Recovery key", "Not set yet"],
+    [
+      "Who you can pay",
+      state.setup.recipientMode === "strict" ? "Only allowed recipients" : "Anyone, within the limits",
+    ],
+    ["Vault", state.setup.vault ? `Paired · key …${state.setup.vault.pk.slice(-8).toLowerCase()}` : "Not paired"],
+    [
+      "Recovery key",
+      state.setup.recovery?.testedAt
+        ? `Set · key …${state.setup.recovery.pk.slice(-8).toLowerCase()}`
+        : "Not yet (Lockdown unavailable)",
+    ],
+    [
+      "Guardian",
+      state.setup.guardian ? `${state.setup.guardian.name ?? "Set"} (added with your phone after activation)` : "None",
+    ],
     ["Network", `${net.name} · ${net.accountKind}`],
   ];
   return (
     <>
-      <Title headingRef={headingRef} sub="Your everyday key is ready on this browser.">
-        You're set.
+      <Title headingRef={headingRef} sub="Your account address is ready. Activate it to start paying.">
+        {s?.deployed ? "You're set." : "Almost there"}
       </Title>
+      {plan.error && (
+        <RiskBanner
+          level="limit"
+          title={plan.error}
+          action={{
+            label: state.setup.vault ? "Try again" : "Pair your Vault",
+            onClick: () => (state.setup.vault ? void plan.reload() : go("vault")),
+          }}
+        />
+      )}
       <dl className="mb-6 divide-y divide-line rounded-md border border-line">
         {rows.map(([k, v]) => (
           <div key={k} className="flex flex-col gap-0.5 px-4 py-3 sm:flex-row sm:gap-4">
-            <dt className="t-strong sm:w-32">{k}</dt>
+            <dt className="t-strong sm:w-36">{k}</dt>
             <dd className="t-body text-muted">{v}</dd>
           </div>
         ))}
         <div className="flex flex-col gap-1 px-4 py-3 sm:flex-row sm:items-center sm:gap-4">
-          <dt className="t-strong sm:w-32">Your address</dt>
+          <dt className="t-strong sm:w-36">Your address</dt>
           <dd className="flex flex-col gap-1">
-            {address && <AddressChip address={address} chain={net.accountKind} />}
+            {s && <AddressChip address={s.address} chain={net.accountKind} />}
             <span className="t-small text-muted" data-testid="done-address-note">
-              Not activated yet: you can receive now; activate it from the wallet to start paying.
+              {s?.deployed ? "Active." : "You can receive money now. Paying starts after activation."}
             </span>
           </dd>
         </div>
       </dl>
-      <RiskBanner
-        level="limit"
-        title="No daily limit yet"
-        body="Your limit goes on the network when you activate your account. Until Vault pairing arrives, keep only test money here."
-      />
-      <Card className="mt-6 bg-surface" heading="Open your wallet">
-        <p className="t-body text-muted">
-          Click the LEAKED icon in your browser's toolbar. Tip: pin it from the puzzle-piece menu so it's always one
-          click away.
-        </p>
-      </Card>
+      {s && !s.deployed && (
+        <Card heading="Activate your account" className="mb-6" data-testid="activate-card">
+          <p className="t-body">
+            Activation puts your limits and your Vault on {net.name}. Your <strong>fee tank</strong> pays the one-time
+            network fee and gives your Vault a little ETH for its own fees. The fee tank only pays network fees: a thief
+            can only burn what's in it.
+          </p>
+          <ol className="t-body mt-3 flex list-decimal flex-col gap-1 pl-5">
+            <li className={tankOk ? "text-muted line-through" : ""}>
+              Send at least {eth(s.activationCostWei, 4)} on {net.name} to your fee tank{tankOk ? " ✔" : ":"}
+            </li>
+            {!tankOk && (
+              <li className="-ml-5 mt-2 flex list-none items-center gap-4">
+                <QrCode value={s.tank} size={120} label={`QR code of your fee tank ${s.tank}`} />
+                <div className="flex flex-col gap-1">
+                  <AddressChip address={s.tank} name="Fee tank" />
+                  <span className="t-small text-muted" data-testid="tank-balance">
+                    In the tank: {eth(s.tankWei)}
+                  </span>
+                </div>
+              </li>
+            )}
+            <li>Press Activate account. It takes a few seconds.</li>
+          </ol>
+
+          {error && <RiskBanner className="mt-3" level="danger" title={error} />}
+          <Button
+            className="mt-4 min-w-48"
+            disabled={!tankOk || Boolean(s.activation)}
+            loading={busy || Boolean(s.activation)}
+            loadingLabel="Activating…"
+            onClick={async () => {
+              setBusy(true);
+              setError(null);
+              try {
+                await call("account:activate", { chainId: net.chainId });
+                await plan.reload();
+              } catch (e) {
+                setError(e instanceof UiCallError ? e.message : "Couldn't activate. Try again.");
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            Activate account
+          </Button>
+        </Card>
+      )}
+      {s?.deployed && (
+        <>
+          <RiskBanner
+            level="vault"
+            title="Your account is active"
+            body="Your daily limit is enforced by the network, and your phone approves the rest."
+          />
+          {state.setup.guardian && (
+            <Button
+              className="mt-4"
+              variant="vault"
+              onClick={() =>
+                void startVault({
+                  type: "setGuardian",
+                  guardian: state.setup.guardian!.address,
+                  enabled: true,
+                  ...(state.setup.guardian!.name ? { name: state.setup.guardian!.name } : {}),
+                })
+              }
+            >
+              Add your Guardian with Vault
+            </Button>
+          )}
+          <Card className="mt-6 bg-surface" heading="Open your wallet">
+            <p className="t-body text-muted">
+              Click the LEAKED icon in your browser's toolbar. Tip: pin it from the puzzle-piece menu so it's always one
+              click away.
+            </p>
+            <Button className="mt-3" variant="secondary" onClick={() => (location.hash = "#home")}>
+              Open wallet here
+            </Button>
+          </Card>
+        </>
+      )}
+      {!s?.deployed && (
+        <div className="flex gap-3">
+          <Button variant="secondary" onClick={() => go("network")}>
+            Back
+          </Button>
+        </div>
+      )}
     </>
   );
 }

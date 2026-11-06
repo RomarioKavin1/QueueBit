@@ -41,4 +41,5 @@ export const StorageKeys = {
   approvals: "leaked:approvals",
   accountPlans: "leaked:accountPlans",
   activity: "leaked:activity",
+  vaultRequests: "leaked:vaultRequests",
 } as const;

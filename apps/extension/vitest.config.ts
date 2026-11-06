@@ -12,5 +12,7 @@ export default defineProject({
     name: "extension",
     include: ["test/unit/**/*.test.ts", "test/devnet/**/*.test.ts"],
     environment: "node",
+    // @ngraveio/bc-ur's ESM build imports the bare directory "buffer/" (packages/ur notes); let Vite resolve it.
+    server: { deps: { inline: ["@ngraveio/bc-ur"] } },
   },
 });

@@ -30,9 +30,13 @@ export const VERIFY_GAS = 80_000n;
 /** Default code pays only the access charge (measured 3,000). VERIFY + tank + 2 × 2,800 sig cost ≤ 100,000. */
 export const TANK_GAS = 10_000n;
 /** Body limits of the measuring simulation. */
-const PROBE_BODY = { execution: 600_000n, state: 200_000n };
-/** A value transfer to a fresh account needs state gas (devnet README "Gas rules that bite"). */
-const BODY_STATE_GAS = 200_000n;
+const PROBE_BODY = { execution: 600_000n, state: 300_000n };
+/**
+ * A value transfer to a fresh account needs state gas (devnet README "Gas rules that bite"): 204,600 for the new
+ * account alone, which spills into (and exhausts) the execution limit when the state limit is lower. Open recipient
+ * mode makes fresh recipients the common case, so the body reserves 300,000 (found by the M4 e2e).
+ */
+const BODY_STATE_GAS = 300_000n;
 const MIN_BODY_EXECUTION = 80_000n;
 const GWEI = 1_000_000_000n;
 export const DEFAULT_PRIORITY_FEE = GWEI;
@@ -111,12 +115,16 @@ export function hotExecuteData(declaredUsd: bigint, calls: Call[]): Hex {
   });
 }
 
-/** Per-frame gas from a simulation result (`frames: [{gasUsed, succeeded}]`; tolerant of field-name drift). */
+/**
+ * Per-frame gas from a simulation result (`frames: [{gasUsed, succeeded}]`; tolerant of field-name drift). A frame
+ * that reports no outcome at all counts as FAILED (M1 review decision: fail closed; a node that stops reporting
+ * outcomes must not make an unchecked payment look admitted).
+ */
 export function parseSimFrames(frames: unknown[] | null): FrameGas[] {
   return (frames ?? []).map((f) => {
     const o = (f ?? {}) as Record<string, unknown>;
     const g = o.gasUsed ?? o.executionGasUsed ?? 0;
-    const ok = o.succeeded ?? o.success ?? (o.status === undefined ? true : o.status === "0x1" || o.status === 1);
+    const ok = o.succeeded ?? o.success ?? (o.status === undefined ? false : o.status === "0x1" || o.status === 1);
     return { gasUsed: BigInt(String(g)), succeeded: Boolean(ok) };
   });
 }
@@ -207,7 +215,14 @@ export class FrameEngine {
     let final = probe;
     const used = probe.frames[2]?.gasUsed;
     if (probe.sim.valid && used !== undefined) {
-      const execution = used + used / 4n + 20_000n;
+      // The frame's own `gasUsed` is its execution only; a value transfer that creates the recipient's account also
+      // burns ~205k state gas, which this ethrex build takes from the execution limit (found by the M4 e2e: an Open
+      // payment to a fresh address ran out of gas with execution = 1.25 × the frame's gasUsed). Size the limit by the
+      // body's total from the transaction's gasUsed instead.
+      const prefix = (probe.frames[0]?.gasUsed ?? 0n) + (probe.frames[1]?.gasUsed ?? 0n);
+      const total = probe.sim.gasUsed !== null && probe.sim.gasUsed > prefix ? probe.sim.gasUsed - prefix : used;
+      const body = total > used ? total : used;
+      const execution = body + body / 4n + 20_000n;
       final = await this.build(profile, req, nonce, fees, {
         execution: execution > MIN_BODY_EXECUTION ? execution : MIN_BODY_EXECUTION,
         state: BODY_STATE_GAS,

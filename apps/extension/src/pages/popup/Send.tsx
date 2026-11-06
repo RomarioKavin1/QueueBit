@@ -45,6 +45,7 @@ export function SendScreen({
   const status = useAsync(() => call("account:status", { chainId }), [chainId]);
   const [to, setTo] = useState(prefill?.to ?? "");
   const [amount, setAmount] = useState("");
+  const [handedOff, setHandedOff] = useState(false);
   const [stage, setStage] = useState<Stage>("compose");
   const [preview, setPreview] = useState<SendPreview | null>(null);
   const [previewing, setPreviewing] = useState(false);
@@ -230,18 +231,20 @@ export function SendScreen({
                     type="button"
                     variant="vault"
                     block
-                    onClick={() => {
-                      const q = new URLSearchParams({
-                        to,
-                        amount: eth(wei!),
-                        usd: formatUsd(route.amountUsd),
-                        why: route.copy.detail,
-                        rules: route.rules.join(","),
+                    data-testid="approve-on-phone"
+                    onClick={async () => {
+                      const rec = await call("vault:create", {
+                        action: {
+                          type: "send",
+                          calls: [{ target: to as `0x${string}`, value: wei!.toString(), data: "0x" }],
+                          usd6: String(Math.round(route.amountUsd * 1e6)),
+                        },
                       });
-                      void browser.tabs.create({ url: browser.runtime.getURL(`/app.html#vault/request?${q}`) });
+                      void browser.tabs.create({ url: browser.runtime.getURL(`/app.html#vault/${rec.id}`) });
+                      setHandedOff(true);
                     }}
                   >
-                    Request Vault approval
+                    {handedOff ? "Continuing in the LEAKED tab" : "Approve on phone"}
                   </Button>
                 </div>
               )}

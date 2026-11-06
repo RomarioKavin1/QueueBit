@@ -3,8 +3,10 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { test as base, chromium, expect, type BrowserContext, type Page, type Worker } from "@playwright/test";
+import { HELPERS_OUT } from "./build-helpers";
+import type * as SimModule from "./support/companion-sim";
 
 const here = dirname(fileURLToPath(import.meta.url));
 export const EXTENSION_PATH = join(here, "..", ".output", "chrome-mv3");
@@ -67,12 +69,35 @@ export async function openPopup(context: BrowserContext, extensionId: string): P
   return page;
 }
 
-/** Create an account through the onboarding UI, skipping the stubbed Vault and Recovery steps. */
+type Sim = typeof SimModule;
+let sim: Promise<Sim> | undefined;
+/** The simulated Vault phone (the real companion decoder + worker, bundled by e2e/build-helpers.ts). */
+export function companion(): Promise<Sim> {
+  sim ??= import(pathToFileURL(`${HELPERS_OUT}companion-sim.mjs`).href) as Promise<Sim>;
+  return sim;
+}
+export type Phone = Awaited<ReturnType<Sim["newPhone"]>>;
+
+/** Paste a code into the page's scanner (the camera's fallback, ux-spec E-20). */
+export async function pasteCode(page: Page, text: string): Promise<void> {
+  const tab = page.getByRole("tab", { name: "Paste the code" }).last();
+  await tab.click();
+  await page.getByTestId("ur-paste").last().fill(text);
+  await page.getByTestId("ur-paste-submit").last().click();
+}
+
+/**
+ * Onboarding through the UI with a simulated companion (ux-spec §3.1, task order): create → pair the Vault (paste
+ * fallback) → Recovery ceremony (key code + test code) or "Set up later" → Guardian skipped → limits → network → the
+ * address is computed. Activation is left to the caller (it needs devnet funds).
+ */
 export async function onboard(
   context: BrowserContext,
   extensionId: string,
-  shots?: (name: string, page: Page) => Promise<void>,
+  opts: { phone?: Phone; recovery?: boolean; shots?: (name: string, page: Page) => Promise<void> } = {},
 ) {
+  const shots = opts.shots;
+  const phone = opts.phone ?? (await (await companion()).newPhone());
   const page = await context.newPage();
   await page.setViewportSize({ width: 1024, height: 900 });
   await page.goto(extUrl(extensionId, "app.html#onboarding"));
@@ -83,25 +108,56 @@ export async function onboard(
   await page.getByLabel("Confirm password").fill(PASSWORD);
   await shots?.("onboarding-2-password", page);
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page.getByRole("heading", { name: /How much can this browser spend/u })).toBeVisible({
-    timeout: 30_000,
-  });
-  await shots?.("onboarding-3-daily-limit", page);
+
+  await expect(page.getByRole("heading", { name: "Pair your Vault" })).toBeVisible({ timeout: 30_000 });
+  await shots?.("onboarding-3-pair-vault", page);
+  await pasteCode(page, phone.pairingText);
+  await expect(page.getByTestId("key-check")).toHaveText(`…${phone.vaultPk.slice(-8).toLowerCase()}`);
+  await shots?.("onboarding-3b-pair-check", page);
+  await page.getByRole("button", { name: "This matches" }).click();
+
+  await expect(page.getByRole("heading", { name: "Set up your Recovery key" })).toBeVisible();
+  await shots?.("onboarding-4-recovery", page);
+  if (opts.recovery !== false) {
+    await page.getByRole("button", { name: "I'm ready" }).click();
+    await pasteCode(page, phone.recoveryKeyText);
+    await expect(page.getByTestId("key-check")).toHaveText(`…${phone.recoveryPk.slice(-8).toLowerCase()}`);
+    await page.getByRole("button", { name: "This matches" }).click();
+    await expect(page.getByText(/Now the test/u)).toBeVisible();
+    await pasteCode(page, await phone.recoveryTestText());
+    await expect(page.getByText("Recovery key is set. Store the paper away from your phone.")).toBeVisible({
+      timeout: 30_000,
+    });
+    await shots?.("onboarding-4b-recovery-done", page);
+    await page.getByRole("button", { name: "Continue" }).click();
+  } else {
+    await page.getByRole("button", { name: "Set up later" }).click();
+    await shots?.("onboarding-4c-recovery-later", page);
+    await page.getByRole("dialog").getByRole("button", { name: "Set up later" }).click();
+  }
+
+  await expect(page.getByRole("heading", { name: "Add a Guardian (optional)" })).toBeVisible();
+  await shots?.("onboarding-5-guardian", page);
+  await page.getByRole("button", { name: "Skip" }).click();
+  await expect(page.getByRole("heading", { name: /How much can this browser spend/u })).toBeVisible();
+  await shots?.("onboarding-6-daily-limit", page);
   await page.getByRole("button", { name: "Set limit" }).click();
   await expect(page.getByRole("heading", { name: "Choose a network" })).toBeVisible();
-  await shots?.("onboarding-4-network", page);
+  await shots?.("onboarding-7-network", page);
   await page.getByRole("button", { name: "Continue" }).click();
-  await expect(page.getByRole("heading", { name: "Pair your Vault" })).toBeVisible();
-  await shots?.("onboarding-5-vault-stub", page);
-  await page.getByRole("button", { name: "Skip for now" }).click();
-  await page.getByRole("button", { name: "Skip anyway" }).click();
-  await expect(page.getByRole("heading", { name: "Set up your Recovery key" })).toBeVisible();
-  await shots?.("onboarding-6-recovery-stub", page);
-  await page.getByRole("button", { name: "Later" }).click();
-  await page.getByRole("dialog").getByRole("button", { name: "Continue" }).click();
-  await expect(page.getByRole("heading", { name: "You're set." })).toBeVisible();
-  await shots?.("onboarding-7-done", page);
-  return page;
+  await expect(page.getByRole("heading", { name: "Almost there" })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("activate-card")).toBeVisible({ timeout: 30_000 });
+  await shots?.("onboarding-8-activate", page);
+  return { page, phone };
+}
+
+/** Funds the fee tank and activates from the onboarding page; resolves once the account is active. */
+export async function activateFromOnboarding(page: Page, fundTank: (tank: string) => Promise<void>, tank: string) {
+  await fundTank(tank);
+  const btn = page.getByTestId("activate-card").getByRole("button", { name: "Activate account" });
+  await expect(btn).toBeEnabled({ timeout: 30_000 });
+  await btn.click();
+  await expect(page.getByText("Your account is active")).toBeVisible({ timeout: 180_000 });
 }
 
 /** The address the extension shows on the Receive sheet / the dapp sees. */

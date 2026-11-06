@@ -27,6 +27,7 @@ function deps(over: Partial<RouterDeps> & { outcome?: ApprovalOutcome } = {}) {
       activityId: "a1",
       ...(tx.batchId ? { batchId: tx.batchId } : {}),
     })),
+    requestSignature: vi.fn(async () => "0x1234" as `0x${string}`),
     callsStatus: vi.fn(async (_o: string, id: string) =>
       id === HASH ? { version: "2.0.0", id, chainId: "0x539" as const, status: 200, atomic: true } : null,
     ),
@@ -200,13 +201,49 @@ describe("provider router", () => {
     expect(d.readRpc).toHaveBeenCalledWith(1337, method, params);
   });
 
-  it("signatures: sign-in / ERC-2612 arrive in M3 (4200); Permit2 and orders need the Vault (4100 + leakedRule)", async () => {
+  it("signatures: sign-in and ERC-2612 go to the approval window; Permit2 and orders are refused (4100 + leakedRule)", async () => {
     const d = deps();
     expect((await rpcError(call(d, "personal_sign", ["0x68656c6c6f", ACCOUNT]))).code).toBe(4100); // not connected
     await d.permissions.grant(ORIGIN, [ACCOUNT], 1337);
-    const sign = await rpcError(call(d, "personal_sign", ["0x68656c6c6f", ACCOUNT]));
-    expect(sign.code).toBe(4200);
-    expect(sign.data).toMatchObject({ leakedRule: "SIG-SIGN-IN" });
+    expect(await call(d, "personal_sign", ["0x68656c6c6f", ACCOUNT])).toBe("0x1234");
+    expect(d.requestSignature).toHaveBeenLastCalledWith(ctx, 1337, {
+      method: "personal_sign",
+      raw: "0x68656c6c6f",
+      cls: { kind: "sign-in", rule: "SIG-SIGN-IN" },
+    });
+    // Another address than the connected account is refused.
+    expect((await rpcError(call(d, "personal_sign", ["0x68656c6c6f", HASH.slice(0, 42)]))).code).toBe(4100);
+    const permit = {
+      primaryType: "Permit",
+      types: {
+        Permit: ["owner", "spender", "value", "nonce", "deadline"].map((name) => ({
+          name,
+          type: name === "owner" || name === "spender" ? "address" : "uint256",
+        })),
+      },
+      domain: {
+        name: "T",
+        version: "1",
+        chainId: 1337,
+        verifyingContract: "0x00000000000000000000000000000000000000aa",
+      },
+      message: {
+        owner: ACCOUNT,
+        spender: "0x00000000000000000000000000000000000000bb",
+        value: "5",
+        nonce: "0",
+        deadline: "99",
+      },
+    };
+    await call(d, "eth_signTypedData_v4", [ACCOUNT, JSON.stringify(permit)]);
+    expect(d.requestSignature).toHaveBeenLastCalledWith(
+      ctx,
+      1337,
+      expect.objectContaining({
+        method: "eth_signTypedData_v4",
+        cls: expect.objectContaining({ kind: "register-permit", value: 5n }),
+      }),
+    );
     const p2 = {
       primaryType: "PermitSingle",
       types: { PermitSingle: [{ name: "spender", type: "address" }] },
@@ -215,7 +252,7 @@ describe("provider router", () => {
     const e = await rpcError(call(d, "eth_signTypedData_v4", [ACCOUNT, JSON.stringify(p2)]));
     expect(e.code).toBe(4100);
     expect(e.data).toMatchObject({ leakedRule: "SIG-PERMIT2" });
-    expect(e.message).toMatch(/Vault/u);
+    expect(e.message).toMatch(/Permit2/u);
   });
 
   it.each(["eth_subscribe", "foo_bar"])("%s is 4200 unsupported with a clear message", async (method) => {

@@ -1,4 +1,6 @@
-import type { Address, Hex } from "viem";
+import { erc20Abi, hexToBytes, type Address, type Hex } from "viem";
+import { schemeById } from "@leaked/pq-signer";
+import { UR_TYPES, UrReceiver, recoveryTestChallenge } from "@leaked/ur";
 import { findNetwork, getNetwork, toHexChainId } from "../shared/chains";
 import type { KV } from "../shared/kv";
 import type { ApprovalView, SendRequest, UiApi, UiType } from "../shared/messages";
@@ -10,6 +12,25 @@ import { ApprovalBroker, ApprovalStore, TooManyPendingError, type ApprovalWindow
 import { bucketFromStatus } from "./bucket";
 import { KeyringController, KeyringError, type KeyringOptions } from "./keyring";
 import { Payments, PaymentsError, RouteError, type ChainIo } from "./payments";
+import type { SidecarClient } from "@leaked/rpc";
+import { accountAbi, roleSignerFactoryAbi } from "../generated/contracts";
+import { ROLE_ID, type AccountPlan } from "./account";
+import { choosePath } from "./lanes";
+import { registerPermitCall, type SignatureClass } from "./signing";
+import {
+  messageText,
+  parseSiwe,
+  personalMessage,
+  registeredMarker,
+  signPersonal7739,
+  signTyped7739,
+  siweDomainMatches,
+  typedDigest,
+} from "./signin";
+import { VaultError, VaultFlow, last8 } from "./vault";
+import type { VaultActionRequest } from "./vaultActions";
+import type { PairPreview, PolicyView, SignerView } from "../shared/views";
+import type { ApprovalSignature } from "../shared/types";
 import { PermissionsStore } from "./permissions";
 import {
   routeProviderRequest,
@@ -30,7 +51,7 @@ export interface WalletEnv {
   /** Push an event to connected dapp ports; `origin` filters to one site. */
   emit(event: "chainChanged" | "accountsChanged", data: unknown, origin?: string): void;
   /** Frame-backend RPC per chain (FrameEngine, account reads). */
-  io?: ChainIo;
+  io?: ChainIo & { sidecar?(url: string): SidecarClient };
   /** Open the full app at a hash route (wallet_showCallsStatus, Vault hand-off). */
   openApp?(hash: string): Promise<void>;
   keyring?: KeyringOptions;
@@ -49,6 +70,7 @@ export class Wallet {
   readonly plans: AccountPlans;
   readonly activity: ActivityStore;
   readonly payments: Payments | undefined;
+  readonly vault: VaultFlow | undefined;
   private readonly now: () => number;
 
   constructor(private readonly env: WalletEnv) {
@@ -69,6 +91,21 @@ export class Wallet {
           now: this.now,
         })
       : undefined;
+    this.vault = env.io
+      ? new VaultFlow({
+          io: env.io,
+          kv: env.local,
+          keyring: this.keyring,
+          plans: this.plans,
+          activity: this.activity,
+          now: this.now,
+        })
+      : undefined;
+  }
+
+  private vf(): VaultFlow {
+    if (!this.vault) throw new Error("Vault approvals are not available in this context.");
+    return this.vault;
   }
 
   private pay(): Payments {
@@ -111,13 +148,14 @@ export class Wallet {
       isUnlocked: () => this.keyring.isUnlocked(),
       getAccount: (chainId) => this.accountFor(chainId),
       requestTransaction: (ctx, chainId, tx) => this.requestTransaction(ctx, chainId, tx),
+      requestSignature: (ctx, chainId, req) => this.requestSignature(ctx, chainId, req),
       callsStatus: (origin, id) => this.callsStatus(origin, id),
       batchIdTaken: async (origin, id) => (await this.activity.findByBatchId(id, origin)) !== undefined,
       capabilities: (chainId) => this.capabilities(chainId),
       showActivity: async (id) => {
         await this.env.openApp?.(`#activity/${encodeURIComponent(id)}`);
       },
-      requestConnect: async ({ origin, requestId, embedded }, chainId) => {
+      requestConnect: async ({ origin, requestId, embedded, topOrigin }, chainId) => {
         try {
           return await this.approvals.request(
             {
@@ -126,6 +164,7 @@ export class Wallet {
               chainId,
               firstVisit: await this.permissions.isFirstVisit(origin),
               ...(embedded ? { embedded: true } : {}),
+              ...(topOrigin ? { topOrigin } : {}),
             },
             requestId,
           );
@@ -215,7 +254,7 @@ export class Wallet {
           chainId,
           firstVisit: false,
           tx,
-          ...(ctx.embedded ? { embedded: true } : {}),
+          ...(ctx.embedded ? { embedded: true, ...(ctx.topOrigin ? { topOrigin: ctx.topOrigin } : {}) } : {}),
         },
         ctx.requestId,
       );
@@ -262,12 +301,9 @@ export class Wallet {
     const leaked: Record<string, unknown> = { backend: "frame" };
     try {
       const s = await this.payments.status(chainId);
+      // Only what a site needs to choose a flow. The limit and what is left of it today are not exposed: they are a
+      // cross-site signal (any connected site could watch another site's spending), M1 review.
       leaked.activated = s.deployed;
-      if (s.deployed) {
-        leaked.capUsd = s.limits.capUsd;
-        leaked.capRemainingUsd = s.limits.availableUsd;
-        leaked.perPaymentUsd = s.limits.perTxMaxUsd;
-      }
     } catch {
       // capabilities stay minimal when the network is unreachable
     }
@@ -312,10 +348,411 @@ export class Wallet {
     };
   }
 
-  async resolveApproval(id: string, approved: boolean): Promise<void> {
+  // ---- signatures from sites (M3: scoped ERC-1271) ----
+
+  private async requestSignature(
+    ctx: RequestContext,
+    chainId: number,
+    req: { method: "personal_sign" | "eth_signTypedData_v4"; raw: unknown; cls: SignatureClass },
+  ): Promise<Hex> {
+    const net = findNetwork(chainId);
+    if (!net || net.backend !== "frame") {
+      throw new ProviderRpcError(
+        RpcErrorCode.unsupportedMethod,
+        `Signatures on ${net?.name ?? "this network"} arrive with the compatible-account update.`,
+      );
+    }
+    const sig: ApprovalSignature = { method: req.method };
+    let kind: "sign-in" | "permit" = "sign-in";
+    if (req.method === "personal_sign") {
+      const raw = req.raw as string;
+      sig.raw = raw;
+      sig.text = messageText(raw);
+      const siwe = parseSiwe(sig.text);
+      if (siwe) {
+        sig.siwe = {
+          domain: siwe.domain,
+          ...(siwe.statement ? { statement: siwe.statement } : {}),
+          ...(siwe.uri ? { uri: siwe.uri } : {}),
+          ...(siwe.expirationTime ? { expirationTime: siwe.expirationTime } : {}),
+          ...(siwe.nonce ? { nonce: siwe.nonce } : {}),
+        };
+        sig.domainOk = siweDomainMatches(siwe.domain, ctx.origin);
+      }
+    } else {
+      const json = typeof req.raw === "string" ? req.raw : JSON.stringify(req.raw);
+      sig.typedJson = json;
+      const td = JSON.parse(json) as { domain?: { name?: string; verifyingContract?: string; chainId?: unknown } };
+      sig.appDomain = {
+        ...(td.domain?.name ? { name: td.domain.name } : {}),
+        ...(td.domain?.verifyingContract ? { verifyingContract: td.domain.verifyingContract } : {}),
+        ...(td.domain?.chainId !== undefined ? { chainId: Number(td.domain.chainId) } : {}),
+      };
+      if (req.cls.kind === "register-permit") {
+        kind = "permit";
+        let symbol: string | undefined;
+        let decimals: number | undefined;
+        try {
+          const c = this.env.io!.publicClient(chainId);
+          [symbol, decimals] = await Promise.all([
+            c.readContract({ address: req.cls.token, abi: erc20Abi, functionName: "symbol" }) as Promise<string>,
+            c.readContract({ address: req.cls.token, abi: erc20Abi, functionName: "decimals" }).then(Number),
+          ]);
+        } catch {
+          // unknown token metadata: raw units
+        }
+        sig.permit = {
+          token: req.cls.token,
+          spender: req.cls.spender,
+          value: req.cls.value.toString(),
+          deadline: req.cls.deadline.toString(),
+          ...(symbol ? { symbol } : {}),
+          ...(decimals !== undefined ? { decimals } : {}),
+        };
+      }
+    }
+    if (kind === "sign-in") sig.firstSignIn = !(await this.signInSites()).includes(ctx.origin);
+    let record: Approval;
+    try {
+      record = await this.approvals.requestRecord(
+        {
+          kind,
+          origin: ctx.origin,
+          chainId,
+          firstVisit: false,
+          sig,
+          ...(ctx.embedded ? { embedded: true, ...(ctx.topOrigin ? { topOrigin: ctx.topOrigin } : {}) } : {}),
+        },
+        ctx.requestId,
+      );
+    } catch (err) {
+      if (err instanceof TooManyPendingError) throw new ProviderRpcError(RpcErrorCode.limitExceeded, err.message);
+      throw err;
+    }
+    if (record.status === "approved" && record.result?.signature) return record.result.signature;
+    if (record.denial) throw new ProviderRpcError(RpcErrorCode.unauthorized, record.denial.explanation, record.denial);
+    throw userRejected("The user rejected the signature request.");
+  }
+
+  private async signInSites(): Promise<string[]> {
+    return (await this.env.local.get<string[]>("leaked:signInSites")) ?? [];
+  }
+
+  private async resolveSignature(
+    approval: Approval,
+    approved: boolean,
+    opts: { alwaysAllow?: boolean },
+  ): Promise<void> {
+    if (!approved) return void (await this.approvals.resolve(approval.id, "rejected"));
+    if (!(await this.keyring.isUnlocked())) throw new KeyringError("locked", "Unlock LEAKED before signing.");
+    const sig = approval.sig!;
+    const account = await this.accountFor(approval.chainId);
+    if (!account) throw new KeyringError("missing", "No account yet.");
+    if (approval.kind === "sign-in") {
+      if (sig.siwe && !sig.domainOk) {
+        await this.approvals.resolve(approval.id, "rejected", {
+          denial: {
+            leakedRule: "SIG-DOMAIN-NOT-ALLOWED",
+            explanation: `This sign-in message says it's for ${sig.siwe.domain}, but the request came from ${approval.origin}. LEAKED didn't sign it.`,
+          },
+        });
+        return;
+      }
+      const signature = await this.keyring.withHotKeys((k) =>
+        sig.method === "personal_sign"
+          ? signPersonal7739(k.everyday, account, approval.chainId, personalMessage(sig.raw ?? ""))
+          : signTyped7739(k.everyday, account, approval.chainId, JSON.parse(sig.typedJson!)),
+      );
+      if (opts.alwaysAllow) {
+        const sites = await this.signInSites();
+        if (!sites.includes(approval.origin))
+          await this.env.local.set("leaked:signInSites", [...sites, approval.origin]);
+      }
+      await this.approvals.resolve(approval.id, "approved", {
+        result: { activityId: "", hash: "0x", signature },
+      });
+      return;
+    }
+    // permit: register the ERC-2612 digest on-chain in an everyday batch (it counts against the daily limit), wait
+    // for it to be mined, then hand the site the registered-hash marker.
+    const p = sig.permit!;
+    const call = registerPermitCall(account, {
+      kind: "register-permit",
+      rule: "SIG-PERMIT-2612",
+      token: p.token,
+      spender: p.spender,
+      value: BigInt(p.value),
+      deadline: BigInt(p.deadline),
+    });
+    let entry: ActivityEntry;
+    try {
+      entry = await this.pay().send(approval.chainId, [call], { origin: approval.origin });
+    } catch (err) {
+      if (err instanceof RouteError) {
+        await this.approvals.resolve(approval.id, "rejected", {
+          denial: {
+            leakedRule: err.view.rules[0] ?? "ROUTE-NEEDS-VAULT",
+            explanation: `${err.view.copy.headline}. ${err.view.copy.detail}`,
+            ...(err.view.copy.remedy ? { remedy: err.view.copy.remedy } : {}),
+          },
+        });
+        return;
+      }
+      throw err;
+    }
+    await this.approvals.store.update(approval.id, { result: { activityId: entry.id, hash: entry.hash } });
+    for (let i = 0; i < 90; i++) {
+      await this.payments!.refreshPending();
+      const e = await this.activity.get(entry.id);
+      if (e && e.status !== "confirming" && e.status !== "sending") {
+        entry = e;
+        break;
+      }
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+    const digest = typedDigest(JSON.parse(sig.typedJson!));
+    const expiry = (await this.env.io!.publicClient(approval.chainId).readContract({
+      address: account,
+      abi: accountAbi,
+      functionName: "registeredHashExpiry",
+      args: [digest],
+    })) as number;
+    if (entry.status !== "confirmed" || Number(expiry) === 0) {
+      await this.approvals.resolve(approval.id, "rejected", {
+        denial: {
+          leakedRule: "SIG-PERMIT-NOT-REGISTERED",
+          explanation:
+            entry.status !== "confirmed"
+              ? "The pre-approval didn't go through, so nothing was signed."
+              : "Your account recorded a different permit than the one the site asked for (its nonce or token domain differ), so nothing was signed.",
+        },
+      });
+      return;
+    }
+    await this.approvals.resolve(approval.id, "approved", {
+      result: { activityId: entry.id, hash: entry.hash, signature: registeredMarker(digest) },
+    });
+  }
+
+  // ---- pairing (ux-spec §3.1.2, §3.1.4) ----
+
+  private readUr(text: string, type: (typeof UR_TYPES)[keyof typeof UR_TYPES]) {
+    const rx = new UrReceiver([type]);
+    let last: ReturnType<UrReceiver["receive"]> | undefined;
+    for (const line of text.split(/\s+/u)) {
+      if (!line) continue;
+      last = rx.receive(line);
+      if (last.status === "complete") return last.decoded;
+      if (last.status === "error") throw new VaultError("E-24", `That code can't be read: ${last.error.message}`);
+    }
+    throw new VaultError(
+      "E-24",
+      last?.status === "progress"
+        ? `That's only part of the code (${last.received} of ${last.total}). Paste every part.`
+        : "That isn't a LEAKED code. Show the code from the Vault app.",
+    );
+  }
+
+  private async pair(role: "vault" | "recovery", text: string, confirm: boolean): Promise<PairPreview> {
+    const d = this.readUr(text, UR_TYPES.pqKey);
+    if (d.type !== UR_TYPES.pqKey) throw new VaultError("E-24", "That isn't a pairing code.");
+    const k = d.value;
+    if (k.role !== ROLE_ID[role]) {
+      throw new VaultError(
+        "E-25",
+        role === "vault"
+          ? "That's a Recovery key code. Show the Vault's pairing code (Vault app › Pair with a browser)."
+          : "That's the Vault's pairing code. Show the Recovery key code from the ceremony.",
+      );
+    }
+    const scheme = schemeById(k.schemeId);
+    if (!scheme)
+      throw new VaultError("E-22", "This Vault uses a key type this version doesn't support. Update LEAKED.");
+    if (role === "vault" && !k.payer)
+      throw new VaultError("E-22", "This pairing code has no fee-payment key. Update the Vault app.");
+    const setup = await this.settings.getSetup();
+    if (role === "recovery" && setup.vault && setup.vault.pk.toLowerCase() === k.pk.toLowerCase()) {
+      throw new VaultError("E-23", "That's your Vault's key. The Recovery key must be a different key.");
+    }
+    if (confirm) {
+      const plan = await this.plans.get((await this.settings.get()).selectedChainId);
+      if (plan && (await this.planInUse(plan))) {
+        throw new VaultError(
+          "frozen",
+          "Your account is already active; its Vault can only be replaced with the Recovery key.",
+        );
+      }
+      await this.settings.setPaired(role, {
+        schemeId: k.schemeId,
+        pk: k.pk,
+        ...(k.payer ? { payer: k.payer as Address } : {}),
+        at: this.now(),
+      });
+    }
+    return {
+      role,
+      pk: k.pk,
+      last8: last8(k.pk),
+      schemeId: k.schemeId,
+      schemeName: scheme.name,
+      ...(scheme.experimental && scheme.warning ? { experimental: scheme.warning } : {}),
+      ...(k.payer ? { payer: k.payer as Address } : {}),
+      stored: confirm,
+    };
+  }
+
+  private async planInUse(plan: AccountPlan): Promise<boolean> {
+    if (plan.activation) return true;
+    if (!this.env.io) return false;
+    const c = this.env.io.publicClient(plan.chainId);
+    const code = await c.getCode({ address: plan.address }).catch(() => undefined);
+    return !!code && code !== "0x";
+  }
+
+  private async recoveryTest(text: string): Promise<{ ok: true; last8: string }> {
+    const d = this.readUr(text, UR_TYPES.recoveryTest);
+    if (d.type !== UR_TYPES.recoveryTest) throw new VaultError("E-24", "That isn't a recovery test code.");
+    const t = d.value;
+    const setup = await this.settings.getSetup();
+    const want = setup.recovery?.pk;
+    if (!want) throw new VaultError("E-23", "Scan the Recovery key code first.");
+    if (t.recoveryPk.toLowerCase() !== want.toLowerCase()) {
+      throw new VaultError(
+        "E-23",
+        "The Recovery key on the phone doesn't match the one scanned. Start the recovery setup again.",
+      );
+    }
+    const scheme = schemeById(t.schemeId);
+    const challenge = recoveryTestChallenge(t.schemeId, t.recoveryPk, t.requestId);
+    if (!scheme || !t.ok || !scheme.verify(hexToBytes(t.recoveryPk), hexToBytes(challenge), hexToBytes(t.witness))) {
+      throw new VaultError("E-62", "The test signature didn't check out. Run the test again on the phone.");
+    }
+    await this.settings.setPaired("recovery", setup.recovery, this.now());
+    return { ok: true, last8: last8(t.recoveryPk) };
+  }
+
+  // ---- Limits / Security views ----
+
+  private async policyView(chainId: number): Promise<PolicyView> {
+    const status = await this.pay().status(chainId);
+    const base: PolicyView = {
+      deployed: status.deployed,
+      capUsd: status.limits.capUsd,
+      perTxMaxUsd: status.limits.perTxMaxUsd,
+      availableUsd: status.limits.availableUsd,
+      recipientMode: status.recipientMode,
+      timelockDelaySec: 172_800,
+      vaultAvailableUsd: 0,
+      tokens: [],
+      sessions: [],
+      tankWei: status.tankWei,
+    };
+    if (!status.deployed) return base;
+    const p = await this.vf().currentPolicy(chainId);
+    const plan = (await this.plans.get(chainId))!;
+    const client = this.env.io!.publicClient(chainId);
+    base.timelockDelaySec = p.timelockDelay;
+    base.vaultAvailableUsd = Number(p.vaultAvailableUsd) / 1e6;
+    for (const [token, t] of Object.entries(p.tokens)) {
+      if (!t.allowed) continue;
+      let symbol = token === "0x0000000000000000000000000000000000000000" ? "ETH" : `${token.slice(0, 6)}…`;
+      if (symbol !== "ETH") {
+        symbol = await client
+          .readContract({ address: token as Address, abi: erc20Abi, functionName: "symbol" })
+          .catch(() => symbol);
+      }
+      base.tokens.push({
+        token: token as Address,
+        allowed: true,
+        decimals: t.decimals,
+        usdPerToken: Number(t.usdPerToken) / 1e6,
+        symbol,
+      });
+    }
+    const events = await client
+      .getContractEvents({ address: plan.address, abi: accountAbi, eventName: "SessionConfigured", fromBlock: 0n })
+      .catch(() => []);
+    const latest = new Map<
+      string,
+      { target: Address; selector: Hex; allowanceUsd: number; expiry: number; label: string }
+    >();
+    for (const e of events) {
+      const a = e.args as unknown as { target: Address; selector: Hex; allowanceUsd: bigint; expiry: number };
+      latest.set(`${a.target.toLowerCase()}:${a.selector}`, {
+        target: a.target,
+        selector: a.selector,
+        allowanceUsd: Number(a.allowanceUsd) / 1e6,
+        expiry: Number(a.expiry),
+        label: `${a.target.slice(0, 6)}…${a.target.slice(-4)}`,
+      });
+    }
+    base.sessions = [...latest.values()].filter((x) => x.allowanceUsd > 0 && x.expiry * 1000 > this.now());
+    return base;
+  }
+
+  private async signerViews(chainId: number): Promise<SignerView[]> {
+    const plan = await this.plans.get(chainId);
+    if (!plan) return [];
+    const out: SignerView[] = [];
+    const budgets = await this.vf().budgets(chainId);
+    for (const role of ["vault", "recovery"] as const) {
+      if (role === "recovery" && !plan.recoverySigner) continue;
+      const s = await this.vf().signerState(chainId, role);
+      const choice = choosePath({
+        schemeVerifyGas: s.verifyGasEstimate,
+        hasPayer: s.payerKey !== "0x0000000000000000000000000000000000000000",
+        signerStaked: s.staked,
+        budgets,
+      });
+      const scheme = schemeById(s.schemeId);
+      out.push({
+        role,
+        address: s.address,
+        deployed: s.deployed,
+        balanceWei: s.balance.toString(),
+        staked: s.staked,
+        schemeName: scheme?.name ?? "unknown",
+        pkLast8: last8(s.pk),
+        lane: choice.ok
+          ? {
+              ok: true,
+              text:
+                choice.path === "A"
+                  ? `Quantum-safe signature checked before the fee is paid (${choice.lane === "staked" ? "staked lane" : "standard lane"}).`
+                  : "Quantum-safe signature checked on-chain; the fee step uses a classical key on your phone (standard lane).",
+              rules: choice.rules,
+            }
+          : {
+              ok: false,
+              text:
+                role === "recovery"
+                  ? "Can't send approvals on this network yet: Recovery approvals need the staked lane, and this key's signer has no stake there. Your Vault can cancel scheduled changes meanwhile."
+                  : `Can't send approvals right now: ${choice.reason}`,
+              rules: choice.rules,
+            },
+      });
+    }
+    return out;
+  }
+
+  /** Effects of a confirmed Vault approval that the extension must mirror (the new everyday key, a linked Recovery key). */
+  private async afterVault(): Promise<void> {
+    if (!this.vault) return;
+    const changed = await this.vault.refresh();
+    for (const r of changed) {
+      if (r.status !== "confirmed") continue;
+      if (r.action.action === "vaultSetHotKey" && r.hotIndex !== undefined && (await this.keyring.isUnlocked())) {
+        await this.keyring.useEverydayIndex(r.hotIndex);
+      }
+    }
+  }
+
+  async resolveApproval(id: string, approved: boolean, opts: { alwaysAllow?: boolean } = {}): Promise<void> {
     const approval = await this.approvals.store.get(id);
     if (!approval || approval.status !== "pending") return;
     if (approval.kind === "transaction") return this.resolveTransaction(approval, approved);
+    if (approval.kind === "sign-in" || approval.kind === "permit")
+      return this.resolveSignature(approval, approved, opts);
     if (approved) {
       const account = await this.accountFor(approval.chainId);
       if (!account || !(await this.keyring.isUnlocked())) {
@@ -371,7 +808,9 @@ export class Wallet {
       for (let i = 0; i < 90; i++) {
         await new Promise((r) => setTimeout(r, 2000));
         await this.payments.refreshPending();
-        if ((await this.activity.pending()).length === 0) break;
+        await this.afterVault().catch(() => undefined);
+        const vaultBusy = (await this.vault?.list())?.some((r) => r.status === "sending") ?? false;
+        if ((await this.activity.pending()).length === 0 && !vaultBusy) break;
       }
     } finally {
       this.tracking = false;
@@ -445,8 +884,8 @@ export class Wallet {
       return null;
     },
     "approval:get": ({ id }) => this.approvalView(id),
-    "approval:resolve": async ({ id, approved }) => {
-      await this.resolveApproval(id, approved);
+    "approval:resolve": async ({ id, approved, alwaysAllow }) => {
+      await this.resolveApproval(id, approved, alwaysAllow ? { alwaysAllow } : {});
       return null;
     },
     "approval:preview": ({ id }) => this.approvalPreview(id),
@@ -474,7 +913,95 @@ export class Wallet {
       void this.trackSoon();
       return entry;
     },
+    "pair:vault": ({ text, confirm }) => this.pair("vault", text, confirm),
+    "pair:recovery": ({ text, confirm }) => this.pair("recovery", text, confirm),
+    "pair:recoveryTest": ({ text }) => this.recoveryTest(text),
+    "pair:forgetRecovery": async () => {
+      await this.settings.setPaired("recovery", undefined);
+      return null;
+    },
+    "account:computePlan": async ({ chainId }) => {
+      const id = chainId ?? (await this.settings.get()).selectedChainId;
+      await this.pay().computePlan(id);
+      return this.pay().status(id);
+    },
+    "vault:create": async ({ chainId, action }) => {
+      const id = chainId ?? (await this.settings.get()).selectedChainId;
+      return this.vf().create(id, await this.prepareAction(id, action));
+    },
+    "approval:toVault": async ({ id }) => {
+      const a = await this.approvals.store.get(id);
+      if (!a || a.kind !== "transaction" || a.status !== "pending" || !a.tx) throw new Error("No such request.");
+      const preview = await this.pay().preview(a.chainId, toCalls(a.tx.calls));
+      return this.vf().create(
+        a.chainId,
+        { type: "send", calls: a.tx.calls, usd6: String(Math.round(preview.route.amountUsd * 1e6)) },
+        { origin: a.origin, approvalId: a.id },
+      );
+    },
+    "vault:get": async ({ id }) => {
+      if ((await this.vf().get(id))?.status === "sending") await this.afterVault().catch(() => undefined);
+      return (await this.vf().get(id)) ?? null;
+    },
+    "vault:list": async () => {
+      await this.afterVault().catch(() => undefined);
+      return this.vf().list();
+    },
+    "vault:submit": async ({ id, signature }) => {
+      const r = await this.vf().submit(id, signature);
+      if (r.approvalId && r.hash) {
+        // The dapp's eth_sendTransaction / wallet_sendCalls resolves with the Vault transaction's hash.
+        await this.approvals
+          .resolve(r.approvalId, "approved", { result: { activityId: r.id, hash: r.hash } })
+          .catch(() => undefined);
+      }
+      void this.trackSoon();
+      return r;
+    },
+    "vault:cancel": async ({ id }) => {
+      await this.vf().cancelRequest(id);
+      return null;
+    },
+    "vault:queue": async ({ chainId }) => {
+      await this.afterVault().catch(() => undefined);
+      return this.vf().queue(chainId ?? (await this.settings.get()).selectedChainId);
+    },
+    "vault:executeQueued": async ({ chainId, opId }) => ({
+      hash: await this.vf().executeQueued(chainId ?? (await this.settings.get()).selectedChainId, opId),
+    }),
+    "vault:policy": async ({ chainId }) => this.policyView(chainId ?? (await this.settings.get()).selectedChainId),
+    "vault:signers": async ({ chainId }) => this.signerViews(chainId ?? (await this.settings.get()).selectedChainId),
+    "security:nextEverydayKey": async () => {
+      const index = (await this.keyring.everydayIndex()) + 1;
+      return { index, address: await this.keyring.everydayAt(index) };
+    },
   };
+
+  /**
+   * Fills in what only the service worker knows before a Vault request is built: a later Recovery key's signer
+   * address (linked with `vaultSetRecoverySigner`).
+   */
+  private async prepareAction(chainId: number, action: VaultActionRequest): Promise<VaultActionRequest> {
+    if (action.type !== "setRecoverySigner") return action;
+    const plan = await this.plans.get(chainId);
+    const setup = await this.settings.getSetup();
+    if (!plan || !setup.recovery) throw new VaultError("no-recovery", "Scan your Recovery key code first.");
+    const net = findNetwork(chainId)!;
+    const params = {
+      salt: plan.salt,
+      pk: setup.recovery.pk,
+      verifier: net.deployment!.c13Verifier,
+      payerKey: "0x0000000000000000000000000000000000000000" as Address,
+    };
+    const signer = (await this.env.io!.publicClient(chainId).readContract({
+      address: net.deployment!.roleSignerFactory,
+      abi: roleSignerFactoryAbi,
+      functionName: "predictRoleSigner",
+      args: [params.salt, 2, plan.address, params.pk, params.verifier, params.payerKey],
+    })) as Address;
+    await this.plans.put({ ...plan, recoverySigner: signer, recoveryParams: params });
+    return { type: "setRecoverySigner", signer };
+  }
 }
 
 function toCalls(calls: ApprovalTx["calls"]): Call[] {

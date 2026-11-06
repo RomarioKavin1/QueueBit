@@ -19,9 +19,13 @@ export interface AccountStatus {
   activationCostWei: string;
   limits: { capUsd: number; perTxMaxUsd: number; availableUsd: number; fullAt?: number };
   frozen: boolean;
+  frozenUntil?: number;
   bunker: boolean;
-  /** "stand-in": a public devnet key acts as the Vault until pairing exists (M4). */
-  vault: "stand-in" | "none";
+  /** "paired": the account's address commits to the paired Vault; "none": setup is not finished. */
+  vault: "paired" | "none";
+  vaultSigner?: Address;
+  recoverySigner?: Address;
+  recipientMode: "open" | "strict";
   ethUsdPrice: number;
   readAt: number;
   /** Set when the network could not be read; the other fields are then best effort. */
@@ -48,4 +52,43 @@ export interface SendPreview {
   /** The fee tank can't cover the worst-case fee (E-05). */
   tankTooLow?: boolean;
   ethUsdPrice: number;
+}
+
+/** What a scanned pairing code says, for the "check the last 8 characters" step (ux-spec §3.1.2). */
+export interface PairPreview {
+  role: "vault" | "recovery";
+  pk: Hex;
+  last8: string;
+  schemeId: Hex;
+  schemeName: string;
+  /** The scheme is behind an experimental flag (leanSphincs-s). */
+  experimental?: string;
+  payer?: Address;
+  stored: boolean;
+}
+
+/** The account's limits and lists for the Limits screen (JSON-safe). */
+export interface PolicyView {
+  deployed: boolean;
+  capUsd: number;
+  perTxMaxUsd: number;
+  availableUsd: number;
+  recipientMode: "open" | "strict";
+  timelockDelaySec: number;
+  vaultAvailableUsd: number;
+  tokens: Array<{ token: Address; allowed: boolean; decimals: number; usdPerToken: number; symbol: string }>;
+  sessions: Array<{ target: Address; selector: Hex; allowanceUsd: number; expiry: number; label: string }>;
+  tankWei: string;
+}
+
+export interface SignerView {
+  role: "vault" | "recovery";
+  address: Address;
+  deployed: boolean;
+  balanceWei: string;
+  staked: boolean;
+  schemeName: string;
+  pkLast8: string;
+  /** How approvals with this key reach the network, in plain words, plus the reason codes. */
+  lane: { ok: boolean; text: string; rules: string[] };
 }

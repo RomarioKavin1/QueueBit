@@ -85,7 +85,10 @@ export class ApprovalStore {
 
 export type ApprovalOutcome = Exclude<ApprovalStatus, "pending">;
 
-export type ApprovalInit = Pick<Approval, "kind" | "origin" | "chainId" | "firstVisit" | "embedded" | "tx">;
+export type ApprovalInit = Pick<
+  Approval,
+  "kind" | "origin" | "chainId" | "firstVisit" | "embedded" | "topOrigin" | "tx" | "sig"
+>;
 
 /**
  * Upper bound on approvals waiting at once. Each one is a window, and a page can embed any number of cross-origin

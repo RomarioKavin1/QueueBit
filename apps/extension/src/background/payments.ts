@@ -5,7 +5,21 @@ import type { NodeClient } from "@leaked/rpc";
 import { findNetwork, type Network } from "../shared/chains";
 import type { AccountStatus, RouteView, SendPreview } from "../shared/views";
 import type { AccountPlans } from "./account";
-import { ACTIVATION_GAS, activationCalldata, buildPlan, initConfigFor, type AccountPlan } from "./account";
+import {
+  ACTIVATION_GAS,
+  CLONE_GAS,
+  VAULT_SIGNER_FLOAT,
+  ZERO,
+  accountSalt,
+  activationCalldata,
+  buildPlan,
+  createRoleSignerCalldata,
+  initConfigFor,
+  roleSalt,
+  type AccountPlan,
+} from "./account";
+import { roleSignerFactoryAbi } from "../generated/contracts";
+import type { SetupState } from "../shared/types";
 import type { ActivityStore } from "./activity";
 import {
   describeReceipt,
@@ -31,7 +45,7 @@ export interface PaymentsDeps {
   keyring: KeyringController;
   plans: AccountPlans;
   activity: ActivityStore;
-  getLimits(): Promise<{ dailyLimitUsd: number; perPaymentUsd: number }>;
+  getLimits(): Promise<SetupState>;
   now: () => number;
 }
 
@@ -48,7 +62,16 @@ export class RouteError extends Error {
 
 export class PaymentsError extends Error {
   constructor(
-    readonly reason: "unsupported" | "tank-low" | "not-activated" | "not-admitted" | "unknown-entry" | "not-pending",
+    readonly reason:
+      | "unsupported"
+      | "tank-low"
+      | "not-activated"
+      | "not-admitted"
+      | "unknown-entry"
+      | "not-pending"
+      | "no-vault"
+      | "no-plan"
+      | "frozen",
     message: string,
   ) {
     super(message);
@@ -138,25 +161,73 @@ export class Payments {
     return net as Network & { deployment: NonNullable<Network["deployment"]> };
   }
 
-  /** The account plan for `chainId` (computed once and frozen), or undefined where LEAKED has no native account. */
+  /**
+   * The account plan for `chainId`, or undefined before onboarding computed it. The plan is computed exactly once, at
+   * the end of onboarding (`computePlan`), after the Vault is paired and the limits are chosen: nothing reads the
+   * limits before that, so the address can never be frozen with stale limits (M1 review "plan frozen on first
+   * account:status").
+   */
   async plan(chainId: number): Promise<AccountPlan | undefined> {
-    const existing = await this.d.plans.get(chainId);
-    if (existing) return existing;
-    const net = findNetwork(chainId);
-    if (!net?.deployment) return undefined;
+    return this.d.plans.get(chainId);
+  }
+
+  /**
+   * Computes (or, while nothing depends on it yet, recomputes) the counterfactual account from the paired Vault, the
+   * optional Recovery key and the chosen limits. The Vault and Recovery signer addresses come from the factory's own
+   * `predictRoleSigner` (what `initialize` derives). Refuses to move an address that may already hold money or is
+   * being activated.
+   */
+  async computePlan(chainId: number): Promise<AccountPlan> {
+    const net = this.network(chainId);
     const accounts = await this.d.keyring.accounts();
-    if (!accounts) return undefined;
-    const limits = await this.d.getLimits();
+    if (!accounts) throw new PaymentsError("unsupported", "No account yet.");
+    const setup = await this.d.getLimits();
+    if (!setup.vault) throw new PaymentsError("no-vault", "Pair your Vault first: the account address depends on it.");
+    const existing = await this.d.plans.get(chainId);
+    const salt = accountSalt(accounts.everyday, setup.vault.pk, setup.recovery?.pk, chainId);
+    const rsalt = roleSalt(salt);
+    const config = initConfigFor({
+      hotKey: accounts.everyday,
+      tank: accounts.feeTank,
+      deployment: net.deployment,
+      vault: setup.vault,
+      ...(setup.recovery ? { recovery: setup.recovery } : {}),
+      salt: rsalt,
+      dailyLimitUsd: setup.dailyLimitUsd,
+      perPaymentUsd: setup.perPaymentUsd,
+      recipientMode: setup.recipientMode ?? "open",
+    });
+    const draft = buildPlan(chainId, net.deployment, config, { vaultSigner: ZERO }, salt, this.d.now());
+    if (existing && existing.address === draft.address) return existing;
+    if (existing) {
+      const client = this.d.io.publicClient(chainId);
+      const [code, bal] = await Promise.all([
+        client.getCode({ address: existing.address }),
+        client.getBalance({ address: existing.address }),
+      ]);
+      if (existing.activation || (code && code !== "0x") || bal > 0n) {
+        throw new PaymentsError(
+          "frozen",
+          "Your account address is already in use, so its setup can't change any more. Change limits from Limits instead.",
+        );
+      }
+    }
+    const client = this.d.io.publicClient(chainId);
+    const predict = (role: 1 | 2, p: { salt: Hex; pk: Hex; verifier: Address; payerKey: Address }) =>
+      client.readContract({
+        address: net.deployment.roleSignerFactory,
+        abi: roleSignerFactoryAbi,
+        functionName: "predictRoleSigner",
+        args: [p.salt, role, draft.address, p.pk, p.verifier, p.payerKey],
+      }) as Promise<Address>;
+    const vaultSigner = await predict(1, config.vault);
+    const recoverySigner = setup.recovery ? await predict(2, config.recovery) : undefined;
     const plan = buildPlan(
       chainId,
       net.deployment,
-      initConfigFor({
-        hotKey: accounts.everyday,
-        tank: accounts.feeTank,
-        vaultSigner: net.deployment.vaultStandIn,
-        dailyLimitUsd: limits.dailyLimitUsd,
-        perPaymentUsd: limits.perPaymentUsd,
-      }),
+      config,
+      { vaultSigner, ...(recoverySigner ? { recoverySigner } : {}) },
+      salt,
       this.d.now(),
     );
     await this.d.plans.put(plan);
@@ -166,7 +237,8 @@ export class Payments {
   private async requirePlan(chainId: number): Promise<AccountPlan> {
     this.network(chainId);
     const plan = await this.plan(chainId);
-    if (!plan) throw new PaymentsError("unsupported", "No account on this network yet.");
+    if (!plan)
+      throw new PaymentsError("no-plan", "Finish setting up LEAKED first: pair your Vault and choose your limits.");
     return plan;
   }
 
@@ -201,7 +273,10 @@ export class Payments {
       limits: { capUsd: 0, perTxMaxUsd: 0, availableUsd: 0 },
       frozen: false,
       bunker: false,
-      vault: plan ? "stand-in" : "none",
+      vault: plan ? "paired" : "none",
+      ...(plan ? { vaultSigner: plan.vaultSigner } : {}),
+      ...(plan?.recoverySigner ? { recoverySigner: plan.recoverySigner } : {}),
+      recipientMode: "open",
       ethUsdPrice: 0,
       readAt: this.d.now(),
     };
@@ -225,9 +300,13 @@ export class Payments {
       };
       base.frozen = state.policy.frozen;
       base.bunker = state.policy.bunker;
+      base.recipientMode = state.recipientMode;
+      if (state.frozenUntil) base.frozenUntil = state.frozenUntil;
       base.ethUsdPrice = usdNumber(state.ethUsdPrice);
-      if (!state.deployed)
-        base.activationCostWei = (ACTIVATION_GAS * (await this.activationGasPrice(chainId))).toString();
+      if (!state.deployed) {
+        const gp = await this.activationGasPrice(chainId);
+        base.activationCostWei = ((ACTIVATION_GAS + CLONE_GAS) * gp + VAULT_SIGNER_FLOAT).toString();
+      }
     } catch (e) {
       base.error = "Can't reach the network right now. Showing the last known state.";
       void e;
@@ -249,7 +328,13 @@ export class Payments {
         throw new PaymentsError("not-pending", "Your account is already active.");
       const data = activationCalldata(plan);
       const gasPrice = await this.activationGasPrice(chainId);
-      const cost = ACTIVATION_GAS * gasPrice;
+      // Two plain transactions from the tank: the account (its address commits to the Vault's key), then the Vault
+      // signer clone initialize derived, with a float it pays its own fees from (deployed now so the first Vault
+      // approval needs no extra step; anyone may deploy it, IMPLEMENTATION-NOTES "Bound signers").
+      const net = this.network(chainId);
+      const signerCode = await client.getCode({ address: plan.vaultSigner });
+      const needSigner = !signerCode || signerCode === "0x";
+      const cost = ACTIVATION_GAS * gasPrice + (needSigner ? CLONE_GAS * gasPrice + VAULT_SIGNER_FLOAT : 0n);
       const tankWei = await client.getBalance({ address: accounts.feeTank });
       if (tankWei < cost) {
         throw new PaymentsError("tank-low", `Your fee tank needs at least ${ethAmount(cost)} to pay for activation.`);
@@ -257,21 +342,41 @@ export class Payments {
       // Simulate first: an eth_call of the exact call from the tank.
       await client.call({ account: accounts.feeTank, to: plan.factory, data, gas: ACTIVATION_GAS });
       const nonce = await client.getTransactionCount({ address: accounts.feeTank, blockTag: "pending" });
-      const raw = await this.d.keyring.withHotKeys((k) =>
-        privateKeyToAccount(k.feeTank).signTransaction({
-          type: "legacy",
-          chainId,
-          nonce,
-          gasPrice,
-          gas: ACTIVATION_GAS,
-          to: plan.factory,
-          data,
-          value: 0n,
-        }),
-      );
+      const signerData = createRoleSignerCalldata(plan, "vault");
+      const [raw, rawSigner] = await this.d.keyring.withHotKeys(async (k) => {
+        const tank = privateKeyToAccount(k.feeTank);
+        return Promise.all([
+          tank.signTransaction({
+            type: "legacy",
+            chainId,
+            nonce,
+            gasPrice,
+            gas: ACTIVATION_GAS,
+            to: plan.factory,
+            data,
+            value: 0n,
+          }),
+          needSigner
+            ? tank.signTransaction({
+                type: "legacy",
+                chainId,
+                nonce: nonce + 1,
+                gasPrice,
+                gas: CLONE_GAS,
+                to: net.deployment.roleSignerFactory,
+                data: signerData,
+                value: VAULT_SIGNER_FLOAT,
+              })
+            : Promise.resolve(undefined),
+        ]);
+      });
       const hash = await this.d.io.node(chainId).sendRawTransaction(raw);
+      const vaultSignerTx = rawSigner ? await this.d.io.node(chainId).sendRawTransaction(rawSigner) : undefined;
       const now = this.d.now();
-      await this.d.plans.put({ ...plan, activation: { txHash: hash, sentAt: now } });
+      await this.d.plans.put({
+        ...plan,
+        activation: { txHash: hash, sentAt: now, ...(vaultSignerTx ? { vaultSignerTx } : {}) },
+      });
       const entry: ActivityEntry = {
         id: crypto.randomUUID(),
         chainId,
@@ -286,8 +391,11 @@ export class Payments {
         replaced: [],
         nonce: nonce.toString(),
         headline: "Activating your account",
-        detail: "Sets your daily limit on the network. Paid by your fee tank.",
-        steps: [{ label: "Create account with your limits", status: "pending" }],
+        detail: "Sets your daily limit and links your Vault on the network. Paid by your fee tank.",
+        steps: [
+          { label: "Create account with your limits", status: "pending" },
+          { label: "Set up your Vault on the network", status: needSigner ? "pending" : "done" },
+        ],
         createdAt: now,
         updatedAt: now,
       };
@@ -469,18 +577,34 @@ export class Payments {
 
   private async refreshOne(e: ActivityEntry): Promise<ActivityEntry | undefined> {
     const client = this.d.io.publicClient(e.chainId);
+    if (e.kind === "vault") return undefined; // tracked by the Vault flow
     if (e.kind === "activation") {
       const r = await client.getTransactionReceipt({ hash: e.hash }).catch(() => null);
       if (!r) return undefined;
+      const plan = await this.d.plans.get(e.chainId);
+      const signerHash = plan?.activation?.vaultSignerTx;
+      const rs = signerHash ? await client.getTransactionReceipt({ hash: signerHash }).catch(() => null) : null;
+      if (signerHash && !rs) return undefined;
       const ok = r.status === "success";
+      const signerOk = !signerHash || rs?.status === "success";
       return this.d.activity.update(e.id, {
-        status: ok ? "confirmed" : "failed",
-        headline: ok ? "Account activated" : "Activation failed; nothing changed",
+        status: ok && signerOk ? "confirmed" : "failed",
+        headline:
+          ok && signerOk
+            ? "Account activated"
+            : ok
+              ? "Account active; Vault setup failed"
+              : "Activation failed; nothing changed",
         detail: ok
-          ? "Your daily limit is now enforced by the network."
+          ? signerOk
+            ? "Your daily limit is now enforced by the network, and your Vault can approve."
+            : "The Vault signer wasn't deployed. LEAKED retries before your first Vault approval."
           : "Your fee tank paid the network fee. Try again.",
-        steps: [{ label: "Create account with your limits", status: ok ? "done" : "failed" }],
-        feeWei: (r.gasUsed * r.effectiveGasPrice).toString(),
+        steps: [
+          { label: "Create account with your limits", status: ok ? "done" : "failed" },
+          { label: "Set up your Vault on the network", status: signerOk ? "done" : "failed" },
+        ],
+        feeWei: (r.gasUsed * r.effectiveGasPrice + (rs ? rs.gasUsed * rs.effectiveGasPrice : 0n)).toString(),
         blockNumber: r.blockNumber.toString(),
       });
     }

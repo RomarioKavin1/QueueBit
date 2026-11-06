@@ -3,7 +3,16 @@ import { createPublicClient, createWalletClient, http, parseEther, type Address,
 import { privateKeyToAccount } from "viem/accounts";
 import { createFrameRpc } from "@leaked/rpc";
 import { localDeployment } from "../src/generated/contracts";
-import { expect, keyringAccounts, onboard, openPopup, smartAccount, test, waitForApproval } from "./fixtures";
+import {
+  activateFromOnboarding,
+  expect,
+  keyringAccounts,
+  onboard,
+  openPopup,
+  smartAccount,
+  test,
+  waitForApproval,
+} from "./fixtures";
 
 /**
  * M1 end to end on the LOCAL devnet (devnet/README.md; contracts from devnet/deploy). Funding from anvil #7 only
@@ -93,26 +102,14 @@ test("M1: activate, everyday send, needs-Vault before submission, dapp send and 
   test.skip(why !== undefined, why);
   test.setTimeout(420_000);
 
-  // ---- onboarding: the counterfactual account is the address from now on ----
-  await onboard(context, extensionId);
+  // ---- onboarding (Vault paired, Recovery later); activation from its last step: the fee tank pays ----
+  const { page } = await onboard(context, extensionId, { recovery: false });
   const account = await smartAccount(serviceWorker);
   const { feeTank } = await keyringAccounts(serviceWorker);
   expect(await pub.getCode({ address: account as Address })).toBeUndefined();
-
-  const popup = await openPopup(context, extensionId);
-  await expect(popup.getByText("No daily limit yet")).toBeVisible({ timeout: 30_000 });
-
-  // ---- activate: fund the fee tank, then the tank pays for the factory deployment ----
-  await popup.getByRole("button", { name: "Activate account" }).click();
-  await expect(popup.getByRole("heading", { name: "Activate account" })).toBeVisible();
-  const activate = popup.getByRole("button", { name: "Activate account" });
-  await expect(activate).toBeDisabled();
-  await fund(feeTank, "0.05");
-  await expect(activate).toBeEnabled({ timeout: 30_000 });
-  await activate.click();
-  await expect(popup.getByText("Your account is active")).toBeVisible({ timeout: 120_000 });
+  await activateFromOnboarding(page, (t) => fund(t, "0.1"), feeTank);
   expect(await pub.getCode({ address: account as Address })).toMatch(/^0x[0-9a-f]+$/u);
-  await popup.getByRole("button", { name: "Done" }).click();
+  const popup = await openPopup(context, extensionId);
 
   // ---- fund the account itself; the meter is the real on-chain bucket ----
   await fund(account, "0.2");
@@ -151,13 +148,13 @@ test("M1: activate, everyday send, needs-Vault before submission, dapp send and 
   await expect(card).toContainText("Needs your phone");
   await expect(card).toContainText("Above your $200 per-payment limit.");
   await expect(popup.getByRole("button", { name: "Review" })).toBeDisabled();
-  await expect(card.getByRole("button", { name: "Request Vault approval" })).toBeVisible();
+  await expect(card.getByRole("button", { name: "Approve on phone" })).toBeVisible();
   await card.getByText("Details").click();
   await expect(card.getByRole("button", { name: "PER-PAYMENT-LIMIT" })).toBeVisible();
-  // A recipient that isn't allowed yet is also "needs your phone".
+  // Open recipient mode (the default): any other address within the limit is an everyday payment.
   await popup.getByLabel("To").fill("0x000000000000000000000000000000000000dEaD");
   await popup.getByLabel("Amount").fill("0.001");
-  await expect(card).toContainText("isn't on your allowed list yet", { timeout: 30_000 });
+  await expect(card).toHaveAttribute("data-route", "hot", { timeout: 30_000 });
   expect(await node.getTransactionCount(account as Address, "pending")).toBe(nonceBefore);
 
   // ---- a dapp: connect, then eth_sendTransaction within the limit via the approval window ----

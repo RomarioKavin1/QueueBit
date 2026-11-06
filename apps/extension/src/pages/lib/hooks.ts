@@ -75,11 +75,17 @@ export function useTheme(theme: Theme | undefined) {
   }, [theme]);
 }
 
-/** Re-run `reload` every `ms` while `active` (e.g. while a payment is confirming). */
+/**
+ * Re-run `reload` every `ms` while `active` (e.g. while a payment is confirming). The latest `reload` is kept in a
+ * ref, so an inline callback on a page that re-renders often (a countdown) does not restart the interval forever
+ * (found by the M4 e2e: the Vault hand-off page re-renders every second and never polled).
+ */
 export function usePoll(reload: () => unknown, ms: number, active: boolean) {
+  const latest = useRef(reload);
+  latest.current = reload;
   useEffect(() => {
     if (!active) return;
-    const t = setInterval(() => void reload(), ms);
+    const t = setInterval(() => void latest.current(), ms);
     return () => clearInterval(t);
-  }, [reload, ms, active]);
+  }, [ms, active]);
 }

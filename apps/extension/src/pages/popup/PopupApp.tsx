@@ -9,12 +9,14 @@ import {
   ChevronDownIcon,
   ExternalIcon,
   HomeIcon,
+  HourglassIcon,
   LockIcon,
   LogoMark,
   MoreIcon,
   SendIcon,
   SettingsIcon,
   Spinner,
+  VaultIcon,
 } from "../../ui";
 import { cx } from "../../ui/cx";
 import { call } from "../lib/api";
@@ -114,6 +116,9 @@ function Unlocked({ state, close, initialTab }: { state: WalletState; close: () 
           label="More"
           icon={<MoreIcon />}
           items={[
+            { label: "Security", icon: <LockIcon size={18} />, onSelect: () => (openFullApp("#security"), close()) },
+            { label: "Limits", icon: <VaultIcon size={18} />, onSelect: () => (openFullApp("#limits"), close()) },
+            { label: "Pending", icon: <HourglassIcon size={18} />, onSelect: () => (openFullApp("#pending"), close()) },
             { label: "Settings", icon: <SettingsIcon size={18} />, onSelect: () => setScreen("settings") },
             { label: "Lock now", icon: <LockIcon size={18} />, onSelect: () => void call("keyring:lock") },
             {

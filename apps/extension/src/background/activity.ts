@@ -26,7 +26,7 @@ export interface ActivityCall {
 export interface ActivityEntry {
   id: string;
   chainId: number;
-  kind: "payment" | "cancel" | "activation";
+  kind: "payment" | "cancel" | "activation" | "vault";
   /** The site that asked, for dapp requests. */
   origin?: string;
   /** EIP-5792 batch id (wallet_sendCalls) when the dapp supplied or was given one. */

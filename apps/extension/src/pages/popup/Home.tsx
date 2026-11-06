@@ -21,6 +21,7 @@ import { formatRelative, formatUsd, groupedAddress } from "../../ui/format";
 import { call } from "../lib/api";
 import { useAsync, usePoll } from "../lib/hooks";
 import { eth, usdOf } from "../lib/money";
+import { openFullApp as openApp } from "./PopupApp";
 
 export function Home({
   state,
@@ -38,6 +39,10 @@ export function Home({
   const status = useAsync(() => call("account:status", { chainId }), [chainId]);
   const bucket = useAsync(() => call("wallet:bucket"), [chainId]);
   const [receiveOpen, setReceiveOpen] = useState(false);
+  const queued = useAsync(
+    async () => (await call("vault:queue", { chainId }).catch(() => [])).filter((q) => q.state === "pending"),
+    [chainId],
+  );
   const s = status.data;
   usePoll(() => Promise.all([status.reload(), bucket.reload()]), 3000, Boolean(s?.activation && !s.deployed));
 
@@ -52,11 +57,27 @@ export function Home({
         />
       )}
       {s?.frozen && <RiskBanner level="limit" title="Everyday spending is paused" body="Your phone can resume it." />}
-      {s?.deployed && s.vault === "stand-in" && (
+      {s?.bunker && (
         <RiskBanner
-          level="limit"
-          title="Vault not paired yet"
-          body="On this test network a shared test key stands in for the Vault, so keep only test money here."
+          level="danger"
+          title="Lockdown is on."
+          body="Everyday spending is off until the Vault issues a new everyday key."
+          action={{ label: "Open Security", onClick: () => openApp("#security") }}
+        />
+      )}
+      {s?.deployed && !s.recoverySigner && (
+        <RiskBanner
+          level="info"
+          title="Add a Recovery key before you keep real money here."
+          body="It replaces your Vault if your phone is lost."
+          action={{ label: "Set up", onClick: () => openApp("#security") }}
+        />
+      )}
+      {(queued.data?.length ?? 0) > 0 && (
+        <RiskBanner
+          level="vault"
+          title={`${queued.data!.length} change${queued.data!.length > 1 ? "s" : ""} scheduled: ${queued.data![0]!.title}`}
+          action={{ label: "Review", onClick: () => openApp("#pending") }}
         />
       )}
 

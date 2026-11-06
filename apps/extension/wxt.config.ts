@@ -30,12 +30,13 @@ export default defineConfig({
     host_permissions: RPC_HOSTS,
     action: { default_title: "LEAKED" },
     content_security_policy: {
-      // Chrome's minimum is `script-src 'self'; object-src 'self'`. Nothing in M0 runs WASM, so 'wasm-unsafe-eval'
-      // stays off until the PQ verifier / zxing workers arrive (plan §30 §2.5, §9.5). The extra directives bound what
+      // Chrome's minimum is `script-src 'self'; object-src 'self'`. 'wasm-unsafe-eval' (and nothing else) is added for
+      // the quantum-safe signature check (`@leaked/pq-signer`, WASM inlined: `initSync` from embedded bytes, no fetch),
+      // which runs in the service worker before any Vault approval is sent (plan §30 §2.5, §6.2). The extra directives bound what
       // extension pages and the service worker may load or connect to (the fixed RPC hosts over https, or a local
       // devnet fork), and refuse frames, plugins, <base> and form posts outright.
       extension_pages: [
-        "script-src 'self'",
+        "script-src 'self' 'wasm-unsafe-eval'",
         "object-src 'none'",
         "frame-src 'none'",
         "base-uri 'none'",
