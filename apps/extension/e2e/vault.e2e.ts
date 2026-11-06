@@ -136,7 +136,10 @@ test("M3/M4: Vault-first onboarding, Open payment, Vault payment, queued change 
     ],
     functionName: "getRoles",
   })) as readonly [Address, Address, Address, number, number];
-  expect(await pub.getCode({ address: roles[0] })).toMatch(/^0x[0-9a-f]+$/u);
+  // The Done page turns "active" on the account's code; the clone is the tank's next nonce and may land a block later.
+  await expect
+    .poll(() => pub.getCode({ address: roles[0] }).then((c) => c ?? "0x"), { timeout: 60_000 })
+    .toMatch(/^0x[0-9a-f]+$/u);
   expect(roles[1]).not.toBe("0x0000000000000000000000000000000000000000"); // Recovery signer derived at initialize
   await sim.fund(account, "0.5");
 
