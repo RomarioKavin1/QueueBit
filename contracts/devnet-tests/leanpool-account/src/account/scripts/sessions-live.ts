@@ -35,7 +35,7 @@ const RESUME = process.env.SESSIONS_RESUME as Address | undefined;
 const saved = RESUME ? JSON.parse(fs.readFileSync(path.join(ROOT, ".keys", "sessions-live.json"), "utf8"))[RESUME] : undefined;
 if (RESUME && !saved) throw new Error(`no saved keys for ${RESUME}`);
 const shop: Address = saved?.shop ?? privateKeyToAccount(generatePrivateKey()).address; // where the session pays
-const tokenAbi = artifact("TestToken", "LegacyAccount").abi;
+const tokenAbi = artifact("TestToken", "LegacyAccount").abi; // TestToken(symbol, decimals)
 const hookAbi = artifact("SpendingLimitHook").abi;
 const ksAbi = artifact("KeystoreValidator").abi;
 const KEYS_FILE = path.join(ROOT, ".keys", "sessions-live.json");

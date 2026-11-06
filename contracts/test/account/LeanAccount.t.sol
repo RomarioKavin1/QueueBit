@@ -866,7 +866,7 @@ contract LeanAccountTest is TxSim {
     function test_migrateSA_upgradeKeepsTheAddressAndRetiresTheOldOwner() public {
         address owner_ = vm.addr(OWNER_PK);
         LegacyAccount legacy = _legacyProxy(owner_);
-        TestToken t = new TestToken();
+        TestToken t = new TestToken("MTT", 18);
         t.mint(address(legacy), 5e18);
 
         vm.prank(owner_);
@@ -935,7 +935,7 @@ contract LeanAccountTest is TxSim {
         address owner_ = vm.addr(OWNER_PK);
         LegacyAccount legacy = new LegacyAccount(owner_);
         vm.deal(address(legacy), 1 ether);
-        TestToken t = new TestToken();
+        TestToken t = new TestToken("MTT", 18);
         t.mint(address(legacy), 5e18);
         vm.prank(owner_);
         vm.expectRevert(bytes("not a proxy"));
@@ -992,7 +992,7 @@ contract LeanAccountTest is TxSim {
 
     function _tokenSession() internal returns (LeanAccount a, address s, bytes32 sid, TestToken t) {
         (a, s, sid) = _sessionAccount();
-        t = new TestToken();
+        t = new TestToken("MTT", 18);
         t.mint(address(a), 1000e18);
         vm.startPrank(address(a));
         ks.setSessionTargets(sid, _addrs(address(t)), true);
@@ -1041,7 +1041,7 @@ contract LeanAccountTest is TxSim {
 
     function test_sessionCannotMoveAnUncappedToken() public {
         (LeanAccount a, address s, bytes32 sid,) = _tokenSession();
-        TestToken other = new TestToken();
+        TestToken other = new TestToken("MTT", 18);
         other.mint(address(a), 1e18);
         vm.prank(address(a));
         ks.setSessionTargets(sid, _addrs(address(other)), true); // allowlisted, but no token cap
@@ -1076,7 +1076,7 @@ contract LeanAccountTest is TxSim {
         (ok,) = _verify(a);
         assertTrue(ok, "over the session's per-tx cap");
         sh = keccak256("owner tx 3");
-        TestToken other = new TestToken();
+        TestToken other = new TestToken("MTT", 18);
         _pq1(a, vkA, _single(address(other), 0, abi.encodeCall(TestToken.transfer, (makeAddr("x"), 1))));
         (ok,) = _verify(a);
         assertTrue(ok, "a token no session may touch");

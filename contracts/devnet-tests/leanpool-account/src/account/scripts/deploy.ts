@@ -40,6 +40,6 @@ if (!(await has(d.hook))) d.hook = await deploy("SpendingLimitHook", [d.keystore
 const resetSel = toFunctionSelector(artifact("KeystoreValidator").abi.find((x: any) => x.name === "resetKeys") as any);
 if (!(await has(d.recovery))) d.recovery = await deploy("GuardianRecovery", [d.keystore, resetSel]);
 if (!(await has(d.legacyImplementation))) d.legacyImplementation = await deploy("LegacyAccount", ["0x0000000000000000000000000000000000000000"]);
-if (!(await has(d.testToken))) d.testToken = await deploy("TestToken", [], "LegacyAccount");
+if (!(await has(d.testToken))) d.testToken = await deploy("TestToken", ["MTT", 18], "LegacyAccount");
 writeAccountDeployment(d as AccountDeployment);
 console.log(JSON.stringify(d, null, 2));
