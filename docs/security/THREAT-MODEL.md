@@ -53,9 +53,9 @@ until the vault rotates the hot key or a guardian freezes it:
   caller has no code (an `eth_call` check) or is a contract the vault marked trusted. Tokens, Permit2 and other
   value-moving verifiers never accept a hot-key signature (audit H1).
 
-It cannot: raise the cap, add tokens, recipients or sessions, approve a spender that outlives the batch (I-6),
-touch a token the vault never allowlisted, upgrade, migrate, or delay vault and recovery transactions (VERIFY reads
-only state the hot key cannot write, I-2/C4).
+It cannot: raise the cap, add tokens, recipients or sessions, approve a spender that outlives the batch (I-6; the one
+exception is a pre-paid Permit2 allowance, §3.1), touch a token the vault never allowlisted, upgrade, migrate, or
+delay vault and recovery transactions (VERIFY reads only state the hot key cannot write, I-2/C4).
 
 **Worst case** for an unnoticed leak: about `capUsdPerDay` per day plus the tank's balance. Pick the cap with that in
 mind.
@@ -65,7 +65,9 @@ mind.
 Lesson from audit C1: a hash is opaque; the account cannot tell what it authorises. So:
 
 - `registerHash(hash, token, amount, expiry)` debits a *declared* amount and is honoured only for off-chain checks
-  (`eth_call`, sender `0x0`) and vault-trusted verifiers. Never for a token or Permit2.
+  and vault-trusted verifiers. Never for a token or Permit2. "Off-chain" means a code-less caller on the frame-native
+  account (`eth_call` from any EOA, including a contract under construction) and strictly sender `0x0` on the 7579
+  validator (`registeredHashAllowed`: hosts route state-changing 1271 checks with the original caller as sender).
 - The typed registrations compute the EIP-712 digest **on chain** from the typed fields, debit the **real** amount, and
   bind the hash to its **one** consumer:
 
@@ -84,6 +86,21 @@ needs the vault to have approved Permit2 on the token once; the hot key cannot.
 
 The debit is taken once, at registration, even if the spender never pulls. If the same batch also runs the session
 call that pulls, the pull is debited again (over-counting, which fails closed).
+
+What a registration binds after the fact (`test_permit2Single_setAllowanceOutlivesFreezeAndSession`):
+
+- A freeze or bunker kills every **unconsumed** registration: the account answers nothing while frozen, so the
+  permit or authorization cannot be submitted. It comes back if the vault unfreezes before the hash expires.
+- A Permit2 allowance the spender has **already set** (`permit` submitted) lives at Permit2 until its `expiration`
+  (≤ 30 days), at the debited amount, and Permit2 never consults the account again: a freeze, removing the session
+  or the target, switching to Strict or removing the token does not revoke it. The vault revokes it at Permit2
+  (`approve(token, spender, 0, 0)` or `lockdown`), the same way it approved Permit2 on the token. The pull is bounded
+  by the debited amount; an "infinite" (`type(uint160).max`) allowance is refused only because its debit cannot fit
+  the per-transaction bound at any sane price (a token with ≥ 30 decimals priced below a nano-dollar would let it
+  through: do not price such a token).
+- `transferWithAuthorization` may be submitted by anyone (the funds still go to `to`); a contract recipient that
+  must be the caller should get a `receiveAuth` registration (`receiveWithAuthorization`, callable by `to` only).
+- On Kernel hosts the registrations are inert (hot 1271 is off there, §6); they still debit.
 
 ## 4. Recovery-key compromise: an uncancellable 7-day vault takeover
 
@@ -130,6 +147,8 @@ vault policy (and for the extension's vault screens):
    `RecipientMode.Strict` with no sessions).
 5. Removing a token from the allowlist is instant but does not revoke sessions that could still reach it. Review
    and remove sessions when you remove a token.
+6. Removing a session or a target does not revoke a Permit2 allowance the hot tier pre-paid to it
+   (`registerPermit2`, §3.1). Revoke it at Permit2 in the same vault batch.
 
 ## 6. The ERC-4337 / ERC-7579 backend (before Hegotá)
 
@@ -156,6 +175,16 @@ Things specific to this backend:
   hook is still bound and turns the hot tier off if it is not.
 - **`recoveryStartVaultRotation` reverts after the hook was retired**; migrations must rotate first.
 - Validation reads only account-associated storage (ERC-7562), so these are ordinary 4337 userOps.
+- **The bundler's trust boundary** (extension M2 review, `a3e8116`). A bundler cannot alter a userOp or charge more
+  than the hot policy's `maxFeeWei` per op (the validator bounds the fee fields). It can censor, delay, or hold an
+  op indefinitely: the hot path sets no `validUntil`, so a held op stays valid until the account uses its nonce
+  for another one (send a replacement with the same nonce to kill it). A bundler that under-estimates
+  `callGasLimit` could make the call run out of gas on chain while the account still pays the prefund (the
+  EntryPoint marks the call failed, it does not revert the op): the extension measures the account's `execute`
+  with its own `eth_estimateGas` from the EntryPoint and floors `callGasLimit` at ×1.2 + 30k, so the bundler's
+  estimate can only raise it. The loss bound per griefed op is still `maxFeeWei`; the vault path never goes
+  through a bundler. The compatible account's address is computed locally (CREATE2 from the factory's init code)
+  and cross-checked against the RPC's `getAddress`; a mismatch fails closed before anything is shown or funded.
 
 ## 7. Post-quantum assumptions
 
@@ -187,6 +216,9 @@ Things specific to this backend:
 - **`ethrex_submitPrivilegedFrameTransaction`** (used by some devnet scripts and the extension's e2e to stake signers
   and to land PoolPayer txs) bypasses the mempool. It is **devnet-only**. No production flow may depend on it, and the
   wallet must not offer it as a fallback.
+- **4337 userOps (the compatible backend) go through a bundler**, which is one more party that can censor, delay or
+  hold a hot op (never alter it, never exceed `maxFeeWei`; §6). Use more than one bundler endpoint; an op you no
+  longer want must be replaced at the same nonce, since it carries no `validUntil`.
 - **Liveness is part of security.** Timelocks protect you only if your cancel lands in time: a recovery cancel of a
   malicious queued op must be mined within the timelock (default 48 h), and a counter-rotation within 7 days.
   Prolonged censorship of your role signer's txs can defeat them. Use more than one RPC and inclusion path for role

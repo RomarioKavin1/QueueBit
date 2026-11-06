@@ -2,6 +2,7 @@
 pragma solidity 0.8.28;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {ILeakedAccount} from "../../src/account/ILeakedAccount.sol";
 import {LeakedAccountImpl} from "../../src/account/LeakedAccountImpl.sol";
 import {LeakedAccountRoles} from "../../src/account/LeakedAccountRoles.sol";
@@ -255,6 +256,141 @@ contract TypedPermitsTest is AccountTestBase {
             )
         );
         _hot(1 * USD, _one(_regSingle(1 ether, address(spender))));
+    }
+
+    /// Security review (2026-11-06): the Permit2 variants without a registration (`PermitBatch`,
+    /// `permitWitnessTransferFrom`) can never get a "yes" when Permit2 asks: not through the hot key's 7739
+    /// material (Permit2 is a denied value verifier) and not through an opaque `registerHash` of their digest with
+    /// a lying amount (C1: an opaque hash is never honoured for Permit2). Off-chain (`eth_call`) they still verify,
+    /// which moves nothing.
+    function test_permit2_batchAndWitness_neverHonoured() public {
+        bytes32 ds = TypedPermits.permit2DomainSeparator();
+        bytes32 details = keccak256(
+            abi.encode(TypedPermits.PERMIT_DETAILS_TYPEHASH, address(tok), uint160(90_000 ether), expiration, uint48(0))
+        );
+        bytes32 batch = MessageHashUtils.toTypedDataHash(
+            ds,
+            keccak256(
+                abi.encode(
+                    keccak256(
+                        "PermitBatch(PermitDetails[] details,address spender,uint256 sigDeadline)PermitDetails(address token,uint160 amount,uint48 expiration,uint48 nonce)"
+                    ),
+                    keccak256(abi.encodePacked(details)),
+                    address(spender),
+                    deadline
+                )
+            )
+        );
+        bytes32 witness = MessageHashUtils.toTypedDataHash(
+            ds,
+            keccak256(
+                abi.encode(
+                    keccak256(
+                        "PermitWitnessTransferFrom(TokenPermissions permitted,address spender,uint256 nonce,uint256 deadline,bytes32 witness)TokenPermissions(address token,uint256 amount)"
+                    ),
+                    keccak256(abi.encode(TypedPermits.TOKEN_PERMISSIONS_TYPEHASH, address(tok), 90_000 ether)),
+                    address(spender),
+                    uint256(5),
+                    deadline,
+                    keccak256("order")
+                )
+            )
+        );
+        bytes32[2] memory digests = [batch, witness];
+        for (uint256 i; i < 2; ++i) {
+            bytes32 d = digests[i];
+            bytes memory sig = _personalSign(d);
+            vm.prank(address(0));
+            assertEq(account.isValidSignature(d, sig), MAGIC, "the hot key's material verifies off chain");
+            vm.prank(PERMIT2);
+            assertEq(account.isValidSignature(d, sig), BAD, "never for Permit2");
+            // C1 replay: an opaque registration of the digest at 1 wei of declared value
+            _hot(
+                1,
+                _one(_selfCall(abi.encodeCall(LeakedAccountImpl.registerHash, (d, address(tok), 1, uint48(deadline)))))
+            );
+            vm.prank(PERMIT2);
+            assertEq(account.isValidSignature(d, ""), BAD, "an opaque hash is never honoured for Permit2");
+            vm.prank(PERMIT2);
+            assertEq(account.isValidSignature(d, sig), BAD);
+        }
+        assertEq(tok.balanceOf(attacker), 0);
+    }
+
+    /// Cross-account replay: a `PermitSingle` digest carries no owner (Permit2 asks the owner it is given), so a
+    /// second LEAKED account with the same (token, spender, nonce) has the same digest. Only the account that
+    /// registered it answers for it.
+    function test_permit2Single_crossAccountReplayRefused() public {
+        address b = factory.createAccount(bytes32(uint256(2)), address(impl), _initData(_defaultCfg()));
+        tok.mint(b, 90_000 ether);
+        vm.prank(b);
+        tok.approve(PERMIT2, type(uint256).max);
+        bytes32 digest = p2.hashPermitSingle(_single(40 ether, 0));
+        assertEq(
+            TypedPermits.permitSingleDigest(b, address(tok), 40 ether, expiration, address(spender), deadline),
+            digest,
+            "same digest for both owners"
+        );
+        _hot(40 * USD, _one(_regSingle(40 ether, address(spender))));
+        vm.prank(PERMIT2);
+        assertEq(LeakedAccountImpl(payable(b)).isValidSignature(digest, ""), BAD, "B never registered it");
+        vm.expectRevert(Permit2Mock.InvalidContractSignature.selector);
+        spender.permitAndPull(p2, b, _single(40 ether, 0), attacker, 40 ether);
+        assertEq(tok.balanceOf(b), 90_000 ether);
+    }
+
+    /// What a registration does and does not bind after the fact (threat model §3.1): a freeze blocks every
+    /// unconsumed registration (the account answers nothing while frozen), but an allowance the spender already
+    /// set at Permit2 is outside the account's reach: it survives the freeze and the session's removal until its
+    /// expiration, at the debited amount. The vault revokes it at Permit2 (`approve(token, spender, 0, 0)` /
+    /// `lockdown`), as it approved Permit2 on the token in the first place.
+    function test_permit2Single_setAllowanceOutlivesFreezeAndSession() public {
+        _hot(10 * USD, _one(_regSingle(10 ether, address(spender))));
+        p2.permit(address(account), _single(10 ether, 0), ""); // the spender submits the permit (allowance set)
+        _hot(10 * USD, _one(_regSingle(10 ether, address(spender)))); // a second one at nonce 1, not yet submitted
+        vm.prank(guardian);
+        roles.guardianFreeze();
+        vm.prank(vault);
+        roles.vaultSetSession(address(spender), Permit2Spender.execute.selector, 0, 0);
+
+        // the unconsumed registration is dead while frozen
+        vm.expectRevert(Permit2Mock.InvalidContractSignature.selector);
+        p2.permit(address(account), _single(10 ether, 1), "");
+        // the set allowance is not: Permit2 does not consult the account
+        vm.prank(address(spender));
+        p2.transferFrom(address(account), alice, 10 ether, address(tok));
+        assertEq(tok.balanceOf(alice), 10 ether);
+        (uint160 left, uint48 exp,) = p2.allowance(address(account), address(tok), address(spender));
+        assertEq(left, 0, "bounded by the debited amount");
+        assertEq(exp, expiration);
+        // after the vault unfreezes, the second registration (still unexpired, nonce 1) is consumable again; the
+        // vault's revocation path is Permit2 itself (a vault op in production, like the approval in setUp)
+        vm.prank(vault);
+        roles.vaultUnfreeze();
+        p2.permit(address(account), _single(10 ether, 1), "");
+        (left,,) = p2.allowance(address(account), address(tok), address(spender));
+        assertEq(left, 10 ether);
+        vm.prank(address(account));
+        p2.approve(address(tok), address(spender), 0, 0);
+        vm.prank(address(spender));
+        vm.expectRevert(abi.encodeWithSelector(Permit2Mock.AllowanceExpired.selector, 0));
+        p2.transferFrom(address(account), alice, 10 ether, address(tok));
+        assertEq(tok.balanceOf(alice), 10 ether, "nothing beyond what was debited and set");
+    }
+
+    function _personalSign(bytes32 hash) internal view returns (bytes memory) {
+        bytes32 ds = keccak256(
+            abi.encode(
+                keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
+                keccak256("LEAKED"),
+                keccak256("1"),
+                block.chainid,
+                address(account)
+            )
+        );
+        bytes32 structHash = keccak256(abi.encode(keccak256("PersonalSign(bytes prefixed)"), hash));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(hotPk, MessageHashUtils.toTypedDataHash(ds, structHash));
+        return abi.encodePacked(r, s, v);
     }
 
     /// An allowlisted target is a valid spender without a session.

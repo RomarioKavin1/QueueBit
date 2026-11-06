@@ -116,6 +116,14 @@ contract Permit2Mock {
         allowed.expiration = d.expiration == 0 ? uint48(block.timestamp) : d.expiration;
     }
 
+    /// `AllowanceTransfer.approve`: the owner (msg.sender) sets `(amount, expiration)` directly; the nonce is kept.
+    /// Zeroing is the owner's revocation path (`lockdown` is the batch form).
+    function approve(address token, address spender, uint160 amount, uint48 expiration) external {
+        PackedAllowance storage allowed = allowance[msg.sender][token][spender];
+        allowed.amount = amount;
+        allowed.expiration = expiration;
+    }
+
     function transferFrom(address from, address to, uint160 amount, address token) external {
         PackedAllowance storage allowed = allowance[from][token][msg.sender];
         if (block.timestamp > allowed.expiration) revert AllowanceExpired(allowed.expiration);
