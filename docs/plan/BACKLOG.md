@@ -39,6 +39,8 @@ Each entry is tagged with its source. Remove an entry when it lands, and cite th
 - [x] `recoveryStartVaultRotation` reverts if the hook was retired; migration flows must rotate first (module review). Documented as the intended order: `b3c56a1` (THREAT-MODEL §6, `10-contracts.md` §10.12).
 - [x] Kernel `MAGIC_VALUE_SIG_REPLAYABLE`: the hot key can sign chain-agnostic userOps (module review, low). Documented (accepted: the cap applies per chain): `b3c56a1` (THREAT-MODEL §6, `10-contracts.md` §10.12).
 
+- [ ] Optional tightening: bound a Permit2 `expiration` to `session.expiry` for session-bound spenders (~40 B per contract; mind the size margins). Today a Permit2 allowance outlives freeze/session removal until it expires, bounded by the debit (review fddfe1e).
+
 ## Privacy package (review of 72c290d..d20cfeb)
 - [ ] Enforce that the broadcaster's node RPC (nonce, simulation with the full proof, receipts) runs on the withdrawal's fresh Anon-RPC isolation key, not the account's circuit (linkability).
 - [ ] `EncryptedStorage.lock()` should trigger the secret manager's `forget()`; remove the private key from `FramePaymasterQuote.senderKey` (pass a signer handle instead).
