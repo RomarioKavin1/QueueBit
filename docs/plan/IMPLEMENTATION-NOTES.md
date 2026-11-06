@@ -1497,3 +1497,36 @@ Commits `410c02f` (companion), `8545f18` (privacy, groth16, devnet-test verifier
   `send` of `pool.ragequit`, usd 0, body gas from an estimate) → done; the full 0.05 ETH came back to the account
   (the Vault signer paid the fee). Verifier gas on a real proof: 241k (forge).
 
+
+## LeanPool: the quantum-safe everyday key (2026-11-06)
+
+Plan: `60-leanpool-merge-plan.md` (option H: LeanPool on the everyday key, bounded by the cap; the Vault keeps Paths
+A/B). Evidence and LeanPool's original write-up: `docs/research/leanpool.md`.
+
+- **Contracts.** `hotExecute` and the new `hotExecuteFrom` share one private body (`_hotExecute`), so the two entries
+  cannot drift; `HotExecuteFromParity.t.sol` re-runs all 44 `HotExecuteTest` cases through `hotExecuteFrom`.
+  `pqHotSigner` is appended to the ERC-7201 layout (execution-only, never read in VERIFY: I-2 holds, lint-verify OK).
+  `vaultSetPQHotSigner` is instant (like `vaultSetHotKey`: same bucket, so the maximum loss is unchanged) and refuses a
+  signer whose `account()` is not this account. `QueueBitAccountImpl` is 23,320 bytes (1,256 under EIP-170).
+- **LeanPoolHotSigner** is a Solady clone with immutable args `account ‖ registry ‖ aggregator ‖ pk ‖ maxFee` and no
+  storage: changing aggregator or fee bound means a new signer. Its VERIFY data is the raw 96-byte EIP-8288 triple
+  (frame target null) and it exposes `vk()`, so LeanPool's node binds it exactly like `LeanWallet8288`. FrameSim shows
+  its VERIFY's only foreign read is its own ring slot `keccak(signer ‖ keccak(aggregator ‖ 2)) + i`; the devnet
+  measured 61,449 gas.
+- **No eth_call pre-check on ethrex.** ethrex applies EIP-3607 to `eth_call` (a `from` with code is refused) and has
+  no state overrides, so the signer's body cannot be simulated directly. Because the bodies are shared, the extension
+  checks a PQ payment by simulating the same calls as an ECDSA everyday tx (`FrameEngine.prepare`, never sent) and
+  copies its body gas limits. An over-limit payment is refused before the PQ key signs.
+- **leanSPHINCS in WASM.** leanVM's `signatures` crate builds for wasm32 unchanged (getrandom `wasm_js`): 71 KB, key
+  build ~1.2 s once per unlock, sign ~0.1 s. Its keys and (deterministic) signatures are byte-identical to native
+  lean-pq 0.7.0. lean-pq 0.9.0 (`ed7d2b9`) is a different parameter set (7,740-byte signatures): moving means moving the
+  node, the crate, the scheme label and the vectors together.
+- **Node.** Ported to Node 22 (`node:http` instead of `Bun.serve`) and `@queuebit/frames` (byte-identical to
+  hegota-support on LeanPool's tx shapes, `codec-parity.test.ts`). New: `leanpool_getTx` stages for wallets; a sender
+  naming a different aggregator is refused at intake (its VERIFY would never read our root); auto-bond.
+- **Extension.** `background/leanpool.ts` (`PqEveryday`): seed = HKDF(recovery phrase, "queuebit.pq-everyday.v1",
+  scheme label), independent of the everyday index; the built key is kept while unlocked and disposed on lock. The
+  fee tank creates and funds the signer; the Vault installs it (`setPQHotSigner`). Payments use it when installed,
+  preferred, funded (≥ 0.002 ETH) and the node answers, else the checked ECDSA tx goes out with a `fallbackNote`.
+  Nonce lanes 1–8 (EIP-8250) let several PQ payments wait for batches; speed-up/cancel are refused for them.
+- **Forge fmt.** Forge 1.7.x formats differently from CI's pinned 1.3.5: format only touched files, with 1.3.5.

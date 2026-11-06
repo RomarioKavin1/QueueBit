@@ -26,6 +26,7 @@ policy, makes large payments and replaces the hot key, behind a timelock for any
 |---|---|---|---|---|
 | Hot key | browser extension | secp256k1 | spend within the cap; allowlisted calls; sign off-chain messages | anything a timelock or the vault guards; spend above the cap |
 | Tank (fee payer) | browser extension | secp256k1 | pay hot-tx fees up to `maxFeeWeiPerTx` each | move account funds |
+| Quantum-safe everyday key (optional) | browser extension (derived from the recovery phrase) | leanVM leanSPHINCS, through LeanPool | exactly the hot key's powers, through its `LeanPoolHotSigner` and `hotExecuteFrom` (same bucket) | anything the hot key can't; see §8.1 for what its LeanPool aggregator can do |
 | Vault | companion device | SPHINCS- C13 (default) | everything, with loosening and large spends timelocked (default 48 h, min 1 h) | cancel a recovery rotation; act while a rotation is pending |
 | Vault payer key (Path B) | companion device | secp256k1 | pay for a vault tx the PQ key signed | authorise anything |
 | Recovery | separate seed, offline | SPHINCS- C13 | cancel any queued vault op; start a 7-day vault rotation | spend directly |
@@ -209,6 +210,7 @@ Things specific to this backend:
 
 - **Hot txs and Path B vault/recovery txs** (PQ checked in execution, an ECDSA payer key in VERIFY) are valid on the
   canonical public mempool. Measured on the devnet (gate G1).
+- **Quantum-safe everyday payments** (LeanPool) are alt-mempool only (§8.1).
 - **Path A** (PQ checked inside VERIFY, C13: ~150k gas) exceeds the canonical 100k VERIFY budget. It needs a staked
   signer and a mempool with BUDGET-010 staked budgets (a sidecar PR we have written, not merged upstream).
 - **PoolPayer withdrawals** (~306k VERIFY gas, Groth16 precompiles) need the same BUDGET-010 mempool plus a
@@ -223,6 +225,32 @@ Things specific to this backend:
   malicious queued op must be mined within the timelock (default 48 h), and a counter-rotation within 7 days.
   Prolonged censorship of your role signer's txs can defeat them. Use more than one RPC and inclusion path for role
   txs, and keep the timelock long if you can't watch the account daily.
+
+### 8.1 The quantum-safe everyday key and its LeanPool aggregator
+
+The optional quantum-safe everyday key (`LeanPoolHotSigner`, plan `60-leanpool-merge-plan.md`) is not checked on-chain.
+A LeanPool node verifies its leanSPHINCS signatures off-chain, batches them, and its aggregator writes the batch's
+Merkle root into the signer's ring in `DepsRegistry`. The signer's VERIFY only checks that the payment's dependency is
+in such a root. So:
+
+- **The aggregator can approve a payment the key did not sign** (or a quantum attacker who forges the aggregator's
+  ECDSA posting key can). The payment still runs through `hotExecuteFrom`, the same rolling USD cap, per-payment
+  maximum, allowlists, freeze and bunker as the hot key: the most it can take is what a leaked hot key could, the rest
+  of today's allowance to allowed destinations. It cannot touch the Vault, Recovery, limits or keys.
+- **Accountability is after the fact.** Every batch's recursive STARK hash is attached on-chain and the STARK is served
+  by the node; `queuebit-leanpool-verify-batch` checks it and that its claims rebuild the posted root. A forged root
+  fails that check. There is no on-chain slashing: the EVM cannot verify leanVM signatures or STARKs yet.
+- **Response:** pause the hot tier (Guardian or Vault freeze stops `hotExecuteFrom` too), and have the Vault replace or
+  remove the signer (`vaultSetPQHotSigner`, instant). The aggregator is part of the signer's address, so switching
+  aggregator means a new signer.
+- **Liveness:** a LeanPool node that is down or censors only delays quantum-safe payments: the extension falls back to
+  the ECDSA everyday key and says so. Its txs read storage outside the sender, so the canonical mempool refuses them
+  (`StorageReadNonSender`, measured): they only travel through the ERC-8421 alt mempool, which admits them unstaked
+  because the slot is keyed by the signer (STO-021).
+- **Fees:** the signer pays its own gas from a small balance (the fee tank funds it); each payment's cost is bounded by
+  the signer's immutable `maxFee` (0.01 ETH).
+- **Before Q-day the ECDSA everyday key remains valid next to it**: turning the quantum-safe key on narrows nothing by
+  itself. It is the path toward an everyday key that stays safe after Q-day, once the ECDSA key can be retired.
 
 ## 9. The companion (vault device)
 
@@ -293,6 +321,9 @@ PoolPayer can only lose a little slack per withdrawal, never gain. Mainnet calib
   against co-installed extensions (see `docs/plan/BACKLOG.md`).
 - Prices are static and vault-set: if a token's market price rises far above the configured price, the cap
   under-counts it. Keep prices current or set them conservatively high.
+- The quantum-safe everyday key trusts its LeanPool aggregator within the everyday limits and has no on-chain
+  slashing (§8.1); leanVM leanSPHINCS (rev `a39758d`) is a research scheme, and the ECDSA everyday key stays valid
+  next to it until it can be retired.
 - EIP-8141 and ERC-8421 are drafts. Our bytecode is pinned to a devnet profile, and spec drift is tracked in
   §10.8 of the contracts plan.
 

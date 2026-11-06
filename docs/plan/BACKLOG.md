@@ -77,3 +77,10 @@ Each entry is tagged with its source. Remove an entry when it lands, and cite th
 - [ ] `cargo audit`: `RUSTSEC-2024-0388` (`derivative` unmaintained, transitive via arkworks in `packages/groth16/rust`); informational, track an arkworks bump.
 - [ ] First green run of the nightly `devnet` workflow on a GitHub runner (written and linted locally; the compose stack is amd64-native there, but the run itself is unverified).
 - [ ] Release checklist (`docs/release/CHECKLIST.md`): audits, the circom artifact legal review, BUDGET-010 upstream, key ceremonies, 4337 mainnet addresses.
+
+## LeanPool (quantum-safe everyday key, 2026-11-06)
+- [ ] Local devnet: a `leanpool-node` service in `devnet/docker-compose.yml` (written as a Dockerfile; not added to the compose stack because it could not be run here) and a Playwright case for the Security › Quantum-safe flow.
+- [ ] Retire the ECDSA everyday key for accounts that only want the quantum-safe one (a "PQ-only" hot tier), once the LeanPool liveness story is good enough.
+- [ ] More than one aggregator per signer (today: one, immutable; switching = a new signer through the Vault).
+- [ ] leanVM 0.9.0 (`ed7d2b9`) migration, together with the node and the scheme label.
+- [ ] The LeanAccount / KeystoreValidator track (ERC-8286 frame validator: passkeys, weighted multisig) from LeanPool.

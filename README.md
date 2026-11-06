@@ -14,6 +14,11 @@ laptops, leaked seed phrases. QueueBit assumes that will happen and limits the d
 - A separate **Recovery** key, kept offline, can cancel any pending Vault action and replace a lost or stolen Vault.
   **Guardians** (a friend, a second device) can only pause the everyday key.
 
+Optionally, the everyday key can be **quantum-safe**: a post-quantum (leanSPHINCS) key signs everyday payments, a
+**LeanPool** node verifies and batches the signatures off-chain, and the account only checks a Merkle inclusion
+proof, so no PQ signature goes on-chain and the alt mempool admits it without stake (ported from LeanPool; same daily
+limit; trust: [THREAT-MODEL §8.1](docs/security/THREAT-MODEL.md)).
+
 It is built on native account abstraction (EIP-8141 frame transactions, expected in the Hegotá fork), with an
 ERC-4337 / ERC-7579 backend for today's chains, and it routes transactions between the public mempool and ERC-8421
 alternative mempools. Privacy Pools withdrawals can pay their own gas through a paymaster contract.
@@ -50,6 +55,8 @@ Components, transaction shapes (Path A / Path B), the QR protocol, privacy and t
 | [`contracts/`](contracts/) | Foundry: the frame-native account, PQ role signers, guardian, factories, ERC-7579 modules, PoolPayer; `devnet-tests/` (gate G1, the 4337 anvil e2e, PQ and privacy runs) |
 | [`packages/frames`](packages/frames/) | EIP-8141 frame-transaction codec and signature hash, per-network profiles |
 | [`packages/pq-signer`](packages/pq-signer/) | SPHINCS- C13 / leanSphincs-s signer (Rust → committed, reproducible WASM) |
+| [`packages/lean-sphincs`](packages/lean-sphincs/) | leanVM leanSPHINCS for the quantum-safe everyday key (Rust → committed, reproducible WASM) |
+| [`services/leanpool-node`](services/leanpool-node/) | The LeanPool node: verifies, batches and delivers quantum-safe everyday payments; STARK audit CLI |
 | [`packages/ur`](packages/ur/) | BC-UR types for the browser ⇄ companion QR protocol |
 | [`packages/rpc`](packages/rpc/) | Transports for ethrex, the alt-mempool sidecar and bundlers |
 | [`packages/privacy`](packages/privacy/) | Privacy Pools v1 client, frame-paymaster broadcaster, Vault envelope signer |

@@ -45,6 +45,8 @@ How the pieces of QueueBit fit together and how data moves between them. The bin
 | `packages/rpc` | JSON-RPC transports for ethrex, the sidecar and bundlers; rejection-reason mapping. |
 | `packages/privacy` | Privacy Pools v1 client (sync, notes, deposit, withdraw), host adapters, the frame-paymaster broadcaster, the Vault envelope signer over QR. |
 | `packages/groth16` | MIT Groth16 (BN254) prover for circom circuits, arkworks → committed WASM; replaces GPL snarkjs at runtime. |
+| `packages/lean-sphincs` | leanVM leanSPHINCS (rev `a39758d`, the one lean-pq 0.7.0 binds) in Rust → committed, reproducible WASM; byte-compatible with the LeanPool node. |
+| `services/leanpool-node` | The LeanPool node: native leanSPHINCS intake, EIP-8288 gossip, batching, `DepsRegistry` roots, witness delivery, background recursive STARKs, `verify-batch`. |
 | `packages/watcher-core` | Pure TS alert rules over account events and receipts (used by the service and the extension's light mode). |
 | `services/watcher` | Node service: polls a node, applies `watcher-core`, delivers alerts (SSE, HMAC webhook, ntfy). |
 | `apps/extension` | WXT + viem MV3 wallet. |
@@ -74,6 +76,7 @@ fee bound. A tx that fails simulation is never offered to the mempool.
 | Flow | Frames | Signatures | Mempool |
 |---|---|---|---|
 | **Hot payment** | `[VERIFY(account, verifyFrame()), pay(fee-tank EOA), SENDER(account, hotExecute(...))]` | hot key (secp256k1), tank key | public (`eth_sendRawTransaction`) |
+| **Quantum-safe everyday payment** (LeanPool, optional) | `[VERIFY 0x3 (signer, EIP-8288 triple), SENDER(signer, execute(...) → account.hotExecuteFrom)]` | `[ARBITRARY witness (root, ring, proof), filled by the LeanPool node]`; the leanSPHINCS signature goes to the node only | ERC-8421 alt mempool, through the LeanPool node |
 | **Vault, Path B** (default) | `[VERIFY(roleSigner, verifyFrame(0)), SENDER(roleSigner, executePQ(0, account, roleCalldata))]` | `[0]` PQ witness (ARBITRARY, 3,688 B for C13), `[1]` the Vault payer key (secp256k1) | public |
 | **Vault, Path A** | `[VERIFY(roleSigner, verifyFrame(0)) with the PQ check inside, SENDER(roleSigner, relay(account, roleCalldata))]` | `[0]` PQ witness only | ERC-8421 sidecar, role signer staked |
 | **Recovery** | as the Vault paths, through the RecoverySigner, with the Recovery payer key on Path B | | public / alt |
@@ -89,6 +92,18 @@ gas verification does not fit the flat 100k `MAX_VERIFY_GAS` of today's mempools
 sidecar implementing ERC-8421 BUDGET-010 per-entity budgets: `upstream/skandha-budget-010` is our patch, run as
 `devnet/patched-sidecar` (`:14340`). leanSphincs-s (46,899 gas VERIFY) is the documented option for Path A under the
 stock 100k budget; it is experimental and has no formal proof.
+
+**Quantum-safe everyday payments** (plan `60-leanpool-merge-plan.md`, ported from LeanPool) give the everyday tier an
+optional post-quantum key without putting a PQ signature on-chain. The extension derives a leanVM leanSPHINCS key
+(`@queuebit/lean-sphincs`, WASM) from the recovery phrase, signs the frame tx's signature hash and sends `{raw, sig}`
+to a LeanPool node (`services/leanpool-node`). The node verifies it natively, batches it (EIP-8288 wrappers), posts
+the batch's Merkle root into the signer's ring in `DepsRegistry`, fills the witness and delivers the tx to its
+sidecar; in the background it proves the batch with a recursive STARK and attaches its hash. The account's
+`LeanPoolHotSigner` (a clone, its own sender) checks inclusion in VERIFY (61k gas measured) and spends through
+`hotExecuteFrom`, which shares `hotExecute`'s body: same bucket, limits, allowlists, freeze. The Vault installs it with
+`vaultSetPQHotSigner` (instant). Before sending, the extension checks the payment exactly as an ECDSA everyday tx
+(simulated, never sent: ethrex refuses `eth_call` from a contract), so a payment the account would refuse is never
+signed. Trust: THREAT-MODEL §8.1.
 
 VERIFY-reachable code obeys the devnet's admission rules (no banned opcodes, no logs, no transient storage, no
 writes, no storage outside the sender): `contracts/script/lint-verify.sh` checks the bytecode, the source and the
