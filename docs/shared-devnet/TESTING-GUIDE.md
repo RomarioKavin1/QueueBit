@@ -5,11 +5,29 @@
 # Testing QueueBit on the shared devnet
 
 QueueBit is a browser-extension wallet whose everyday key is safe to lose: small payments are instant within a daily
-limit, and a phone (the **Vault**, a quantum-safe signing app) approves everything bigger. This guide gets you from
-nothing to a working wallet on our shared test network in about 15 minutes.
+limit, and a phone (the **Vault**, a quantum-safe signing app) approves everything bigger.
 
 > **Devnet only.** Everything here is test money on a private test chain. Every key on the server is public. Never send
 > real funds to these addresses, never import a real seed phrase.
+
+## Get started in 1 minute
+
+You need Chrome on a laptop and a phone with a camera. No laptop webcam needed.
+
+1. **Install:** download https://<base>.trycloudflare.com/downloads/queuebit-extension-shared.zip, unzip it, open
+   `chrome://extensions`, turn on **Developer mode**, click **Load unpacked** and pick the unzipped folder. A setup tab
+   opens.
+2. **Password:** choose one, press **Create wallet**.
+3. **Connect your phone:** point your phone's normal camera app at the QR code and tap the link. The Vault app opens
+   on the phone: press **Create my Vault key**, choose a passphrase. The browser says **Phone connected**: check both
+   screens show the same 4 words and press **They match**.
+4. **Finish setup:** one button. Free test ETH is added for the fees and your wallet is activated in a few seconds.
+
+That's it. On Home, **Secure your wallet** lists what's left (backup words, a Recovery key, optional Guardian and
+limit), whenever you like. To try a phone approval: **Send** more than $50; scan the code in the browser with the Vault
+app's **Scan request**, approve on the phone, and the browser finishes by itself.
+
+The rest of this guide is detail.
 
 ## The links
 
@@ -18,6 +36,7 @@ nothing to a working wallet on our shared test network in about 15 minutes.
 | Status page (current URLs, endpoints, faucet form) | https://<base>.trycloudflare.com/ |
 | Extension download (shared-devnet build, zip) | https://<base>.trycloudflare.com/downloads/queuebit-extension-shared.zip |
 | Vault app for your phone | https://<base>.trycloudflare.com/companion/ |
+| Relay (phone → browser, end-to-end encrypted) | https://<base>.trycloudflare.com/relay/ |
 | Frame pool explorer (mempool, admissions, `/tx/<hash>`) | https://<explorer>.trycloudflare.com/ |
 | This guide | https://<base>.trycloudflare.com/TESTING-GUIDE.md |
 | Source | https://github.com/RomarioKavin1/QueueBit |
@@ -27,61 +46,55 @@ The URLs are Cloudflare quick tunnels: they change when the server restarts them
 
 ## What you need
 
-- A laptop with **Chrome** (or another Chromium browser, version 120+) and a webcam (or you can paste codes instead).
-- A phone with a camera and a modern browser (Chrome on Android, Safari on iOS). The Vault app runs in the browser and
-  works offline once loaded.
+- A laptop with **Chrome** (or another Chromium browser, version 120+). A webcam is not needed.
+- A phone with a camera and a modern browser (Chrome on Android, Safari on iOS).
 
 ## 1. Install the extension (unpacked)
 
 1. Download the zip: https://<base>.trycloudflare.com/downloads/queuebit-extension-shared.zip and unzip it. You get a folder with a
    `manifest.json` inside.
 2. Open `chrome://extensions`, turn on **Developer mode** (top right), click **Load unpacked** and pick that folder.
+   Updating: unzip the new zip over the same folder and press the reload arrow on QueueBit's card.
 3. Pin QueueBit (puzzle icon, then the pin). The extension is called **QueueBit (shared devnet)**.
 4. A tab opens with the setup. If it doesn't, click the QueueBit icon, then **Set up QueueBit**.
-
-The first time you press a **Get test ETH** button, Chrome may ask to let QueueBit read data on
-`*.trycloudflare.com`. Allow it (the requests also work without it).
 
 Building it yourself instead: `VITE_QUEUEBIT_SHARED_BASE=https://<base>.trycloudflare.com pnpm --filter @queuebit/extension build:shared`
 (output in `apps/extension/.output/shared/chrome-mv3` and a zip next to it).
 
-## 2. Open the Vault on your phone
+## 2. Setup: three screens
 
-1. On the phone, open https://<base>.trycloudflare.com/companion/ (it needs https for the camera, which the tunnel gives you).
-2. Add it to the home screen (Android Chrome: menu, then **Add to Home screen**; iOS Safari: share, then
-   **Add to Home Screen**). It then opens full screen and keeps working offline: the app never talks to the network,
-   everything goes through QR codes.
-3. Tap **Create a new Vault**, choose a passphrase, and write the **24 words** down on paper (**Back up your 24 words**,
-   then **Check your backup**). For this test, a scrap of paper is fine.
+1. **Welcome:** choose a password for this browser and press **Create wallet**. (Restoring an existing wallet:
+   **Restore it with your backup words**.) Your everyday key and fee tank are made in the background; the backup words
+   wait for the checklist.
+2. **Connect your phone:** the browser shows one QR code. Scan it with the phone's camera app and tap the link: the
+   Vault app (https://<base>.trycloudflare.com/companion/) opens on **Link to your browser**.
+   - New phone: **Create my Vault key**, choose a passphrase (you type it for each approval). Existing Vault:
+     **Link to browser**.
+   - The phone sends its public key to the browser through the devnet's **relay**, end-to-end encrypted with a key
+     that only the QR code carries. Both screens show the same **4 words**: compare them, then **They match**.
+   - **Can't scan?** **Use the manual code**: type the `QB1.…` code into the Vault app (**Pair with a browser**), or
+     show the phone's pairing code to the laptop camera / paste it as text (phones in offline mode).
+3. **You're ready:** safe defaults are already set: **$50 a day** without the phone, pay anyone within that, the
+   network of this build (**QueueBit devnet (shared)**, chain 1337) and test USDC. Press **Finish setup**: 1 test ETH
+   goes to your fee tank (the small key that pays network fees) and the account is activated. Optional, before that:
+   **Add it first** puts a Recovery key in with activation.
 
-## 3. Onboarding in the extension
+Then Home opens with **Secure your wallet**: back up your everyday words (≈1 min), add a Recovery key (≈2 min, on a
+second device or a second browser profile on the phone), and optionally a Guardian and your own daily limit.
 
-Follow the setup tab:
-
-1. **Create account**: pick a password for this browser.
-2. **Pair your Vault**: on the phone choose **Pair with a browser**. The phone shows a **Vault pairing code**; hold it
-   up to the laptop camera (or use **Paste the code**). Check that the key fingerprint matches on both screens, then
-   **This matches**.
-3. **Recovery key**: optional for a test. **Set up later** is fine (you can add it in Security later).
-4. **Guardian**: **Skip**.
-5. **Daily limit**: keep the defaults ($500 a day, $200 per payment) or lower them.
-6. **Choose a network**: **QueueBit devnet (shared)** (native account, chain 1337). The other choice,
-   **QueueBit 4337 devnet (shared)**, is the same idea as an ERC-4337 smart account (chain 31337).
-7. **Tokens you'll spend**: test USDC is ticked; keep it.
-8. **Almost there**: in the Activate card press **Get test ETH: Fee tank**. 1 test ETH lands in your fee tank (the small
-   key that pays network fees) within a few seconds; then press **Activate account**. Done when it says
-   **Your account is active**.
+Tip: add the Vault app to the phone's home screen (Android Chrome: menu, **Add to Home screen**; iOS Safari: share,
+**Add to Home Screen**). On iOS the home-screen app has its own storage: link from the one you will keep using.
 
 If the network shows "Loading the shared devnet's contract addresses…" or "isn't available", the server is down or its
 URL changed: see below.
 
-## 4. Get test ETH
+## 3. Get test ETH
 
 Open the popup. The **Get test ETH** box has two buttons: **Fee tank** (pays fees) and **Account** (the money you
 spend). Each request gives 1 ETH; the faucet allows one request per IP every 10 minutes and one per address per hour.
 Or use the form on the status page / `https://<base>.trycloudflare.com/faucet?address=0xYOUR_ADDRESS` (add `&chain=31337` for the 4337 chain).
 
-## 5. Try it
+## 4. Try it
 
 **Everyday send (no phone).** Popup, **Send**, any address (e.g. a friend's), an amount under your per-payment limit.
 It goes out at once: the everyday key signs within the limits the chain enforces. Watch it in the explorer
@@ -93,8 +106,13 @@ limits (Security, or Settings). QueueBit opens an approval window with a QR code
 1. On the phone, **Scan request**, point it at the laptop screen.
 2. The phone decodes the request on its own and shows what it does in plain words (**Compare before you approve
    anything**). Check the amount and recipient against the laptop.
-3. Approve; the phone signs with its quantum-safe key and shows a **Signature code for the browser**. Hold it up to the
-   laptop camera (or paste it). The transaction is sent.
+3. Approve; the phone signs with its quantum-safe key and sends the signature back to the browser through the relay
+   (**Sent to your browser ✓**). The browser checks it and sends the transaction by itself. If the phone is offline,
+   the phone also shows a **Signature code**: in the browser press **Phone offline? Read its signature code instead**.
+
+**Fully offline phone.** In the Vault app, Settings › **Offline phone (no relay)**, and in the extension, Settings ›
+Vault › **Offline phone (no relay)**: then nothing goes through the relay and every hand-off is a QR code both ways
+(the laptop camera, or paste).
 
 Loosening a limit is not instant: it is queued with a waiting period (you'll see it under Pending), so a stolen laptop
 cannot quietly raise its own limits.
@@ -154,6 +172,9 @@ If the chain itself was reset (rare: the status page says so), start over with a
 
 - **"rate limited"**: the public endpoints allow 10 requests/s per IP; wait a few seconds.
 - **Faucet says "one drip per IP per 10 min"**: wait, or ask a friend to send you some.
+- **The phone's camera app doesn't offer to open the link**: use the manual code (Can't scan? on the Connect screen).
+- **"Waiting for your phone…" doesn't change**: the code is valid for 5 minutes after the phone answers; reload the
+  setup tab for a fresh code. "Can't reach the connection service" means the relay is down or the URL changed.
 - **Camera doesn't start on the phone**: the page must be opened over https (the tunnel URL is) and the browser must be
   allowed to use the camera. You can always paste codes instead.
 - **Something else**: note what you did and the time, and send it with a screenshot. Transaction hashes help: paste

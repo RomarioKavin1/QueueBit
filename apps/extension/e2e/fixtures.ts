@@ -97,10 +97,32 @@ export async function pasteCode(page: Page, text: string): Promise<void> {
   await page.getByTestId("ur-paste-submit").last().click();
 }
 
+/** Calls the service worker's UI API from an extension page (what the page's own buttons do). */
+export async function uiCall(page: Page, type: string, payload?: unknown): Promise<unknown> {
+  return page.evaluate(
+    async ([t, p]) => {
+      const c = (globalThis as unknown as { chrome: { runtime: { sendMessage(m: unknown): Promise<unknown> } } })
+        .chrome;
+      const r = (await c.runtime.sendMessage({ channel: "queuebit-ui", type: t, payload: p })) as {
+        ok: boolean;
+        result?: unknown;
+        error?: { message: string };
+      };
+      if (!r?.ok) throw new Error(r?.error?.message ?? "ui call failed");
+      return r.result;
+    },
+    [type, payload] as const,
+  );
+}
+
 /**
- * Onboarding through the UI with a simulated companion (ux-spec §3.1, task order): create → pair the Vault (paste
- * fallback) → Recovery ceremony (key code + test code) or "Set up later" → Guardian skipped → limits → network → the
- * address is computed. Activation is left to the caller (it needs devnet funds).
+ * Onboarding v2 through the UI with a simulated companion (docs/design/onboarding-v2.md): password → connect the
+ * phone → Ready. The phone connects through the manual-code fallback (paste of its pairing code) unless `relay` is
+ * given (then the simulated phone answers the QR link over that relay). With `recovery` (default) the optional Recovery
+ * ceremony runs from the Ready screen before activation. Activation is left to the caller (it needs devnet funds).
+ *
+ * For the older suites the helper keeps their assumptions through the UI API: `limits` (default $500/day, $200 per
+ * payment), the network (`chainId`) and the `tokens` ticked. The v2 e2e passes `limits: "v2"` to keep the new defaults.
  */
 export async function onboard(
   context: BrowserContext,
@@ -109,10 +131,11 @@ export async function onboard(
     phone?: Phone;
     recovery?: boolean;
     shots?: (name: string, page: Page) => Promise<void>;
-    /** The network picked in onboarding (default: the local devnet 1337). */
     chainId?: number;
-    /** Tokens to tick on "Tokens you'll spend" (default: the presets as offered, USDC ticked). */
     tokens?: string[];
+    limits?: "v2" | { daily: number; perPayment: number };
+    /** Pair over this relay: the simulated phone reads the QR link and sends its pairing code. */
+    relay?: (link: string) => Promise<string[]>;
   } = {},
 ) {
   const shots = opts.shots;
@@ -120,79 +143,83 @@ export async function onboard(
   const page = await context.newPage();
   await page.setViewportSize({ width: 1024, height: 900 });
   await page.goto(extUrl(extensionId, "app.html#onboarding"));
-  await expect(page.getByRole("heading", { name: /Money you can lose a little of/u })).toBeVisible();
-  await shots?.("onboarding-1-welcome", page);
-  await page.getByRole("button", { name: "Create account" }).click();
+  await expect(page.getByRole("heading", { name: "Welcome to QueueBit" })).toBeVisible();
   await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
   await page.getByLabel("Confirm password").fill(PASSWORD);
-  await shots?.("onboarding-2-password", page);
-  await page.getByRole("button", { name: "Create account" }).click();
+  await shots?.("onboarding-1-password", page);
+  await page.getByRole("button", { name: "Create wallet" }).click();
 
-  await expect(page.getByRole("heading", { name: "Pair your Vault" })).toBeVisible({ timeout: 30_000 });
-  await shots?.("onboarding-3-pair-vault", page);
-  await pasteCode(page, phone.pairingText);
-  await expect(page.getByTestId("key-check")).toHaveText(`…${phone.vaultPk.slice(-8).toLowerCase()}`);
-  await shots?.("onboarding-3b-pair-check", page);
-  await page.getByRole("button", { name: "This matches" }).click();
+  await expect(page.getByRole("heading", { name: "Connect your phone" })).toBeVisible({ timeout: 30_000 });
+  if (opts.chainId !== undefined) await uiCall(page, "settings:update", { selectedChainId: opts.chainId });
+  await shots?.("onboarding-2-connect", page);
+  let words: string[] | undefined;
+  if (opts.relay) {
+    const link = (await page.getByTestId("pair-qr").getAttribute("data-link"))!;
+    words = await opts.relay(link);
+  } else {
+    await page.getByRole("button", { name: "Can't scan? Use the manual code" }).click();
+    await shots?.("onboarding-2b-manual", page);
+    await pasteCode(page, phone.pairingText);
+  }
+  await expect(page.getByRole("heading", { name: "Phone connected" })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("key-check")).toHaveText(`Vault key …${phone.vaultPk.slice(-8).toLowerCase()}`);
+  if (words) await expect(page.getByTestId("pair-words")).toHaveText(words.join(" "));
+  await shots?.("onboarding-2c-connected", page);
+  await page.getByRole("button", { name: "They match" }).click();
 
-  await expect(page.getByRole("heading", { name: "Set up your Recovery key" })).toBeVisible();
-  await shots?.("onboarding-4-recovery", page);
+  await expect(page.getByRole("heading", { name: "You're ready" })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("ready-summary")).toContainText("$50 a day");
+  // The defaults are in once the address is worked out (the Ready screen applies them first).
+  await expect(page.getByTestId("ready-address")).toBeVisible({ timeout: 30_000 });
+  const limits = opts.limits ?? { daily: 500, perPayment: 200 };
+  if (limits !== "v2")
+    await uiCall(page, "setup:update", { dailyLimitUsd: limits.daily, perPaymentUsd: limits.perPayment });
+  if (opts.tokens) {
+    const net = opts.chainId ?? 1337;
+    const st = (await uiCall(page, "state:get")) as {
+      setup: {
+        tokens?: Record<string, Array<{ token: string; usdPerToken: string; decimals: number; symbol: string }>>;
+      };
+    };
+    const tokens = (st.setup.tokens?.[String(net)] ?? [])
+      .filter((t) => opts.tokens!.includes(t.symbol))
+      .map((t) => ({ token: t.token, usd: Number(t.usdPerToken) / 1e6, decimals: t.decimals, symbol: t.symbol }));
+    await uiCall(page, "setup:setTokens", { chainId: net, tokens });
+  }
   if (opts.recovery !== false) {
+    await page.getByRole("button", { name: "Add it first" }).click();
+    await expect(page.getByRole("heading", { name: "Set up your Recovery key" })).toBeVisible();
+    await shots?.("onboarding-3b-recovery", page);
     await page.getByRole("button", { name: "I'm ready" }).click();
     await pasteCode(page, phone.recoveryKeyText);
     await expect(page.getByTestId("key-check")).toHaveText(`…${phone.recoveryPk.slice(-8).toLowerCase()}`);
     await page.getByRole("button", { name: "This matches" }).click();
     await expect(page.getByText(/Now the test/u)).toBeVisible();
-    // The browser's single-use challenge: the phone signs over its request id.
     const challenge = page.getByTestId("recovery-challenge-text");
     await expect(challenge).toHaveValue(/^UR:QUEUEBIT-RECOVERY-CHALLENGE\//iu);
-    await shots?.("onboarding-4a-recovery-test", page);
     await pasteCode(page, await phone.recoveryTestText(await challenge.inputValue()));
     await expect(page.getByText("Recovery key is set. Store the paper away from your phone.")).toBeVisible({
       timeout: 30_000,
     });
-    await shots?.("onboarding-4b-recovery-done", page);
     await page.getByRole("button", { name: "Continue" }).click();
-  } else {
-    await page.getByRole("button", { name: "Set up later" }).click();
-    await shots?.("onboarding-4c-recovery-later", page);
-    await page.getByRole("dialog").getByRole("button", { name: "Set up later" }).click();
+    await expect(page.getByRole("heading", { name: "You're ready" })).toBeVisible();
   }
-
-  await expect(page.getByRole("heading", { name: "Add a Guardian (optional)" })).toBeVisible();
-  await shots?.("onboarding-5-guardian", page);
-  await page.getByRole("button", { name: "Skip" }).click();
-  await expect(page.getByRole("heading", { name: /How much can this browser spend/u })).toBeVisible();
-  await shots?.("onboarding-6-daily-limit", page);
-  await page.getByRole("button", { name: "Set limit" }).click();
-  await expect(page.getByRole("heading", { name: "Choose a network" })).toBeVisible();
-  if (opts.chainId !== undefined) await page.getByTestId(`network-${opts.chainId}`).locator("input").check();
-  await shots?.("onboarding-7-network", page);
-  await page.getByRole("button", { name: "Continue" }).click();
-  await expect(page.getByRole("heading", { name: "Tokens you'll spend" })).toBeVisible();
-  if (opts.tokens) {
-    for (const li of await page.locator("li[data-testid^='token-']").all()) {
-      const sym = (await li.getAttribute("data-testid"))!.slice("token-".length);
-      const box = li.locator("input[type=checkbox]");
-      if (opts.tokens.includes(sym)) await box.check();
-      else await box.uncheck();
-    }
-  }
-  await shots?.("onboarding-7b-tokens", page);
-  await page.getByRole("button", { name: /^(Confirm|Continue without tokens)/u }).click();
-  await expect(page.getByRole("heading", { name: "Almost there" })).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByTestId("activate-card")).toBeVisible({ timeout: 30_000 });
-  await shots?.("onboarding-8-activate", page);
+  // Reload so the Ready screen reads the settings changed above.
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "You're ready" })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("finish-setup")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("ready-address")).toBeVisible({ timeout: 30_000 });
+  await shots?.("onboarding-3-ready", page);
   return { page, phone };
 }
 
-/** Funds the fee tank and activates from the onboarding page; resolves once the account is active. */
+/** Funds the fee tank and finishes setup from the Ready screen; resolves once the account is active. */
 export async function activateFromOnboarding(page: Page, fundTank: (tank: string) => Promise<void>, tank: string) {
   await fundTank(tank);
-  const btn = page.getByTestId("activate-card").getByRole("button", { name: "Activate account" });
+  const btn = page.getByTestId("finish-setup");
   await expect(btn).toBeEnabled({ timeout: 30_000 });
   await btn.click();
-  await expect(page.getByText("Your account is active")).toBeVisible({ timeout: 180_000 });
+  await expect(page.getByRole("heading", { name: "Your wallet is active" })).toBeVisible({ timeout: 180_000 });
 }
 
 /** The address the extension shows on the Receive sheet / the dapp sees. */

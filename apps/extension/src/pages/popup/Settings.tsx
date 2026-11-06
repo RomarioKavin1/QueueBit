@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { SHARED_DEVNET } from "../../shared/build";
 import { NETWORKS } from "../../shared/chains";
 import { sharedUi } from "../lib/boot";
@@ -71,6 +71,13 @@ export function SettingsScreen({ state, onBack }: { state: WalletState; onBack: 
 
         <PrivateConnectionSection chainId={s.selectedChainId} enabled={s.anonRpc} />
         <PrivacyNetworkSection chainId={s.selectedChainId} />
+
+        <section className="flex flex-col gap-2" aria-labelledby="vault-h" data-testid="settings-vault">
+          <h2 id="vault-h" className="t-small font-semibold tracking-wide text-muted uppercase">
+            Vault
+          </h2>
+          <AirGappedToggle on={Boolean(s.airGapped)} />
+        </section>
 
         <section className="flex flex-col gap-2" aria-labelledby="alerts-h">
           <h2 id="alerts-h" className="t-small font-semibold tracking-wide text-muted uppercase">
@@ -263,5 +270,32 @@ function ChangePassword() {
         </form>
       )}
     </section>
+  );
+}
+
+/** Settings › Vault › Offline phone (no relay). Optimistic: the box follows the click at once. */
+function AirGappedToggle({ on }: { on: boolean }) {
+  const [checked, setChecked] = useState(on);
+  useEffect(() => setChecked(on), [on]);
+  return (
+    <label className="flex cursor-pointer items-start gap-3">
+      <input
+        type="checkbox"
+        className="mt-1 size-4 accent-[var(--brand)]"
+        checked={checked}
+        onChange={(e) => {
+          setChecked(e.target.checked);
+          void call("settings:update", { airGapped: e.target.checked }).catch(() => setChecked(on));
+        }}
+        data-testid="air-gapped-toggle"
+      />
+      <span>
+        <span className="t-strong block">Offline phone (no relay)</span>
+        <span className="t-small text-muted">
+          Your phone stays offline: approvals go both ways by QR code (this computer&apos;s camera reads the
+          phone&apos;s answer). Off: the phone sends its signature back on its own, end-to-end encrypted.
+        </span>
+      </span>
+    </label>
   );
 }

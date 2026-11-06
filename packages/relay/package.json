@@ -1,0 +1,21 @@
+{
+  "name": "@queuebit/relay",
+  "version": "0.1.0",
+  "private": true,
+  "description": "QueueBit relay: one-time, in-memory, end-to-end-encrypted mailboxes for phone → browser messages (no dependencies)",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/relay.mjs"
+  },
+  "bin": {
+    "queuebit-relay": "./src/main.mjs"
+  },
+  "scripts": {
+    "start": "node src/main.mjs",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@queuebit/relay-client": "workspace:*"
+  }
+}

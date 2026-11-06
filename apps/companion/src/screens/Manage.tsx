@@ -1,3 +1,4 @@
+import { RELAY_URL } from "../core/relay.js";
 import { PK_LENGTH, SIGNATURE_BUDGET, WASM_HASH, schemes } from "@queuebit/pq-signer";
 import { randomUuid } from "@queuebit/ur";
 import { useEffect, useState } from "react";
@@ -369,6 +370,28 @@ export function Settings() {
         />
       </section>
 
+      {RELAY_URL && (
+        <section className="flex flex-col gap-2">
+          <h2 className="t-strong">Connection to your browser</h2>
+          <label className="tap flex cursor-pointer items-start gap-3 rounded-md border border-line px-3 py-3">
+            <input
+              type="checkbox"
+              className="mt-1 shrink-0 accent-[var(--vault)]"
+              checked={!!store.settings.offline}
+              onChange={(e) => void store.saveSettings({ ...store.settings, offline: e.target.checked })}
+              data-testid="offline-toggle"
+            />
+            <span>
+              <span className="block t-strong">Offline phone (no relay)</span>
+              <span className="block t-small text-muted">
+                Never connect. Pairing codes and signatures are shown as QR codes for the browser&apos;s camera instead.
+                Safest for large amounts; turn the same option on in the browser (Settings › Vault).
+              </span>
+            </span>
+          </label>
+        </section>
+      )}
+
       <section className="flex flex-col gap-2">
         <h2 className="t-strong">Experimental</h2>
         <label className="tap flex cursor-pointer items-start gap-3 rounded-md border border-line px-3 py-3">
@@ -392,7 +415,14 @@ export function Settings() {
         <h2 className="mb-1 t-strong">About</h2>
         <dl className="divide-y divide-line rounded-md border border-line px-3" data-testid="about">
           <Row label="App" value={`QueueBit Vault ${__APP_VERSION__}`} />
-          <Row label="Network access" value="none: the app's security policy blocks every connection" />
+          <Row
+            label="Network access"
+            value={
+              RELAY_URL
+                ? `only the encrypted relay at ${new URL(RELAY_URL).host}${store.settings.offline ? " (off: offline phone)" : ""}`
+                : "none: the app's security policy blocks every connection"
+            }
+          />
           <Row label="Leaving the app" value="links and pages that would open another site are blocked" />
           <Row label="Offline" value={sw} />
           <Row label="Clear-signing registry" value={REGISTRY_VERSION} />

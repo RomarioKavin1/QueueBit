@@ -201,6 +201,21 @@ export class KeyringController {
     return record.accounts;
   }
 
+  /** The everyday backup words, for the "Back up your everyday words" checklist item. Needs the password again. */
+  async revealWords(password: string): Promise<string> {
+    const record = await this.requireRecord();
+    let plaintext: Uint8Array;
+    try {
+      ({ plaintext } = await decryptWithPassword(password, record.blob, aadFor(record.accounts.everyday)));
+    } catch (err) {
+      if (err instanceof DecryptionError) throw new KeyringError("wrong-password", "That password didn't work.");
+      throw new KeyringError("damaged", "The stored keyring is damaged and can't be unlocked.");
+    }
+    const secret = JSON.parse(new TextDecoder().decode(plaintext)) as Secret;
+    plaintext.fill(0);
+    return secret.mnemonic;
+  }
+
   async lock(): Promise<void> {
     await this.session.remove(StorageKeys.session);
   }

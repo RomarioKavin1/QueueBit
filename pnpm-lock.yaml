@@ -62,6 +62,9 @@ importers:
       '@queuebit/pq-signer':
         specifier: workspace:*
         version: link:../../packages/pq-signer
+      '@queuebit/relay-client':
+        specifier: workspace:*
+        version: link:../../packages/relay-client
       '@queuebit/ur':
         specifier: workspace:*
         version: link:../../packages/ur
@@ -150,6 +153,9 @@ importers:
       '@queuebit/privacy':
         specifier: workspace:*
         version: link:../../packages/privacy
+      '@queuebit/relay-client':
+        specifier: workspace:*
+        version: link:../../packages/relay-client
       '@queuebit/rpc':
         specifier: workspace:*
         version: link:../../packages/rpc
@@ -316,6 +322,21 @@ importers:
       snarkjs:
         specifier: 0.7.5
         version: 0.7.5
+
+  packages/relay:
+    devDependencies:
+      '@queuebit/relay-client':
+        specifier: workspace:*
+        version: link:../relay-client
+
+  packages/relay-client:
+    dependencies:
+      '@noble/hashes':
+        specifier: 2.4.0
+        version: 2.4.0
+      '@scure/bip39':
+        specifier: 2.4.0
+        version: 2.4.0
 
   packages/rpc:
     dependencies:

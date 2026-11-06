@@ -132,7 +132,7 @@ export function Security({ state }: { state: WalletState }) {
           {...(recoverySigner ? { detail: recoverySigner.lane.text } : {})}
           action={
             !hasRecovery && state.setup.recovery && !state.setup.recovery.testedAt ? (
-              <Button size="sm" variant="secondary" onClick={() => (location.hash = "#onboarding/recovery")}>
+              <Button size="sm" variant="secondary" onClick={() => (location.hash = "#recovery")}>
                 Finish the test
               </Button>
             ) : !hasRecovery && state.setup.recovery && s.deployed ? (
@@ -149,7 +149,7 @@ export function Security({ state }: { state: WalletState }) {
                 Link with Vault
               </Button>
             ) : !state.setup.recovery ? (
-              <Button size="sm" variant="secondary" onClick={() => (location.hash = "#onboarding/recovery")}>
+              <Button size="sm" variant="secondary" onClick={() => (location.hash = "#recovery")}>
                 Set up
               </Button>
             ) : undefined

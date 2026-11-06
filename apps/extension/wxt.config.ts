@@ -85,6 +85,10 @@ export default defineConfig({
       __QUEUEBIT_DESIGN__: JSON.stringify(DESIGN || env.mode === "development"),
       __QUEUEBIT_SHARED_BASE__: JSON.stringify(SHARED_BASE),
       __QUEUEBIT_SHARED_DEVNET__: JSON.stringify(SHARED_BASE !== ""),
+      __QUEUEBIT_RELAY_URL__: JSON.stringify((process.env.VITE_QUEUEBIT_RELAY_URL ?? "").replace(/\/+$/u, "")),
+      __QUEUEBIT_COMPANION_URL__: JSON.stringify(process.env.VITE_QUEUEBIT_COMPANION_URL ?? ""),
+      // A faucet only makes sense on a devnet: ignored unless this is a local-devnet build.
+      __QUEUEBIT_FAUCET_URL__: JSON.stringify(LOCAL_DEVNET ? (process.env.VITE_QUEUEBIT_FAUCET_URL ?? "") : ""),
     },
     // The offscreen prover Worker is an ES module (it imports the WASM engine and the privacy package).
     worker: { format: "es" },

@@ -18,6 +18,9 @@
  */
 const VERSION = "__VERSION__";
 const BUILD = "__BUILD__";
+/** The relay (onboarding v2), "" when the build has none: its requests go to the network untouched (the page's CSP
+ * allows only this origin), never to the cache. */
+const RELAY = "__RELAY__";
 const PRECACHE = __PRECACHE__;
 const INTEGRITY = __INTEGRITY__;
 const PREFIX = "queuebit-vault-";
@@ -109,6 +112,7 @@ self.addEventListener("message", (event) => {
 self.addEventListener("fetch", (event) => {
   const req = event.request;
   const url = new URL(req.url);
+  if (RELAY && req.url.startsWith(RELAY)) return; // not handled here: the browser fetches it as the page asked
   if (req.method !== "GET" || url.origin !== self.location.origin) {
     event.respondWith(Response.error());
     return;

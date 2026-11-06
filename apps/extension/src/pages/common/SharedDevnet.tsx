@@ -12,6 +12,12 @@ import { Button, RiskBanner, TextField } from "../../ui";
  */
 const currentBase = () => sharedDevnetState().config?.base ?? SHARED_DEVNET_BASE;
 
+/** The devnet's relay, companion and faucet (onboarding v2), from the base URL in use. */
+export function sharedEndpoints(): { relay: string; companion: string; faucet: string } {
+  const u = sharedUrls(currentBase());
+  return { relay: `${currentBase().replace(/\/+$/u, "")}/relay`, companion: u.companion, faucet: u.faucet };
+}
+
 /** Asks (once, from the click) for access to the devnet's origin. Requests also work without it (the devnet sends CORS). */
 function askHostPermission(base: string) {
   try {

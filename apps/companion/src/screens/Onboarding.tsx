@@ -17,6 +17,8 @@ import { GearIcon, RecoveryIcon, ShieldIcon, VaultIcon, WarnIcon } from "../ui/i
 import { Banner, Button, Card, KeyCheck, PassphraseField, ProgressBar, Screen, TextField } from "../ui/kit.js";
 import { StaticQr } from "../ui/qr.js";
 import { BuildLine, UpdateBanner } from "../ui/update.js";
+import { EnterLinkCode, LinkSend } from "./Link.js";
+import { relayAvailable } from "../core/relay.js";
 import { WordGrid, WordPager, WordQuiz, randomPositions } from "../ui/words.js";
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -25,6 +27,7 @@ import { WordGrid, WordPager, WordQuiz, randomPositions } from "../ui/words.js";
 
 export function Welcome() {
   const nav = useNav();
+  const store = useStore();
   return (
     <Screen>
       <div className="flex flex-1 flex-col justify-center gap-6 pt-8">
@@ -45,6 +48,11 @@ export function Welcome() {
             Restore from 24 words
           </Button>
         </div>
+        {relayAvailable(store.settings) && (
+          <p className="text-center t-small text-muted" data-testid="welcome-link-hint">
+            Setting up QueueBit in a browser? Scan the code it shows with this phone&apos;s camera app instead.
+          </p>
+        )}
         <Banner level="limit" title="Web app: your key is protected by your passphrase only">
           Not by the phone's secure chip. A native app is coming. Use a phone you don't use for browsing.
         </Banner>
@@ -345,6 +353,7 @@ async function createRecord(
 export function Create() {
   const nav = useNav();
   const store = useStore();
+  const link = nav.route.name === "create" ? nav.route.link : undefined;
   const [step, setStep] = useState<"pass" | "gen" | "pair" | "backupIntro" | "words" | "quiz">("pass");
   const [phase, setPhase] = useState<{ p: Phase; f?: number }>({ p: "derive" });
   const [error, setError] = useState<string>();
@@ -391,6 +400,10 @@ export function Create() {
       <Screen title="Create a new Vault">
         <Generating phase={phase.p} fraction={phase.f} />
       </Screen>
+    );
+  if (step === "pair" && store.vault && link)
+    return (
+      <LinkSend channel={link} vault={store.vault} auto onDone={() => setStep("backupIntro")} doneLabel="Continue" />
     );
   if (step === "pair" && store.vault)
     return (
@@ -675,8 +688,10 @@ export function PairView({
     >
       {intro}
       <ol className="flex list-decimal flex-col gap-1 pl-5 t-body">
-        <li>In the browser, open QueueBit › Pair your Vault.</li>
-        <li>Hold this code up to the browser's camera.</li>
+        <li>
+          In the browser: QueueBit › Connect your phone › <em>Can&apos;t scan? Use the manual code</em>.
+        </li>
+        <li>Hold this code up to the browser&apos;s camera (or paste its text there).</li>
         <li>Check that the browser shows the same last 8 characters:</li>
       </ol>
       <KeyCheck value={last8(vaultPk)} />
@@ -711,6 +726,19 @@ export function Pair() {
       onBack={nav.back}
       onDone={nav.back}
       doneLabel="Done"
+      {...(relayAvailable(store.settings)
+        ? {
+            intro: (
+              <>
+                <p className="t-body">
+                  Easiest: scan the code the browser shows with this phone&apos;s camera app. Or paste its manual code:
+                </p>
+                <EnterLinkCode />
+                <p className="mt-2 t-strong">Or let the browser read this phone&apos;s code:</p>
+              </>
+            ),
+          }
+        : {})}
     />
   );
 }

@@ -2,6 +2,7 @@ import type { Address, Hex } from "viem";
 import type { AccountSnapshot, AddressBookEntry } from "./types.js";
 import type { UsageRecord } from "./usage.js";
 import type { SealedBlob, SealedSeed } from "./vaultCrypto.js";
+import type { BrowserLink } from "./relay.js";
 
 /**
  * Local storage: one IndexedDB database, one key-value store. Everything here is either public (keys, address book,
@@ -58,6 +59,8 @@ export interface Settings {
   qrSpeed: "normal" | "slow";
   /** Offer experimental key types (leanSphincs-s) when creating or restoring a Vault. Off by default. */
   experimental?: boolean;
+  /** Offline phone (no relay): never use the relay, show codes for the browser to scan instead. */
+  offline?: boolean;
 }
 
 interface Schema {
@@ -69,6 +72,8 @@ interface Schema {
   log: LogEntry[];
   /** The activity log, one sealed box per entry (logCrypto.ts). */
   logSealed: Uint8Array[];
+  /** Browsers paired over the relay (public: they only let this phone address its answers). */
+  links: BrowserLink[];
 }
 
 const DB_NAME = "queuebit-companion";

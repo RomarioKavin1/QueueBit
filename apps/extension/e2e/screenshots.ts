@@ -57,7 +57,7 @@ test("screens", async ({ context, extensionId, serviceWorker, dappUrl }) => {
   await popup.keyboard.press("Escape");
 
   await activateFromOnboarding(page, (t) => fund(t, "0.1"), feeTank);
-  await shot("onboarding-9-done", page);
+  await shot("onboarding-4-active", page);
   await popup.reload();
   await fund(account, "0.2");
   await popup.getByRole("button", { name: "Refresh balance" }).click();

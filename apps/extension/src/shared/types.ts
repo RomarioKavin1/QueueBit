@@ -13,6 +13,11 @@ export interface Settings {
    * build has none, requests go direct whatever this says, and Settings explains why.
    */
   anonRpc: boolean;
+  /**
+   * Settings › Vault › "Offline phone (no relay)": Vault approvals use the two-way QR / paste hand-off instead of
+   * receiving the phone's signature over the relay (onboarding v2). Off by default.
+   */
+  airGapped?: boolean;
 }
 
 export const AUTO_LOCK_CHOICES = [1, 5, 15, 30, 60, 240];
@@ -81,6 +86,18 @@ export interface SetupState {
   recoverySkippedAt?: number;
   guardianSkippedAt?: number;
   completedAt?: number;
+  /**
+   * The relay link made when the phone connected (onboarding v2): each Vault approval's answer arrives on a channel
+   * derived from it and the request id (packages/relay-client). Not a key to anything: the signatures that travel
+   * over it are verified like scanned ones.
+   */
+  relayLink?: { secret: string; at: number };
+  /** The v2 defaults (limit, recipient mode, tokens) were applied on the "Ready" screen. */
+  defaultsAppliedAt?: number;
+  /** Checklist: the everyday backup words were shown and confirmed (or the wallet was restored from them). */
+  backupConfirmedAt?: number;
+  /** Checklist: the user looked at the daily limit (optional item). */
+  limitReviewedAt?: number;
 }
 
 export const DEFAULT_SETUP: SetupState = {

@@ -17,6 +17,7 @@ import {
   type Hex,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
+import { RelayClient, fingerprintWords, linkSecretOf, parsePairFragment, requestChannel } from "@queuebit/relay-client";
 import { encodeTx, getProfile, roleSignerPathATx, setSignature, sigHash, signTx, txHash } from "@queuebit/frames";
 import { SCHEME_ID, keygen, sign } from "@queuebit/pq-signer";
 import { createFrameRpc } from "@queuebit/rpc";
@@ -698,4 +699,28 @@ export async function simulateHotPayment(o: {
     declaredUsd: o.declaredUsd,
   });
   return { admitted: p.verdict.admitted, ...(p.verdict.reason ? { reason: p.verdict.reason } : {}) };
+}
+
+// ---- Onboarding v2: the phone over the relay (packages/relay-client, as the companion uses it) ----
+
+/**
+ * The phone's camera opened the browser's pairing link: send the pairing code over the relay, as the companion's
+ * "Link to browser" does. Returns the 4 words the phone shows and the link secret it keeps for approvals.
+ */
+export async function phoneLinkOverRelay(
+  phone: Phone,
+  link: string,
+  relayUrl: string,
+): Promise<{ words: string[]; linkSecret: string }> {
+  const channel = parsePairFragment(link);
+  if (!channel) throw new Error(`not a pairing link: ${link}`);
+  await new RelayClient(relayUrl).send(channel, { t: "pair", ur: phone.pairingText });
+  return { words: fingerprintWords(phone.vaultPk, phone.payer), linkSecret: linkSecretOf(channel) };
+}
+
+/** After `phone.approve(...)`: send the signature over the relay, as the companion's Signed screen does. */
+export async function phoneSendOverRelay(answerText: string, linkSecret: string, relayUrl: string): Promise<void> {
+  const { cbor } = decode(answerText, UR_TYPES.signature);
+  const { requestId } = decodeSignature(cbor);
+  await new RelayClient(relayUrl).send(requestChannel(linkSecret, requestId), { t: "sig", cbor: toHex(cbor) });
 }

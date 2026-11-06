@@ -27,3 +27,4 @@ upstream/
 /release/
 /audit/
 /sbom/
+**/dist-relay/

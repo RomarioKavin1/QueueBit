@@ -46,6 +46,8 @@ export interface UiApi {
   /** The backup words leave the service worker only when the user asked to see them (`revealWords`). */
   "keyring:create": { req: { password: string; revealWords?: boolean }; res: { mnemonic?: string } };
   "keyring:import": { req: { mnemonic: string; password: string }; res: null };
+  /** Checklist › Back up your everyday words: the words, after the password is typed again. */
+  "keyring:revealWords": { req: { password: string }; res: { mnemonic: string } };
   "keyring:unlock": { req: { password: string }; res: null };
   "keyring:lock": { req: undefined; res: null };
   "keyring:changePassword": { req: { oldPassword: string; newPassword: string }; res: null };

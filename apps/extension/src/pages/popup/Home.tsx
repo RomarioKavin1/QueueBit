@@ -24,6 +24,10 @@ import { call } from "../lib/api";
 import { useAsync, usePoll } from "../lib/hooks";
 import { eth, usdOf } from "../lib/money";
 import { openFullApp as openApp } from "./PopupApp";
+import { SecureChecklist } from "../common/SecureChecklist";
+
+/** In the full-tab app, move within it; from the popup, open it. */
+const goTo = (hash: string) => (location.pathname.endsWith("/app.html") ? (location.hash = hash) : openApp(hash));
 
 export function Home({
   state,
@@ -67,14 +71,7 @@ export function Home({
           action={{ label: "Open Security", onClick: () => openApp("#security") }}
         />
       )}
-      {s?.deployed && !s.recoverySigner && (
-        <RiskBanner
-          level="info"
-          title="Add a Recovery key before you keep real money here."
-          body="It replaces your Vault if your phone is lost."
-          action={{ label: "Set up", onClick: () => openApp("#security") }}
-        />
-      )}
+      {state.setup.completedAt && s?.deployed && <SecureChecklist state={state} status={s} open={goTo} />}
       {(queued.data?.length ?? 0) > 0 && (
         <RiskBanner
           level="vault"

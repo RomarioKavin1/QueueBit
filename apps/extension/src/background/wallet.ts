@@ -1387,8 +1387,11 @@ export class Wallet {
     },
     "keyring:import": async ({ mnemonic, password }) => {
       await this.keyring.import(mnemonic, password);
+      // Restored from words: the user has them already (checklist item done).
+      await this.settings.updateSetup({ backupConfirmedAt: Date.now() });
       return null;
     },
+    "keyring:revealWords": async ({ password }) => ({ mnemonic: await this.keyring.revealWords(password) }),
     "keyring:unlock": async ({ password }) => {
       await this.keyring.unlock(password);
       await this.onUnlocked();

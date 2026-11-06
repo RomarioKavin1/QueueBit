@@ -7,18 +7,24 @@ import { AnimatedQr, UrScanner } from "../../ui/QrHandoff";
 import { cx } from "../../ui/cx";
 import { call, UiCallError } from "../lib/api";
 import { usePoll } from "../lib/hooks";
+import { requestChannel } from "@queuebit/relay-client";
+import { useRelayMessage } from "../lib/relay";
 
 /**
- * Vault approval hand-off (ux-spec §3.6, `#vault/<requestId>`): what is being approved, the animated request code for
- * the phone, then the camera (or paste) for the phone's signature, which the service worker verifies locally,
- * simulates and only then sends.
+ * Vault approval hand-off (ux-spec §3.6, `#vault/<requestId>`): what is being approved and the animated request code
+ * for the phone. With a relay link (onboarding v2) the phone's signature comes back over the relay on its own: no
+ * camera here. Otherwise (Settings › Offline phone, or no link) the camera (or paste) reads it back. Either way the
+ * service worker verifies it locally, simulates and only then sends.
  */
 export function VaultHandoff({
   id,
   onDone,
   backLabel,
+  relay,
 }: {
   id: string;
+  /** The relay to receive the phone's signature on (absent: the air-gapped QR hand-off). */
+  relay?: { url: string; secret: string } | undefined;
   onDone: (to: string) => void;
   /** Where "back" goes when the hand-off was opened from another flow (e.g. the private balance's deposit). */
   backLabel?: string;
@@ -29,6 +35,19 @@ export function VaultHandoff({
   const [now, setNow] = useState(Date.now());
 
   const load = async () => setRec(await call("vault:get", { id }).catch(() => null));
+  async function submit(cborHex: `0x${string}`) {
+    setPhase("verifying");
+    setError(null);
+    try {
+      setRec(await call("vault:submit", { id, signature: cborHex }));
+    } catch (e) {
+      const msg = e instanceof UiCallError ? e.message : "Something went wrong. Nothing was sent.";
+      setError({ message: msg });
+      // The relay channel is one-time: the way on is the phone's signature code.
+      setPhase("scan");
+      await load();
+    }
+  }
   useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -38,6 +57,12 @@ export function VaultHandoff({
     return () => clearInterval(t);
   }, []);
   usePoll(() => void load(), 2500, rec?.status === "sending");
+  const secret = relay?.secret;
+  const channel = useMemo(() => (secret ? requestChannel(secret, id) : null), [secret, id]);
+  const listening = rec?.status === "waiting" && phase === "show" && channel !== null;
+  const relayState = useRelayMessage(relay?.url, listening ? channel : null, (m) => {
+    if (m.t === "sig") void submit(m.cbor as `0x${string}`);
+  });
 
   const cborHex = rec?.cbor;
   const cbor = useMemo(() => (cborHex ? hexToBytes(cborHex) : undefined), [cborHex]);
@@ -56,24 +81,18 @@ export function VaultHandoff({
   const mins = Math.floor(left / 60_000);
   const secs = Math.floor((left % 60_000) / 1000);
   const step = rec.status !== "waiting" ? 3 : phase === "show" ? 1 : 2;
-  const steps: TimelineStep[] = [
-    { label: "Scan this code with QueueBit Vault", status: step > 1 ? "done" : "active" },
-    { label: "Check and approve on your phone", status: step > 2 ? "done" : step === 2 ? "done" : "pending" },
-    { label: "Scan the phone's signature back", status: step > 2 ? "done" : step === 2 ? "active" : "pending" },
-  ];
-
-  const submit = async (cborHex: `0x${string}`) => {
-    setPhase("verifying");
-    setError(null);
-    try {
-      setRec(await call("vault:submit", { id, signature: cborHex }));
-    } catch (e) {
-      const msg = e instanceof UiCallError ? e.message : "Something went wrong. Nothing was sent.";
-      setError({ message: msg });
-      setPhase("scan");
-      await load();
-    }
-  };
+  const steps: TimelineStep[] =
+    relay && phase === "show"
+      ? [
+          { label: "Scan this code with QueueBit Vault", status: rec.status !== "waiting" ? "done" : "active" },
+          { label: "Approve on your phone", status: rec.status !== "waiting" ? "done" : "pending" },
+          { label: "Done: it comes back by itself", status: rec.status !== "waiting" ? "done" : "pending" },
+        ]
+      : [
+          { label: "Scan this code with QueueBit Vault", status: step > 1 ? "done" : "active" },
+          { label: "Check and approve on your phone", status: step > 2 ? "done" : step === 2 ? "done" : "pending" },
+          { label: "Scan the phone's signature back", status: step > 2 ? "done" : step === 2 ? "active" : "pending" },
+        ];
 
   return (
     <div
@@ -157,9 +176,23 @@ export function VaultHandoff({
                     Check what the phone shows. <strong>What the phone shows is what is signed.</strong>
                   </li>
                 </ol>
-                <Button variant="vault" onClick={() => setPhase("scan")} data-testid="scan-back">
-                  Phone has signed: scan it back
-                </Button>
+                {relay ? (
+                  <>
+                    <p className="t-body inline-flex items-center gap-2" role="status" data-testid="relay-wait">
+                      <Spinner size={16} />
+                      {relayState.status === "trouble"
+                        ? "Can't reach the connection service. Retrying…"
+                        : "Waiting for your phone. This page finishes by itself."}
+                    </p>
+                    <Button variant="ghost" size="sm" onClick={() => setPhase("scan")} data-testid="scan-back">
+                      Phone offline? Read its signature code instead
+                    </Button>
+                  </>
+                ) : (
+                  <Button variant="vault" onClick={() => setPhase("scan")} data-testid="scan-back">
+                    Phone has signed: scan it back
+                  </Button>
+                )}
                 {/* The visible clock ticks every second; the announced one only when a minute passes (or in the last minute). */}
                 <p className="t-small text-muted">
                   <span aria-hidden="true">

@@ -119,12 +119,11 @@ test("M2: compatible account on a local 4337 chain: onboarding, activation, ever
     chainId: CHAIN,
     tokens: ["USDC"],
     shots: async (n, p) => {
-      if (n === "onboarding-7-network" || n === "onboarding-7b-tokens" || n === "onboarding-8-activate")
-        await shot(`aa-${n}`, p);
+      if (n === "onboarding-3-ready") await shot(`aa-${n}`, p);
     },
   });
-  await expect(page.getByText("Local 4337 test chain · Compatible account")).toBeVisible();
-  await expect(page.getByText("USDC at $1.00")).toBeVisible();
+  await expect(page.getByTestId("ready-summary")).toContainText("Local 4337 test chain");
+  await expect(page.getByTestId("ready-summary")).toContainText("ETH, USDC");
   const account = (await smartAccount(serviceWorker, CHAIN)) as Address;
   const { feeTank } = await keyringAccounts(serviceWorker);
   expect(await pub.getCode({ address: account })).toBeUndefined();

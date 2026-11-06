@@ -15,6 +15,9 @@ declare const __QUEUEBIT_LOCAL_DEVNET__: boolean | undefined;
 declare const __QUEUEBIT_DESIGN__: boolean | undefined;
 declare const __QUEUEBIT_SHARED_BASE__: string | undefined;
 declare const __QUEUEBIT_SHARED_DEVNET__: boolean | undefined;
+declare const __QUEUEBIT_RELAY_URL__: string | undefined;
+declare const __QUEUEBIT_COMPANION_URL__: string | undefined;
+declare const __QUEUEBIT_FAUCET_URL__: string | undefined;
 
 const env = (import.meta as unknown as { env?: Record<string, string | boolean | undefined> }).env ?? {};
 
@@ -35,3 +38,23 @@ export const BUILD = {
   designGallery: DESIGN_GALLERY,
   sharedDevnet: SHARED_DEVNET,
 } as const;
+
+/**
+ * Onboarding v2 endpoints fixed at build time outside the shared flavour (which derives them from its base URL):
+ * `VITE_QUEUEBIT_RELAY_URL` (the relay), `VITE_QUEUEBIT_COMPANION_URL` (where the phone's camera opens the pairing
+ * link) and, on a local devnet, `VITE_QUEUEBIT_FAUCET_URL` (the gateway-style `?address=` faucet). "" when unset.
+ */
+const str = (v: unknown, k: string): string =>
+  typeof v === "string" ? v : typeof env[k] === "string" ? (env[k] as string) : "";
+export const BUILD_RELAY_URL: string = str(
+  typeof __QUEUEBIT_RELAY_URL__ === "string" ? __QUEUEBIT_RELAY_URL__ : undefined,
+  "VITE_QUEUEBIT_RELAY_URL",
+);
+export const BUILD_COMPANION_URL: string = str(
+  typeof __QUEUEBIT_COMPANION_URL__ === "string" ? __QUEUEBIT_COMPANION_URL__ : undefined,
+  "VITE_QUEUEBIT_COMPANION_URL",
+);
+export const BUILD_FAUCET_URL: string = str(
+  typeof __QUEUEBIT_FAUCET_URL__ === "string" ? __QUEUEBIT_FAUCET_URL__ : undefined,
+  "VITE_QUEUEBIT_FAUCET_URL",
+);

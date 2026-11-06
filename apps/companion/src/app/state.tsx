@@ -5,6 +5,8 @@ import type { LogEntry, Settings, VaultRecord } from "../core/db.js";
 import { sealLogEntry } from "../core/logCrypto.js";
 import type { AccountSnapshot, AddressBookEntry } from "../core/types.js";
 import type { Review } from "../core/clearsign.js";
+import type { BrowserLink } from "../core/relay.js";
+import type { Channel } from "@queuebit/relay-client";
 import type { Built } from "./routes.js";
 
 /**
@@ -19,6 +21,8 @@ export interface Store {
   addressBook: AddressBookEntry[];
   snapshots: AccountSnapshot[];
   settings: Settings;
+  links: BrowserLink[];
+  saveLinks(l: BrowserLink[]): Promise<void>;
   /** Number of activity entries on this phone (sealed + any legacy plaintext ones). */
   logCount: number;
   saveVault(v: VaultRecord | undefined): Promise<void>;
@@ -43,6 +47,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [snapshots, setSnapshots] = useState<AccountSnapshot[]>([]);
   const [settings, setSettings] = useState<Settings>(db.DEFAULT_SETTINGS);
   const [logCount, setLogCount] = useState(0);
+  const [links, setLinks] = useState<BrowserLink[]>([]);
 
   useEffect(() => {
     void (async () => {
@@ -50,6 +55,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setAddressBook((await db.get("addressBook")) ?? []);
       setSnapshots((await db.get("snapshots")) ?? []);
       setSettings({ ...db.DEFAULT_SETTINGS, ...(await db.get("settings")) });
+      setLinks((await db.get("links")) ?? []);
       setLogCount(((await db.get("logSealed")) ?? []).length + ((await db.get("log")) ?? []).length);
       setLoaded(true);
     })();
@@ -67,6 +73,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     addressBook,
     snapshots,
     settings,
+    links,
+    saveLinks: async (l) => {
+      await db.put("links", l);
+      setLinks(l);
+    },
     logCount,
     saveVault: async (v) => {
       if (v) await db.put("vault", v);
@@ -103,6 +114,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setAddressBook([]);
       setSnapshots([]);
       setSettings(db.DEFAULT_SETTINGS);
+      setLinks([]);
       setLogCount(0);
     },
   };
@@ -121,7 +133,8 @@ export function useStore(): Store {
 
 export type Route =
   | { name: "welcome" }
-  | { name: "create" }
+  | { name: "create"; link?: Channel }
+  | { name: "link"; channel: Channel }
   | { name: "restore" }
   | { name: "backup"; afterCreate?: boolean }
   | { name: "pair"; firstTime?: boolean }

@@ -39,6 +39,10 @@ export class SettingsStore {
       if (typeof patch.anonRpc !== "boolean") throw new Error("Unknown private-connection setting");
       next.anonRpc = patch.anonRpc;
     }
+    if (patch.airGapped !== undefined) {
+      if (typeof patch.airGapped !== "boolean") throw new Error("Unknown offline-phone setting");
+      next.airGapped = patch.airGapped;
+    }
     await this.kv.set(StorageKeys.settings, next);
     return next;
   }
@@ -65,6 +69,19 @@ export class SettingsStore {
       next.recipientMode = patch.recipientMode;
     }
     if (patch.guardian !== undefined) next.guardian = patch.guardian;
+    if (patch.relayLink !== undefined) {
+      const l = patch.relayLink;
+      if (!l || typeof l.secret !== "string" || !/^[A-Za-z0-9_-]{43}$/u.test(l.secret) || !Number.isFinite(l.at))
+        throw new Error("Bad relay link");
+      next.relayLink = { secret: l.secret, at: l.at };
+    }
+    for (const k of ["defaultsAppliedAt", "backupConfirmedAt", "limitReviewedAt"] as const) {
+      const v = patch[k];
+      if (v !== undefined) {
+        if (!Number.isFinite(v)) throw new Error(`Bad ${k}`);
+        next[k] = v;
+      }
+    }
     await this.kv.set(StorageKeys.setup, next);
     return next;
   }

@@ -18,6 +18,7 @@ import { PROFILE_ID, type Built } from "../fixtures/requests.js";
  */
 
 export * from "../fixtures/requests.js";
+export { RelayClient, fingerprintWords, newChannel, pairLink } from "@queuebit/relay-client";
 export * from "../fixtures/aa.js";
 
 /** The browser's recovery test code (`ur:queuebit-recovery-challenge`), as its "test code as text" box shows it. */

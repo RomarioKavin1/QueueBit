@@ -25,6 +25,30 @@ import { BuildLine, UpdateBanner } from "../ui/update.js";
 import { AnimatedQr } from "../ui/qr.js";
 import { Scanner } from "../ui/Scanner.js";
 import { ReviewScreen } from "./Review.js";
+import { relayAvailable, relayClient, sendSignature } from "../core/relay.js";
+
+type RelayState = { s: "sending" } | { s: "sent" } | { s: "failed"; message: string };
+/** What happened to each signature's relay send (so "Show again" doesn't send twice). */
+const relayed = new WeakMap<Built, RelayState>();
+
+/** Sends a fresh signature to the linked browser(s) over the relay, once; null when the relay isn't in use. */
+function useRelaySend(built: Built): RelayState | null {
+  const store = useStore();
+  const use = relayAvailable(store.settings) && store.links.length > 0;
+  const [st, setSt] = useState<RelayState | undefined>(() => relayed.get(built));
+  useEffect(() => {
+    if (!use || relayed.has(built)) return;
+    const set = (v: RelayState) => {
+      relayed.set(built, v);
+      setSt(v);
+    };
+    set({ s: "sending" });
+    sendSignature(relayClient(), store.links, built.cbor)
+      .then(() => set({ s: "sent" }))
+      .catch((e: Error) => set({ s: "failed", message: e.message }));
+  }, [built, use, store.links]);
+  return use ? (st ?? { s: "sending" }) : null;
+}
 
 /** The last signature, kept in memory only, for "Show again" (ux-spec §4.5: discarded after 10 minutes). */
 let lastBuilt: Built | undefined;
@@ -367,6 +391,7 @@ export function SignedView({ built, onDone }: { built: Built; onDone: () => void
     return () => window.clearInterval(t);
   }, [built.expiresAt]);
   const expired = left <= 0;
+  const relay = useRelaySend(built);
   return (
     <Screen
       title={built.title}
@@ -380,6 +405,22 @@ export function SignedView({ built, onDone }: { built: Built; onDone: () => void
       <Banner level="safe" title="Signed on this phone" testId="signed-banner">
         {built.summary}
       </Banner>
+      {relay?.s === "sent" && (
+        <Banner level="safe" title="Sent to your browser ✓" testId="relay-sent">
+          The browser checks it and finishes on its own. You can close this.
+        </Banner>
+      )}
+      {relay?.s === "sending" && (
+        <p className="t-body text-muted" role="status" data-testid="relay-sending">
+          Sending to your browser…
+        </p>
+      )}
+      {relay?.s === "failed" && (
+        <Banner level="limit" title="Couldn't reach your browser" testId="relay-failed">
+          {relay.message} Show the browser this code instead: there, press “Phone offline? Read its signature code
+          instead”.
+        </Banner>
+      )}
       {expired ? (
         <Banner level="info" title="This signature expired">
           Start again in the browser for a fresh request.
@@ -394,7 +435,9 @@ export function SignedView({ built, onDone }: { built: Built; onDone: () => void
         />
       )}
       <p className="t-body text-muted">
-        Keep the phone still, about 20 cm from the browser's camera. The code loops until the browser says “Received”.
+        {relay?.s === "sent"
+          ? "If the browser didn't get it, it can also read this code with its camera."
+          : "Keep the phone still, about 20 cm from the browser's camera. The code loops until the browser says “Received”."}
       </p>
       {!expired && (
         <p className="t-small text-muted" aria-live="off">

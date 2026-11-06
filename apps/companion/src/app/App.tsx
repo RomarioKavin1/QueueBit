@@ -1,4 +1,7 @@
-import { useNav, useStore, NavProvider, StoreProvider } from "./state.js";
+import { parsePairFragment } from "@queuebit/relay-client";
+import { useEffect, useState } from "react";
+import { useNav, useStore, NavProvider, StoreProvider, type Route } from "./state.js";
+import { LinkScreen } from "../screens/Link.js";
 import { Backup, Create, Pair, Restore, Welcome } from "../screens/Onboarding.js";
 import { AddressBook, Health, Settings } from "../screens/Manage.js";
 import { Ceremony, RecoveryHub, RecoveryTest, RecoveryUse } from "../screens/Recovery.js";
@@ -6,13 +9,32 @@ import { Rotate } from "../screens/Rotate.js";
 import { Home, ReviewRoute, Scan, Signed } from "../screens/Vault.js";
 import { Spinner } from "../ui/kit.js";
 
+/** A `#pair=<id>.<key>` link from the browser's QR code, read once and removed from the address bar. */
+function takePairLink(): Route | undefined {
+  const channel = parsePairFragment(location.hash);
+  if (!location.hash.includes("pair=")) return undefined;
+  history.replaceState(history.state, "", location.pathname + location.search);
+  return channel ? { name: "link", channel } : undefined;
+}
+
 function Router() {
-  const { route } = useNav();
+  const nav = useNav();
+  const { route } = nav;
   const store = useStore();
+  // The app was already open when the phone opened another pairing link.
+  useEffect(() => {
+    const on = () => {
+      const r = takePairLink();
+      if (r) nav.reset(r);
+    };
+    window.addEventListener("hashchange", on);
+    return () => window.removeEventListener("hashchange", on);
+  }, [nav]);
   // Screens that need a Vault fall back to Welcome when there is none (e.g. after "Erase").
   const needsVault = ![
     "welcome",
     "create",
+    "link",
     "restore",
     "recovery",
     "ceremony",
@@ -26,6 +48,8 @@ function Router() {
       return <Welcome />;
     case "create":
       return <Create />;
+    case "link":
+      return <LinkScreen channel={route.channel} />;
     case "restore":
       return <Restore />;
     case "backup":
@@ -61,6 +85,7 @@ function Router() {
 
 function Boot() {
   const store = useStore();
+  const [link] = useState(takePairLink);
   if (!store.loaded)
     return (
       <div className="flex min-h-dvh items-center justify-center">
@@ -68,7 +93,7 @@ function Boot() {
       </div>
     );
   return (
-    <NavProvider initial={store.vault ? { name: "home" } : { name: "welcome" }}>
+    <NavProvider initial={link ?? (store.vault ? { name: "home" } : { name: "welcome" })}>
       <Router />
     </NavProvider>
   );

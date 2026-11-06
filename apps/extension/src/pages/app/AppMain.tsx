@@ -21,7 +21,8 @@ import { DESIGN_GALLERY } from "../../shared/build";
 import { Alerts } from "./Alerts";
 import { Gallery } from "./Gallery";
 import { Limits } from "./Limits";
-import { Onboarding, type Step } from "./Onboarding";
+import { BackupWords, Onboarding, RecoveryStep, type Step } from "./Onboarding";
+import { endpoints } from "../lib/relay";
 import { Pending } from "./Pending";
 import { Privacy } from "./Privacy";
 import { SettingsScreen } from "../popup/Settings";
@@ -38,27 +39,11 @@ function useHash() {
   return hash;
 }
 
-const STEPS: Step[] = [
-  "welcome",
-  "create",
-  "import",
-  "words",
-  "vault",
-  "recovery",
-  "guardian",
-  "limit",
-  "network",
-  "tokens",
-  "done",
-];
+const STEPS: Step[] = ["welcome", "import", "connect", "ready", "recovery"];
 
-/** Where onboarding resumes after a reload or a closed tab. */
+/** Where onboarding resumes after a reload or a closed tab: connect the phone, else the Ready screen. */
 function resumeStep(state: WalletState): Step {
-  const s = state.setup;
-  if (!s.vault) return "vault";
-  if (!s.recovery?.testedAt && !s.recoverySkippedAt) return "recovery";
-  if (!s.guardian && !s.guardianSkippedAt) return "guardian";
-  return "limit";
+  return state.setup.vault ? "ready" : "connect";
 }
 
 /** Full-tab app (ux-spec §2.3): onboarding, the Vault hand-off and the pages that need room or a camera. */
@@ -97,7 +82,7 @@ export function AppMain() {
   };
 
   if (!state.initialized) {
-    const step = (["welcome", "create", "import"] as Step[]).includes(sub as Step) ? (sub as Step) : "welcome";
+    const step = sub === "import" ? "import" : "welcome";
     return <Onboarding state={state} step={step} go={go} />;
   }
   if (!state.unlocked) {
@@ -111,14 +96,19 @@ export function AppMain() {
   }
   if (route === "onboarding" || (!state.setup.completedAt && route !== "vault")) {
     let step = STEPS.includes(sub as Step) ? (sub as Step) : resumeStep(state);
-    if (["welcome", "create", "import"].includes(step)) step = resumeStep(state);
-    if (!state.setup.vault && !["words", "vault"].includes(step)) step = "vault";
+    if (step === "welcome" || step === "import") step = resumeStep(state);
+    if (!state.setup.vault) step = "connect";
     return <Onboarding state={state} step={step} go={go} />;
   }
   const page =
     route === "vault" ? (
       <VaultHandoff
         id={sub}
+        relay={
+          !state.settings.airGapped && state.setup.relayLink && endpoints()
+            ? { url: endpoints()!.relay, secret: state.setup.relayLink.secret }
+            : undefined
+        }
         {...(back === "privacy" ? { backLabel: "Back to private balance" } : {})}
         onDone={(to) => (location.hash = to === "pending" ? "#pending" : back === "privacy" ? "#privacy" : "#home")}
       />
@@ -134,6 +124,10 @@ export function AppMain() {
       </div>
     ) : route === "security" ? (
       <Security state={state} />
+    ) : route === "recovery" ? (
+      <RecoveryStep state={state} onDone={() => (location.hash = "#home")} />
+    ) : route === "backup" ? (
+      <BackupWords onDone={() => (location.hash = "#home")} />
     ) : route === "limits" ? (
       <Limits />
     ) : (

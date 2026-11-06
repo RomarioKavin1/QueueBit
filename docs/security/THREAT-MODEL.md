@@ -226,12 +226,47 @@ Things specific to this backend:
 
 ## 9. The companion (vault device)
 
-- It runs offline: CSP `connect-src 'none'`. Requests and signatures move as QR codes (UR). Cross-origin navigation is
-  a remaining exfiltration channel. It is partly guarded and documented.
+- By default it runs offline: CSP `connect-src 'none'`. Requests and signatures move as QR codes (UR). Cross-origin
+  navigation is a remaining exfiltration channel. It is partly guarded and documented.
+- **The relay build (onboarding v2, §9.1):** a build made with a relay URL allows `connect-src` to that one origin,
+  pinned at build time (the shared-devnet build: `<base>/relay`). Settings › **Offline phone (no relay)** turns it off
+  at runtime.
 - **Updates:** the PWA update check proves the download is complete and unmixed (SHA-256 digests inside `sw.js`). It
   does **not** prove authenticity. The trust anchor is the origin that serves it. A compromised origin can ship
   malicious code; the user must approve "Update now", and the build id is shown.
 - The vault seed is encrypted at rest under the passphrase (strength-checked). The activity log is encrypted too.
+
+### 9.1 The relay (phone → browser) and its trade-off
+
+Onboarding v2 (`docs/design/onboarding-v2.md`) removes the laptop camera: the phone sends its pairing code and each
+signature to the browser through a relay (`packages/relay`, deployed at `<base>/relay/` on the shared devnet).
+
+- **What the relay sees:** a random channel id, opaque bytes (≤ 16 KB), the sender's and reader's IP, timing. Messages
+  are AES-256-GCM encrypted by the clients (`packages/relay-client`) with a key that only the QR code's URL fragment
+  carries (`#pair=<id>.<key>`); browsers never send fragments to servers, and the companion removes it from the
+  address bar on load. The channel id is bound in as associated data. The relay stores nothing durably (in memory,
+  5-minute TTL, one message per channel) and logs no bodies or ids.
+- **What a malicious relay (or anyone on the path) can do:** drop or delay messages (the user falls back to the QR /
+  paste hand-off), or fill a channel first with junk (it fails authentication; the real message can't then be written,
+  so this is a denial of service only). It cannot read or alter a message, nor forge one: it lacks the key.
+- **What travels:** only public data: the Vault public key and fee-payment address, and signatures. The browser
+  re-verifies all of it exactly as when it came by QR code (`pair:vault` decodes and checks the key; `vault:submit`
+  verifies the quantum-safe signature locally, simulates, and only then sends). A relayed signature for anything other
+  than the pending request is rejected.
+- **Pairing substitution:** someone who sees the QR code (shoulder surfing, a screenshot) could answer it with their
+  own phone's key. Both screens then show the **4-word fingerprint** of the key (SHA-256 of key and payer, 44 bits):
+  the user confirms the words match before the key is stored. A mismatch restarts with a fresh code.
+- **Approval channels:** after pairing both ends keep a link secret (HKDF of the pairing key). Each request's channel
+  and key are HMACs of it and the request id, so channels are single-use and unlinkable to the relay. The secret is not
+  a key to any funds: at worst it lets its holder put junk in a channel the browser is listening on.
+- **The trade-off:** the companion is no longer network-free. A compromised companion build (a malicious update from
+  the origin) could now exfiltrate over the relay origin, e.g. the passphrase as it is typed, where before it could
+  not open any connection at all. Mitigations: the origin is pinned at build time (the CSP allows nothing else),
+  updates are verified and approved by the user (the build id is shown), secrets stay inside the signing worker, and
+  high-value users run an offline build or switch on **Offline phone (no relay)** on both ends (the two-way QR
+  hand-off, unchanged).
+- **Abuse limits:** per-IP token bucket (2 req/s, burst 40), 60 writes per IP per 5 minutes, 8 open long-polls per IP
+  (400 total), 2,000 channels held at once, 16 KB per message. The container is capped (CPU and memory) and read-only.
 
 ## 10. PoolPayer (privacy withdrawals)
 
@@ -245,6 +280,8 @@ PoolPayer can only lose a little slack per withdrawal, never gain. Mainnet calib
 ## 11. Known gaps and open items
 
 - No external audit of any component.
+- The relay (§9.1) is a single, unauthenticated service: anyone can use it within its rate limits, and it is a
+  denial-of-service point for the convenience path (the QR hand-off always remains).
 - `MIN_SETTLE_GAS` / `MAX_INTRINSIC_GAS` need mainnet calibration (PoolPayer).
 - The watcher's webhook auth is replayable within a 5-minute skew; the extension's postMessage channel has no nonce
   against co-installed extensions (see `docs/plan/BACKLOG.md`).

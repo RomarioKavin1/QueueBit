@@ -9,6 +9,27 @@ import { defaultClientConditions, defineConfig, type Plugin } from "vite";
 import { loadSharedOverlay } from "./scripts/shared-overlay.mjs";
 
 /**
+ * The relay (onboarding v2) is the one origin the companion may connect to, pinned at build time:
+ * `VITE_QUEUEBIT_RELAY_URL`, or `<VITE_QUEUEBIT_SHARED_BASE>/relay` in the shared-devnet build. Without either the
+ * build has no relay and keeps `connect-src 'none'`.
+ */
+function relayUrl(): string {
+  const explicit = (process.env.VITE_QUEUEBIT_RELAY_URL ?? "").replace(/\/+$/u, "");
+  const shared = (process.env.VITE_QUEUEBIT_SHARED_BASE ?? "").replace(/\/+$/u, "");
+  const url = explicit || (shared ? `${shared}/relay` : "");
+  if (
+    url &&
+    !/^https:\/\/[a-z0-9.-]+(:\d+)?(\/[A-Za-z0-9._~-]+)*$|^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/[A-Za-z0-9._~-]+)*$/u.test(
+      url,
+    )
+  )
+    throw new Error(`relay URL must be https://host/path (got ${url})`);
+  return url;
+}
+export const RELAY_URL = relayUrl();
+const RELAY_ORIGIN = RELAY_URL ? new URL(RELAY_URL).origin : "";
+
+/**
  * The companion is a static, offline-first PWA. Security posture enforced by the build:
  *  - a Content-Security-Policy with `connect-src 'none'` (no fetch/XHR/WebSocket/EventSource/beacon, from the page
  *    or from the inline — hence policy-inheriting — signing worker), injected as a <meta> tag and served as a header
@@ -23,7 +44,7 @@ export const CSP = [
   "media-src 'self' blob: mediastream:",
   "worker-src 'self' blob:",
   "manifest-src 'self'",
-  "connect-src 'none'",
+  RELAY_ORIGIN ? `connect-src ${RELAY_ORIGIN}` : "connect-src 'none'",
   "font-src 'self'",
   "base-uri 'none'",
   "form-action 'none'",
@@ -121,9 +142,11 @@ function serviceWorker(): Plugin {
       const source = template
         .replace('"__VERSION__"', JSON.stringify(version))
         .replace('"__BUILD__"', JSON.stringify(gitShort()))
+        .replace('"__RELAY__"', JSON.stringify(RELAY_URL ? `${RELAY_URL}/` : ""))
         .replace("= __PRECACHE__;", `= ${JSON.stringify(all)};`)
         .replace("= __INTEGRITY__;", `= ${JSON.stringify(integrity)};`);
-      if (/= __(PRECACHE|INTEGRITY)__|"__(VERSION|BUILD)__"/.test(source)) this.error("sw.js template not filled in");
+      if (/= __(PRECACHE|INTEGRITY)__|"__(VERSION|BUILD|RELAY)__"/.test(source))
+        this.error("sw.js template not filled in");
       writeFileSync(join(outDir, "sw.js"), source);
     },
   };
@@ -143,6 +166,7 @@ export default defineConfig({
     __APP_VERSION__: JSON.stringify(pkg.version),
     __BUILD_ID__: JSON.stringify(gitShort()),
     __QUEUEBIT_REGISTRY_OVERLAY__: JSON.stringify(sharedOverlay),
+    __QUEUEBIT_RELAY_URL__: JSON.stringify(RELAY_URL),
   },
   worker: { format: "es" },
   build: {

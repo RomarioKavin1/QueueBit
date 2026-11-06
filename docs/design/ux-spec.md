@@ -125,6 +125,11 @@ Conventions for every screen below: **Purpose**, **Wireframe** (popup width unle
 
 ### 3.1 Onboarding (full app, `#onboarding/*`)
 
+> **Superseded by [onboarding-v2.md](onboarding-v2.md) (2026-11-06):** three screens (password → connect your phone
+> over the relay, 4-word check → Ready with defaults and "Finish setup"), the Secure-your-wallet checklist on Home, and
+> Vault approvals answered over the relay (air-gapped QR hand-off in Settings › Vault). The ceremony and copy below
+> still apply to the Recovery key (`#recovery`, from the checklist) and the air-gapped path.
+
 A single linear flow with a progress rail. Steps 1–3 are the **core** (target < 3 min, §5); 4–5 can be deferred but are nagged (§2.4).
 
 ```
