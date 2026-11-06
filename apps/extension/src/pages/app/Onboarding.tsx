@@ -184,9 +184,18 @@ function Connect({ headingRef, state, go }: StepProps & { state: WalletState }) 
   const relay = useRelayMessage(ep?.relay, found ? null : channel, (m) => {
     if (m.t === "pair") void preview(m.ur, channel);
   });
+  // Something that wasn't the phone filled the channel: it holds that one message until it expires, so the phone
+  // can't answer this code any more. Show a fresh code (and say why) rather than wait on a dead channel.
+  const [answeredByOther, setAnsweredByOther] = useState(false);
+  useEffect(() => {
+    if (!relay.badMessage) return;
+    setAnsweredByOther(true);
+    setChannel(newChannel());
+  }, [relay.badMessage]);
 
   const restart = () => {
     setFound(null);
+    setAnsweredByOther(false);
     setChannel(newChannel());
     setScanKey((k) => k + 1);
   };
@@ -260,8 +269,8 @@ function Connect({ headingRef, state, go }: StepProps & { state: WalletState }) 
               <Spinner size={14} />
               {relay.status === "trouble"
                 ? "Can't reach the connection service. Retrying…"
-                : relay.badMessage
-                  ? "Something else answered this code. Still waiting for your phone…"
+                : answeredByOther
+                  ? "Something else answered the last code. Here is a fresh one: scan it again with your phone…"
                   : "Waiting for your phone…"}
             </p>
           </div>

@@ -268,14 +268,12 @@ export class RelayClient {
   }
 
   /**
-   * Long-polls until a message arrives or `signal` aborts. Network errors and rate limits back off and retry; a
-   * message that fails its check is reported through `onBadMessage` and waiting goes on (someone may have written
-   * junk into the channel first; the real phone's message can't be forged).
+   * Long-polls until a message arrives or `signal` aborts. Network errors and rate limits back off and retry. A
+   * message that fails its check (someone wrote junk into the channel first; the real phone's message can't be
+   * forged) rejects with `bad-message`: the channel holds one message until it expires, so the phone can't deliver
+   * there any more and the caller must move to a fresh channel (or the QR hand-off).
    */
-  async waitFor(
-    c: Channel,
-    opts: { signal: AbortSignal; onBadMessage?: (e: RelayError) => void; onError?: (e: unknown) => void },
-  ): Promise<RelayMessage> {
+  async waitFor(c: Channel, opts: { signal: AbortSignal; onError?: (e: unknown) => void }): Promise<RelayMessage> {
     let backoff = 1000;
     while (!opts.signal.aborted) {
       try {
@@ -284,12 +282,7 @@ export class RelayClient {
         if (m) return m;
       } catch (e) {
         if (opts.signal.aborted) break;
-        if (e instanceof RelayError && e.code === "bad-message") {
-          opts.onBadMessage?.(e);
-          // The bad message stays in the channel until it expires: stop polling it in a tight loop.
-          await sleep(5000, opts.signal);
-          continue;
-        }
+        if (e instanceof RelayError && e.code === "bad-message") throw e;
         opts.onError?.(e);
         await sleep(backoff, opts.signal);
         backoff = Math.min(backoff * 2, 15_000);

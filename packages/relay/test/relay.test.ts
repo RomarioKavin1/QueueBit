@@ -136,6 +136,54 @@ describe("relay server", () => {
     r2.close();
   });
 
+  it("forgets a channel that only had readers once the last one leaves (long-polls can't fill the relay)", async () => {
+    const r = createRelay({ maxChannels: 2, rateBurst: 100, maxWaitersPerIp: 10 });
+    const id = (n: number) => String(n).padStart(22, "y");
+    // Two timed-out long-polls on fresh ids used to pin two empty channels for a whole TTL …
+    const polls = [get(r, id(1), 1), get(r, id(2), 1)];
+    await new Promise((f) => setTimeout(f, 10));
+    expect(r.channels.size).toBe(2);
+    expect((await put(r, id(3), Buffer.from("3"))).status).toBe(503);
+    expect((await Promise.all(polls)).map((x) => x.status)).toEqual([204, 204]);
+    expect(r.channels.size).toBe(0);
+    // … which locked every phone out. Now the phone can still write.
+    expect((await put(r, id(3), Buffer.from("3"))).status).toBe(201);
+    // A channel with a reader still waiting is kept (the PUT is delivered to it).
+    const waiting = get(r, id(4), 1);
+    await new Promise((f) => setTimeout(f, 10));
+    expect(r.channels.has(id(4))).toBe(true);
+    expect((await put(r, id(4), Buffer.from("4"))).status).toBe(201);
+    expect((await waiting).status).toBe(200);
+    expect(r.channels.has(id(4))).toBe(true);
+    r.close();
+  });
+
+  it("gives a message a full TTL from when it is written, not from the first long-poll", async () => {
+    let now = 1_000_000;
+    const r = createRelay({ now: () => now });
+    const first = get(r, ID, 1);
+    await new Promise((f) => setTimeout(f, 10));
+    now += 4 * 60_000;
+    await put(r, ID, Buffer.from("late"));
+    expect((await first).status).toBe(200);
+    now += 4 * 60_000; // 8 min after the poll, 4 after the write
+    expect((await get(r, ID)).status).toBe(200);
+    now += 61_000;
+    expect((await get(r, ID)).status).toBe(204);
+    r.close();
+  });
+
+  it("bounds the per-address tables: the oldest addresses are forgotten past maxIps", async () => {
+    const r = createRelay({ maxIps: 3, rateBurst: 1 });
+    for (let i = 0; i < 10; i++) expect((await get(r, ID, 0, `10.0.0.${i}`)).status).toBe(204);
+    for (let i = 0; i < 10; i++) expect((await put(r, ID + i, Buffer.from("m"), `10.1.0.${i}`)).status).toBe(201);
+    expect(r.ips().buckets).toBeLessThanOrEqual(3);
+    expect(r.ips().puts).toBeLessThanOrEqual(3);
+    // A tracked address keeps its bucket (still limited); untracked ones start fresh.
+    expect((await get(r, ID, 0, "10.1.0.9")).status).toBe(429);
+    r.close();
+  });
+
   it("rejects malformed channel ids and answers CORS preflights", async () => {
     const r = createRelay();
     expect((await get(r, "short")).status).toBe(400);

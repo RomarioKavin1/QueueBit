@@ -24,6 +24,8 @@ export const DEFAULTS = Object.freeze({
   rateBurst: 40,
   /** Writes (PUT) per IP per TTL window. */
   maxPutsPerIp: 60,
+  /** Client addresses tracked for rate limiting; the oldest are forgotten past this (bounds memory under an IPv6 flood). */
+  maxIps: 20_000,
   /** Trust X-Forwarded-For / CF-Connecting-IP (only behind the gateway). */
   trustProxy: false,
   /** Path prefix the relay answers under. */
@@ -56,9 +58,23 @@ export function createRelay(options = {}) {
   let waiters = 0;
   const stats = { puts: 0, gets: 0, delivered: 0, expired: 0, refused: 0 };
 
+  /** Keeps a per-IP map under `maxIps`: idle entries go first, then the oldest (Maps iterate in insertion order). */
+  function bound(map, idle) {
+    if (map.size < o.maxIps) return;
+    idle();
+    for (const key of map.keys()) {
+      if (map.size < o.maxIps) break;
+      map.delete(key);
+    }
+  }
+
   function take(ip) {
     const now = o.now();
-    const b = buckets.get(ip) ?? { t: now, tokens: o.rateBurst };
+    let b = buckets.get(ip);
+    if (!b) {
+      bound(buckets, sweep);
+      b = { t: now, tokens: o.rateBurst };
+    }
     b.tokens = Math.min(o.rateBurst, b.tokens + ((now - b.t) / 1000) * o.ratePerSec);
     b.t = now;
     buckets.set(ip, b);
@@ -117,7 +133,11 @@ export function createRelay(options = {}) {
 
     if (req.method === "PUT") {
       stats.puts++;
-      const p = puts.get(req.ip) ?? { n: 0, since: o.now() };
+      let p = puts.get(req.ip);
+      if (!p) {
+        bound(puts, sweep);
+        p = { n: 0, since: o.now() };
+      }
       if (o.now() - p.since > o.ttlMs) Object.assign(p, { n: 0, since: o.now() });
       if (p.n >= o.maxPutsPerIp) return reply(429, "too many messages from this address", { "retry-after": "60" });
       const body = req.body ? await req.body() : null;
@@ -129,6 +149,8 @@ export function createRelay(options = {}) {
       p.n++;
       puts.set(req.ip, p);
       c.body = body;
+      // The message lives a full TTL from now, however long the browser's long-polls had held the channel open.
+      c.expiresAt = o.now() + o.ttlMs;
       for (const w of c.waiters) w(body);
       c.waiters.clear();
       return reply(201);
@@ -177,6 +199,9 @@ export function createRelay(options = {}) {
       const left = (waitersPerIp.get(req.ip) ?? 1) - 1;
       if (left <= 0) waitersPerIp.delete(req.ip);
       else waitersPerIp.set(req.ip, left);
+      // A channel that only ever had readers is forgotten with its last reader: otherwise a stream of long-polls on
+      // fresh ids would hold `maxChannels` empty mailboxes for a whole TTL and lock every phone out (503).
+      if (!result && !ch.body && ch.waiters.size === 0 && channels.get(id) === ch) channels.delete(id);
       return result ? ok(result) : reply(204, undefined, { "cache-control": "no-store" });
     }
     return reply(405, "method not allowed");
@@ -184,7 +209,16 @@ export function createRelay(options = {}) {
 
   const timer = setInterval(sweep, 30_000);
   timer.unref?.();
-  return { handle, sweep, stats, channels, close: () => clearInterval(timer), options: o };
+  return {
+    handle,
+    sweep,
+    stats,
+    channels,
+    /** How many client addresses are tracked (bounded by `maxIps`). */
+    ips: () => ({ buckets: buckets.size, puts: puts.size }),
+    close: () => clearInterval(timer),
+    options: o,
+  };
 }
 
 /** Reads at most `max` bytes; null if the body is larger. */

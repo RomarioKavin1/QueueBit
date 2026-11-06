@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { RelayClient, type Channel, type RelayMessage } from "@queuebit/relay-client";
+import { RelayClient, RelayError, type Channel, type RelayMessage } from "@queuebit/relay-client";
 import { BUILD_COMPANION_URL, BUILD_FAUCET_URL, BUILD_RELAY_URL, SHARED_DEVNET } from "../../shared/build";
 import { sharedUi } from "./boot";
 
@@ -45,7 +45,9 @@ export async function askFaucet(address: string, chainId: number): Promise<void>
 
 /**
  * Long-polls `channel` while it is set; calls `onMessage` once with the first message that decrypts. `status` is
- * "waiting" normally and "trouble" while the relay can't be reached (it keeps retrying).
+ * "waiting" normally and "trouble" while the relay can't be reached (it keeps retrying). `badMessage` is set, and
+ * polling stops, when something that isn't from the phone filled the channel: a channel holds one message until it
+ * expires, so the phone can't deliver there any more and the page must move to a fresh channel (or the QR hand-off).
  */
 export function useRelayMessage(
   relay: string | undefined,
@@ -67,15 +69,17 @@ export function useRelayMessage(
     setStatus("waiting");
     setBad(false);
     client
-      .waitFor(channel, {
-        signal: ctl.signal,
-        onBadMessage: () => setBad(true),
-        onError: () => setStatus("trouble"),
-      })
+      .waitFor(channel, { signal: ctl.signal, onError: () => setStatus("trouble") })
       .then((m) => {
         if (!ctl.signal.aborted) cb.current(m);
       })
-      .catch(() => undefined);
+      .catch((e: unknown) => {
+        if (ctl.signal.aborted) return;
+        if (e instanceof RelayError && e.code === "bad-message") {
+          setBad(true);
+          setStatus("idle");
+        }
+      });
     return () => ctl.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [relay, id]);

@@ -266,7 +266,13 @@ signature to the browser through a relay (`packages/relay`, deployed at `<base>/
   high-value users run an offline build or switch on **Offline phone (no relay)** on both ends (the two-way QR
   hand-off, unchanged).
 - **Abuse limits:** per-IP token bucket (2 req/s, burst 40), 60 writes per IP per 5 minutes, 8 open long-polls per IP
-  (400 total), 2,000 channels held at once, 16 KB per message. The container is capped (CPU and memory) and read-only.
+  (400 total), 2,000 channels held at once, 16 KB per message. The per-address tables hold at most 20,000 addresses
+  (the oldest are forgotten first, so an IPv6 flood of fresh addresses costs memory, not the process). A channel that
+  only ever had readers is dropped with its last reader, so long-polls on fresh ids can't hold the 2,000 channels. The
+  container is capped (CPU and memory) and read-only. `TRUST_PROXY=1` (the image default) believes `X-Forwarded-For`:
+  the container port must only be reachable from the gateway, or every per-IP limit is forgeable.
+- **A filled channel is dead:** junk written first fails authentication and the browser stops polling that channel
+  (one message per channel until it expires). Pairing shows a fresh code; an approval falls back to the QR hand-off.
 
 ## 10. PoolPayer (privacy withdrawals)
 

@@ -86,4 +86,19 @@ describe("relay-client", () => {
     const ctl = new AbortController();
     expect(await client.waitFor(c, { signal: ctl.signal })).toEqual({ t: "pair", ur: "ur:queuebit-pq-key/abc" });
   });
+
+  it("stops waiting on a channel someone else filled: the phone can't deliver there any more", async () => {
+    const c = newChannel();
+    const junk = await seal({ ...c, key: newChannel().key }, { t: "pair", ur: "ur:queuebit-pq-key/impostor" });
+    let gets = 0;
+    const fake: typeof fetch = async () => {
+      gets++;
+      return new Response(junk as BodyInit);
+    };
+    const client = new RelayClient("https://relay.example/relay/", fake);
+    await expect(client.waitFor(c, { signal: new AbortController().signal })).rejects.toMatchObject({
+      code: "bad-message",
+    });
+    expect(gets).toBe(1);
+  });
 });

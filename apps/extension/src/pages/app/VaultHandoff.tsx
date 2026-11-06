@@ -179,10 +179,12 @@ export function VaultHandoff({
                 {relay ? (
                   <>
                     <p className="t-body inline-flex items-center gap-2" role="status" data-testid="relay-wait">
-                      <Spinner size={16} />
-                      {relayState.status === "trouble"
-                        ? "Can't reach the connection service. Retrying…"
-                        : "Waiting for your phone. This page finishes by itself."}
+                      {!relayState.badMessage && <Spinner size={16} />}
+                      {relayState.badMessage
+                        ? "Something that wasn't your phone answered this request. Read the phone's signature code instead."
+                        : relayState.status === "trouble"
+                          ? "Can't reach the connection service. Retrying…"
+                          : "Waiting for your phone. This page finishes by itself."}
                     </p>
                     <Button variant="ghost" size="sm" onClick={() => setPhase("scan")} data-testid="scan-back">
                       Phone offline? Read its signature code instead
