@@ -7,11 +7,10 @@ import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.s
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {ERC7739} from "@openzeppelin/contracts/utils/cryptography/signers/draft-ERC7739.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {IERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Permit.sol";
 import {RollingCap} from "../lib/RollingCap.sol";
+import {TypedPermits} from "../lib/TypedPermits.sol";
 import {IPQVerifier} from "../interfaces/IPQVerifier.sol";
 import {IRoleSignerFactory} from "../interfaces/IRoleSignerFactory.sol";
 import {LeakedVerify} from "./LeakedVerify.sol";
@@ -44,7 +43,7 @@ contract LeakedAccountImpl is LeakedVerify, LeakedAccountBase, Initializable, UU
     bytes4 public constant REGISTERED_MARKER = 0xdc6b87c9; // bytes4(keccak256("leaked.account.registeredHash"))
 
     /// Permit2 (same address on every chain): a hot-key 7739 signature is never valid when Permit2 asks.
-    address internal constant PERMIT2 = 0x000000000022D473030F116dDEE9F6B43aC78BA3;
+    address internal constant PERMIT2 = TypedPermits.PERMIT2;
 
     bytes4 private constant MAGIC_1271 = 0x1626ba7e;
     uint8 private constant ROLE_VAULT = 1; // PQRoleSigner.ROLE_VAULT
@@ -53,8 +52,6 @@ contract LeakedAccountImpl is LeakedVerify, LeakedAccountBase, Initializable, UU
     bytes4 private constant ERC20_INCREASE_ALLOWANCE = 0x39509351;
     bytes4 private constant SET_APPROVAL_FOR_ALL = 0xa22cb465;
     bytes32 private constant SENTINEL_7739 = 0x7739773977397739773977397739773977397739773977397739773977397739;
-    bytes32 private constant PERMIT_TYPEHASH =
-        keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
 
     /// The role surface (`LeakedAccountRoles`), reached by DELEGATECALL from `fallback()`.
     address public immutable ROLES_MODULE;
@@ -276,26 +273,74 @@ contract LeakedAccountImpl is LeakedVerify, LeakedAccountBase, Initializable, UU
     ///         debited by the permit's own value, and only `token` may consume the hash (its `permit`, for tokens
     ///         that check EIP-1271). Expires at `deadline`, at most `MAX_REGISTERED_TTL` from now. Hot batch only.
     function registerPermit(address token, address spender, uint256 value, uint256 deadline) external {
-        if (msg.sender != address(this)) revert OnlySelf();
-        if (_tload(T_HOT) == 0) revert NotInHotBatch();
-        LeakedAccountStorage.Layout storage $ = _s();
-        TokenCfg storage t = $.tokens[token];
-        if (token == address(0) || !t.allowed) revert TokenNotAllowed(token);
-        if (deadline <= block.timestamp) revert BadExpiry();
-        uint48 expiry = uint48(Math.min(deadline, block.timestamp + MAX_REGISTERED_TTL));
-        bytes32 digest = MessageHashUtils.toTypedDataHash(
-            IERC20Permit(token).DOMAIN_SEPARATOR(),
-            keccak256(
-                abi.encode(
-                    PERMIT_TYPEHASH, address(this), spender, value, IERC20Permit(token).nonces(address(this)), deadline
-                )
-            )
+        TokenCfg storage t = _typedToken(token);
+        bytes32 digest = TypedPermits.erc2612Digest(token, address(this), spender, value, deadline);
+        _registerBound(t, digest, token, value, deadline, token);
+    }
+
+    /// @notice Registers a Permit2 `PermitSingle` (AllowanceTransfer) of `amount` of the allowlisted `token` to
+    ///         `spender`, valid until `expiration`, signature deadline `sigDeadline`. The digest is computed here
+    ///         (Permit2's domain and type hashes, the current `allowance(this, token, spender).nonce`), the hot
+    ///         bucket is debited by `amount` (once: what the spender later pulls through Permit2 is already paid
+    ///         for), and only Permit2 may consume the hash. `spender` must be an allowlisted target or hold a live
+    ///         session `(spender, sessionSelector)`. `expiration` is in (now, now + MAX_REGISTERED_TTL] (0, "this
+    ///         block", is refused). Needs the vault to have approved Permit2 on `token`. Hot batch only.
+    function registerPermit2(
+        address token,
+        uint160 amount,
+        uint48 expiration,
+        address spender,
+        uint256 sigDeadline,
+        bytes4 sessionSelector
+    ) external {
+        TokenCfg storage t = _typedToken(token);
+        _checkSpender(spender, sessionSelector);
+        if (expiration <= block.timestamp || expiration > block.timestamp + MAX_REGISTERED_TTL) revert BadExpiry();
+        bytes32 digest = TypedPermits.permitSingleDigest(address(this), token, amount, expiration, spender, sigDeadline);
+        _registerBound(t, digest, token, amount, sigDeadline, TypedPermits.PERMIT2);
+    }
+
+    /// @notice Registers a Permit2 `PermitTransferFrom` (SignatureTransfer) of up to `amount` of the allowlisted
+    ///         `token`, to be called by `spender` (Permit2 hashes its caller as the spender), unordered `nonce`
+    ///         (must be unspent), until `deadline`. Debits `amount`; only Permit2 may consume the hash; `spender` as
+    ///         in `registerPermit2`. Witness transfers (`permitWitnessTransferFrom`) are not supported. Hot batch only.
+    function registerPermit2Transfer(
+        address token,
+        uint256 amount,
+        address spender,
+        uint256 nonce,
+        uint256 deadline,
+        bytes4 sessionSelector
+    ) external {
+        TokenCfg storage t = _typedToken(token);
+        _checkSpender(spender, sessionSelector);
+        if (TypedPermits.permit2NonceUsed(address(this), nonce)) revert NonceUsed();
+        bytes32 digest = TypedPermits.permitTransferFromDigest(token, amount, spender, nonce, deadline);
+        _registerBound(t, digest, token, amount, deadline, TypedPermits.PERMIT2);
+    }
+
+    /// @notice Registers an EIP-3009 `TransferWithAuthorization` (or, `receiveAuth`, `ReceiveWithAuthorization`)
+    ///         of `value` of the allowlisted `token` to `to`, valid in (`validAfter`, `validBefore`), unspent `nonce`.
+    ///         `to` follows the hot `transfer` recipient rule (`_checkRecipient`: any non-forbidden recipient in Open,
+    ///         an allowlisted one in Strict): the authorization can move no more, and to nobody else, than a hot
+    ///         `transfer` could. Debits `value`; only `token` may consume the hash. Hot batch only.
+    function registerTransferAuthorization(
+        address token,
+        uint256 value,
+        address to,
+        uint256 validAfter,
+        uint256 validBefore,
+        bytes32 nonce,
+        bool receiveAuth
+    ) external {
+        TokenCfg storage t = _typedToken(token);
+        _checkRecipient(_s(), to, token, IERC20.transfer.selector);
+        if (validAfter >= validBefore) revert BadExpiry();
+        if (TypedPermits.authorizationUsed(token, address(this), nonce)) revert NonceUsed();
+        bytes32 digest = TypedPermits.authorizationDigest(
+            token, receiveAuth, address(this), to, value, validAfter, validBefore, nonce
         );
-        uint256 usd = _quote(t, value);
-        $.registeredHashes[digest] = expiry;
-        $.registeredFor[digest] = token;
-        _tstore(T_HOT_DEBIT, _tload(T_HOT_DEBIT) + usd);
-        emit HashRegistered(digest, token, value, expiry);
+        _registerBound(t, digest, token, value, validBefore, token);
     }
 
     /// @notice Clears an expired freeze. Permissionless; also the one SENDER call VERIFY admits while frozen.
@@ -432,7 +477,8 @@ contract LeakedAccountImpl is LeakedVerify, LeakedAccountBase, Initializable, UU
                 c.value != 0
                     || (
                         sel != this.registerHash.selector && sel != this.registerPermit.selector
-                            && sel != this.clearExpiredFreeze.selector
+                            && sel != this.registerPermit2.selector && sel != this.registerPermit2Transfer.selector
+                            && sel != this.registerTransferAuthorization.selector && sel != this.clearExpiredFreeze.selector
                     )
             ) {
                 revert NotAllowed(t, sel);
@@ -521,6 +567,41 @@ contract LeakedAccountImpl is LeakedVerify, LeakedAccountBase, Initializable, UU
                 if (!ok || ret.length < 32 || abi.decode(ret, (uint256)) != 0) revert StandingApproval(t, spender);
             }
         }
+    }
+
+    /// A typed registration's caller and token: a self-call of the open hot batch, an allowlisted (priced) ERC-20.
+    function _typedToken(address token) private view returns (TokenCfg storage t) {
+        if (msg.sender != address(this)) revert OnlySelf();
+        if (_tload(T_HOT) == 0) revert NotInHotBatch();
+        t = _s().tokens[token];
+        if (token == address(0) || !t.allowed) revert TokenNotAllowed(token);
+    }
+
+    /// A Permit2 spender: an allowlisted target, or the target of a live session `(spender, selector)`. Never the
+    /// Open-mode "anyone": the spender decides where the tokens go.
+    function _checkSpender(address spender, bytes4 selector) private view {
+        LeakedAccountStorage.Layout storage $ = _s();
+        if ($.targets[spender]) return;
+        Session storage s = $.sessions[sessionId(spender, selector)];
+        if (s.expiry < block.timestamp || s.allowanceUsd == 0) revert NotAllowed(spender, selector);
+    }
+
+    /// Registers `digest` for `consumer` alone until min(deadline, now + MAX_REGISTERED_TTL) and debits `amount`.
+    function _registerBound(
+        TokenCfg storage t,
+        bytes32 digest,
+        address token,
+        uint256 amount,
+        uint256 deadline,
+        address consumer
+    ) private {
+        if (deadline <= block.timestamp) revert BadExpiry();
+        uint48 expiry = uint48(Math.min(deadline, block.timestamp + MAX_REGISTERED_TTL));
+        LeakedAccountStorage.Layout storage $ = _s();
+        $.registeredHashes[digest] = expiry;
+        $.registeredFor[digest] = consumer;
+        _tstore(T_HOT_DEBIT, _tload(T_HOT_DEBIT) + _quote(t, amount));
+        emit HashRegistered(digest, token, amount, expiry);
     }
 
     function _isRegisteredMarker(bytes32 hash, bytes calldata signature) private pure returns (bool) {

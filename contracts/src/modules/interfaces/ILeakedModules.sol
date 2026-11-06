@@ -182,6 +182,8 @@ interface ILeakedModules {
     error StandingApproval(address token, address spender);
     error FeeTooHigh();
     error NotInHotBatch();
+    /// A typed registration (Permit2 `PermitTransferFrom`, EIP-3009) for a nonce its verifier already spent.
+    error NonceUsed();
     error FreezeNotExpired(uint48 until);
     error NotFrozen();
     error TooManyTokens();

@@ -28,7 +28,11 @@ pragma solidity 0.8.28;
 ///           never for an allowlisted token or a vault-denied "value verifier" (Permit2 by default);
 ///         - `registerHash` registers an opaque hash under the same verifier rule (its debit is self-declared, so a
 ///           token or Permit2 never consumes it); `registerPermit` computes an ERC-2612 permit digest on chain,
-///           debits the permit's own value and binds the hash to that token;
+///           debits the permit's own value and binds the hash to that token; likewise `registerPermit2` (Permit2
+///           `PermitSingle`), `registerPermit2Transfer` (Permit2 `PermitTransferFrom`) and
+///           `registerTransferAuthorization` (EIP-3009) compute their digests on chain, debit the typed amount and
+///           bind the hash to its one consumer (Permit2, or the token); a Permit2 spender must be an allowlisted
+///           target or hold a live session (the 3009 recipient follows the hot `transfer` recipient rule);
 ///         - `vaultSetToken` price semantics: `usdPerToken` (USD-6 per whole token); a lower price is loosening;
 ///         - `vaultSetFeePolicy(maxPriorityFeePerGas, selfPay, tank)` added; `vaultExecute` draws on a rolling daily
 ///           allowance (cap = timelock threshold) and measures outflow instead of trusting `usdValue`;
@@ -264,6 +268,8 @@ interface ILeakedAccount {
     error StandingApproval(address token, address spender);
     error NotInHotBatch();
     error BadExpiry();
+    /// A typed registration (Permit2 `PermitTransferFrom`, EIP-3009) for a nonce its verifier already spent.
+    error NonceUsed();
     error FreezeNotExpired(uint48 until);
     error NotFrozen();
     /// A hot payment (ETH send or token `transfer`) to a self-defeating recipient: the account itself, a role

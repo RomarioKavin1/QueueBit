@@ -60,7 +60,7 @@ interface IHostView {
 ///            misconfigured owner path) turns the hot tier off instead of leaving it uncapped;
 ///         4. `callData` is `execute(single|batch, default)` (optionally behind `executeUserOp`, as Kernel needs),
 ///            canonically encoded, and every call is one the hot tier may make (`HOOK.checkHotCalls`): allowlisted
-///            ETH sends and ERC-20 transfers, an unexpired-or-not-yet-checked session, `registerHash`; while frozen,
+///            ETH sends and ERC-20 transfers, an unexpired-or-not-yet-checked session, `registerHash` and the typed registrations; while frozen,
 ///            only the clear-freeze batch;
 ///         5. the batch's static USD value <= `perTxMaxUsd` and <= the daily cap (M-b: over-cap batches are rejected
 ///            before they cost gas; the rolling bucket itself needs the clock and is checked in `postCheck`).
@@ -74,8 +74,9 @@ interface IHostView {
 ///            `REGISTERED_MARKER ‖ hash`; an opaque `registerHash` hash only for `sender == address(0)` (a plain
 ///            eth_call) or a vault-trusted verifier (`HOOK.registeredHashAllowed`: hosts consume 1271 in
 ///            state-changing paths with the original caller as sender, and "code-less" includes an EOA's
-///            transaction and a contract under construction, audit A1/A6); a `registerPermit` hash for its token
-///            alone (the one caller whose value was bound and debited);
+///            transaction and a contract under construction, audit A1/A6); a typed registration's hash
+///            (`registerPermit`, `registerTransferAuthorization`: the token; `registerPermit2`,
+///            `registerPermit2Transfer`: Permit2) for that one consumer alone (whose value was bound and debited);
 ///         2. ERC-7739 nested typed data / personal sign by the hot key, for any app domain **except the account's
 ///            own** (Safe `domainSeparator()`, EIP-5267): that is the domain of host admin actions such as
 ///            Safe7579's `EmergencyUninstall`, which must stay vault-only (audit A1b);

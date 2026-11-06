@@ -3,9 +3,8 @@ pragma solidity 0.8.28;
 
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {IERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Permit.sol";
-import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {RollingCap} from "../lib/RollingCap.sol";
+import {TypedPermits} from "../lib/TypedPermits.sol";
 import {IERC7579Hook, Execution, MODULE_TYPE_HOOK} from "./interfaces/IERC7579Modules.sol";
 import {ILeakedModules, HOST_GENERIC, HOST_KERNEL, HOST_SAFE} from "./interfaces/ILeakedModules.sol";
 import {LeakedExecDecoder} from "./lib/LeakedExecDecoder.sol";
@@ -41,7 +40,9 @@ interface ILeakedRoleContext {
 ///           (priced) ERC-20 `transfer`s to any non-zero recipient in `RecipientMode.Open` (the install default) or
 ///           to allowlisted recipients in Strict, vault-issued session calls (debited by
 ///           measured balance delta; every session called in a batch is charged the batch's whole residual outflow,
-///           since a hook sees only batch-level deltas) and `registerHash`; the batch's USD value
+///           since a hook sees only batch-level deltas), `registerHash` and the typed registrations
+///           (`registerPermit`, `registerPermit2`, `registerPermit2Transfer`, `registerTransferAuthorization`:
+///           digests computed on chain, bound to their one consumer); the batch's USD value
 ///           (max of static debits and measured outflow, plus registered hashes) must fit `perTxMaxUsd` and the
 ///           rolling bucket (`RollingCap`), and no approval granted in the batch may survive it (I-6);
 ///         - calls from `EXECUTOR` (PQ-verified vault/recovery actions) are exempt, and so is everything nested
@@ -57,7 +58,7 @@ contract LeakedPolicyHook is IERC7579Hook, ILeakedModules {
     uint256 public constant MAX_TOKENS = 16;
     uint48 public constant MAX_REGISTERED_TTL = 30 days;
     /// Permit2 (same address on every chain): denied as a hot-key ERC-7739 verifier from install on.
-    address public constant PERMIT2 = 0x000000000022D473030F116dDEE9F6B43aC78BA3;
+    address public constant PERMIT2 = TypedPermits.PERMIT2;
     /// The one Safe owner this hook accepts: an address nobody holds a key for. A Safe's owner path
     /// (`execTransaction`, `approveHash`, `signMessage`) never sees the ERC-7579 hook, so a keyed owner would be an
     /// unbounded second hot tier (IMPLEMENTATION-NOTES, "Contracts M7").
@@ -67,8 +68,6 @@ contract LeakedPolicyHook is IERC7579Hook, ILeakedModules {
     bytes4 private constant ERC20_APPROVE = 0x095ea7b3;
     bytes4 private constant ERC20_INCREASE_ALLOWANCE = 0x39509351;
     bytes4 private constant SET_APPROVAL_FOR_ALL = 0xa22cb465;
-    bytes32 private constant PERMIT_TYPEHASH =
-        keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
 
     uint256 private constant KIND_PASS = 0;
     uint256 private constant KIND_HOT = 1;
@@ -294,22 +293,66 @@ contract LeakedPolicyHook is IERC7579Hook, ILeakedModules {
     ///         debited by the permit's own value, and only `token` may consume the hash. Expires at `deadline`, at
     ///         most `MAX_REGISTERED_TTL` from now. Hot batch only (mirrors the account's audit fix C1).
     function registerPermit(address token, address spender, uint256 value, uint256 deadline) external {
+        TokenCfg storage t = _typedToken(token);
+        bytes32 digest = TypedPermits.erc2612Digest(token, msg.sender, spender, value, deadline);
+        _registerBound(t, digest, token, value, deadline, token);
+    }
+
+    /// @notice Permit2 `PermitSingle` registration (mirrors the account's `registerPermit2`): digest computed here
+    ///         at the account's current Permit2 nonce, `amount` debited, consumable by Permit2 alone; `spender` an
+    ///         allowlisted target or the target of a live session `(spender, sessionSelector)`; `expiration` in
+    ///         (now, now + MAX_REGISTERED_TTL]. Hot batch only.
+    function registerPermit2(
+        address token,
+        uint160 amount,
+        uint48 expiration,
+        address spender,
+        uint256 sigDeadline,
+        bytes4 sessionSelector
+    ) external {
+        TokenCfg storage t = _typedToken(token);
+        _checkSpender(spender, sessionSelector);
+        if (expiration <= block.timestamp || expiration > block.timestamp + MAX_REGISTERED_TTL) revert BadExpiry();
+        bytes32 digest = TypedPermits.permitSingleDigest(msg.sender, token, amount, expiration, spender, sigDeadline);
+        _registerBound(t, digest, token, amount, sigDeadline, PERMIT2);
+    }
+
+    /// @notice Permit2 `PermitTransferFrom` registration (mirrors the account's `registerPermit2Transfer`). Hot
+    ///         batch only.
+    function registerPermit2Transfer(
+        address token,
+        uint256 amount,
+        address spender,
+        uint256 nonce,
+        uint256 deadline,
+        bytes4 sessionSelector
+    ) external {
+        TokenCfg storage t = _typedToken(token);
+        _checkSpender(spender, sessionSelector);
+        if (TypedPermits.permit2NonceUsed(msg.sender, nonce)) revert NonceUsed();
+        bytes32 digest = TypedPermits.permitTransferFromDigest(token, amount, spender, nonce, deadline);
+        _registerBound(t, digest, token, amount, deadline, PERMIT2);
+    }
+
+    /// @notice EIP-3009 registration (mirrors the account's `registerTransferAuthorization`): `to` follows the hot
+    ///         `transfer` recipient rule; consumable by `token` alone. Hot batch only.
+    function registerTransferAuthorization(
+        address token,
+        uint256 value,
+        address to,
+        uint256 validAfter,
+        uint256 validBefore,
+        bytes32 nonce,
+        bool receiveAuth
+    ) external {
         address account = msg.sender;
-        if (_tload(T_HOT, account) == 0) revert NotInHotBatch();
-        TokenCfg storage t = _tokens[token][account];
-        if (token == address(0) || !t.allowed) revert TokenNotAllowed(token);
-        if (deadline <= block.timestamp) revert BadExpiry();
-        uint48 expiry = uint48(Math.min(deadline, block.timestamp + MAX_REGISTERED_TTL));
-        bytes32 digest = MessageHashUtils.toTypedDataHash(
-            IERC20Permit(token).DOMAIN_SEPARATOR(),
-            keccak256(
-                abi.encode(PERMIT_TYPEHASH, account, spender, value, IERC20Permit(token).nonces(account), deadline)
-            )
-        );
-        _registered[digest][account] = expiry;
-        _registeredFor[digest][account] = token;
-        _tstore(T_HOT_DEBIT, account, _tload(T_HOT_DEBIT, account) + _quote(t, value));
-        emit HashRegistered(account, digest, token, value, expiry);
+        TokenCfg storage t = _typedToken(token);
+        _checkTransferRecipient(account, token, to, false);
+        if (validAfter >= validBefore) revert BadExpiry();
+        if (TypedPermits.authorizationUsed(token, account, nonce)) revert NonceUsed();
+        bytes32 digest =
+            TypedPermits.authorizationDigest(token, receiveAuth, account, to, value, validAfter, validBefore, nonce);
+        _registerBound(t, digest, token, value, validBefore, token);
     }
 
     /// @notice Clears an expired freeze. Permissionless (and the only hot batch the validator admits while frozen).
@@ -611,16 +654,28 @@ contract LeakedPolicyHook is IERC7579Hook, ILeakedModules {
             bytes memory d = execs[i].callData;
             bytes4 sel = LeakedExecDecoder.selectorOf(d);
             if (t == address(this)) {
-                // The hook calls a hot batch may make (clearExpiredFreeze runs only in the frozen batch):
-                // registerHash(hash, token, amount, expiry) and registerPermit(token, spender, value, deadline).
+                // The hook calls a hot batch may make (clearExpiredFreeze runs only in the frozen batch), with
+                // (token, amount) argument positions and calldata length: registerHash(hash, token, amount, expiry)
+                // (1, 2), registerPermit(token, spender, value, deadline) (0, 2), registerPermit2 /
+                // registerPermit2Transfer (0, 1; 6 words), registerTransferAuthorization (0, 1; 7 words). The
+                // validation debit is the amount word as given (a dirty uint160 only over-counts).
                 uint256 tokenArg;
-                if (sel == this.registerHash.selector) tokenArg = 1;
-                else if (sel != this.registerPermit.selector) revert NotAllowed(t, sel);
-                if (value != 0 || d.length != 132) revert NotAllowed(t, sel);
+                uint256 amountArg = 1;
+                uint256 len = 196;
+                if (sel == this.registerHash.selector) {
+                    (tokenArg, amountArg, len) = (1, 2, 132);
+                } else if (sel == this.registerPermit.selector) {
+                    (amountArg, len) = (2, 132);
+                } else if (sel == this.registerTransferAuthorization.selector) {
+                    len = 228;
+                } else if (sel != this.registerPermit2.selector && sel != this.registerPermit2Transfer.selector) {
+                    revert NotAllowed(t, sel);
+                }
+                if (value != 0 || d.length != len) revert NotAllowed(t, sel);
                 bytes32 tokenWord = LeakedExecDecoder.argWord(d, tokenArg);
                 if (uint256(tokenWord) >> 160 != 0) revert NotAllowed(t, sel);
                 registerDebit += _quoteStrict(
-                    account, address(uint160(uint256(tokenWord))), uint256(LeakedExecDecoder.argWord(d, 2))
+                    account, address(uint160(uint256(tokenWord))), uint256(LeakedExecDecoder.argWord(d, amountArg))
                 );
                 continue;
             }
@@ -644,12 +699,8 @@ contract LeakedPolicyHook is IERC7579Hook, ILeakedModules {
                 // debit would absorb the measured residual a session in the same batch is charged.
                 if (value != 0 || d.length != 68) revert NotAllowed(t, sel);
                 bytes32 toWord = LeakedExecDecoder.argWord(d, 0);
-                address to = address(uint160(uint256(toWord)));
-                if (
-                    uint256(toWord) >> 160 != 0 || to == account || to == t || to == address(this) || to == EXECUTOR
-                        || (!_targets[to][account] && (to == address(0) || !open))
-                ) revert NotAllowed(to, sel);
-                if (!_targets[to][account]) _checkOpenRecipient(account, to, sel, validation);
+                if (uint256(toWord) >> 160 != 0) revert NotAllowed(address(uint160(uint256(toWord))), sel);
+                _checkTransferRecipient(account, t, address(uint160(uint256(toWord))), validation);
                 staticDebit += _quote(tc, uint256(LeakedExecDecoder.argWord(d, 1)));
                 continue;
             }
@@ -671,6 +722,51 @@ contract LeakedPolicyHook is IERC7579Hook, ILeakedModules {
         assembly ("memory-safe") {
             mstore(sids, k)
         }
+    }
+
+    /// A hot `transfer` (or EIP-3009) recipient of `token`: an allowlisted recipient, or (Open) any non-zero one;
+    /// never the account itself, the token or a LEAKED module, in either mode (the account's `ForbiddenRecipient`):
+    /// such a transfer moves nothing (or strands it), and a self-transfer's static debit would absorb the measured
+    /// residual a session in the same batch is charged.
+    function _checkTransferRecipient(address account, address token, address to, bool validation) internal view {
+        bool listed = _targets[to][account];
+        if (
+            to == account || to == token || to == address(this) || to == EXECUTOR
+                || (!listed && (to == address(0) || !_policies[account].recipientsOpen))
+        ) revert NotAllowed(to, ERC20_TRANSFER);
+        if (!listed) _checkOpenRecipient(account, to, ERC20_TRANSFER, validation);
+    }
+
+    /// A typed registration's caller and token: inside the account's open hot batch, an allowlisted ERC-20.
+    function _typedToken(address token) internal view returns (TokenCfg storage t) {
+        if (_tload(T_HOT, msg.sender) == 0) revert NotInHotBatch();
+        t = _tokens[token][msg.sender];
+        if (token == address(0) || !t.allowed) revert TokenNotAllowed(token);
+    }
+
+    /// A Permit2 spender: an allowlisted target, or the target of a live session `(spender, selector)`.
+    function _checkSpender(address spender, bytes4 selector) internal view {
+        if (_targets[spender][msg.sender]) return;
+        Session storage s = _sessions[sessionId(spender, selector)][msg.sender];
+        if (s.expiry < block.timestamp || s.allowanceUsd == 0) revert NotAllowed(spender, selector);
+    }
+
+    /// Registers `digest` for `consumer` alone until min(deadline, now + MAX_REGISTERED_TTL) and debits `amount`.
+    function _registerBound(
+        TokenCfg storage t,
+        bytes32 digest,
+        address token,
+        uint256 amount,
+        uint256 deadline,
+        address consumer
+    ) internal {
+        address account = msg.sender;
+        if (deadline <= block.timestamp) revert BadExpiry();
+        uint48 expiry = uint48(Math.min(deadline, block.timestamp + MAX_REGISTERED_TTL));
+        _registered[digest][account] = expiry;
+        _registeredFor[digest][account] = consumer;
+        _tstore(T_HOT_DEBIT, account, _tload(T_HOT_DEBIT, account) + _quote(t, amount));
+        emit HashRegistered(account, digest, token, amount, expiry);
     }
 
     /// Open mode, a recipient the vault has not allowlisted (mirrors the account's `ForbiddenRecipient`): never an

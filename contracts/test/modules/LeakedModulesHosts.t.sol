@@ -13,6 +13,7 @@ import {LeakedRoleExecutor} from "../../src/modules/LeakedRoleExecutor.sol";
 import {IERC7579AccountView, IAccount4337 as IAccountValidate} from "./hosts/HostInterfaces.sol";
 import {ILeakedModules} from "../../src/modules/interfaces/ILeakedModules.sol";
 import {LeakedModulesBase} from "./LeakedModulesBase.sol";
+import {Permit2Mock, Auth3009Token} from "../account/mocks/TypedPermitMocks.sol";
 
 contract PermitToken is ERC20Permit {
     constructor() ERC20("PUSD", "PUSD") ERC20Permit("PUSD") {}
@@ -603,6 +604,197 @@ abstract contract LeakedModulesHostsTest is LeakedModulesBase {
         assertEq(hook.registeredHashConsumer(account, digest), address(pt));
         if (_host() != Host.KERNEL) assertTrue(_isValid(address(pt), digest, ""), "the token consumes it");
         assertFalse(_isValid(stranger, digest, ""), "nobody else");
+    }
+
+    // ----------------------------------------- typed registrations: Permit2 and EIP-3009 (account audit follow-up) ------
+
+    /// An allowlisted ($1, 18 decimals) EIP-3009 + ERC-2612 token, the Permit2 mock at the canonical address with the
+    /// vault's Permit2 approval, and a live session on (router, pull) that binds `router` as a Permit2 spender.
+    function _typedSetup() internal returns (Auth3009Token t, Permit2Mock p2) {
+        t = new Auth3009Token("tUSD");
+        t.mint(account, 10_000 ether);
+        vm.etch(hook.PERMIT2(), address(new Permit2Mock()).code);
+        p2 = Permit2Mock(hook.PERMIT2());
+        Call[] memory c = new Call[](2);
+        c[0] = Call(address(hook), 0, abi.encodeCall(LeakedPolicyHook.setToken, (account, address(t), true, 18, 1e6)));
+        c[1] = Call(
+            address(hook),
+            0,
+            abi.encodeCall(
+                LeakedPolicyHook.setSession,
+                (account, address(router), router.pull.selector, 400e6, uint48(block.timestamp + 30 days))
+            )
+        );
+        _queueAndRun(c, 1);
+        vm.prank(account);
+        t.approve(address(p2), type(uint256).max);
+    }
+
+    function test_registerPermit2_boundToPermit2() public {
+        (Auth3009Token t, Permit2Mock p2) = _typedSetup();
+        uint48 exp = uint48(block.timestamp + 7 days);
+        uint256 dl = block.timestamp + 1 hours;
+        uint256 avail = _available();
+        _submitOk(
+            _op(
+                _single(
+                    address(hook),
+                    0,
+                    abi.encodeCall(
+                        LeakedPolicyHook.registerPermit2,
+                        (address(t), uint160(40 ether), exp, address(router), dl, router.pull.selector)
+                    )
+                )
+            )
+        );
+        assertEq(_available(), avail - 40e6, "typed amount debited");
+        Permit2Mock.PermitSingle memory ps = Permit2Mock.PermitSingle(
+            Permit2Mock.PermitDetails(address(t), uint160(40 ether), exp, 0), address(router), dl
+        );
+        bytes32 digest = p2.hashPermitSingle(ps);
+        assertEq(hook.registeredHashConsumer(account, digest), address(p2));
+        assertFalse(_isValid(address(t), digest, ""), "not the token");
+        assertFalse(_isValid(address(0), digest, ""), "not eth_call");
+        if (_host() == Host.KERNEL) return; // hot 1271 is off on Kernel (audit A3)
+        assertTrue(_isValid(address(p2), digest, ""), "Permit2 consumes it");
+        // C1: a larger amount is another digest
+        Permit2Mock.PermitSingle memory big = Permit2Mock.PermitSingle(
+            Permit2Mock.PermitDetails(address(t), uint160(9_000 ether), exp, 0), address(router), dl
+        ); // a fresh struct: memory assignment would alias `ps`
+        vm.expectRevert(Permit2Mock.InvalidContractSignature.selector);
+        p2.permit(account, big, _sig1271(""));
+        p2.permit(account, ps, _sig1271(""));
+        vm.prank(address(router));
+        p2.transferFrom(account, recipient, uint160(40 ether), address(t));
+        assertEq(t.balanceOf(recipient), 40 ether);
+        // replay: the nonce moved on
+        vm.expectRevert(Permit2Mock.InvalidNonce.selector);
+        p2.permit(account, ps, _sig1271(""));
+    }
+
+    function test_registerPermit2_spenderMustBeBound() public {
+        (Auth3009Token t,) = _typedSetup();
+        address thief = makeAddr("thief");
+        _expectExecFail(
+            _op(
+                _single(
+                    address(hook),
+                    0,
+                    abi.encodeCall(
+                        LeakedPolicyHook.registerPermit2Transfer,
+                        (address(t), 1 ether, thief, 1, block.timestamp + 1 hours, router.pull.selector)
+                    )
+                )
+            ),
+            abi.encodeWithSelector(NotAllowed.selector, thief, router.pull.selector)
+        );
+    }
+
+    function test_registerPermit2Transfer_wrongCallerAndReplay() public {
+        (Auth3009Token t, Permit2Mock p2) = _typedSetup();
+        uint256 dl = block.timestamp + 1 hours;
+        _submitOk(
+            _op(
+                _single(
+                    address(hook),
+                    0,
+                    abi.encodeCall(
+                        LeakedPolicyHook.registerPermit2Transfer,
+                        (address(t), 30 ether, address(router), 77, dl, router.pull.selector)
+                    )
+                )
+            )
+        );
+        Permit2Mock.PermitTransferFrom memory pt =
+            Permit2Mock.PermitTransferFrom(Permit2Mock.TokenPermissions(address(t), 30 ether), 77, dl);
+        assertEq(hook.registeredHashConsumer(account, p2.hashPermitTransferFrom(pt, address(router))), address(p2));
+        if (_host() == Host.KERNEL) return;
+        // the wrong caller: Permit2 hashes its caller as the spender
+        vm.prank(stranger);
+        vm.expectRevert(Permit2Mock.InvalidContractSignature.selector);
+        p2.permitTransferFrom(pt, Permit2Mock.SignatureTransferDetails(stranger, 30 ether), account, _sig1271(""));
+        vm.prank(address(router));
+        p2.permitTransferFrom(pt, Permit2Mock.SignatureTransferDetails(recipient, 30 ether), account, _sig1271(""));
+        assertEq(t.balanceOf(recipient), 30 ether);
+        vm.prank(address(router));
+        vm.expectRevert(Permit2Mock.InvalidNonce.selector);
+        p2.permitTransferFrom(pt, Permit2Mock.SignatureTransferDetails(recipient, 30 ether), account, _sig1271(""));
+        // a spent nonce is not registered again
+        _expectExecFail(
+            _op(
+                _single(
+                    address(hook),
+                    0,
+                    abi.encodeCall(
+                        LeakedPolicyHook.registerPermit2Transfer,
+                        (address(t), 30 ether, address(router), 77, dl, router.pull.selector)
+                    )
+                )
+            ),
+            abi.encodeWithSelector(NonceUsed.selector)
+        );
+    }
+
+    function test_registerTransferAuthorization_boundToToken() public {
+        (Auth3009Token t,) = _typedSetup();
+        uint256 dl = block.timestamp + 1 hours;
+        bytes32 nonce = keccak256("n");
+        uint256 avail = _available();
+        _submitOk(
+            _op(
+                _single(
+                    address(hook),
+                    0,
+                    abi.encodeCall(
+                        LeakedPolicyHook.registerTransferAuthorization,
+                        (address(t), 25 ether, recipient, 0, dl, nonce, false)
+                    )
+                )
+            )
+        );
+        assertEq(_available(), avail - 25e6);
+        bytes32 digest = t.authDigest(false, account, recipient, 25 ether, 0, dl, nonce);
+        assertEq(hook.registeredHashConsumer(account, digest), address(t));
+        assertFalse(_isValid(hook.PERMIT2(), digest, ""), "not Permit2");
+        if (_host() == Host.KERNEL) return;
+        vm.expectRevert(bytes("bad sig"));
+        t.transferWithAuthorization(account, recipient, 9_000 ether, 0, dl, nonce, _sig1271(""));
+        t.transferWithAuthorization(account, recipient, 25 ether, 0, dl, nonce, _sig1271(""));
+        assertEq(t.balanceOf(recipient), 25 ether);
+        vm.expectRevert(bytes("used"));
+        t.transferWithAuthorization(account, recipient, 25 ether, 0, dl, nonce, _sig1271(""));
+    }
+
+    /// The EIP-3009 recipient follows the hot `transfer` rule: Strict needs the allowlist, Open does not; never
+    /// the token itself.
+    function test_registerTransferAuthorization_recipientRule() public {
+        (Auth3009Token t,) = _typedSetup();
+        uint256 dl = block.timestamp + 1 hours;
+        PackedUserOperation memory op = _op(
+            _single(
+                address(hook),
+                0,
+                abi.encodeCall(
+                    LeakedPolicyHook.registerTransferAuthorization,
+                    (address(t), 1 ether, stranger, 0, dl, keccak256("s"), false)
+                )
+            )
+        );
+        if (_open()) _submitOk(op);
+        else _expectExecFail(op, abi.encodeWithSelector(NotAllowed.selector, stranger, IERC20.transfer.selector));
+        _expectExecFail(
+            _op(
+                _single(
+                    address(hook),
+                    0,
+                    abi.encodeCall(
+                        LeakedPolicyHook.registerTransferAuthorization,
+                        (address(t), 1 ether, address(t), 0, dl, keccak256("t"), false)
+                    )
+                )
+            ),
+            abi.encodeWithSelector(NotAllowed.selector, address(t), IERC20.transfer.selector)
+        );
     }
 
     function _allowPermitToken() internal returns (PermitToken pt) {
