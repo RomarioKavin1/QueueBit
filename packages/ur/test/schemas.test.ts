@@ -2,6 +2,7 @@ import { Tag, encode } from "cbor2";
 import { describe, expect, it } from "vitest";
 import {
   C13_SCHEME_ID,
+  LEAN_SPHINCS_S_SCHEME_ID,
   ROLE,
   TX_TYPE,
   UrSchemaError,
@@ -15,6 +16,7 @@ import {
   encodeSignature,
   randomUuid,
   recoveryTestChallenge,
+  recoveryTestChallengeOf,
 } from "../src/index.js";
 import { bytes, fakeSecp, fullRequest, hex, minimalRequest, signatureResponse } from "./fixtures.js";
 
@@ -266,9 +268,20 @@ describe("leaked-pq-key", () => {
     const k = { schemeId: C13_SCHEME_ID, pk: hex(bytes(32, 5)), role: ROLE.vault, payer: hex(bytes(20, 6)) } as const;
     expect(decodePqKey(encodePqKey(k))).toEqual(k);
   });
-  it("rejects a Recovery key with a payer, and role 3", () => {
+  it("round-trips a Recovery key with and without its payer address (the Recovery bootstrap)", () => {
+    const k = {
+      schemeId: C13_SCHEME_ID,
+      pk: hex(bytes(32, 5)),
+      role: ROLE.recovery,
+      payer: hex(bytes(20, 6)),
+    } as const;
+    expect(decodePqKey(encodePqKey(k))).toEqual(k);
+    const { payer: _p, ...noPayer } = k;
+    expect(decodePqKey(encodePqKey(noPayer))).toEqual(noPayer);
+  });
+  it("rejects a short payer, and role 3", () => {
     expect(() =>
-      encodePqKey({ schemeId: C13_SCHEME_ID, pk: hex(bytes(32, 5)), role: ROLE.recovery, payer: hex(bytes(20, 6)) }),
+      encodePqKey({ schemeId: C13_SCHEME_ID, pk: hex(bytes(32, 5)), role: ROLE.recovery, payer: hex(bytes(19, 6)) }),
     ).toThrow(/payer/);
     const m = new Map<number, unknown>([
       [1, bytes(32, 1)],
@@ -309,6 +322,32 @@ describe("leaked-recovery-test", () => {
     expect(recoveryTestChallenge(C13_SCHEME_ID, hex(bytes(32, 9)), t.requestId)).not.toBe(c);
     expect(recoveryTestChallenge(C13_SCHEME_ID, pk, randomUuid())).not.toBe(c);
     expect(recoveryTestChallenge(hex(bytes(32, 3)), pk, t.requestId)).not.toBe(c);
+  });
+  it("v2: a payer address is carried and covered by the challenge; v1 stays as it was", () => {
+    const payer = hex(bytes(20, 4));
+    const v2 = { ...t, payer };
+    expect(decodeRecoveryTest(encodeRecoveryTest(v2))).toEqual(v2);
+    expect(encodeRecoveryTest(v2).length).toBe(encodeRecoveryTest(t).length + 22);
+    const c1 = recoveryTestChallengeOf(t);
+    const c2 = recoveryTestChallengeOf(v2);
+    expect(c1).toBe(recoveryTestChallenge(C13_SCHEME_ID, pk, t.requestId));
+    expect(c2).toBe(recoveryTestChallenge(C13_SCHEME_ID, pk, t.requestId, payer));
+    expect(c2).not.toBe(c1);
+    expect(recoveryTestChallengeOf({ ...v2, payer: hex(bytes(20, 5)) })).not.toBe(c2);
+    // A leanSphincs-s test must carry a 4,164-byte witness.
+    expect(() => encodeRecoveryTest({ ...t, schemeId: LEAN_SPHINCS_S_SCHEME_ID })).toThrow(/4164/);
+  });
+  it("pins the v2 challenge construction", () => {
+    // keccak256("LEAKED recovery test v2" ‖ C13_SCHEME_ID ‖ 0x00…00 ‖ uuid 00000000-0000-4000-8000-000000000000 ‖
+    // 0x00…01 (20 bytes)), cross-checked with Foundry: cast keccak $(cast concat-hex …)
+    expect(
+      recoveryTestChallenge(
+        C13_SCHEME_ID,
+        `0x${"00".repeat(32)}`,
+        "00000000-0000-4000-8000-000000000000",
+        `0x${"00".repeat(19)}01`,
+      ),
+    ).toMatchInlineSnapshot(`"0x0e2bf91a90016079730e3afde08e0fc0561479c6bb7bd30ddea9d8dda88d3932"`);
   });
   it("pins the challenge construction", () => {
     // keccak256("LEAKED recovery test v1" ‖ C13_SCHEME_ID ‖ 0x00…00 ‖ uuid 00000000-0000-4000-8000-000000000000),

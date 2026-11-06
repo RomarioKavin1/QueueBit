@@ -3,6 +3,7 @@ export type { Hex } from "./cbor.js";
 export {
   C13_SCHEME_ID,
   KNOWN_SIG_LENGTHS,
+  LEAN_SPHINCS_S_SCHEME_ID,
   MAX_UNSIGNED_PAYLOAD,
   MAX_WITNESS,
   ROLE,
@@ -18,6 +19,7 @@ export {
   encodeSignRequest,
   encodeSignature,
   recoveryTestChallenge,
+  recoveryTestChallengeOf,
 } from "./schemas.js";
 export type {
   AdvisoryIntent,

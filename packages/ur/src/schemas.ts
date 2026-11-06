@@ -45,8 +45,13 @@ export type RoleId = (typeof ROLE)[keyof typeof ROLE];
 
 /** keccak256("SPHINCS-C13/keccak/fips-adrs/v1"), `IPQVerifier.schemeId()` of the C13 adapter. */
 export const C13_SCHEME_ID: Hex = "0xb2062c48f163f38edbf050c4a98b6abbe194acda9a6de525b69b330a739aa054";
+/** keccak256("leanSphincs-s/keccak/v1"), `IPQVerifier.schemeId()` of the (experimental) leanSphincs-s adapter. */
+export const LEAN_SPHINCS_S_SCHEME_ID: Hex = "0x5f6989ca8f8b5be0ec5193400cd602392000e54a51f3290ed4be9c075229daed";
 /** Fixed witness lengths per known scheme; a witness for a listed scheme must have exactly this length. */
-export const KNOWN_SIG_LENGTHS: Readonly<Record<string, number>> = { [C13_SCHEME_ID]: 3688 };
+export const KNOWN_SIG_LENGTHS: Readonly<Record<string, number>> = {
+  [C13_SCHEME_ID]: 3688,
+  [LEAN_SPHINCS_S_SCHEME_ID]: 4164,
+};
 
 export const MAX_UNSIGNED_PAYLOAD = 64 * 1024;
 export const MAX_WITNESS = 32 * 1024;
@@ -448,7 +453,11 @@ export interface PqKeyAnnouncement {
   pk: Hex;
   /** 3: 1 vault, 2 recovery. */
   role: typeof ROLE.vault | typeof ROLE.recovery;
-  /** 4: vault only: the Path-B payer address (BIP-32 `m/44'/60'/8141'/0/0` of the same mnemonic). */
+  /**
+   * 4: the role's Path-B payer (fee-payment) address, a secp256k1 key from the same mnemonic: the Vault's is BIP-32
+   * `m/44'/60'/8141'/0/0`, the Recovery key's `m/44'/60'/8141'/1'/0'` (added 2026-11-06 for the Recovery bootstrap;
+   * a Recovery announcement without one is still valid: that Recovery signer is Path A only).
+   */
   payer?: Hex;
 }
 
@@ -478,7 +487,6 @@ export function decodePqKey(cbor: Uint8Array): PqKeyAnnouncement {
   };
   const payer = r.bytes(4, false, { size: 20 });
   if (payer) out.payer = toHex(payer);
-  if (payer && role !== ROLE.vault) throw new UrSchemaError("only the Vault has a payer key", `${path}.4`);
   r.done();
   return out;
 }
@@ -498,27 +506,44 @@ export interface RecoveryTest {
   witness: Hex;
   /** 5: always true; the phone only emits a test after the word check passed. */
   ok: true;
+  /**
+   * 6 (optional, added 2026-11-06): the Recovery key's Path-B payer address (see `PqKeyAnnouncement.payer`). When
+   * present the witness signs the v2 challenge, which covers it, so the browser can put it in `InitConfig` knowing
+   * the holder of the Recovery words chose it.
+   */
+  payer?: Hex;
 }
 
-const RECOVERY_TEST_KEYS = [1, 2, 3, 4, 5] as const;
+const RECOVERY_TEST_KEYS = [1, 2, 3, 4, 5, 6] as const;
 const RECOVERY_TEST_DOMAIN = new TextEncoder().encode("LEAKED recovery test v1");
+const RECOVERY_TEST_DOMAIN_V2 = new TextEncoder().encode("LEAKED recovery test v2");
 
 /**
  * The digest a Recovery key signs to prove a test restore: `keccak256("LEAKED recovery test v1" ‖ schemeId ‖ pk ‖
- * requestId)`. Domain-separated so it can never be a frame transaction's sig hash (those are keccak of a `0x06`-led
- * RLP payload, which this 87-byte preimage is not).
+ * requestId)`, or with a payer address `keccak256("LEAKED recovery test v2" ‖ schemeId ‖ pk ‖ requestId ‖
+ * payer(20))`. Domain-separated so it can never be a frame transaction's sig hash (those are keccak of a `0x06`-led
+ * RLP payload, which these 87/107-byte preimages are not). Verifiers should call `recoveryTestChallengeOf(test)`,
+ * which picks the version from the decoded test.
  */
-export function recoveryTestChallenge(schemeId: Hex, recoveryPk: Hex, requestId: string): Hex {
+export function recoveryTestChallenge(schemeId: Hex, recoveryPk: Hex, requestId: string, payer?: Hex): Hex {
   const s = bytesN(schemeId, 32, "scheme-id")!;
   const p = bytesN(recoveryPk, 32, "recovery-pk")!;
   const id = uuidToBytes(requestId);
-  const pre = new Uint8Array(RECOVERY_TEST_DOMAIN.length + 80);
-  pre.set(RECOVERY_TEST_DOMAIN, 0);
-  pre.set(s, RECOVERY_TEST_DOMAIN.length);
-  pre.set(p, RECOVERY_TEST_DOMAIN.length + 32);
-  pre.set(id, RECOVERY_TEST_DOMAIN.length + 64);
+  const a = payer === undefined ? undefined : bytesN(payer, 20, "payer")!;
+  const domain = a ? RECOVERY_TEST_DOMAIN_V2 : RECOVERY_TEST_DOMAIN;
+  const pre = new Uint8Array(domain.length + 80 + (a ? 20 : 0));
+  pre.set(domain, 0);
+  pre.set(s, domain.length);
+  pre.set(p, domain.length + 32);
+  pre.set(id, domain.length + 64);
+  if (a) pre.set(a, domain.length + 80);
   return toHex(keccak_256(pre));
 }
+
+/** The challenge a decoded `ur:leaked-recovery-test` must verify against (v2 when it carries a payer). */
+export const recoveryTestChallengeOf = (
+  t: Pick<RecoveryTest, "schemeId" | "recoveryPk" | "requestId" | "payer">,
+): Hex => recoveryTestChallenge(t.schemeId, t.recoveryPk, t.requestId, t.payer);
 
 export function encodeRecoveryTest(t: RecoveryTest): Uint8Array {
   if (t.ok !== true) throw new UrSchemaError("must be true", `${UR_TYPES.recoveryTest}.5`);
@@ -528,6 +553,7 @@ export function encodeRecoveryTest(t: RecoveryTest): Uint8Array {
   m.set(3, bytesN(t.recoveryPk, 32, "recovery-pk"));
   m.set(4, fromHex(t.witness, "witness"));
   m.set(5, true);
+  put(m, 6, bytesN(t.payer, 20, "payer"));
   const bytes = encodeCbor(m);
   decodeRecoveryTest(bytes);
   return bytes;
@@ -544,6 +570,8 @@ export function decodeRecoveryTest(cbor: Uint8Array): RecoveryTest {
     ok: true,
   };
   if (r.bool(5, true) !== true) throw new UrSchemaError("must be true", `${path}.5`);
+  const payer = r.bytes(6, false, { size: 20 });
+  if (payer) out.payer = toHex(payer);
   r.done();
   const want = KNOWN_SIG_LENGTHS[out.schemeId];
   const len = (out.witness.length - 2) / 2;
