@@ -277,7 +277,6 @@ function Hero() {
           <br />
           <span className="font-medium">Technical report QB-1, November 2026.</span>
         </p>
-        <StartLink />
       </div>
       <DitherBand className="mt-4 lg:col-span-3" />
     </section>
@@ -304,7 +303,7 @@ function StartLink({ size = "lg" }: { size?: "sm" | "lg" }) {
         size === "sm" ? "h-7 px-2.5" : "h-9 px-3.5 text-[13px]"
       }`}
     >
-      {size === "sm" ? "Start" : "Start with a passkey"}
+      Launch wallet
       <svg
         width="14"
         height="10"

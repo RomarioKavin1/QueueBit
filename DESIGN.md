@@ -352,7 +352,7 @@ Character: a manual's running head, in the mono.
 ### Buttons
 Character: a typed command in a ruled box.
 - **Shape:** square corners (0px), 1px border.
-- **Start (landing):** "Start with a passkey" in the 13px label with a thin right arrow; 36px tall, 14px inline padding, ink border, paper fill. **Small:** "Start", 28px tall, 10px padding, in the top bar.
+- **Start (landing):** "Launch wallet" in the 13px label with a thin right arrow; 36px tall, 14px inline padding, ink border, paper fill. **Small:** the same words, 28px tall, 10px padding, in the top bar. The top bar's is the page's first and only one above the fold (the hero has none, so the two never repeat each other); the closing "Start" section repeats it at the end of the page.
 - **Start hover:** border and fill turn manual blue, text turns paper (200ms colour transition); the arrow nudges 2px right (300ms, ease-out). There is one action on the landing; never add a second bordered or filled button beside it.
 - **App primary:** the same command resting in its "on" state, because touch has no hover: manual-blue fill and border, paper label, right arrow, full width, 48px, pinned in the bottom action bar. Pressed: 10% darker. Disabled: paper-3 fill, rule border, ink-3 label. While working, the label is replaced by three small pulsing squares and a short present-tense label ("Moving").
 - **App secondary:** paper fill, ink border, ink label, full width, 48px; pressed fills paper-3.

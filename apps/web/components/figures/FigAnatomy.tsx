@@ -165,7 +165,9 @@ function Inlay({ i, z }: { i: number; z: number }) {
       <g>
         {sq(28, 28, 44, tone("b12"))}
         {sq(92, 28, 30, tone("b4"))}
-        {[0, 1, 2].map((k) => sq(28 + k * 40, 112, 26, "var(--paper)", "var(--blue-2)"))}
+        {[0, 1, 2].map((k) => (
+          <g key={k}>{sq(28 + k * 40, 112, 26, "var(--paper)", "var(--blue-2)")}</g>
+        ))}
       </g>
     );
   }
