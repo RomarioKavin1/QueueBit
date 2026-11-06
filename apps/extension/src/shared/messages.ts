@@ -188,6 +188,7 @@ export type PortMessageFromSw = PortResponse | ProviderEvent;
 
 // ---- window.postMessage between inpage and content script ----
 
+/** Sent over the private MessageChannel (after the handshake below), never on `window`. */
 export interface InpageToContent {
   target: typeof CONTENT_TARGET;
   request: PortRequest;
@@ -197,3 +198,14 @@ export interface ContentToInpage {
   target: typeof INPAGE_TARGET;
   message: PortMessageFromSw;
 }
+
+/**
+ * The only messages on `window` (M0 review: other extensions' content scripts and page scripts see every window
+ * message). The provider says `hello` with a fresh nonce; the bridge answers once per document with a MessagePort
+ * (`channel` echoes the nonce) and from then on requests, responses and events travel on that port only. `ready`:
+ * the bridge started after the provider's first hello, so the provider says hello again.
+ */
+export type Handshake =
+  | { target: typeof CONTENT_TARGET; hello: string }
+  | { target: typeof INPAGE_TARGET; channel: string }
+  | { target: typeof INPAGE_TARGET; ready: true };

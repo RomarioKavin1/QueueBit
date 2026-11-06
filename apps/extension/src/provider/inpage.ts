@@ -3,6 +3,7 @@ import {
   CONTENT_TARGET,
   INPAGE_TARGET,
   type ContentToInpage,
+  type Handshake,
   type InpageToContent,
   type PortMessageFromSw,
 } from "../shared/messages";
@@ -49,13 +50,28 @@ export class LeakedProvider {
   #accounts: string[] = [];
   #connected = false;
 
-  constructor(private readonly win: Window) {
+  /** The private channel to the content-script bridge (see `Handshake`); requests wait in `#queue` until it exists. */
+  #port: MessagePort | null = null;
+  #queue: InpageToContent[] = [];
+  readonly #nonce = uuidv4();
+
+  constructor(win: Window) {
+    const target = win.location.origin === "null" ? "*" : win.location.origin;
+    const hello = () => win.postMessage({ target: CONTENT_TARGET, hello: this.#nonce } satisfies Handshake, target);
     win.addEventListener("message", (event: MessageEvent) => {
-      if (event.source !== win) return;
-      const data = event.data as ContentToInpage | undefined;
+      if (event.source !== win || this.#port) return;
+      const data = event.data as Handshake | undefined;
       if (data?.target !== INPAGE_TARGET) return;
-      this.#onMessage(data.message);
+      if ("ready" in data) return hello();
+      if (!("channel" in data) || data.channel !== this.#nonce || !event.ports[0]) return;
+      this.#port = event.ports[0];
+      this.#port.onmessage = (e: MessageEvent) => {
+        const m = e.data as ContentToInpage | undefined;
+        if (m?.target === INPAGE_TARGET) this.#onMessage(m.message);
+      };
+      for (const q of this.#queue.splice(0)) this.#port.postMessage(q);
     });
+    hello();
   }
 
   request(args: RequestArguments): Promise<unknown> {
@@ -69,7 +85,8 @@ export class LeakedProvider {
     };
     return new Promise((resolve, reject) => {
       this.#pending.set(id, { resolve, reject });
-      this.win.postMessage(msg, this.win.location.origin === "null" ? "*" : this.win.location.origin);
+      if (this.#port) this.#port.postMessage(msg);
+      else this.#queue.push(msg);
     });
   }
 

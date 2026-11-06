@@ -5,6 +5,7 @@ import {
   INPAGE_TARGET,
   PROVIDER_PORT,
   type ContentToInpage,
+  type Handshake,
   type InpageToContent,
   type PortMessageFromSw,
   type PortRequest,
@@ -26,9 +27,15 @@ export function startBridge(): void {
   let backoff = 100;
   let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
 
+  const origin = window.location.origin === "null" ? "*" : window.location.origin;
+  // The private channel to the page's provider (M0 review): one per document, handed over on the provider's first
+  // `hello`; responses and events never go through window.postMessage, where other extensions could read or forge them.
+  let page: MessagePort | null = null;
+  const early: PortMessageFromSw[] = [];
   const toPage = (message: PortMessageFromSw) => {
     const out: ContentToInpage = { target: INPAGE_TARGET, message };
-    window.postMessage(out, window.location.origin === "null" ? "*" : window.location.origin);
+    if (page) page.postMessage(out);
+    else early.push(message);
   };
 
   const failAll = (message: string) => {
@@ -77,9 +84,7 @@ export function startBridge(): void {
     window !== window.top ? (location as Location & { ancestorOrigins?: DOMStringList }).ancestorOrigins : undefined;
   const topOrigin = ancestors && ancestors.length > 0 ? (ancestors.item(ancestors.length - 1) ?? undefined) : undefined;
 
-  window.addEventListener("message", (event: MessageEvent) => {
-    if (event.source !== window) return;
-    const data = event.data as InpageToContent | undefined;
+  const onRequest = (data: InpageToContent | undefined) => {
     if (data?.target !== CONTENT_TARGET) return;
     const req = data.request;
     if (typeof req?.id !== "string" || typeof req.method !== "string") return;
@@ -91,5 +96,18 @@ export function startBridge(): void {
       port = null;
       scheduleReconnect();
     }
+  };
+
+  window.addEventListener("message", (event: MessageEvent) => {
+    if (event.source !== window || page) return;
+    const data = event.data as Handshake | undefined;
+    if (data?.target !== CONTENT_TARGET || !("hello" in data) || typeof data.hello !== "string") return;
+    const ch = new MessageChannel();
+    page = ch.port1;
+    page.onmessage = (e: MessageEvent) => onRequest(e.data as InpageToContent | undefined);
+    window.postMessage({ target: INPAGE_TARGET, channel: data.hello } satisfies Handshake, origin, [ch.port2]);
+    for (const m of early.splice(0)) toPage(m);
   });
+  // The provider may have said hello before this script listened: ask it to say it again.
+  window.postMessage({ target: INPAGE_TARGET, ready: true } satisfies Handshake, origin);
 }
