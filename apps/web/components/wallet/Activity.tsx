@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Address, Notice, Screen, Secondary, Title } from "@/components/onboarding/ui";
 import { eth, explorerLink, short } from "@/lib/format";
+import { OnChain } from "./OnChain";
 import { EntryRow, Row, entryOut, entryState, entryTitle } from "./bits";
 import { useWallet, type ActivityEntry } from "./state";
 import type { Nav } from "./Wallet";
@@ -107,6 +108,13 @@ export function EntryDetail({ nav, entryId }: { nav: Nav; entryId: string }) {
           </Row>
         )}
       </dl>
+      {txHash && net && (
+        <OnChain
+          rpcUrl={net.rpcUrl}
+          hash={txHash as `0x${string}`}
+          {...(e.kind === "activation" ? { account: e.account } : {})}
+        />
+      )}
       {steps && (
         <ol className="mt-8 border-t border-ink">
           {steps.map((s) => (
