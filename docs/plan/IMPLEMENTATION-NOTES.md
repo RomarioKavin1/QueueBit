@@ -1399,16 +1399,21 @@ Commits `9ccfd58` (`@leaked/privacy`), `d74b8d8` (extension). Plan §30 §10 M6,
   proves again).
   - **The phone signs note keys without holding the SW open**: `phoneSigner` throws `NeedsPhoneError`; the op stores
     the `ur:leaked-sign-request` (tx-type 2, the companion's typed-data flow, payer = the paired Vault's fee key); the
-    page shows the QR and scans the answer; `acceptPhoneAnswer` checks request id + payer recovery and keeps it in the
-    encrypted store (`ans:<d>:<k>:<attempt>`). The determinism double-sign happens once per Vault payer (attempt 1
-    compared with attempt 0, then `deterministicPayer` is persisted). Scans in the e2e: first shield 2, withdrawal 1.
-  - **Store key**: HKDF-SHA256 of the seed with label `privacy-pools:<chainId>` (`KeyringController.deriveStorageKey`)
-    — not a signing key, stable across password changes, dropped on lock (`EncryptedStorage.lock()` → the secret
-    manager's `forget()`, package change below). Deviation from plan §1.4 item 2 (key released by a Vault approval):
-    the balance must be readable after a normal unlock; spending still needs the phone every time, because a withdrawal
-    always signs a new change note.
-  - Discovery stops at the deposits this browser made (`maxDeposits`, new `notes()` option), so refreshing the balance
-    never asks the phone; `prepareDeposit` probes the next index, which is the key the deposit needs anyway.
+    page shows the QR and scans the answer; `acceptPhoneAnswer` checks request id + payer recovery. **Corrected by
+    `5c006bf` (review, critical):** a note signature _is_ the note's spend key, so answers live only in
+    `chrome.storage.session` (`NoteAnswers`, memory, never on disk) while the operation that needs them runs, and are
+    cleared when it finishes, on cancel and on lock; there is no secret-manager cache. (The first M6 version kept them
+    as `ans:<d>:<k>:<attempt>` in the seed-keyed store: the everyday seed plus a copy of `storage.local` could
+    withdraw.) The determinism double-sign happens once per Vault payer (`deterministicPayer` persisted).
+  - **Store key**: HKDF-SHA256 of the seed with label `privacy-pools:<chainId>` (`KeyringController.deriveStorageKey`),
+    dropped on lock. Since `5c006bf`/`0909216` it encrypts only **public** data: the op state machine and a public note
+    ledger (`ledger:<pool>`: precommitment, nullifier hash, label, value, commitment, status; no nullifier, no secret),
+    refreshed against the synced pool without the phone. So plan §1.4 item 2 (the pool key is released by a Vault
+    approval) holds: the balance is readable after a normal unlock because it needs no key, and every spend asks the
+    phone twice (the note's key, checked against the pool, then the change note's key). The earlier "deviation" text
+    here described the pre-review build and no longer applies.
+  - No discovery scan: a deposit is prepared by index (`prepareDeposit(value, {depositIndex})`) and its public entry
+    recorded when the payment lands; a withdrawal records its change note's public data.
   - **Deposit** = a payment from the account (`payments.preview` → hot, else a Vault `send`). The Entrypoint is not an
     allowed app, so it is a Vault approval in practice; the request carries a body gas hint (`body`, bounded by
     `MAX_ROLE_BODY` 4M/3M; the first attempt failed at the stock 700k: a deposit is ~1.05M on the devnet) and a label
