@@ -30,6 +30,8 @@ export interface WatcherState {
   account: Address;
   /** Last block processed. */
   cursor?: string;
+  /** The chain the cursor belongs to (`chainFingerprint`: chain id + genesis hash); a change resets the state. */
+  chain?: string;
   core?: CoreState;
   lastPollAt?: number;
   lastError?: string;
@@ -37,7 +39,7 @@ export interface WatcherState {
 
 export interface LightClient extends CodeReader {
   request(a: { method: string; params: unknown[] }): Promise<unknown>;
-  getBlock(a: { blockNumber: bigint }): Promise<{ timestamp: bigint }>;
+  getBlock(a: { blockNumber: bigint }): Promise<{ timestamp: bigint; hash?: Hex | null }>;
 }
 
 export interface WatcherLightDeps {
@@ -88,6 +90,18 @@ export class WatcherLight {
     const nowS = Math.floor((this.d.now ?? Date.now)() / 1000);
     let st = await this.state(chainId);
     if (!st || st.account.toLowerCase() !== plan.address.toLowerCase()) st = { account: plan.address };
+
+    // A reset chain (a restarted devnet keeps chain id 1337), another chain behind the RPC, or a head below the
+    // cursor: the cursor and the core's pending state belong to the old chain. Start over from the account's deploy
+    // block on this one (`DeployBlocks.checkChain` drops the cached deploy block too).
+    const fp = await this.d.deployBlocks.checkChain(chainId, c).catch(() => undefined);
+    const head0 = await c.getBlockNumber().catch(() => undefined);
+    if (
+      (fp && st.chain && st.chain !== fp) ||
+      (st.cursor !== undefined && head0 !== undefined && BigInt(st.cursor) > head0)
+    )
+      st = { account: plan.address };
+    if (fp) st.chain = fp;
 
     const [rolesNow, initiated] = await Promise.all([this.d.roles(chainId), this.d.initiated(chainId)]);
     const core = new WatcherCore({

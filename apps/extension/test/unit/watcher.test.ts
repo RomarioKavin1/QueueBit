@@ -12,7 +12,7 @@ import {
   notificationFor,
   type AlertRecord,
 } from "../../src/background/watcher/alerts";
-import { WatcherLight, watchTargets, type LightClient } from "../../src/background/watcher/light";
+import { WATCHER_STATE_KEY, WatcherLight, watchTargets, type LightClient } from "../../src/background/watcher/light";
 import { PairingStore, readPairedWatcher, readPairingCode } from "../../src/background/watcher/pairing";
 import { MemoryKV } from "../../src/shared/kv";
 
@@ -360,5 +360,47 @@ describe("pairing with a self-hosted watcher", () => {
     await store.retract(["mine", "theirs"], "watcher");
     const byId = Object.fromEntries((await store.list()).map((r) => [r.alert.id, r.retracted ?? false]));
     expect(byId).toEqual({ mine: false, theirs: true });
+  });
+});
+
+describe("light mode across a reset chain (M6 review: deploy-block cache and cursor)", () => {
+  const withGenesis = (deployAt: bigint, head: bigint, genesis: Hex) => {
+    const c = fakeChain({ deployAt, head, logs: [], ts: () => 1_800_000_000 });
+    return Object.assign(c, {
+      getBlock: async ({ blockNumber }: { blockNumber: bigint }) => ({
+        timestamp: 1_800_000_000n,
+        ...(blockNumber === 0n ? { hash: genesis } : {}),
+      }),
+      getChainId: async () => 1337,
+    });
+  };
+  const light = (kv: MemoryKV, chain: LightClient) =>
+    new WatcherLight({
+      kv,
+      deployBlocks: new DeployBlocks(kv),
+      client: () => chain,
+      plan: async () => plan,
+      roles: async () => ({}),
+      initiated: async () => () => undefined,
+      confirmations: 1,
+    });
+
+  it("a new genesis under the same chain id drops the cursor and the cached deploy block", async () => {
+    const kv = new MemoryKV();
+    const a = withGenesis(40n, 1000n, "0x01");
+    await light(kv, a).poll(1337);
+    expect((await kv.get<{ cursor: string }>(WATCHER_STATE_KEY(1337)))?.cursor).toBe("999");
+    const b = withGenesis(7n, 50n, "0x02"); // the devnet restarted: account redeployed at 7, head 50
+    await light(kv, b).poll(1337);
+    expect(b.calls.getLogs[0]?.from).toBe(7n);
+    expect(await kv.get(WATCHER_STATE_KEY(1337))).toMatchObject({ cursor: "49", chain: "1337:0x02" });
+  });
+
+  it("a head below the cursor (no fingerprint available) also starts over", async () => {
+    const kv = new MemoryKV();
+    await light(kv, fakeChain({ deployAt: 40n, head: 1000n, logs: [], ts: () => 0 })).poll(1337);
+    const low = fakeChain({ deployAt: 40n, head: 60n, logs: [], ts: () => 0 });
+    await light(kv, low).poll(1337);
+    expect(low.calls.getLogs[0]?.from).toBe(40n);
   });
 });
