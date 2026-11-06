@@ -16,7 +16,12 @@ import {
   type PoolState,
 } from "./sync.js";
 import { buildWithdrawInputs } from "./withdraw.js";
-import type { FramePaymasterBroadcaster, FramePaymasterOutcome } from "./broadcaster.js";
+import {
+  localFrameSigner,
+  type FramePaymasterBroadcaster,
+  type FramePaymasterOutcome,
+  type FrameSenderSigner,
+} from "./broadcaster.js";
 import { relayerWithdrawal, type RelayerClient, type RelayerResult } from "./relayer.js";
 
 export interface DepositTx {
@@ -122,7 +127,11 @@ export class PrivacyPoolsV1Client {
     return { state: this.state, asp: this.aspLabels };
   }
 
-  notes(o: { gapLimit?: number } = {}): Promise<DiscoveryResult> {
+  /**
+   * Our notes. `maxDeposits` stops discovery after that many deposit indices (a wallet that knows how many deposits
+   * it made never probes the next index, which would cost a vault scan on every refresh).
+   */
+  notes(o: { gapLimit?: number; maxDeposits?: number } = {}): Promise<DiscoveryResult> {
     const { state, asp } = this.need();
     return discoverNotes({ secrets: this.c.secrets, state, aspLabels: asp, ...o });
   }
@@ -183,15 +192,19 @@ export class PrivacyPoolsV1Client {
     amount: bigint;
     broadcaster: FramePaymasterBroadcaster;
     refundRecipient?: Address;
-    senderKey?: Hex;
+    /** The fresh sender; default: derived from the change note's vault signature (recoverable from the vault). */
+    sender?: FrameSenderSigner;
     onStatus?: (s: string) => void;
+    /** Called once the signed transaction is built, before it is submitted (so a caller can persist its hash). */
+    onBuilt?: (b: { hash: Hex; sender: Address; fee: bigint }) => void | Promise<void>;
   }): Promise<FramePaymasterOutcome & { sender: Address; fee: bigint; changeCommitment: bigint }> {
     assertWithdrawMode("frame-paymaster");
     const { state } = this.need();
     const hint = await findRootIndex(this.c.provider, this.c.pool, state.root);
-    const senderKey = a.senderKey ?? (await this.c.secrets.senderKey(a.note.depositIndex, a.note.secretIndex + 1));
+    const sender =
+      a.sender ?? localFrameSigner(await this.c.secrets.senderKey(a.note.depositIndex, a.note.secretIndex + 1));
     const q = await a.broadcaster.quote({
-      senderKey,
+      sender,
       rootIndexHint: hint,
       ...(a.refundRecipient ? { refundRecipient: a.refundRecipient } : {}),
     });
@@ -199,6 +212,7 @@ export class PrivacyPoolsV1Client {
     a.onStatus?.("prove");
     const p = await this.prove(a.note, a.amount, q.withdrawal);
     const built = await a.broadcaster.build(q, p.proof.proof, p.rootIndexHint);
+    await a.onBuilt?.({ hash: built.hash, sender: q.sender, fee: q.fee });
     a.onStatus?.("routing");
     const hash = await a.broadcaster.submit(built);
     const out = await a.broadcaster.wait(hash, a.onStatus);

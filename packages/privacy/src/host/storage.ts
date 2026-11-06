@@ -97,6 +97,7 @@ export class EncryptedStorage implements Storage {
   readonly _brand = "Storage" as const;
   private key: CryptoKey | undefined;
   private readonly backend: StorageBackend;
+  private readonly lockListeners = new Set<() => void>();
   readonly namespace: string;
 
   constructor(opts: EncryptedStorageOptions) {
@@ -114,8 +115,25 @@ export class EncryptedStorage implements Storage {
     this.key = key;
   }
 
+  /**
+   * Drops the key, then tells every listener (the secret manager subscribes and forgets its in-memory signatures,
+   * so a locked store never leaves note secrets reachable in memory).
+   */
   lock(): void {
     this.key = undefined;
+    for (const f of [...this.lockListeners]) {
+      try {
+        f();
+      } catch {
+        // a failing listener must not keep the store unlocked or stop the others
+      }
+    }
+  }
+
+  /** Called on every `lock()`. Returns the unsubscribe function. */
+  onLock(f: () => void): () => void {
+    this.lockListeners.add(f);
+    return () => this.lockListeners.delete(f);
   }
 
   private need(): CryptoKey {

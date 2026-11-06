@@ -105,9 +105,18 @@ describe("Groth16 prover", () => {
     await expect(p.prove(fakeInputs)).rejects.toBeInstanceOf(ProofSelfCheckError);
   });
 
+  it("refuses an engine without verify() unless the self-check is turned off explicitly", () => {
+    const backend = { fullProve: async () => ({ proof: fakeProof, publicSignals: signals }) };
+    const artifacts = async () => ({ wasm: new Uint8Array(), zkey: new Uint8Array(), vkey: {} });
+    expect(() => createGroth16Prover({ backend, artifacts })).toThrow(/no verify/);
+    expect(() => createGroth16Prover({ backend, artifacts, selfVerify: true })).toThrow(/no verify/);
+    expect(() => createGroth16Prover({ backend, artifacts, selfVerify: false })).not.toThrow();
+  });
+
   it("a failed artifact load is retried on the next prove", async () => {
     let n = 0;
     const p = createGroth16Prover({
+      selfVerify: false,
       backend: { fullProve: async () => ({ proof: fakeProof, publicSignals: signals }) },
       artifacts: async () => {
         if (n++ === 0) throw new ArtifactHashMismatchError("withdraw.zkey", "aa", "bb");

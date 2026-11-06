@@ -19,6 +19,7 @@ import {
   NOTE_DOMAIN_SALT,
   NonDeterministicSignerError,
   QrEnvelopeSigner,
+  StorageLockedError,
   acceptNoteSignature,
   buildNoteEnvelope,
   canonicalRS,
@@ -28,6 +29,7 @@ import {
   importStorageKey,
   memoryBackend,
   noteEnvelopeDigest,
+  type EnvelopeSigner,
 } from "../src/index.js";
 import { SECP256K1_N as SECP256K1_N_FOR_TEST } from "../src/envelope/envelope.js";
 import { CHAIN, ENTRYPOINT, PAYER_KEY, softwareSigner, vaultDevice } from "./helpers.js";
@@ -162,6 +164,22 @@ describe("vault EnvelopeSigner over QR", () => {
     expect(scans).toBe(2);
     await expect(sm.getSecrets(0, 0)).rejects.toThrow(/start at 1/);
     expect(await sm.senderKey(0, 1)).toMatch(/^0x[0-9a-f]{64}$/);
+  });
+
+  it("locking the encrypted cache makes the secret manager forget its in-memory signatures", async () => {
+    let scans = 0;
+    const signer: EnvelopeSigner = { signEnvelope: async (e) => (scans++, softwareSigner().signEnvelope(e)) };
+    const key = await importStorageKey(new Uint8Array(32).fill(7));
+    const cache = new EncryptedStorage({ backend: memoryBackend(), namespace: "pp:", key });
+    const sm = createSignatureSecretManager({ signer, chainId: CHAIN, entrypoint: ENTRYPOINT, cache });
+    await sm.getDepositSecrets(0);
+    expect(scans).toBe(2);
+    cache.lock();
+    // The memo is gone: the next derivation reads the (now locked) cache and fails closed instead of answering from memory.
+    await expect(sm.getDepositSecrets(0)).rejects.toBeInstanceOf(StorageLockedError);
+    cache.unlock(key);
+    await sm.getDepositSecrets(0);
+    expect(scans).toBe(2); // from the encrypted cache: no new vault scan, and the determinism check is not redone
   });
 
   it("refuses a non-deterministic signer (secrets could never be re-derived)", async () => {

@@ -5,6 +5,7 @@ import { getProfile } from "@leaked/frames";
 import type { NodeClient, SidecarClient } from "@leaked/rpc";
 import * as pkg from "../src/index.js";
 import {
+  CircuitError,
   FramePaymasterBroadcaster,
   LegalGuardrailError,
   MempoolOutcomeError,
@@ -18,8 +19,11 @@ import {
   contextOf,
   decodeFeeData,
   encodeRelayData,
+  isolationKeyFor,
+  localFrameSigner,
   rejectFeeOptions,
   relayerWithdrawal,
+  withdrawalClients,
   type FramePaymasterOptions,
   type SolProof,
 } from "../src/index.js";
@@ -61,6 +65,7 @@ function mockNode(maxCosts: bigint[]): NodeClient & { simulated: number } {
 const opts = (node: NodeClient, sidecar = {} as SidecarClient): FramePaymasterOptions => ({
   node,
   sidecar,
+  circuit: { anonymous: false },
   profile,
   chainId: 1337n,
   payer: PAYER,
@@ -111,10 +116,10 @@ describe("§7 rule 2: PoolPayer fee is exactly at cost", () => {
   it("quote: fee = the simulated max cost of the worst-case encoding, with no margin; recipient = the fresh sender", async () => {
     const node = mockNode([7_896_333_520_000_000n]);
     const b = new FramePaymasterBroadcaster(opts(node));
-    await expect(b.quote({ senderKey: generatePrivateKey(), rootIndexHint: 3, margin: 1n } as never)).rejects.toThrow(
-      LegalGuardrailError,
-    );
-    const q = await b.quote({ senderKey: generatePrivateKey(), rootIndexHint: 3 });
+    await expect(
+      b.quote({ sender: localFrameSigner(generatePrivateKey()), rootIndexHint: 3, margin: 1n } as never),
+    ).rejects.toThrow(LegalGuardrailError);
+    const q = await b.quote({ sender: localFrameSigner(generatePrivateKey()), rootIndexHint: 3 });
     expect(q.fee).toBe(7_896_333_520_000_000n);
     expect(q.fee).toBe(q.maxCostUpperBound);
     const fd = decodeFeeData(q.withdrawal.data);
@@ -133,28 +138,79 @@ describe("§7 rule 2: PoolPayer fee is exactly at cost", () => {
       throw new Error("rpc down");
     };
     const b = new FramePaymasterBroadcaster(opts(node));
-    await expect(b.quote({ senderKey: generatePrivateKey(), rootIndexHint: 0 })).rejects.toThrow(/rpc down/);
+    await expect(b.quote({ sender: localFrameSigner(generatePrivateKey()), rootIndexHint: 0 })).rejects.toThrow(
+      /rpc down/,
+    );
     expect(node.simulated).toBe(0);
     const node2 = mockNode([100n]);
     node2.getTransactionCount = async () => 3n;
-    const q = await new FramePaymasterBroadcaster(opts(node2)).quote({ senderKey: generatePrivateKey(), rootIndexHint: 0 });
+    const q = await new FramePaymasterBroadcaster(opts(node2)).quote({
+      sender: localFrameSigner(generatePrivateKey()),
+      rootIndexHint: 0,
+    });
     expect(q.nonce).toBe(3n);
   });
 
   it("build: refuses when the real tx would cost more than the fee, or the quote was inflated", async () => {
     const node = mockNode([100n, 101n]);
     const b = new FramePaymasterBroadcaster(opts(node));
-    const q = await b.quote({ senderKey: generatePrivateKey(), rootIndexHint: 0 });
+    const q = await b.quote({ sender: localFrameSigner(generatePrivateKey()), rootIndexHint: 0 });
     await expect(b.build(q, proofBinding(q.withdrawal, 10n ** 18n), 0)).rejects.toThrow(
       /below the max cost|upper bound/,
     );
     const node2 = mockNode([100n, 90n]);
     const b2 = new FramePaymasterBroadcaster(opts(node2));
-    const q2 = await b2.quote({ senderKey: generatePrivateKey(), rootIndexHint: 0 });
+    const q2 = await b2.quote({ sender: localFrameSigner(generatePrivateKey()), rootIndexHint: 0 });
     const inflated = { ...q2, fee: 150n };
     await expect(b2.build(inflated, proofBinding(q2.withdrawal, 10n ** 18n), 0)).rejects.toThrow(/exceeds/);
     const ok = await b2.build(q2, proofBinding(q2.withdrawal, 10n ** 18n), 0);
     expect(ok.maxCost).toBe(90n);
+  });
+
+  it("the quote holds no private key: only the sender's address (a signer handle signs)", async () => {
+    const key = generatePrivateKey();
+    const b = new FramePaymasterBroadcaster(opts(mockNode([100n, 90n])));
+    const q = await b.quote({ sender: localFrameSigner(key), rootIndexHint: 0 });
+    expect(JSON.stringify(q, (_k, v) => (typeof v === "bigint" ? v.toString() : v))).not.toContain(key.slice(2));
+    expect(Object.keys(q)).not.toContain("senderKey");
+    await expect(b.quote({ senderKey: key, rootIndexHint: 0 } as never)).rejects.toThrow(/signer handle/);
+    // build signs through the handle registered by quote
+    const built = await b.build(q, proofBinding(q.withdrawal, 10n ** 18n), 0);
+    expect(built.tx.sender.toLowerCase()).toBe(q.sender.toLowerCase());
+  });
+
+  it("node RPC runs on the withdrawal's fresh isolation key, never on an account's", async () => {
+    const account = getAddress("0x3333333333333333333333333333333333333333");
+    const accountKey = isolationKeyFor(account, 1337n);
+    const base = opts(mockNode([1n]));
+    expect(() => new FramePaymasterBroadcaster({ ...base, circuit: undefined as never })).toThrow(CircuitError);
+    expect(() => new FramePaymasterBroadcaster({ ...base, circuit: { anonymous: true } })).toThrow(CircuitError);
+    expect(
+      () =>
+        new FramePaymasterBroadcaster({
+          ...base,
+          circuit: { anonymous: true, isolationKey: accountKey },
+          accountIsolationKeys: [accountKey],
+        }),
+    ).toThrow(/account's isolation key/);
+    // withdrawalClients: every node and sidecar request carries one fresh key, distinct per withdrawal.
+    const seen: string[] = [];
+    const anonFetch = async (_u: string | URL, init?: { anonOptions?: { isolationKey?: string } }) => {
+      seen.push(init?.anonOptions?.isolationKey ?? "none");
+      return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: "0x7" }));
+    };
+    const w1 = withdrawalClients({ nodeUrl: "http://n/", sidecarUrl: "http://s/rpc", anonFetch });
+    const w2 = withdrawalClients({ nodeUrl: "http://n/", sidecarUrl: "http://s/rpc", anonFetch });
+    expect(w1.circuit.isolationKey).not.toBe(w2.circuit.isolationKey);
+    new FramePaymasterBroadcaster({ ...base, ...w1, accountIsolationKeys: [accountKey] });
+    await w1.node.getTransactionCount(account, "pending");
+    await w1.sidecar.frameTransactionStatus("0x12").catch(() => undefined);
+    expect(seen.length).toBeGreaterThanOrEqual(2);
+    expect(new Set(seen)).toEqual(new Set([w1.circuit.isolationKey]));
+    expect(seen).not.toContain(accountKey);
+    expect(withdrawalClients({ nodeUrl: "http://n/", sidecarUrl: "http://s/rpc" }).circuit).toEqual({
+      anonymous: false,
+    });
   });
 
   it("wait: maps Cancelled to an error with the sidecar's reason", async () => {

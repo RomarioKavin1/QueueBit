@@ -19,7 +19,7 @@ import {
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { getProfile } from "@leaked/frames";
-import { createNodeClient, createSidecarClient, httpTransport } from "@leaked/rpc";
+import { httpTransport } from "@leaked/rpc";
 import {
   DEFAULT_SIDECAR_URL,
   EncryptedStorage,
@@ -42,6 +42,7 @@ import {
   rootOf,
   serveProver,
   spendable,
+  withdrawalClients,
   type PortLike,
 } from "../src/index.js";
 import { PAYER_KEY, vaultDevice } from "./helpers.js";
@@ -249,8 +250,8 @@ describe.skipIf(!RUN)("LOCAL devnet: deposit → sync → prove → PoolPayer wi
 
     // ---- withdraw 0.05 ETH via PoolPayer through the BUDGET-010 sidecar -----------------------------------------
     const broadcaster = new FramePaymasterBroadcaster({
-      node: createNodeClient(httpTransport(NODE, { timeoutMs: 60_000 })),
-      sidecar: createSidecarClient(networkTransport(SIDECAR, net, 60_000)),
+      // The withdrawal's own circuit (devnet: no Anon-RPC, so direct and labelled; plan §6.2).
+      ...withdrawalClients({ nodeUrl: NODE, sidecarUrl: SIDECAR, timeoutMs: 60_000 }),
       profile: getProfile("ethrex-eip8141-tracer"),
       chainId: 1337n,
       payer: payer.address,

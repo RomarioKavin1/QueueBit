@@ -43,9 +43,10 @@ export interface SignatureSecretManagerOptions {
   verifyDeterminism?: boolean;
   /**
    * Encrypted cache of envelope signatures (the "userSecrets" slice, §1.4 item 2): an `EncryptedStorage` whose key
-   * is released by a vault approval. Without it every derivation is a QR round trip.
+   * is released by a vault approval. Without it every derivation is a QR round trip. A cache with `onLock` (an
+   * `EncryptedStorage`) makes its `lock()` call `forget()`: locking the store also drops the in-memory signatures.
    */
-  cache?: Storage;
+  cache?: Storage & { onLock?(f: () => void): () => void };
 }
 
 /**
@@ -94,6 +95,12 @@ export function createSignatureSecretManager(opts: SignatureSecretManagerOptions
     return p;
   };
 
+  const forget = () => {
+    memo.clear();
+    determinism = undefined;
+  };
+  opts.cache?.onLock?.(forget);
+
   return {
     chainId: opts.chainId,
     entrypoint: opts.entrypoint,
@@ -103,9 +110,6 @@ export function createSignatureSecretManager(opts: SignatureSecretManagerOptions
       return deriveNoteSecrets(await signature(d, k));
     },
     senderKey: async (d, k) => senderKeyFromSignature(await signature(d, k)),
-    forget: () => {
-      memo.clear();
-      determinism = undefined;
-    },
+    forget,
   };
 }

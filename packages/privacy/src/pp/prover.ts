@@ -182,6 +182,12 @@ export function createGroth16Prover(o: {
   selfVerify?: boolean;
   now?: () => number;
 }): Prover {
+  const selfVerify = o.selfVerify ?? true;
+  // A self-check that cannot run must not be skipped silently: an engine without `verify` is refused unless the
+  // caller turned the self-check off explicitly (privacy review).
+  if (selfVerify && typeof o.backend.verify !== "function") {
+    throw new TypeError("createGroth16Prover: the Groth16 engine has no verify(); pass selfVerify: false to opt out");
+  }
   let loaded: Promise<WithdrawArtifacts> | undefined;
   const now = o.now ?? (() => Date.now());
   return {
@@ -194,7 +200,7 @@ export function createGroth16Prover(o: {
       const t0 = now();
       const { proof, publicSignals } = await o.backend.fullProve(stringify(inputs), a.wasm, a.zkey);
       const ms = now() - t0;
-      if ((o.selfVerify ?? true) && o.backend.verify && !(await o.backend.verify(a.vkey, publicSignals, proof))) {
+      if (selfVerify && !(await o.backend.verify!(a.vkey, publicSignals, proof))) {
         throw new ProofSelfCheckError();
       }
       return { proof: toSolProof(proof, publicSignals), raw: proof, publicSignals, ms };

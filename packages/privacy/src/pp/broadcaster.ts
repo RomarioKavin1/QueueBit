@@ -1,8 +1,15 @@
 import type { Address, Hex } from "viem";
 import { privateKeyToAddress } from "viem/accounts";
 import { encodeTx, signTx, txHash, type FrameTx, type FrameTxReceipt, type Profile } from "@leaked/frames";
-import type { FrameTxStatus, NodeClient, SidecarClient } from "@leaked/rpc";
+import {
+  createNodeClient,
+  createSidecarClient,
+  type FrameTxStatus,
+  type NodeClient,
+  type SidecarClient,
+} from "@leaked/rpc";
 import { assertAtCostFee, rejectFeeOptions } from "../guardrails.js";
+import { anonNetwork, directNetwork, freshIsolationKey, networkTransport, type AnonFetch } from "../host/network.js";
 import type { Withdrawal } from "./crypto.js";
 import {
   MAX_FEE_UINT96,
@@ -44,11 +51,80 @@ export class MempoolOutcomeError extends Error {
   }
 }
 
+/**
+ * The fresh PoolPayer sender, as a signing handle: the quote and the built transaction never carry its private key
+ * (privacy review). `localFrameSigner(key)` keeps the key in a closure; a vault-backed signer would not hold it at all.
+ */
+export interface FrameSenderSigner {
+  readonly address: Address;
+  /** Signs SECP256K1 entry `index` of `tx` (over the profile's signing digest). */
+  signFrameTx(profile: Profile, tx: FrameTx, index: number): Promise<FrameTx>;
+}
+
+export function localFrameSigner(privateKey: Hex): FrameSenderSigner {
+  const address = privateKeyToAddress(privateKey);
+  return { address, signFrameTx: (profile, tx, index) => signTx(profile, tx, privateKey, index) };
+}
+
+/**
+ * Which network circuit the broadcaster's node and sidecar calls use. A withdrawal's nonce read, its simulation with
+ * the full proof, the submission and the receipt polls go out on the withdrawal's own fresh Anon-RPC isolation key,
+ * never on the account's (that would link the fresh recipient to the depositing account, plan §6.2).
+ */
+export interface WithdrawalCircuit {
+  /** True when the calls go through Anon-RPC; false on a network without it (the local devnet), which the UI says. */
+  anonymous: boolean;
+  /** The isolation key both clients were built on (anonymous circuits only). */
+  isolationKey?: string;
+}
+
+export class CircuitError extends Error {
+  constructor(why: string) {
+    super(`PoolPayer withdrawal circuit refused: ${why}`);
+    this.name = "CircuitError";
+  }
+}
+
+/**
+ * The node and sidecar clients of ONE withdrawal, on a fresh isolation key (anonymous when `anonFetch` is given, else
+ * the platform fetch on a devnet). Build one per withdrawal; never reuse it for account reads.
+ */
+export function withdrawalClients(o: {
+  nodeUrl: string;
+  sidecarUrl: string;
+  anonFetch?: AnonFetch;
+  timeoutMs?: number;
+  onRequest?: (info: { url: string; isolationKey: string }) => void;
+}): { node: NodeClient; sidecar: SidecarClient; circuit: WithdrawalCircuit } {
+  if (o.anonFetch) {
+    const isolationKey = freshIsolationKey();
+    const net = anonNetwork({ fetch: o.anonFetch, isolationKey, ...(o.onRequest ? { onRequest: o.onRequest } : {}) });
+    return {
+      node: createNodeClient(networkTransport(o.nodeUrl, net, o.timeoutMs)),
+      sidecar: createSidecarClient(networkTransport(o.sidecarUrl, net, o.timeoutMs)),
+      circuit: { anonymous: true, isolationKey },
+    };
+  }
+  const net = directNetwork();
+  return {
+    node: createNodeClient(networkTransport(o.nodeUrl, net, o.timeoutMs)),
+    sidecar: createSidecarClient(networkTransport(o.sidecarUrl, net, o.timeoutMs)),
+    circuit: { anonymous: false },
+  };
+}
+
 export interface FramePaymasterOptions {
-  /** ethrex: simulation (max cost, execution) and receipts. */
+  /** ethrex: simulation (max cost, execution) and receipts. Build it with `withdrawalClients`. */
   node: NodeClient;
-  /** The ERC-8421 alt-mempool node, e.g. `createSidecarClient(networkTransport(DEFAULT_SIDECAR_URL, net))`. */
+  /** The ERC-8421 alt-mempool node. Build it with `withdrawalClients` (same circuit as `node`). */
   sidecar: SidecarClient;
+  /** The circuit `node` and `sidecar` run on (from `withdrawalClients`). */
+  circuit: WithdrawalCircuit;
+  /**
+   * The isolation keys of the user's accounts (`isolationKeyFor`): an anonymous circuit on one of them is refused,
+   * as is an anonymous circuit without a key.
+   */
+  accountIsolationKeys?: readonly string[];
   profile: Profile;
   chainId: bigint;
   payer: Address;
@@ -61,7 +137,7 @@ export interface FramePaymasterOptions {
 
 /** What the withdrawal is proven against: the fee is fixed here, before proving, because `context` binds it. */
 export interface FramePaymasterQuote {
-  senderKey: Hex;
+  /** The fresh sender's address (= the recipient). The quote never holds its key. */
   sender: Address;
   nonce: bigint;
   withdrawal: Withdrawal;
@@ -93,27 +169,52 @@ export interface FramePaymasterOutcome {
  *  4. `submit` to the alt mempool and `wait` for `OnChain`.
  */
 export class FramePaymasterBroadcaster {
+  private readonly signers = new Map<string, FrameSenderSigner>();
+
   constructor(private readonly o: FramePaymasterOptions) {
     rejectFeeOptions(o);
+    const c = o.circuit;
+    if (!c) throw new CircuitError("no circuit (build the clients with withdrawalClients)");
+    if (c.anonymous) {
+      if (!c.isolationKey) throw new CircuitError("an anonymous circuit without an isolation key");
+      if (o.accountIsolationKeys?.some((k) => k.toLowerCase() === c.isolationKey!.toLowerCase()))
+        throw new CircuitError("it runs on an account's isolation key, not the withdrawal's own");
+    }
   }
 
-  private tx(senderKey: Hex, nonce: bigint, verifyData: Hex): Promise<FrameTx> {
+  get circuit(): WithdrawalCircuit {
+    return this.o.circuit;
+  }
+
+  private signer(sender: Address): FrameSenderSigner {
+    const s = this.signers.get(sender.toLowerCase());
+    if (!s) throw new Error("no signer for this quote's sender (quote and build must use the same broadcaster)");
+    return s;
+  }
+
+  private tx(signer: FrameSenderSigner, nonce: bigint, verifyData: Hex): Promise<FrameTx> {
     const unsigned = buildPoolPayerTx({
       profile: this.o.profile,
       chainId: this.o.chainId,
-      sender: privateKeyToAddress(senderKey),
+      sender: signer.address,
       payer: this.o.payer,
       verifyData,
       fees: this.o.fees,
       nonce,
       ...(this.o.limits ? { limits: this.o.limits } : {}),
     });
-    return signTx(this.o.profile, unsigned, senderKey, 0);
+    return signer.signFrameTx(this.o.profile, unsigned, 0);
   }
 
-  async quote(a: { senderKey: Hex; rootIndexHint: number; refundRecipient?: Address }): Promise<FramePaymasterQuote> {
+  async quote(a: {
+    sender: FrameSenderSigner;
+    rootIndexHint: number;
+    refundRecipient?: Address;
+  }): Promise<FramePaymasterQuote> {
     rejectFeeOptions(a);
-    const sender = privateKeyToAddress(a.senderKey);
+    if ("senderKey" in (a as object)) throw new TypeError("pass a signer handle (localFrameSigner), not a private key");
+    const sender = a.sender.address;
+    this.signers.set(sender.toLowerCase(), a.sender);
     // The nonce is signed into the tx whose max cost becomes the fee, and the fee is bound by the proof's `context`:
     // a guessed nonce would only surface as a failed re-simulation after the proof, so an RPC failure here is an error.
     const nonce = await this.o.node.getTransactionCount(sender, "pending");
@@ -125,7 +226,7 @@ export class FramePaymasterBroadcaster {
         ...(a.refundRecipient ? { refundRecipient: a.refundRecipient } : {}),
       });
     const probe = await this.tx(
-      a.senderKey,
+      a.sender,
       nonce,
       encodeVerifyCall(this.o.rules.scope, mk(MAX_FEE_UINT96), PLACEHOLDER_PROOF, a.rootIndexHint),
     );
@@ -133,7 +234,6 @@ export class FramePaymasterBroadcaster {
     if (sim.maxCost === null) throw new SimulationFailedError(sim.violation ?? "no maxCost in the simulation");
     const fee = sim.maxCost;
     return {
-      senderKey: a.senderKey,
       sender,
       nonce,
       withdrawal: mk(fee),
@@ -144,7 +244,7 @@ export class FramePaymasterBroadcaster {
 
   async build(q: FramePaymasterQuote, proof: SolProof, rootIndexHint: number): Promise<BuiltFramePaymasterTx> {
     const tx = await this.tx(
-      q.senderKey,
+      this.signer(q.sender),
       q.nonce,
       encodeVerifyCall(this.o.rules.scope, q.withdrawal, proof, rootIndexHint),
     );

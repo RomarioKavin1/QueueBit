@@ -108,13 +108,18 @@ export {
 } from "./pp/poolPayer.js";
 export type { PoolPayerLimits, PoolPayerRules, PoolPayerTxInit, ShapeContext } from "./pp/poolPayer.js";
 export {
+  CircuitError,
   DEFAULT_SIDECAR_URL,
   FramePaymasterBroadcaster,
   MempoolOutcomeError,
   PoolPayerShapeError,
   SimulationFailedError,
+  localFrameSigner,
+  withdrawalClients,
 } from "./pp/broadcaster.js";
 export type {
+  FrameSenderSigner,
+  WithdrawalCircuit,
   BuiltFramePaymasterTx,
   FramePaymasterOptions,
   FramePaymasterOutcome,
