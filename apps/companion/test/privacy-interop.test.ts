@@ -1,6 +1,6 @@
-import { encodeTx, getProfile, roleSignerPathBTx, sigHash } from "@leaked/frames";
-import { SCHEME_ID, verify } from "@leaked/pq-signer";
-import { decodeSignature, encodeSignRequest, fromHex, type SignRequest } from "@leaked/ur";
+import { encodeTx, getProfile, roleSignerPathBTx, sigHash } from "@queuebit/frames";
+import { SCHEME_ID, verify } from "@queuebit/pq-signer";
+import { decodeSignature, encodeSignRequest, fromHex, type SignRequest } from "@queuebit/ur";
 import { encodeFunctionData, getAddress, type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { describe, expect, it } from "vitest";
@@ -25,7 +25,7 @@ import {
 
 /**
  * The Privacy Pools deposit (extension M6 "shield"), built by the extension's own code: the precommitment from
- * `@leaked/privacy` (a Vault payer signature over the `PrivacyPoolNote` envelope → `deriveNoteSecrets`), the call from
+ * `@queuebit/privacy` (a Vault payer signature over the `PrivacyPoolNote` envelope → `deriveNoteSecrets`), the call from
  * its `buildDepositTx`, the account calldata from the extension's `buildVaultAction({type: "send", label})` exactly as
  * `background/privacy/controller.ts` asks for it, and the request from its `signRequest`. The phone must clear-sign it
  * ("Move 0.05 ETH into your private balance (Privacy Pools)") at the Entrypoint its registry knows, and fall back to
@@ -113,7 +113,7 @@ async function extensionDeposit(entrypoint: Address) {
 }
 
 /**
- * The extension's public exit (`controller.ts` `advanceExit`): `buildRagequitTx(pool, proof)` from `@leaked/privacy`
+ * The extension's public exit (`controller.ts` `advanceExit`): `buildRagequitTx(pool, proof)` from `@queuebit/privacy`
  * sent as a Vault `send` with no value, its label as the controller writes it. The proof is a stand-in with the real
  * shape (pubSignals: commitment, nullifier hash, value, label); the phone reads only the value from it.
  */
@@ -169,7 +169,7 @@ async function vaultRequest(built: ReturnType<BuildVaultAction>, signRequest: Ex
     schemeId: SCHEME_ID,
     pk: vault.pk,
     profileId: PROFILE_ID,
-    origin: "LEAKED Private balance",
+    origin: "QueueBit Private balance",
     built,
     policy: POLICY,
   });
@@ -259,7 +259,7 @@ describe("Privacy Pools deposit (the extension's shield payment)", () => {
     expect(a.title).toBe("Unfamiliar privacy pool at 0x5FE0…27BD");
     expect(a.unknown?.data).toBe(b.data);
     expect(a.unknown?.value).toBe(VALUE);
-    expect(a.unknown?.reason).toMatch(/not the Privacy Pools contract this app knows for LEAKED devnet/);
+    expect(a.unknown?.reason).toMatch(/not the Privacy Pools contract this app knows for QueueBit devnet/);
     expect(a.details).toContainEqual({ label: "Sends", value: "0.05 ETH" });
     // And the worker refuses it unless the user went through the unknown-step confirmation.
     await expect(vaultSigns(b.cbor, r.digest)).rejects.toThrow(/unrecognised steps/);
@@ -276,7 +276,7 @@ describe("Privacy Pools deposit (the extension's shield payment)", () => {
 });
 
 /** The local devnet's Privacy Pools pool (the registry's 1337 `pools` entry: the extension privacy e2e's deployment). */
-const DEVNET_POOL: Address = "0xC7d1B85C5cE485ec03e06162a08134bAaBE8998C";
+const DEVNET_POOL: Address = "0x8B4d48d5a4b26699886BED6Cd20B1582722DC086";
 
 describe("Privacy Pools public exit (the extension's ragequit)", () => {
   it("the registry knows the devnet pool the extension e2e deploys", () => {
@@ -318,7 +318,7 @@ describe("Privacy Pools public exit (the extension's ragequit)", () => {
     const a = r.actions[0]!;
     expect(a.title).toBe("Unfamiliar privacy pool at 0x5FE0…27BD");
     expect(a.unknown?.data).toBe(b.data);
-    expect(a.unknown?.reason).toMatch(/not the Privacy Pools pool this app knows for LEAKED devnet/);
+    expect(a.unknown?.reason).toMatch(/not the Privacy Pools pool this app knows for QueueBit devnet/);
     await expect(vaultSigns(b.cbor, r.digest)).rejects.toThrow(/unrecognised steps/);
     const ok = (await vaultSigns(b.cbor, r.digest, true)) as Extract<WorkerResult, { op: "sign" }>;
     expect(decodeSignature(ok.signatureCbor).witness).toBeTruthy();

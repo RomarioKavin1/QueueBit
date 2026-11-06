@@ -1,9 +1,9 @@
 import { toHex, type Address, type Hex, type PublicClient } from "viem";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { decodeTx, getProfile, sigHash, txHash, type FrameTxReceipt } from "@leaked/frames";
-import { SCHEME_ID, keygen } from "@leaked/pq-signer";
-import type { NodeClient, SimulationResult } from "@leaked/rpc";
-import { decodeSignature, encodeSignature, fromHex } from "@leaked/ur";
+import { decodeTx, getProfile, sigHash, txHash, type FrameTxReceipt } from "@queuebit/frames";
+import { SCHEME_ID, keygen } from "@queuebit/pq-signer";
+import type { NodeClient, SimulationResult } from "@queuebit/rpc";
+import { decodeSignature, encodeSignature, fromHex } from "@queuebit/ur";
 // The companion's own decoder and signing worker logic, unchanged: what the phone runs on the request bytes.
 import { reviewRequestBytes } from "../../../companion/src/core/clearsign";
 import { payerKeyFromSeed, seedFromEntropy, signDigestVrs, wordsToEntropy } from "../../../companion/src/core/keys";
@@ -39,10 +39,10 @@ const CHAIN = 1337;
 const PROFILE = "ethrex-eip8141-tracer";
 const profile = getProfile(PROFILE);
 const dep = {
-  factory: "0x12e7A64982e85868C345165bD149d6bE55fcA345" as Address,
+  factory: "0x602D0b1A46d6fc77A8690691844Fe0F9a7Be7316" as Address,
   accountImpl: "0xa23d5438Ef67E35829C2E0B03aD13eC3B108C520" as Address,
-  roleSignerFactory: "0x6E721ac3171b611eE9E2FD3e989B7B2563B3A578" as Address,
-  c13Verifier: "0xf67f51B70d6e751db52E9Ab8C20e5430dBB04715" as Address,
+  roleSignerFactory: "0xc9de1A8cBf55331acF4180bF30f64045e75C364E" as Address,
+  c13Verifier: "0xAD7432C0BFd52Dd1c62774701005eeAbBc224152" as Address,
   stakingRegistry: "0x8464135c8F25Da09e49BC8782676a84730C318bC" as Address,
 };
 const SIGNER = "0x00000000000000000000000000000000000005c1" as Address;

@@ -924,7 +924,7 @@ export const accountAbi = [
         name: "mode",
         type: "uint8",
         indexed: false,
-        internalType: "enum ILeakedAccount.RecipientMode",
+        internalType: "enum IQueueBitAccount.RecipientMode",
       },
     ],
     anonymous: false,
@@ -1401,7 +1401,7 @@ export const accountAbi = [
       {
         name: "calls",
         type: "tuple[]",
-        internalType: "struct ILeakedAccount.Call[]",
+        internalType: "struct IQueueBitAccount.Call[]",
         components: [
           {
             name: "target",
@@ -1479,7 +1479,7 @@ export const accountAbi = [
       {
         name: "",
         type: "tuple",
-        internalType: "struct ILeakedAccount.GuardianCfg",
+        internalType: "struct IQueueBitAccount.GuardianCfg",
         components: [
           {
             name: "enabled",
@@ -1504,7 +1504,7 @@ export const accountAbi = [
       {
         name: "c",
         type: "tuple",
-        internalType: "struct ILeakedAccount.HotConfig",
+        internalType: "struct IQueueBitAccount.HotConfig",
         components: [
           {
             name: "hotKey",
@@ -1598,7 +1598,7 @@ export const accountAbi = [
       {
         name: "",
         type: "tuple",
-        internalType: "struct ILeakedAccount.QueuedOp",
+        internalType: "struct IQueueBitAccount.QueuedOp",
         components: [
           {
             name: "eta",
@@ -1613,7 +1613,7 @@ export const accountAbi = [
           {
             name: "state",
             type: "uint8",
-            internalType: "enum ILeakedAccount.OpState",
+            internalType: "enum IQueueBitAccount.OpState",
           },
           {
             name: "vaultEpoch",
@@ -1682,7 +1682,7 @@ export const accountAbi = [
       {
         name: "",
         type: "tuple",
-        internalType: "struct ILeakedAccount.Session",
+        internalType: "struct IQueueBitAccount.Session",
         components: [
           {
             name: "allowanceUsd",
@@ -1713,7 +1713,7 @@ export const accountAbi = [
       {
         name: "",
         type: "tuple",
-        internalType: "struct ILeakedAccount.TokenCfg",
+        internalType: "struct IQueueBitAccount.TokenCfg",
         components: [
           {
             name: "allowed",
@@ -1816,7 +1816,7 @@ export const accountAbi = [
       {
         name: "calls",
         type: "tuple[]",
-        internalType: "struct ILeakedAccount.Call[]",
+        internalType: "struct IQueueBitAccount.Call[]",
         components: [
           {
             name: "target",
@@ -1846,7 +1846,7 @@ export const accountAbi = [
       {
         name: "c",
         type: "tuple",
-        internalType: "struct ILeakedAccount.InitConfig",
+        internalType: "struct IQueueBitAccount.InitConfig",
         components: [
           {
             name: "hotKey",
@@ -1861,7 +1861,7 @@ export const accountAbi = [
           {
             name: "vault",
             type: "tuple",
-            internalType: "struct ILeakedAccount.RoleSignerParams",
+            internalType: "struct IQueueBitAccount.RoleSignerParams",
             components: [
               {
                 name: "salt",
@@ -1888,7 +1888,7 @@ export const accountAbi = [
           {
             name: "recovery",
             type: "tuple",
-            internalType: "struct ILeakedAccount.RoleSignerParams",
+            internalType: "struct IQueueBitAccount.RoleSignerParams",
             components: [
               {
                 name: "salt",
@@ -1975,12 +1975,12 @@ export const accountAbi = [
           {
             name: "recipientMode",
             type: "uint8",
-            internalType: "enum ILeakedAccount.RecipientMode",
+            internalType: "enum IQueueBitAccount.RecipientMode",
           },
           {
             name: "tokens",
             type: "tuple[]",
-            internalType: "struct ILeakedAccount.TokenInit[]",
+            internalType: "struct IQueueBitAccount.TokenInit[]",
             components: [
               {
                 name: "token",
@@ -2293,7 +2293,7 @@ export const accountAbi = [
       {
         name: "",
         type: "uint8",
-        internalType: "enum ILeakedAccount.RecipientMode",
+        internalType: "enum IQueueBitAccount.RecipientMode",
       },
     ],
     stateMutability: "view",
@@ -2672,7 +2672,7 @@ export const accountAbi = [
       {
         name: "calls",
         type: "tuple[]",
-        internalType: "struct ILeakedAccount.Call[]",
+        internalType: "struct IQueueBitAccount.Call[]",
         components: [
           {
             name: "target",
@@ -2727,7 +2727,7 @@ export const accountAbi = [
       {
         name: "calls",
         type: "tuple[]",
-        internalType: "struct ILeakedAccount.Call[]",
+        internalType: "struct IQueueBitAccount.Call[]",
         components: [
           {
             name: "target",
@@ -2893,7 +2893,7 @@ export const accountAbi = [
       {
         name: "mode",
         type: "uint8",
-        internalType: "enum ILeakedAccount.RecipientMode",
+        internalType: "enum IQueueBitAccount.RecipientMode",
       },
     ],
     outputs: [],
@@ -4033,7 +4033,7 @@ export const pqVerifierAbi = [
 export const erc1967ProxyCreationCode =
   "0x6080604052610279803803806100148161016e565b9283398101604082820312610156578151916001600160a01b03831690818403610156576020810151906001600160401b038211610156570182601f82011215610156578051906001600160401b03821161015a5761007c601f8301601f191660200161016e565b938285526020838301011161015657815f9260208093018387015e8401015281511561014757823b15610135577f360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc80546001600160a01b031916821790557fbc7cd75a20ee27fd9adebab32041f755214dbc6bffa90cc0225b39da2e5c2d3b5f80a280511561011e5761010e91610193565b505b604051605990816102208239f35b505034156101105763b398979f60e01b5f5260045ffd5b634c9c8ce360e01b5f5260045260245ffd5b6330a289cf60e21b5f5260045ffd5b5f80fd5b634e487b7160e01b5f52604160045260245ffd5b6040519190601f01601f191682016001600160401b0381118382101761015a57604052565b905f8091602081519101845af4808061020c575b156101c75750506040513d81523d5f602083013e60203d82010160405290565b156101ec57639996b31560e01b5f9081526001600160a01b0391909116600452602490fd5b3d156101fd576040513d5f823e3d90fd5b63d6bda27560e01b5f5260045ffd5b503d1515806101a75750813b15156101a756fe60806040527f360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc545f9081906001600160a01b0316368280378136915af43d5f803e156048573d5ff35b3d5ffdfea164736f6c634300081c000a" as const;
 
-/** `LeakedPolicyHook` (ERC-7579 hook, 4337 backend): the policy store (bucket, prices, allowlist, sessions). */
+/** `QueueBitPolicyHook` (ERC-7579 hook, 4337 backend): the policy store (bucket, prices, allowlist, sessions). */
 export const policyHookAbi = [
   {
     type: "function",
@@ -4280,7 +4280,7 @@ export const policyHookAbi = [
       {
         name: "",
         type: "tuple",
-        internalType: "struct ILeakedModules.Session",
+        internalType: "struct IQueueBitModules.Session",
         components: [
           {
             name: "allowanceUsd",
@@ -4316,7 +4316,7 @@ export const policyHookAbi = [
       {
         name: "",
         type: "tuple",
-        internalType: "struct ILeakedModules.TokenCfg",
+        internalType: "struct IQueueBitModules.TokenCfg",
         components: [
           {
             name: "allowed",
@@ -4395,7 +4395,7 @@ export const policyHookAbi = [
       {
         name: "v",
         type: "tuple",
-        internalType: "struct ILeakedModules.HotView",
+        internalType: "struct IQueueBitModules.HotView",
         components: [
           {
             name: "hotKey",
@@ -4706,7 +4706,7 @@ export const policyHookAbi = [
       {
         name: "",
         type: "uint8",
-        internalType: "enum ILeakedModules.RecipientMode",
+        internalType: "enum IQueueBitModules.RecipientMode",
       },
     ],
     stateMutability: "view",
@@ -5058,7 +5058,7 @@ export const policyHookAbi = [
       {
         name: "mode",
         type: "uint8",
-        internalType: "enum ILeakedModules.RecipientMode",
+        internalType: "enum IQueueBitModules.RecipientMode",
       },
     ],
     outputs: [],
@@ -5507,7 +5507,7 @@ export const policyHookAbi = [
         name: "mode",
         type: "uint8",
         indexed: false,
-        internalType: "enum ILeakedModules.RecipientMode",
+        internalType: "enum IQueueBitModules.RecipientMode",
       },
     ],
     anonymous: false,
@@ -6311,7 +6311,7 @@ export const policyHookAbi = [
   },
 ] as const;
 
-/** `LeakedHotValidator` (ERC-7579 validator): the hot key's userOp and scoped ERC-1271 checks. */
+/** `QueueBitHotValidator` (ERC-7579 validator): the hot key's userOp and scoped ERC-1271 checks. */
 export const hotValidatorAbi = [
   {
     type: "function",
@@ -6321,7 +6321,7 @@ export const hotValidatorAbi = [
       {
         name: "",
         type: "address",
-        internalType: "contract LeakedPolicyHook",
+        internalType: "contract QueueBitPolicyHook",
       },
     ],
     stateMutability: "view",
@@ -6860,7 +6860,7 @@ export const hotValidatorAbi = [
         name: "mode",
         type: "uint8",
         indexed: false,
-        internalType: "enum ILeakedModules.RecipientMode",
+        internalType: "enum IQueueBitModules.RecipientMode",
       },
     ],
     anonymous: false,
@@ -7637,7 +7637,7 @@ export const hotValidatorAbi = [
   },
 ] as const;
 
-/** `LeakedRoleExecutor` (ERC-7579 executor): the Vault / Recovery PQ roles, timelock queue and EIP-712 digests. */
+/** `QueueBitRoleExecutor` (ERC-7579 executor): the Vault / Recovery PQ roles, timelock queue and EIP-712 digests. */
 export const roleExecutorAbi = [
   {
     type: "function",
@@ -7841,7 +7841,7 @@ export const roleExecutorAbi = [
       {
         name: "calls",
         type: "tuple[]",
-        internalType: "struct ILeakedModules.Call[]",
+        internalType: "struct IQueueBitModules.Call[]",
         components: [
           {
             name: "target",
@@ -7943,7 +7943,7 @@ export const roleExecutorAbi = [
       {
         name: "calls",
         type: "tuple[]",
-        internalType: "struct ILeakedModules.Call[]",
+        internalType: "struct IQueueBitModules.Call[]",
         components: [
           {
             name: "target",
@@ -7985,7 +7985,7 @@ export const roleExecutorAbi = [
       {
         name: "",
         type: "tuple",
-        internalType: "struct ILeakedModules.GuardianCfg",
+        internalType: "struct IQueueBitModules.GuardianCfg",
         components: [
           {
             name: "enabled",
@@ -8021,7 +8021,7 @@ export const roleExecutorAbi = [
       {
         name: "",
         type: "tuple",
-        internalType: "struct ILeakedModules.QueuedOp",
+        internalType: "struct IQueueBitModules.QueuedOp",
         components: [
           {
             name: "eta",
@@ -8036,7 +8036,7 @@ export const roleExecutorAbi = [
           {
             name: "state",
             type: "uint8",
-            internalType: "enum ILeakedModules.OpState",
+            internalType: "enum IQueueBitModules.OpState",
           },
           {
             name: "vaultEpoch",
@@ -8301,7 +8301,7 @@ export const roleExecutorAbi = [
       {
         name: "calls",
         type: "tuple[]",
-        internalType: "struct ILeakedModules.Call[]",
+        internalType: "struct IQueueBitModules.Call[]",
         components: [
           {
             name: "target",
@@ -8352,7 +8352,7 @@ export const roleExecutorAbi = [
       {
         name: "calls",
         type: "tuple[]",
-        internalType: "struct ILeakedModules.Call[]",
+        internalType: "struct IQueueBitModules.Call[]",
         components: [
           {
             name: "target",
@@ -8727,7 +8727,7 @@ export const roleExecutorAbi = [
       {
         name: "calls",
         type: "tuple[]",
-        internalType: "struct ILeakedModules.Call[]",
+        internalType: "struct IQueueBitModules.Call[]",
         components: [
           {
             name: "target",
@@ -8777,7 +8777,7 @@ export const roleExecutorAbi = [
       {
         name: "calls",
         type: "tuple[]",
-        internalType: "struct ILeakedModules.Call[]",
+        internalType: "struct IQueueBitModules.Call[]",
         components: [
           {
             name: "target",
@@ -9122,7 +9122,7 @@ export const roleExecutorAbi = [
         name: "mode",
         type: "uint8",
         indexed: false,
-        internalType: "enum ILeakedModules.RecipientMode",
+        internalType: "enum IQueueBitModules.RecipientMode",
       },
     ],
     anonymous: false,
@@ -10472,24 +10472,24 @@ export const local4337Deployment: {
 } | null = {
   chainId: 31337,
   entryPoint: "0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108",
-  factory: "0x90cf141D2a49FBE9Af1BF34DDff99E3CA2e2AF05",
-  msaImpl: "0x4165661A01cf071b05167E325f276dE43D63C083",
-  bootstrap: "0x99c930235bA710e1Aec88A5Cd3bE6d28AF606656",
-  validator: "0xc41FC70648563A7E719FF4D9A0064ef387e7E979",
-  hook: "0x8400e96a45928a473bD18C153a7609669413BB32",
-  hookInitCodeHash: "0x0fcb5e2cb60bc04e7f8a044bd089a10d4d4af9e21925583f32925944f0a491ea",
-  executor: "0x94656178267d434D9103018339E5aD43a170f4B4",
-  c13Verifier: "0xf67f51B70d6e751db52E9Ab8C20e5430dBB04715",
+  factory: "0xA90B77188EF3a2f4C9DF2C44533281bAb3A2FBB1",
+  msaImpl: "0xf4821730A575661Ce49590aa50b8f5390dfE5670",
+  bootstrap: "0x863ead776B98AaE1Aefc91846038885b01Ad5487",
+  validator: "0x453b4cA65e8FE639ebA4315833cCd003cc538F8E",
+  hook: "0xFadD39BF567964dd257A87933b3824E90Eb34F61",
+  hookInitCodeHash: "0xc7bd9baa6fa83d32155274cfa8ce5160bc26e886e3c3c7e8d41955c063d42bca",
+  executor: "0x0AA81C1C361e8D243174c273625e8fE65e842233",
+  c13Verifier: "0xAD7432C0BFd52Dd1c62774701005eeAbBc224152",
   tokens: [
     {
-      address: "0x814F7A72b8579040d99d0882681281851C076986",
+      address: "0xA906a5e54E522a95D361bD2Be84c3d3B3d5d57E9",
       symbol: "DAI",
       decimals: 18,
       usdPerToken: "1000000",
       permit: false,
     },
     {
-      address: "0x78285198eD7Ae004ae654f2Da44338D6e0785Fdf",
+      address: "0x1049a551b5766170A89B7FC0546a2cb2dbC04c78",
       symbol: "USDC",
       decimals: 18,
       usdPerToken: "1000000",
@@ -10514,24 +10514,24 @@ export const localDeployment: {
   tokens: LocalToken[];
 } | null = {
   chainId: 1337,
-  accountImpl: "0x4306F6A38F5E8939a89Fc5f8331E0538BB4fe8fb",
-  accountImplInitCodeHash: "0xd8cd6e35c9b8be58195e78e54b634d2db915d745cd660d0fb5778ba44f1ff07c",
-  rolesModule: "0x0DA4a2e6FABac2EEb55dC3cfa48a8aEed2bAEefc",
-  factory: "0x12e7A64982e85868C345165bD149d6bE55fcA345",
-  c13Verifier: "0xf67f51B70d6e751db52E9Ab8C20e5430dBB04715",
-  roleSignerFactory: "0x6E721ac3171b611eE9E2FD3e989B7B2563B3A578",
+  accountImpl: "0x36a3dc1ec67e30e7954fDF7c7636E6c6b102d55D",
+  accountImplInitCodeHash: "0x99a5cf116878b4bee5add424e1ed6338008b23a0c854502b182bd77fafd4dab5",
+  rolesModule: "0xedbD3DD27c2B8bE165790663e77605Ba832C5c3b",
+  factory: "0x602D0b1A46d6fc77A8690691844Fe0F9a7Be7316",
+  c13Verifier: "0xAD7432C0BFd52Dd1c62774701005eeAbBc224152",
+  roleSignerFactory: "0xc9de1A8cBf55331acF4180bF30f64045e75C364E",
   stakingRegistry: "0x8464135c8F25Da09e49BC8782676a84730C318bC",
-  testVault: "0xd2A752cbA5c92DfEEa06957819F229a6fdC1107a",
+  testVault: "0xC777f69338283Af388ABB2Ae38B524ACaEd2A0A0",
   tokens: [
     {
-      address: "0x814F7A72b8579040d99d0882681281851C076986",
+      address: "0xA906a5e54E522a95D361bD2Be84c3d3B3d5d57E9",
       symbol: "DAI",
       decimals: 18,
       usdPerToken: "1000000",
       permit: false,
     },
     {
-      address: "0x78285198eD7Ae004ae654f2Da44338D6e0785Fdf",
+      address: "0x1049a551b5766170A89B7FC0546a2cb2dbC04c78",
       symbol: "USDC",
       decimals: 18,
       usdPerToken: "1000000",

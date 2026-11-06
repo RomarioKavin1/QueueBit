@@ -4,43 +4,44 @@
     "rpcUrl": "http://localhost:8545"
   },
   "deployer": "0x4e59b44847b379578588920cA78FbF26c0B4956C",
-  "salt": "0xaca47e8a366ca735530b57aa7c0af4c32cd86e606bcb4245905a07b91e267401",
+  "salt": "0x998af09652f09c0b66e1e355035204a3cc9208ea2879e6b79a359f84c730b8d2",
   "funder": "0x14dC79964da2C08b23698B3D3cc7Ca32193d9955",
   "stakingRegistry": "0x8464135c8F25Da09e49BC8782676a84730C318bC",
   "contracts": {
-    "LeakedAccountRoles": {
-      "address": "0x0DA4a2e6FABac2EEb55dC3cfa48a8aEed2bAEefc",
-      "artifact": "LeakedAccountRoles.sol/LeakedAccountRoles",
+    "QueueBitAccountRoles": {
+      "address": "0xedbD3DD27c2B8bE165790663e77605Ba832C5c3b",
+      "artifact": "QueueBitAccountRoles.sol/QueueBitAccountRoles",
       "args": [],
-      "initCodeHash": "0x017777c49638799130b9800adc8585630f6b8cc0fac26b5f06dc0d633bd5d87b",
-      "deployTx": "0x6c38e00944b3b4c1d847fad3b78f8c3eeb3c90d01198d5b090f066ea11c375d5"
+      "initCodeHash": "0x6b825ec5db41a9dd91b7d0dd981b4cdecc72a2ee1a67354a077fe836945272e4",
+      "deployTx": "0x2c8c251e934a97b150fb987c71d4edd9bfc11927638492e58e904cd2134173b6"
     },
-    "LeakedAccountImpl": {
-      "address": "0x4306F6A38F5E8939a89Fc5f8331E0538BB4fe8fb",
-      "artifact": "LeakedAccountImpl.sol/LeakedAccountImpl",
+    "QueueBitAccountImpl": {
+      "address": "0x36a3dc1ec67e30e7954fDF7c7636E6c6b102d55D",
+      "artifact": "QueueBitAccountImpl.sol/QueueBitAccountImpl",
       "args": [
         0,
         true,
-        "0x0DA4a2e6FABac2EEb55dC3cfa48a8aEed2bAEefc"
+        "0xedbD3DD27c2B8bE165790663e77605Ba832C5c3b"
       ],
-      "initCodeHash": "0xd8cd6e35c9b8be58195e78e54b634d2db915d745cd660d0fb5778ba44f1ff07c",
-      "deployTx": "0x3dcc5765da78a6d1106a72ee57490c43c2fa32bb4ddef82baad5d6670710bfb3"
+      "initCodeHash": "0x99a5cf116878b4bee5add424e1ed6338008b23a0c854502b182bd77fafd4dab5",
+      "deployTx": "0x5cc8a0341e149ac974b7fb6c3e712d25eb0ade63d91ff4d43cdea1764931d69f"
     },
     "AccountFactory": {
-      "address": "0x12e7A64982e85868C345165bD149d6bE55fcA345",
+      "address": "0x602D0b1A46d6fc77A8690691844Fe0F9a7Be7316",
       "artifact": "AccountFactory.sol/AccountFactory",
       "args": [],
-      "initCodeHash": "0xa85613f47fc252817f87db727e82ee34b716b793d925521f3aa898d8d5b2f713"
+      "initCodeHash": "0xa85613f47fc252817f87db727e82ee34b716b793d925521f3aa898d8d5b2f713",
+      "deployTx": "0x47bb9741cae65744165480f3169b5eaa0302a9868873a629366be0236fc04dac"
     },
     "C13Verifier": {
-      "address": "0xf67f51B70d6e751db52E9Ab8C20e5430dBB04715",
+      "address": "0xAD7432C0BFd52Dd1c62774701005eeAbBc224152",
       "artifact": "C13Verifier.sol/C13Verifier",
       "args": [],
       "initCodeHash": "0x6bb7940450c486efc601df5db8e29082e5328f9d5793e0fa807a5e55b223dc38",
-      "deployTx": "0x8cceeff7449ba219151e0638437c93e950666dfa4e984b0776bc64461deff21d"
+      "deployTx": "0xd69ff6aee5c3ebc235121514d496f22eb6bf3a5adc0440372a3f97789201432e"
     },
     "RoleSignerFactory": {
-      "address": "0x6E721ac3171b611eE9E2FD3e989B7B2563B3A578",
+      "address": "0xc9de1A8cBf55331acF4180bF30f64045e75C364E",
       "artifact": "RoleSignerFactory.sol/RoleSignerFactory",
       "args": [
         0,
@@ -49,34 +50,34 @@
         "10000000000000000"
       ],
       "initCodeHash": "0xb099a5792d3758b0f8c65fe1f7dba9efd9923ad4c8ef0d85329cb60a42ea2b0c",
-      "deployTx": "0xf2c5b79502b03aa132cf82fbd1f0af6ef5bda926c32dbf54856f31a624dc38b0"
+      "deployTx": "0xb98a49da3c21fff50a16debfc5285ebd84109f0298dfe7d2840626ab0b8c8f38"
     }
   },
   "testVault": {
-    "address": "0xd2A752cbA5c92DfEEa06957819F229a6fdC1107a",
-    "privateKey": "0x719beaf8d3bd6187f4467212fde50b9937efcaf53109c6d125157e13f7debd37",
+    "address": "0xC777f69338283Af388ABB2Ae38B524ACaEd2A0A0",
+    "privateKey": "0x738af620ca15c5bedb838f0ff120cd75d30e59e734bbeb1cac57bd514913eba0",
     "note": "Legacy: public devnet-only key for explicit-mode (unbound) accounts; the bound InitConfig needs no stand-in. Never use elsewhere."
   },
   "tokens": {
     "USDC": {
-      "address": "0x78285198eD7Ae004ae654f2Da44338D6e0785Fdf",
+      "address": "0x1049a551b5766170A89B7FC0546a2cb2dbC04c78",
       "symbol": "USDC",
       "decimals": 18,
       "permit": true,
       "usdPerToken": "1000000",
       "artifact": "AccountMocks.sol/PermitToken1271",
       "initCodeHash": "0x61188abbd2f859368fc875e6c457edb814e7736021a6ecf40ba801aafe60e34e",
-      "deployTx": "0x64108691835f863394e3338ece2a1f858eaaff8811b695b60babb952ebe8d072"
+      "deployTx": "0x33438ff8030963829391a7f399cd0d164ae98083726d99fead163a38887b1dab"
     },
     "DAI": {
-      "address": "0x814F7A72b8579040d99d0882681281851C076986",
+      "address": "0xA906a5e54E522a95D361bD2Be84c3d3B3d5d57E9",
       "symbol": "DAI",
       "decimals": 18,
       "permit": false,
       "usdPerToken": "1000000",
       "artifact": "AccountMocks.sol/MockToken",
       "initCodeHash": "0xe281fa69edb5de40faede4bfdd0893903052628db586bf565e41cea46127af3a",
-      "deployTx": "0xa6743c9f1778126c2cc4ec6d74cf044ef25fcd0cc21cc975258c24d5f42e58be"
+      "deployTx": "0x176297f30931709d256f120067f7c5f9032cf0169c4fa001d534a6451da9c730"
     }
   }
 }

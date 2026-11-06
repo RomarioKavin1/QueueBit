@@ -17,10 +17,10 @@ const TANK = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8" as Address;
 const FRESH = "0x9999999999999999999999999999999999999999" as Address;
 const USDC = "0x00000000000000000000000000000000000000c0" as Address;
 const dep = {
-  factory: "0x12e7A64982e85868C345165bD149d6bE55fcA345" as Address,
+  factory: "0x602D0b1A46d6fc77A8690691844Fe0F9a7Be7316" as Address,
   accountImpl: "0xa23d5438Ef67E35829C2E0B03aD13eC3B108C520" as Address,
-  roleSignerFactory: "0x6E721ac3171b611eE9E2FD3e989B7B2563B3A578" as Address,
-  c13Verifier: "0xf67f51B70d6e751db52E9Ab8C20e5430dBB04715" as Address,
+  roleSignerFactory: "0xc9de1A8cBf55331acF4180bF30f64045e75C364E" as Address,
+  c13Verifier: "0xAD7432C0BFd52Dd1c62774701005eeAbBc224152" as Address,
   stakingRegistry: "0x8464135c8F25Da09e49BC8782676a84730C318bC" as Address,
 };
 const vaultPk = `0x${"11".repeat(32)}` as Hex;

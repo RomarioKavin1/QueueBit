@@ -1,13 +1,13 @@
-import { SCHEME_ID } from "@leaked/pq-signer";
-import { ROLE, TX_TYPE, encodeSignRequest, type SignRequest } from "@leaked/ur";
+import { SCHEME_ID } from "@queuebit/pq-signer";
+import { ROLE, TX_TYPE, encodeSignRequest, type SignRequest } from "@queuebit/ur";
 import { decodeFunctionData, encodeFunctionData, getAddress, type Address, type Hex } from "viem";
 import { ERC20_ABI, POLICY_HOOK_ABI, ROLE_EXECUTOR_ABI, roleCallDigest } from "../../src/core/clearsign.js";
 import { aaModules } from "../../src/core/registry.js";
 import { ALICE, recovery, vault } from "./requests.js";
 
 /**
- * tx-type 3 requests (compatible accounts: ERC-4337 + ERC-7579 with the LEAKED modules), shaped as the extension's
- * `buildAaVaultAction` + `AaVault.build` make them: key 4 = a `LeakedRoleExecutor` call with an empty `pqSig`, key 14 =
+ * tx-type 3 requests (compatible accounts: ERC-4337 + ERC-7579 with the QueueBit modules), shaped as the extension's
+ * `buildAaVaultAction` + `AaVault.build` make them: key 4 = a `QueueBitRoleExecutor` call with an empty `pqSig`, key 14 =
  * the executor. The extension's own builder is exercised in test/aa-interop.test.ts.
  */
 
@@ -17,7 +17,7 @@ export const EXECUTOR: Address = getAddress(mods.executor);
 export const HOOK: Address = getAddress(mods.hook);
 export const AA_ACCOUNT: Address = "0x7a5b1c1F2C3D4E5F60718293a4b5C6D7E8F90123";
 /** devnet/deploy's 18-decimal test USDC on the local 4337 chain. */
-export const AA_USDC: Address = "0x78285198eD7Ae004ae654f2Da44338D6e0785Fdf";
+export const AA_USDC: Address = "0x1049a551b5766170A89B7FC0546a2cb2dbC04c78";
 export const NEW_VAULT_PK: Hex = `0x${"5e".repeat(28)}c0ffee01`;
 
 export interface BuiltAa {
@@ -56,7 +56,7 @@ export function wrapAa(
     schemeId: SCHEME_ID,
     expectedPk: role === "vault" ? vault.pk : recovery.pk,
     verifyingContract: executor.toLowerCase() as Hex,
-    origin: "LEAKED extension",
+    origin: "QueueBit extension",
     ...(opts.intent ? { intent: opts.intent } : {}),
   };
   const { functionName, args } = decodeFunctionData({ abi: ROLE_EXECUTOR_ABI, data: calldata });

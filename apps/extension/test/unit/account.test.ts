@@ -24,10 +24,10 @@ const VAULT_PK = `0x${"11".repeat(32)}` as Hex;
 const RECOVERY_PK = `0x${"22".repeat(32)}` as Hex;
 const SCHEME = "0xb2062c48f163f38edbf050c4a98b6abbe194acda9a6de525b69b330a739aa054" as Hex;
 const dep = {
-  factory: "0x12e7A64982e85868C345165bD149d6bE55fcA345" as Address,
+  factory: "0x602D0b1A46d6fc77A8690691844Fe0F9a7Be7316" as Address,
   accountImpl: "0x6770518a08E18eB6dAf13fFf2C7B675375F6A8da" as Address,
-  roleSignerFactory: "0x6E721ac3171b611eE9E2FD3e989B7B2563B3A578" as Address,
-  c13Verifier: "0xf67f51B70d6e751db52E9Ab8C20e5430dBB04715" as Address,
+  roleSignerFactory: "0xc9de1A8cBf55331acF4180bF30f64045e75C364E" as Address,
+  c13Verifier: "0xAD7432C0BFd52Dd1c62774701005eeAbBc224152" as Address,
   stakingRegistry: "0x8464135c8F25Da09e49BC8782676a84730C318bC" as Address,
 };
 const signers = { vaultSigner: "0x00000000000000000000000000000000000000c1" as Address };

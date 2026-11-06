@@ -1,13 +1,13 @@
-import { getProfile, roleSignerPathATx, roleSignerPathBTx, encodeTx, sigHash, type FrameTx } from "@leaked/frames";
-import { SCHEME_ID, keygen, schemes } from "@leaked/pq-signer";
-import { ROLE, TX_TYPE, encodeSignRequest, toHex, type SignRequest } from "@leaked/ur";
+import { getProfile, roleSignerPathATx, roleSignerPathBTx, encodeTx, sigHash, type FrameTx } from "@queuebit/frames";
+import { SCHEME_ID, keygen, schemes } from "@queuebit/pq-signer";
+import { ROLE, TX_TYPE, encodeSignRequest, toHex, type SignRequest } from "@queuebit/ur";
 import { encodeFunctionData, keccak256, parseAbi, stringToHex, type Address, type Hex } from "viem";
 import { ACCOUNT_ABI, ERC20_ABI, ROLE_SIGNER_ABI } from "../../src/core/clearsign.js";
 import { payerKeyFromSeed, seedFromEntropy, wordsToEntropy } from "../../src/core/keys.js";
 
 /**
  * Deterministic requests for unit and e2e tests, built the way the extension builds them: a Path-B (or A) role-signer
- * frame tx from `@leaked/frames` with the PQ placeholder, wrapped in `ur:leaked-sign-request`.
+ * frame tx from `@queuebit/frames` with the PQ placeholder, wrapped in `ur:queuebit-sign-request`.
  */
 
 export const VAULT_WORDS =
@@ -100,7 +100,7 @@ function wrap(
     schemeId: opts.key?.schemeId ?? SCHEME_ID,
     sigIndex: 0,
     expectedPk: opts.key?.pk ?? (role === "vault" ? vault.pk : recovery.pk),
-    origin: "LEAKED extension",
+    origin: "QueueBit extension",
     profileId: PROFILE_ID,
     ...(opts.intent ? { intent: opts.intent } : {}),
     ...(opts.policy ? { policy: opts.policy } : {}),
@@ -191,7 +191,7 @@ export function unknownCall(): Built {
 }
 
 /** The local devnet's Privacy Pools Entrypoint (the registry's 1337 entry: the extension privacy e2e's deployment). */
-export const DEVNET_ENTRYPOINT: Address = "0x03b483F613e62e57fE6b2D007ae1b5b7d2a395A9";
+export const DEVNET_ENTRYPOINT: Address = "0xDe6407DefF80A5296fEAd73892c7c5a32612D67A";
 
 /**
  * The extension's shield step as a Vault approval: `vaultExecute([Entrypoint.deposit(precommitment)] + value)`, with

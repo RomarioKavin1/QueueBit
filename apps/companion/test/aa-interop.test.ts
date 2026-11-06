@@ -1,5 +1,5 @@
-import { SCHEME_ID } from "@leaked/pq-signer";
-import { toHex, type SignRequest } from "@leaked/ur";
+import { SCHEME_ID } from "@queuebit/pq-signer";
+import { toHex, type SignRequest } from "@queuebit/ur";
 import { describe, expect, it } from "vitest";
 import { encodeFunctionData, getAddress, type Address, type Hex } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
@@ -25,13 +25,13 @@ const EXTENSION_AA_VAULT = new URL("../../extension/src/background/aa/vault.ts",
 const mods = aaModules(31337n)!;
 const dep = {
   entryPoint: "0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108",
-  factory: "0x90cf141D2a49FBE9Af1BF34DDff99E3CA2e2AF05",
-  msaImpl: "0x4165661A01cf071b05167E325f276dE43D63C083",
-  bootstrap: "0x99c930235bA710e1Aec88A5Cd3bE6d28AF606656",
-  validator: "0xc41FC70648563A7E719FF4D9A0064ef387e7E979",
+  factory: "0xA90B77188EF3a2f4C9DF2C44533281bAb3A2FBB1",
+  msaImpl: "0xf4821730A575661Ce49590aa50b8f5390dfE5670",
+  bootstrap: "0x863ead776B98AaE1Aefc91846038885b01Ad5487",
+  validator: "0x453b4cA65e8FE639ebA4315833cCd003cc538F8E",
   hook: getAddress(mods.hook),
   executor: getAddress(mods.executor),
-  c13Verifier: "0xf67f51B70d6e751db52E9Ab8C20e5430dBB04715",
+  c13Verifier: "0xAD7432C0BFd52Dd1c62774701005eeAbBc224152",
 } as const;
 
 const policy = {
@@ -239,7 +239,7 @@ describe("compatible accounts: the extension's tx-type 3 requests vs the compani
         { address: AA_ACCOUNT },
         c.req,
         policy,
-        { origin: "LEAKED extension" },
+        { origin: "QueueBit extension" },
         undefined,
       );
       const cbor = fromHexBytes(b.cbor);
