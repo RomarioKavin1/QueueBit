@@ -54,14 +54,6 @@ export async function render() {
   const msaFactory = strip(art("MSAFactory.sol", "MSAFactory").abi);
   const msaProxy = art("MSAProxy.sol", "MSAProxy").bytecode.object;
   const bootstrap = strip(art("Bootstrap.sol", "Bootstrap").abi);
-  const hotSignerFactory = strip(art("LeanPoolHotSignerFactory.sol", "LeanPoolHotSignerFactory").abi);
-  const hotSigner = strip(art("LeanPoolHotSigner.sol", "LeanPoolHotSigner").abi);
-  const depsRegistry = strip(art("DepsRegistry.sol", "DepsRegistry").abi);
-  /** LeanPool (the post-quantum everyday key): absent from deployments recorded before it existed. */
-  const leanpool = (d) => ({
-    depsRegistry: d.contracts.DepsRegistry?.address ?? null,
-    leanPoolHotSignerFactory: d.contracts.LeanPoolHotSignerFactory?.address ?? null,
-  });
   const tokens = (d) =>
     d?.tokens
       ? Object.values(d.tokens)
@@ -99,7 +91,6 @@ export async function render() {
           c13Verifier: deployment.contracts.C13Verifier.address,
           roleSignerFactory: deployment.contracts.RoleSignerFactory.address,
           stakingRegistry: deployment.stakingRegistry,
-          ...leanpool(deployment),
           tokens: tokens(deployment),
         }
       : null;
@@ -118,7 +109,6 @@ export async function render() {
         c13Verifier: deployment.contracts.C13Verifier.address,
         roleSignerFactory: deployment.contracts.RoleSignerFactory.address,
         stakingRegistry: deployment.stakingRegistry,
-        ...leanpool(deployment),
         testVault: deployment.testVault.address,
         tokens: tokens(deployment),
       }
@@ -164,15 +154,6 @@ export const accountFactoryCodeHash = ${j(factoryCodeHash)} as const;
 /** Reference ERC-7579 \`Bootstrap\`: \`initMSA(validators, executors, hook, fallbacks)\`. */
 export const msaBootstrapAbi = ${j(bootstrap)} as const;
 
-/** \`LeanPoolHotSignerFactory\`: creates and predicts the post-quantum everyday key's signer clones. */
-export const leanPoolHotSignerFactoryAbi = ${j(hotSignerFactory)} as const;
-
-/** \`LeanPoolHotSigner\`: the post-quantum everyday key's own sender (VERIFY: LeanPool inclusion; \`execute\`). */
-export const leanPoolHotSignerAbi = ${j(hotSigner)} as const;
-
-/** \`DepsRegistry\` (LeanPool): batch roots, per-signer rings, STARK proof hashes. */
-export const depsRegistryAbi = ${j(depsRegistry)} as const;
-
 /** A devnet test token devnet/deploy put on a local chain (with the static price onboarding proposes). */
 export interface LocalToken {
   address: \`0x\${string}\`;
@@ -209,8 +190,6 @@ export const localDeployment: {
   roleSignerFactory: \`0x\${string}\`;
   /** ERC-8421 staking registry the sidecars read (stake of the role signers, Path A). */
   stakingRegistry: \`0x\${string}\`;
-  depsRegistry: \`0x\${string}\` | null;
-  leanPoolHotSignerFactory: \`0x\${string}\` | null;
   /** Legacy public devnet key for explicit-mode test accounts only; the extension never uses it. */
   testVault: \`0x\${string}\`;
   tokens: LocalToken[];
@@ -224,9 +203,6 @@ export const publicDeployment: {
   c13Verifier: \`0x\${string}\`;
   roleSignerFactory: \`0x\${string}\`;
   stakingRegistry: \`0x\${string}\`;
-  /** LeanPool: null when this deployment predates it. */
-  depsRegistry: \`0x\${string}\` | null;
-  leanPoolHotSignerFactory: \`0x\${string}\` | null;
   tokens: LocalToken[];
 } | null = ${j(pub)};
 `;

@@ -310,22 +310,6 @@ export class KeyringController {
     });
   }
 
-  /**
-   * The 32-byte seed of the post-quantum everyday key (leanSPHINCS, `label` names the scheme and parameter set), from
-   * the recovery phrase with HKDF-SHA256 under its own salt: recoverable from the phrase, independent of the everyday
-   * ECDSA key's index (rotating that key keeps the quantum-safe key), and not derivable from any exported key.
-   */
-  async derivePqSeed(label: string): Promise<Uint8Array> {
-    return this.withMnemonic((mnemonic) => {
-      const seed = mnemonicToSeedSync(mnemonic);
-      try {
-        return hkdf(sha256, seed, utf8ToBytes("queuebit.pq-everyday.v1"), utf8ToBytes(label), 32);
-      } finally {
-        seed.fill(0);
-      }
-    });
-  }
-
   /** Danger zone: remove the everyday key from this browser. Money stays in the account. */
   async reset(): Promise<void> {
     await this.lock();

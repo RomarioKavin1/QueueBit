@@ -35,8 +35,6 @@ export type VaultActionRequest =
   | { type: "unfreeze" }
   | { type: "lockdown" }
   | { type: "setHotKey"; hotKey: Address; index: number }
-  /** Install (or with the zero address, remove) the post-quantum everyday key's `LeanPoolHotSigner`. */
-  | { type: "setPQHotSigner"; signer: Address }
   | { type: "setGuardian"; guardian: Address; enabled: boolean; name?: string }
   | { type: "setRecoverySigner"; signer: Address }
   /** 4337 backend: the executor stores the Recovery key's PQ public key itself (no signer contract). */
@@ -245,22 +243,6 @@ export function buildVaultAction(account: Address, req: VaultActionRequest, cur:
         "Instant. The old everyday key stops working immediately; your address stays the same.",
         [req.hotKey],
       );
-    case "setPQHotSigner":
-      // Removing it is tightening (instant). Installing or replacing it adds a spender that trusts a new LeanPool
-      // aggregator: loosening, so it waits for the timelock (the account refuses it otherwise: MustQueue).
-      return BigInt(req.signer) === 0n
-        ? now(
-            "vaultSetPQHotSigner",
-            "Turn off the quantum-safe everyday key",
-            "Instant. Everyday payments go back to your regular everyday key.",
-            [req.signer],
-          )
-        : {
-            role: "vault",
-            action: "vaultSetPQHotSigner",
-            title: "Use a quantum-safe everyday key",
-            ...queuedLoosen(account, enc("vaultSetPQHotSigner", [req.signer]), cur.timelockDelay),
-          };
     case "setGuardian":
       return now(
         "vaultSetGuardian",

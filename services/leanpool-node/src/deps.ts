@@ -1,7 +1,7 @@
 // EIP-8288 dependency triples. Format and dependencies(tx) follow the EIP exactly; the only difference is where the
 // triples live: the devnet has no frame mode 4 (DEP_VERIFY_FRAME_MODE), so they are the data of the sender's VERIFY
 // frame, which the signature hash covers just as it would cover a mode-4 frame's data. Two layouts of that data:
-//   one triple            the triples themselves, exactly one (QueueBit LeanPoolHotSigner, LeanPool LeanWallet8288)
+//   one triple            the triples themselves, exactly one (a `vk()` sender such as LeanPool LeanWallet8288)
 //   ERC-8286 LeanAccount  verify(abi.encode(validator, abi.encode(LEANPOOL_DEPS, triples, passkeyEntries)))
 import { concat, decodeAbiParameters, getAddress, keccak256, pad, slice, toFunctionSelector, toHex } from "viem";
 import type { Address, Hex } from "viem";

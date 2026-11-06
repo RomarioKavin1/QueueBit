@@ -39,7 +39,6 @@ export {
   QUEUEBIT_VERIFY_ABI,
   accountVerifyData,
   hotSpendTx,
-  leanPoolHotTx,
   leanPoolTriple,
   leanPoolWitness,
   roleSignerPathATx,
@@ -47,7 +46,7 @@ export {
   roleSignerVerifyData,
   selfPaidHotTx,
 } from "./tx/shapes.js";
-export type { HotSpendInit, LeanPoolHotInit, RoleSignerInit, SelfPaidHotInit } from "./tx/shapes.js";
+export type { HotSpendInit, RoleSignerInit, SelfPaidHotInit } from "./tx/shapes.js";
 export { fromWire, toWire } from "./wire.js";
 export type { WireFrameTx } from "./wire.js";
 export { bodyOutcome, frameStatus, parseEthrexReceipt, parseSidecarReceipt } from "./receipts.js";

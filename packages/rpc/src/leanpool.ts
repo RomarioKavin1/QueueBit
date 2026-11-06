@@ -23,7 +23,7 @@ export interface LeanPoolTxStatus {
 export interface LeanPoolStatus {
   name: string;
   aggregating: boolean;
-  /** The aggregator's address: a `LeanPoolHotSigner` names it. */
+  /** The aggregator's address: a LeanAccount keystore policy names it (`Policy.aggregator`). */
   nodeId?: Address;
   registry?: Address;
   chainId?: number;

@@ -5,8 +5,7 @@ import { profile } from "./frameTx.js";
 import type { FrameTx } from "./frameTx.js";
 
 /** A single-dependency sender's tx, as LeanPool's `buildTx8288` made it: `[VERIFY 0x3 (sender, one triple),
- * SENDER(call)]`, entry 0 ARBITRARY and empty. QueueBit's `LeanPoolHotSigner` uses the same layout
- * (`@queuebit/frames` `leanPoolHotTx`). Used by tests and scripts. */
+ * SENDER(call)]`, entry 0 ARBITRARY and empty. Used by tests and scripts. */
 export function buildTx8288(a: {
   wallet: Address;
   vk: Hex;

@@ -42,6 +42,4 @@ export const StorageKeys = {
   accountPlans: "queuebit:accountPlans",
   activity: "queuebit:activity",
   vaultRequests: "queuebit:vaultRequests",
-  /** The post-quantum everyday key's signer, per chain (background/leanpool.ts). */
-  pqEveryday: "queuebit:pqEveryday",
 } as const;

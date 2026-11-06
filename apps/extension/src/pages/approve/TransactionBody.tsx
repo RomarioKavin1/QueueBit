@@ -6,7 +6,6 @@ import { Button, RiskBanner, RouteCard, Spinner } from "../../ui";
 import { formatUsd, hostOf } from "../../ui/format";
 import { call, UiCallError } from "../lib/api";
 import { eth, usdOf } from "../lib/money";
-import { SigningKeyNote, feeLine } from "../lib/signingKey";
 import { approvalId, reject, useArmed } from "./shared";
 
 /**
@@ -73,11 +72,14 @@ export function TransactionBody({ view }: { view: ApprovalView }) {
           {(!route || hot) && (
             <>
               <dt className="text-muted">Fee</dt>
-              <dd>{preview?.feeWei ? feeLine(preview)!.replace(/^Network fee /u, "") : "Checking…"}</dd>
+              <dd>
+                {preview?.feeWei
+                  ? `≈ ${eth(preview.feeWei)} · ${preview.backend === "4337" ? "from your account" : "from your fee tank"}`
+                  : "Checking…"}
+              </dd>
             </>
           )}
         </dl>
-        {hot && <SigningKeyNote preview={preview} />}
         {raw && (
           <RiskBanner
             level="limit"

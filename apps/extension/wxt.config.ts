@@ -33,18 +33,10 @@ if (SHARED_BASE && !/^https:\/\/[a-z0-9.-]+(:\d+)?$|^http:\/\/(localhost|127\.0\
   throw new Error(`VITE_QUEUEBIT_SHARED_BASE must be https://host (got ${SHARED_BASE})`);
 if (SHARED_BASE && LOCAL_DEVNET)
   throw new Error("VITE_QUEUEBIT_SHARED_BASE and VITE_QUEUEBIT_LOCAL_DEVNET exclude each other");
-// The LeanPool node for the post-quantum everyday key (services/leanpool-node): https, or a local node.
-const LEANPOOL_URL = (process.env.VITE_QUEUEBIT_LEANPOOL_URL ?? "").replace(/\/+$/u, "");
-if (
-  LEANPOOL_URL &&
-  !/^https:\/\/[a-z0-9.-]+(:\d+)?(\/.*)?$|^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/.*)?$/u.test(LEANPOOL_URL)
-)
-  throw new Error(`VITE_QUEUEBIT_LEANPOOL_URL must be https://host or a local node (got ${LEANPOOL_URL})`);
 const RPC_HOSTS = [
   "https://altmempool.forshtat.com/*",
   "https://ethereum-sepolia-rpc.publicnode.com/*",
   ...(LOCAL_DEVNET ? ["http://localhost/*"] : []),
-  ...(LEANPOOL_URL ? [`${new URL(LEANPOOL_URL).origin.replace(/:\d+$/u, "")}/*`] : []),
 ];
 
 /**
@@ -95,7 +87,6 @@ export default defineConfig({
       __QUEUEBIT_SHARED_DEVNET__: JSON.stringify(SHARED_BASE !== ""),
       __QUEUEBIT_RELAY_URL__: JSON.stringify((process.env.VITE_QUEUEBIT_RELAY_URL ?? "").replace(/\/+$/u, "")),
       __QUEUEBIT_COMPANION_URL__: JSON.stringify(process.env.VITE_QUEUEBIT_COMPANION_URL ?? ""),
-      __QUEUEBIT_LEANPOOL_URL__: JSON.stringify(LEANPOOL_URL),
       // A faucet only makes sense on a devnet: ignored unless this is a local-devnet build.
       __QUEUEBIT_FAUCET_URL__: JSON.stringify(LOCAL_DEVNET ? (process.env.VITE_QUEUEBIT_FAUCET_URL ?? "") : ""),
     },

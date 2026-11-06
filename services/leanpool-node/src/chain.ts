@@ -31,7 +31,7 @@ export const REGISTRY_ABI = parseAbi([
   "event RootPosted(bytes32 indexed root, address indexed aggregator, uint16 count, uint8 ring)",
   "event ProofAttached(bytes32 indexed root, address indexed aggregator, bytes32 proofHash)",
 ]);
-/** A single-dependency sender's key (QueueBit `LeanPoolHotSigner.vk()`, LeanPool `LeanWallet8288.vk()`). */
+/** A single-dependency sender's key, read from its `vk()` (LeanPool `LeanWallet8288`-style senders). */
 const SENDER_ABI = parseAbi(["function vk() view returns (bytes32)", "function aggregator() view returns (address)"]);
 const KEYSTORE_ABI = parseAbi([
   "function getKey(address account, bytes32 keyId) view returns ((uint8 kind, uint8 weight, uint8 roles, uint48 validUntil, uint128 perTxCap, bytes32 a, bytes32 b))",
@@ -145,7 +145,7 @@ export function makeChain(cfg: NodeConfig, log: (...a: unknown[]) => void): Node
       if (!validator) {
         const own = await pub.readContract({ address: sender, abi: SENDER_ABI, functionName: "vk" }).catch(() => null);
         if (!own || own.toLowerCase() !== vk.toLowerCase()) return false;
-        // A sender that names its aggregator (LeanPoolHotSigner) only accepts roots from it: batching it anywhere else
+        // A sender that names its aggregator (`aggregator()`) only accepts roots from it: batching it anywhere else
         // would post a root its VERIFY never reads.
         const agg = await pub
           .readContract({ address: sender, abi: SENDER_ABI, functionName: "aggregator" })

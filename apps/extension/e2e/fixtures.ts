@@ -157,9 +157,7 @@ export async function onboard(
     const link = (await page.getByTestId("pair-qr").getAttribute("data-link"))!;
     words = await opts.relay(link);
   } else {
-    // With a relay (onboarding v2) the manual code sits behind this link; without one it is shown directly.
-    const manual = page.getByRole("button", { name: "Can't scan? Use the manual code" });
-    if (await manual.count()) await manual.click();
+    await page.getByRole("button", { name: "Can't scan? Use the manual code" }).click();
     await shots?.("onboarding-2b-manual", page);
     await pasteCode(page, phone.pairingText);
   }

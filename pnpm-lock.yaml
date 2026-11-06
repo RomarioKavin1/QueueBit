@@ -147,9 +147,6 @@ importers:
       '@queuebit/groth16':
         specifier: workspace:*
         version: link:../../packages/groth16
-      '@queuebit/lean-sphincs':
-        specifier: workspace:*
-        version: link:../../packages/lean-sphincs
       '@queuebit/pq-signer':
         specifier: workspace:*
         version: link:../../packages/pq-signer

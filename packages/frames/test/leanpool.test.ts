@@ -2,48 +2,44 @@ import { decodeAbiParameters, keccak256, type Address, type Hex } from "viem";
 import { describe, expect, it } from "vitest";
 import {
   LEANSPHINCS_SCHEME,
+  arbitraryEntry,
   decodeTx,
   encodeTx,
   getProfile,
-  leanPoolHotTx,
   leanPoolTriple,
   leanPoolWitness,
+  newTx,
+  selfVerify,
+  senderFrame,
   setSignature,
   sigHash,
   validateTx,
 } from "../src/index.js";
 
 const tracer = getProfile("ethrex-eip8141-tracer");
-const SIGNER: Address = "0x00000000000000000000000000000000000Ab0C1";
+const SENDER: Address = "0x00000000000000000000000000000000000Ab0C1";
 const VK: Hex = keccak256("0x01");
-const body = { data: "0x12345678" as Hex, execution: 200_000n, state: 50_000n };
 
+/** A single-dependency LeanPool sender's tx: `[VERIFY 0x3 (sender, triple), SENDER(call)]`, entry 0 an empty witness. */
 const build = (nonceKey = 3n) =>
-  leanPoolHotTx(tracer, {
+  newTx({
     chainId: 1337,
+    sender: SENDER,
+    nonceKeys: [nonceKey],
     nonceSeq: 7n,
-    nonceKey,
     fees: { maxFeePerGas: 2_000_000_000n },
-    signer: SIGNER,
-    vk: VK,
-    verifyGas: 90_000n,
-    body,
+    frames: [
+      selfVerify(tracer, { execution: 90_000n, data: leanPoolTriple(VK) }),
+      senderFrame(tracer, { target: SENDER, data: "0x12345678", execution: 200_000n, state: 50_000n }),
+    ],
+    signatures: [arbitraryEntry(tracer, 0)],
   });
 
-describe("LeanPool PQ everyday tx", () => {
-  it("is [VERIFY 0x3 (sender, triple), SENDER(signer, body)] with one empty ARBITRARY entry", () => {
+describe("LeanPool tx encoding", () => {
+  it("builds a valid tx with the triple in a sender-targeted VERIFY frame and one empty ARBITRARY entry", () => {
     const tx = build();
-    expect(tx.sender).toBe(SIGNER);
-    expect(tx.nonceKeys).toEqual([3n]);
-    expect(tx.frames).toHaveLength(2);
-    const [v, s] = tx.frames;
-    expect(v!.mode).toBe(1);
-    expect(v!.flags & 0x3).toBe(0x3);
-    expect(v!.target).toBeNull(); // the LeanPool node reads triples from sender-targeted VERIFY frames only
-    expect(v!.data).toBe(leanPoolTriple(VK));
-    expect(s!.mode).toBe(2);
-    expect(s!.target).toBe(SIGNER);
-    expect(s!.data).toBe(body.data);
+    expect(tx.frames[0]!.target).toBeNull(); // the LeanPool node reads triples from sender-targeted VERIFY frames only
+    expect(tx.frames[0]!.data).toBe(leanPoolTriple(VK));
     expect(tx.signatures).toEqual([{ scheme: 0, signer: "0x", msg: "0x", signature: "0x" }]);
     expect(validateTx(tracer, tx)).toEqual([]);
   });
@@ -68,22 +64,6 @@ describe("LeanPool PQ everyday tx", () => {
     expect(root).toBe(keccak256("0x02"));
     expect(ring).toBe(5);
     expect(proof).toHaveLength(2);
-  });
-
-  it("refuses a profile that commits to signature lengths (the witness is filled after signing)", () => {
-    const current = getProfile("eip8141-current");
-    expect(() =>
-      leanPoolHotTx(current, {
-        chainId: 1,
-        nonceSeq: 0n,
-        nonceKey: 1n,
-        fees: { maxFee: 1n, maxPriorityFeePerGas: 1n },
-        signer: SIGNER,
-        vk: VK,
-        verifyGas: 90_000n,
-        body,
-      }),
-    ).toThrow(/empty/u);
   });
 
   it("signs a different hash per nonce lane", () => {

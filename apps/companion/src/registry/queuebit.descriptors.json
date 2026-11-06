@@ -119,7 +119,6 @@
       "function vaultSetFeePolicy(uint256 maxPriorityFeePerGas, bool selfPay, address tank)",
       "function vaultSetGuardian(address guardian, bool enabled)",
       "function vaultSetHotKey(address newHotKey)",
-      "function vaultSetPQHotSigner(address signer)",
       "function vaultSetRecipientMode(uint8 mode)",
       "function vaultSetRecoverySigner(address newRecoverySigner)",
       "function vaultSetSession(address target, bytes4 selector, uint256 allowanceUsd, uint48 expiry)",
@@ -553,18 +552,6 @@
       "timing": "now",
       "fields": {
         "newHotKey": {
-          "format": "addressName"
-        }
-      }
-    },
-    "account.vaultSetPQHotSigner": {
-      "role": "vault",
-      "admin": true,
-      "intent": "Use a quantum-safe everyday key: {signer}",
-      "consequence": "Everyday payments can then be signed with a post-quantum key through LeanPool, under the same daily limit and allowed lists. 0x0000…0000 turns it off.",
-      "timing": "now",
-      "fields": {
-        "signer": {
           "format": "addressName"
         }
       }
@@ -1480,7 +1467,6 @@
     "account.vaultSetFeePolicy": "0xe2909d4e",
     "account.vaultSetGuardian": "0x0a98eed4",
     "account.vaultSetHotKey": "0xbf147947",
-    "account.vaultSetPQHotSigner": "0x7c39fbd3",
     "account.vaultSetRecipientMode": "0x1e7baa4c",
     "account.vaultSetRecoverySigner": "0xc23fa856",
     "account.vaultSetSession": "0x07271ff4",

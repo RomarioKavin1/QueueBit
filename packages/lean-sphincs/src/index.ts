@@ -2,7 +2,7 @@
  * @queuebit/lean-sphincs: leanVM leanSPHINCS, the post-quantum signature scheme LeanPool nodes verify and aggregate
  * (EIP-8288's `LEANSPHINCS_SCHEME`). QueueBit uses it for the post-quantum everyday key: the extension signs a frame
  * transaction's signature hash, a LeanPool node verifies the signature off-chain and batches it, and the account's
- * `LeanPoolHotSigner` only checks the batch's Merkle root on-chain.
+ * the LeanAccount keystore only checks the batch's Merkle root on-chain.
  *
  * WASM core (Rust crate `queuebit-lean-sphincs`, `rust/`) over leanVM `signatures` at revision `a39758d`, the one
  * `@kevaundray/lean-pq` 0.7.0 binds: keys and signatures are byte-compatible with the LeanPool node
@@ -27,7 +27,7 @@ initSync({ module: fromBase64(WASM_BASE64) });
 
 /** Seed (master secret) length. */
 export const SEED_LENGTH = 32;
-/** Public key length: the EIP-8288 `verification_key_hash` of the triple and `LeanPoolHotSigner.vk()`. */
+/** Public key length: the EIP-8288 `verification_key_hash` of the triple and the LeanAccount keystore's PQ key (`KeyInit.a`). */
 export const PK_LENGTH = 32;
 /** Signature length at leanVM a39758d. */
 export const SIG_LENGTH = 4276;

@@ -20,7 +20,6 @@ import { call, UiCallError } from "../lib/api";
 import { useAsync } from "../lib/hooks";
 import { eth, parseEth } from "../lib/money";
 import { startVault } from "./vaultStart";
-import { QuantumSafeRow } from "./QuantumSafe";
 
 type SheetKind = "pause" | "rotate" | "lockdown" | "guardian" | "watcher" | "topup" | null;
 
@@ -80,7 +79,6 @@ export function Security({ state }: { state: WalletState }) {
                 : `Active · limit ${formatUsd(s.limits.capUsd)} in any 24 hours`
           }
         />
-        <QuantumSafeRow disabled={!s.deployed || s.frozen || s.bunker} />
         <Row
           icon={<VaultIcon size={20} />}
           tone="vault"
@@ -489,7 +487,7 @@ function TopUpSheet({
   );
 }
 
-export function SheetButtons({ onBack, children }: { onBack: () => void; children: ReactNode }) {
+function SheetButtons({ onBack, children }: { onBack: () => void; children: ReactNode }) {
   return (
     <div className="mt-4 flex gap-2">
       <Button variant="secondary" block onClick={onBack}>
@@ -500,7 +498,7 @@ export function SheetButtons({ onBack, children }: { onBack: () => void; childre
   );
 }
 
-export function Row({
+function Row({
   icon,
   tone,
   name,

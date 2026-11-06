@@ -1,7 +1,7 @@
 import { erc20Abi, parseGwei, type Address, type Hex, type PublicClient } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { fromWire, signTx, type FrameTxReceipt, type Profile } from "@queuebit/frames";
-import type { LeanPoolClient, NodeClient, SidecarClient } from "@queuebit/rpc";
+import { fromWire, signTx, type Profile } from "@queuebit/frames";
+import type { NodeClient, SidecarClient } from "@queuebit/rpc";
 import { submitStandardLane } from "./submit";
 import { findNetwork, type Network } from "../shared/chains";
 import type { AccountStatus, RouteView, SendPreview } from "../shared/views";
@@ -38,15 +38,6 @@ import { bumpFees, FrameEngine, type EngineRpc } from "./engine";
 import type { KeyringController } from "./keyring";
 import { PolicyReader, type AccountChainState } from "./policy";
 import { decideRoute, routeCopy, usdNumber, type Call, type RouteDecision } from "./routing";
-import {
-  PQ_FALLBACK_REASONS,
-  PQ_MIN_BALANCE,
-  PqEverydayError,
-  describePq,
-  type PqEveryday,
-  type PqEverydayRecord,
-  type PqEverydayState,
-} from "./leanpool";
 import { AaError, AaPayments, aaNetwork } from "./aa/payments";
 import { BundlerClient } from "./aa/userop";
 
@@ -57,8 +48,6 @@ export interface ChainIo {
   sidecar?(url: string): SidecarClient;
   /** 4337 backend: the chain's bundler (defaults to the network's `bundlerUrl`). */
   bundler?(chainId: number): BundlerClient;
-  /** A LeanPool node client by URL (defaults to JSON-RPC over HTTP). */
-  leanpool?(url: string): LeanPoolClient;
 }
 
 export interface PaymentsDeps {
@@ -68,8 +57,6 @@ export interface PaymentsDeps {
   activity: ActivityStore;
   getLimits(): Promise<SetupState>;
   now: () => number;
-  /** The post-quantum everyday key (LeanPool), when this build has it. */
-  pq?: PqEveryday;
 }
 
 /**
@@ -124,9 +111,7 @@ export class PaymentsError extends Error {
       | "no-account"
       | "no-recovery"
       | "bad-amount"
-      | "top-up-failed"
-      | "pq-fee-low"
-      | "pq-refused",
+      | "top-up-failed",
     message: string,
   ) {
     super(message);
@@ -596,24 +581,18 @@ export class Payments {
     }
     const { state, decision, prepared } = await this.evaluate(chainId, calls);
     const tankWei = await this.d.io.publicClient(chainId).getBalance({ address: state.tank });
-    const pq = decision.route === "hot" ? await this.pqLane(chainId, plan) : undefined;
     return {
       chainId,
       route: routeView(decision, state),
       ...(prepared ? { feeWei: prepared.feeWei.toString(), maxCostWei: prepared.maxCostWei.toString() } : {}),
       effects: this.effects(calls, state.tank),
-      ...(prepared && !pq?.record && tankWei < prepared.maxCostWei ? { tankTooLow: true } : {}),
-      ...(pq ? { signingKey: pq.view } : {}),
+      ...(prepared && tankWei < prepared.maxCostWei ? { tankTooLow: true } : {}),
       ethUsdPrice: usdNumber(state.ethUsdPrice),
     };
   }
 
   /** Sends an everyday payment. Refuses anything the router does not clear (RouteError) and never sends unsimulated. */
-  send(
-    chainId: number,
-    calls: Call[],
-    meta: { origin?: string; batchId?: string; forceEveryday?: boolean } = {},
-  ): Promise<ActivityEntry> {
+  send(chainId: number, calls: Call[], meta: { origin?: string; batchId?: string } = {}): Promise<ActivityEntry> {
     if (findNetwork(chainId)?.backend === "4337") {
       return this.serialized(() =>
         this.aaCall(async () => {
@@ -627,28 +606,6 @@ export class Payments {
     return this.serialized(async () => {
       const { plan, state, decision, prepared } = await this.evaluate(chainId, calls);
       if (decision.route !== "hot" || !prepared) throw new RouteError(decision, routeView(decision, state));
-      // The post-quantum everyday key, when it is installed, preferred, funded and its LeanPool node answers. The
-      // payment was just checked as an everyday transaction (same body, same limits: `_hotExecute`); only the key and
-      // the lane differ. If the node can't take it, the checked everyday transaction goes out instead, and says so.
-      let fallbackNote: string | undefined;
-      const pq = meta.forceEveryday ? undefined : await this.pqLane(chainId, plan);
-      if (pq?.record) {
-        try {
-          return await this.sendPq(chainId, plan.address, state.tank, calls, decision, prepared, pq.record, meta);
-        } catch (e) {
-          // Only what failed before the node got the payment may go out with the everyday key (nothing to pay twice);
-          // a refusal is the user's to see.
-          if (!(e instanceof PqEverydayError) || !PQ_FALLBACK_REASONS.has(e.reason)) {
-            throw new PaymentsError("pq-refused", (e as Error).message);
-          }
-          fallbackNote =
-            e.reason === "node-down"
-              ? "LeanPool isn't answering, so this payment used your regular everyday key."
-              : e.message;
-        }
-      } else if (pq?.view.kind === "everyday") {
-        fallbackNote = pq.view.fallback;
-      }
       const tankWei = await this.d.io.publicClient(chainId).getBalance({ address: state.tank });
       if (tankWei < prepared.maxCostWei) {
         throw new PaymentsError("tank-low", "Your fee tank is empty. Everyday payments need it to pay network fees.");
@@ -682,175 +639,11 @@ export class Payments {
         detail: `Network fee about ${ethAmount(prepared.feeWei)} from your fee tank.`,
         steps: pendingSteps(acalls),
         feeWei: prepared.feeWei.toString(),
-        ...(fallbackNote ? { fallbackNote } : {}),
         createdAt: now,
         updatedAt: now,
       };
       await this.d.activity.add(entry);
       return entry;
-    });
-  }
-
-  // ------------------------------------------------------------------------- post-quantum everyday key ----
-
-  /**
-   * Whether the next everyday payment on `chainId` goes through the quantum-safe key: `record` when it does; else
-   * `view.fallback` says why not (only when the user turned it on), so the preview and the activity can tell them.
-   */
-  private async pqLane(
-    chainId: number,
-    plan: AccountPlan,
-  ): Promise<{ record?: PqEverydayRecord; view: NonNullable<SendPreview["signingKey"]> } | undefined> {
-    if (!this.d.pq) return undefined;
-    const net = findNetwork(chainId);
-    let st: PqEverydayState;
-    try {
-      st = await this.d.pq.state(net, plan.address);
-    } catch {
-      return undefined;
-    }
-    if (st.state !== "on" || !st.record.preferred) return undefined;
-    if (!st.nodeOk)
-      return {
-        view: {
-          kind: "everyday",
-          fallback: "LeanPool isn't answering, so this payment uses your regular everyday key.",
-        },
-      };
-    if (BigInt(st.balanceWei) < PQ_MIN_BALANCE) {
-      return {
-        view: {
-          kind: "everyday",
-          fallback:
-            "Your quantum-safe key's fee balance is low, so this payment uses your regular everyday key. Top it up in Security.",
-        },
-      };
-    }
-    return { record: st.record, view: { kind: "quantum-safe", feeBalanceWei: st.balanceWei } };
-  }
-
-  private async sendPq(
-    chainId: number,
-    account: Address,
-    tank: Address,
-    calls: Call[],
-    decision: RouteDecision,
-    prepared: NonNullable<Awaited<ReturnType<Payments["evaluate"]>>["prepared"]>,
-    record: PqEverydayRecord,
-    meta: { origin?: string; batchId?: string },
-  ): Promise<ActivityEntry> {
-    const net = findNetwork(chainId)!;
-    const busy = new Set(
-      (await this.d.activity.pending())
-        .filter((e) => e.lane === "leanpool" && e.pqSigner?.toLowerCase() === record.signer.toLowerCase())
-        .map((e) => e.nonce.split(":")[0]!),
-    );
-    const sent = await this.d.pq!.submit({
-      net,
-      record,
-      declaredUsd: decision.amountUsd,
-      calls,
-      twin: prepared.wire,
-      fees: prepared.fees,
-      busyLanes: busy,
-    });
-    const now = this.d.now();
-    const acalls = toActivityCalls(calls);
-    const entry: ActivityEntry = {
-      id: crypto.randomUUID(),
-      chainId,
-      kind: "payment",
-      ...(meta.origin ? { origin: meta.origin } : {}),
-      ...(meta.batchId ? { batchId: meta.batchId } : {}),
-      account,
-      tank,
-      calls: acalls,
-      declaredUsd: decision.amountUsd.toString(),
-      rules: decision.rules,
-      hash: sent.poolId,
-      replaced: [],
-      nonce: `${sent.nonceKey}:${sent.nonceSeq}`,
-      wire: sent.wire,
-      fees: {
-        maxFeePerGas: prepared.fees.maxFeePerGas.toString(),
-        maxPriorityFeePerGas: prepared.fees.maxPriorityFeePerGas.toString(),
-      },
-      lane: "leanpool",
-      poolId: sent.poolId,
-      pqNodeUrl: record.nodeUrl,
-      pqSigner: record.signer,
-      sentAtBlock: (await this.d.io.publicClient(chainId).getBlockNumber()).toString(),
-      ...describePq({ calls: acalls, declaredUsd: decision.amountUsd.toString() }, { stage: "pooled" }, null, {
-        labels: this.labels(tank),
-      }),
-      ...(sent.unconfirmed
-        ? {
-            detail:
-              "LeanPool didn't confirm it received this payment. QueueBit is following it; it won't be sent twice.",
-          }
-        : {}),
-      createdAt: now,
-      updatedAt: now,
-    };
-    await this.d.activity.add(entry);
-    return entry;
-  }
-
-  /** A post-quantum payment: follows it on its LeanPool node, then reads the mined receipt. */
-  private async refreshPq(e: ActivityEntry): Promise<ActivityEntry | undefined> {
-    if (!this.d.pq || !e.poolId || !e.pqNodeUrl) return undefined;
-    const st = await this.d.pq.track(e.pqNodeUrl, e.poolId);
-    const labels = this.labels(e.tank);
-    if (!st) {
-      // The node no longer knows it (a restart): the signer's nonce lane tells whether it was included.
-      const [lane, seq] = e.nonce.split(":");
-      if (!lane || !seq || !e.pqSigner || this.d.now() - e.createdAt < 10 * 60_000) return undefined;
-      const next = await this.d.pq.laneNonce(findNetwork(e.chainId)!, e.pqSigner, BigInt(lane));
-      return this.d.activity.update(e.id, {
-        ...(next > BigInt(seq)
-          ? {
-              status: "confirmed" as const,
-              headline: `Paid ${intentTitle(e.calls, labels)}`,
-              detail: "Included on-chain (LeanPool lost its record after a restart, so the details aren't available).",
-            }
-          : {
-              status: "failed" as const,
-              headline: "Not sent: LeanPool lost this payment",
-              detail: "Its node restarted before the payment was batched. Nothing was paid; send it again.",
-            }),
-        steps: e.steps,
-      });
-    }
-    let receipt: FrameTxReceipt | null = null;
-    let feeWei: bigint | undefined;
-    if ((st.stage === "mined" || st.stage === "reverted") && st.txHash) {
-      receipt = await this.engine(e.chainId).receipt(st.txHash);
-      if (!receipt) return undefined;
-      const gasUsed =
-        receipt.gasUsed ?? receipt.frameReceipts.reduce((a, f) => a + f.gasUsed.execution + f.gasUsed.state, 0n);
-      feeWei = gasUsed * BigInt(e.fees!.maxFeePerGas);
-      if (receipt.blockNumber !== undefined) {
-        const block = await this.d.io.publicClient(e.chainId).getBlock({ blockNumber: receipt.blockNumber });
-        const eff = (block.baseFeePerGas ?? 0n) + BigInt(e.fees!.maxPriorityFeePerGas);
-        if (eff < BigInt(e.fees!.maxFeePerGas)) feeWei = gasUsed * eff;
-      }
-    }
-    const next = describePq(e, st, receipt, { ...(feeWei !== undefined ? { feeWei } : {}), labels });
-    const final = next.status !== "confirming";
-    // Waiting for more than ~6 blocks: say so (the node may be slow, censoring, or down).
-    let stuck = false;
-    if (!final && e.sentAtBlock) {
-      stuck = (await this.d.io.publicClient(e.chainId).getBlockNumber()) - BigInt(e.sentAtBlock) >= 6n;
-    }
-    const batch = st.batch ? { pqBatch: st.batch } : {};
-    if (!final && next.detail === e.detail && stuck === Boolean(e.stuck) && !st.batch?.proofHash) return undefined;
-    return this.d.activity.update(e.id, {
-      ...next,
-      ...batch,
-      stuck,
-      ...(st.txHash && final ? { hash: st.txHash } : {}),
-      ...(feeWei !== undefined ? { feeWei: feeWei.toString() } : {}),
-      ...(receipt?.blockNumber !== undefined ? { blockNumber: receipt.blockNumber.toString() } : {}),
     });
   }
 
@@ -863,12 +656,6 @@ export class Payments {
         throw new PaymentsError(
           "unsupported",
           "Speed up and cancel aren't available for compatible accounts yet: the bundler retries on its own.",
-        );
-      }
-      if (entry.lane === "leanpool") {
-        throw new PaymentsError(
-          "unsupported",
-          "Quantum-safe payments are batched by LeanPool and can't be sped up or cancelled; they usually land within a minute.",
         );
       }
       if (entry.kind === "activation" || !entry.fees || (entry.status !== "confirming" && entry.status !== "sending")) {
@@ -980,7 +767,6 @@ export class Payments {
         blockNumber: r.blockNumber.toString(),
       });
     }
-    if (e.lane === "leanpool") return this.refreshPq(e);
     const engine = this.engine(e.chainId);
     if (!e.wire) return undefined;
     const account = fromWire(e.wire).sender;
@@ -1042,8 +828,7 @@ export class Payments {
   /** After an SW restart: in-flight nonces from the pending activity (plan §30 §4.5). */
   async rehydrate(): Promise<void> {
     for (const e of await this.d.activity.pending()) {
-      if (e.wire && e.lane !== "leanpool")
-        this.engine(e.chainId).markInFlight(fromWire(e.wire).sender, BigInt(e.nonce));
+      if (e.wire) this.engine(e.chainId).markInFlight(fromWire(e.wire).sender, BigInt(e.nonce));
     }
   }
 }

@@ -57,12 +57,12 @@ test("8288 limits apply to the deduplicated list: 17 copies of one triple are le
   expect(() => deps.dependencies(tx(distinct))).toThrow(/at most/);
 });
 
-test("leaf = keccak256(triple with the resolved data_hash) = LeanPoolHotSigner's keccak256(abi.encodePacked(uint256(0x10), SIG_HASH, vk))", () => {
+test("leaf = keccak256(triple with the resolved data_hash) = the LeanAccount keystore's keccak256(abi.encodePacked(uint256(0x10), SIG_HASH, vk))", () => {
   const sh = keccak256(toHex("sig hash"));
   const dep = { scheme: 0x10, dataHash: sh, vk: vk(5) };
   const leaf = deps.leafOf(dep);
   expect(leaf).toBe(keccak256(deps.encodeTriple(dep)));
-  // The Solidity expression in LeanPoolHotSigner (and LeanPool's LeanWallet8288): the same 96-byte preimage.
+  // The Solidity expression in KeystoreValidator (contracts/src/leanpool/account): the same 96-byte preimage.
   expect(leaf).toBe(keccak256(encodePacked(["uint256", "bytes32", "bytes32"], [0x10n, sh, vk(5)])));
 });
 
