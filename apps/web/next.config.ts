@@ -8,11 +8,16 @@ import type { NextConfig } from "next";
  *
  * Build flags the engine reads (apps/extension/src/shared/build.ts), from the environment at build time:
  *   NEXT_PUBLIC_QUEUEBIT_LOCAL_DEVNET=1    chain 1337 is the local devnet (devnet/), not the public one
- *   NEXT_PUBLIC_QUEUEBIT_LEANPOOL_URL      the default LeanPool node (the /test page can override it at run time)
+ *   NEXT_PUBLIC_QUEUEBIT_LEANPOOL_URL      the LeanPool node (default: the public devnet's; a local devnet's on :8701;
+ *                                          the /test page can override it at run time)
  *   NEXT_PUBLIC_QUEUEBIT_FAUCET_URL        a local devnet's `?address=` faucet
  */
 const LOCAL_DEVNET = process.env.NEXT_PUBLIC_QUEUEBIT_LOCAL_DEVNET === "1";
-const LEANPOOL_URL = (process.env.NEXT_PUBLIC_QUEUEBIT_LEANPOOL_URL ?? "http://127.0.0.1:8701").replace(/\/+$/u, "");
+/** QueueBit's LeanPool node for the public devnet (aggregator 0x99Bd…AF41, the one its accounts trust). */
+const PUBLIC_LEANPOOL_URL = "https://basis-continent-baby-families.trycloudflare.com";
+const LEANPOOL_URL = (
+  process.env.NEXT_PUBLIC_QUEUEBIT_LEANPOOL_URL ?? (LOCAL_DEVNET ? "http://127.0.0.1:8701" : PUBLIC_LEANPOOL_URL)
+).replace(/\/+$/u, "");
 const FAUCET_URL = LOCAL_DEVNET ? (process.env.NEXT_PUBLIC_QUEUEBIT_FAUCET_URL ?? "") : "";
 
 const WORKSPACE = [

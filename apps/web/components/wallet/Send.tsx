@@ -551,13 +551,13 @@ function explain(e: unknown): { text: string; detail?: string; atPool: boolean }
   const pool = e instanceof EngineCallError && e.reason === "leanpool";
   if (pool && /fetch|answer|reach|timed? ?out|UNREACHABLE/iu.test(raw))
     return {
-      text: "LeanPool, the service that checks quantum-safe signatures, can't be reached right now. Nothing was sent and your ETH hasn't moved.",
+      text: "The payment service can't be reached right now. Nothing was sent and your ETH hasn't moved.",
       detail: raw,
       atPool: true,
     };
   if (pool)
     return {
-      text: "LeanPool refused the payment. Nothing was sent and your ETH hasn't moved.",
+      text: "The payment service refused the payment. Nothing was sent and your ETH hasn't moved.",
       detail: raw,
       atPool: true,
     };
@@ -637,7 +637,6 @@ function Sending({ nav, draft, preview, onRetry }: { nav: Nav; draft: Draft; pre
   const steps: Array<{ label: string; done: boolean }> = [
     ...(creating ? [{ label: "Account created", done: created }] : []),
     { label: "Signed with your quantum-safe key", done: entry !== null || Boolean(err?.atPool) },
-    { label: "Checked by LeanPool", done: entry !== null && (stage !== undefined || done) },
     { label: "Batched on chain", done: (stage !== undefined && AFTER_POOL.has(stage)) || done },
     { label: "Confirmed", done },
   ];

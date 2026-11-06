@@ -47,7 +47,6 @@ function journey(e: ActivityEntry): Array<{ label: string; done: boolean }> | nu
   const after = e.stage === "posted" || e.stage === "submitted" || e.stage === "mined";
   return [
     { label: "Signed with your quantum-safe key", done: true },
-    { label: "Checked by LeanPool", done: e.stage !== undefined || done },
     { label: "Batched on chain", done: after || done },
     { label: "Confirmed", done },
   ];
