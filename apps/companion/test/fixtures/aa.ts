@@ -124,6 +124,17 @@ export function aaFreeze(): BuiltAa {
   return wrapAa(exec("vaultExec", [AA_ACCOUNT, [hook("freeze", [AA_ACCOUNT, 2n ** 48n - 1n])], 0n, 8n]));
 }
 
+export const ZERO_PK: Hex = `0x${"00".repeat(32)}`;
+
+/**
+ * A queued executor-self setter (`setRecoveryKey`): linking a key, or removing it (`pk == 0`). `executor` names the
+ * module the call targets AND key 14; an unknown one must not be read as a setting.
+ */
+export function aaSetRecoveryKey(pk: Hex, executor: Address = EXECUTOR): BuiltAa {
+  const data = encodeFunctionData({ abi: ROLE_EXECUTOR_ABI, functionName: "setRecoveryKey", args: [AA_ACCOUNT, pk] });
+  return wrapAa(exec("vaultQueue", [AA_ACCOUNT, [{ target: executor, value: 0n, data }], 1, 9n]), { executor });
+}
+
 /** Recovery: replace the Vault with a new key (7 days). */
 export function aaRotation(): BuiltAa {
   return wrapAa(exec("recoveryStartVaultRotation", [AA_ACCOUNT, NEW_VAULT_PK, 0n]), { role: "recovery" });

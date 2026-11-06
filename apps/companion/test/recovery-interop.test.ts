@@ -116,7 +116,14 @@ describe("the Recovery fee key", () => {
   it("is in the recovery-test code, covered by the Recovery key's signature (v2 challenge)", async () => {
     await load();
     const t = (await handle(
-      { op: "recoveryTest", requestId: "5b6c7d8e-9f0a-4b1c-8d2e-3f4a5b6c7d8e" },
+      {
+        op: "recoveryTest",
+        challenge: {
+          requestId: "5b6c7d8e-9f0a-4b1c-8d2e-3f4a5b6c7d8e",
+          recoveryPk: recovery.pk,
+          expiresAt: Date.now() + 60_000,
+        },
+      },
       () => {},
     )) as Extract<WorkerResult, { op: "recoveryTest" }>;
     await handle({ op: "recoveryWipe" }, () => {});
@@ -150,9 +157,15 @@ describe("the Recovery fee key", () => {
       const signed = setSignature(profile, setSignature(profile, b.tx, 0, s.witness!), 1, s.payerSig!);
       expect((await recoverSecp256k1Signer(profile, signed, 1)).toLowerCase()).toBe(recovery.payer.toLowerCase());
       // Recovery mode signs once, then forgets both keys.
-      await expect(handle({ op: "recoveryTest", requestId: review.request.requestId }, () => {})).rejects.toThrow(
-        /No Recovery key/,
-      );
+      await expect(
+        handle(
+          {
+            op: "recoveryTest",
+            challenge: { requestId: review.request.requestId, recoveryPk: recovery.pk, expiresAt: Date.now() + 60_000 },
+          },
+          () => {},
+        ),
+      ).rejects.toThrow(/No Recovery key/);
     }, 60_000);
   }
 

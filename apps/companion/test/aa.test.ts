@@ -17,6 +17,8 @@ import {
   aaQueueOpenMode,
   aaRotation,
   aaSend,
+  aaSetRecoveryKey,
+  ZERO_PK,
   aaTightenLimits,
   aaUnknownCall,
   wrapAa,
@@ -95,12 +97,34 @@ describe("tx-type 3: clear signing", () => {
     expect(r.actions[0]!.unknown?.reason).toBe("A setting for a different account");
   });
 
-  it("an executor this app doesn't know: a warning, and its hook calls are not trusted as settings", () => {
+  it("linking a Recovery key and removing it (pk = 0) read as what they do", () => {
+    const link = reviewRequestBytes(aaSetRecoveryKey(NEW_VAULT_PK).cbor, ctx());
+    expect(link.headline).toBe(
+      `Link the Recovery key ending …${NEW_VAULT_PK.slice(-8)}: takes effect after a 48-hour waiting period`,
+    );
+    expect(link.admin?.consequence).toBe("This Recovery key can replace the Vault and cancel scheduled changes.");
+    // `setRecoveryKey(account, 0)` removes the key (the executor queues it: a loosening). Never "Link …00000000".
+    const remove = reviewRequestBytes(aaSetRecoveryKey(ZERO_PK).cbor, ctx());
+    expect(remove.unknown).toBe(false);
+    expect(remove.headline).toBe("Remove the Recovery key: takes effect after a 48-hour waiting period");
+    expect(remove.admin?.consequence).toMatch(/^No Recovery key will be able to replace the Vault/);
+    expect(remove.headline).not.toContain("Link");
+  });
+
+  it("an executor this app doesn't know: a warning, and neither its hook calls nor its own setters are settings", () => {
     const other = "0x1234567890123456789012345678901234567890";
     const r = reviewRequestBytes(wrapAa(aaTightenLimits().request.payload, { executor: other }).cbor, ctx());
     expect(r.warnings.map((w) => w.code)).toContain("unknown-module");
     expect(r.unknown).toBe(true);
     expect(r.structure.knownExecutor).toBe(false);
+    // The same bytes at a known executor read as a setting; at an unknown module they are raw + long-press, as the
+    // warning promises ("can't be shown in plain words").
+    expect(reviewRequestBytes(aaSetRecoveryKey(NEW_VAULT_PK).cbor, ctx()).unknown).toBe(false);
+    const self = reviewRequestBytes(aaSetRecoveryKey(NEW_VAULT_PK, other).cbor, ctx());
+    expect(self.unknown).toBe(true);
+    expect(self.approval).toBe("unknown");
+    expect(self.actions[0]!.unknown?.reason).toBe("A setting in a module this app doesn't know");
+    expect(self.headline).not.toContain("Link");
   });
 
   it("the digest is bound to the chain and the executor (key 2, key 14)", () => {

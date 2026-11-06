@@ -39,8 +39,9 @@ describe("recovery challenge", () => {
   it("the worker answers with a v2 test bound to the browser's request id (and the payer key 6)", async () => {
     await handle({ op: "recoveryLoad", entropy: wordsToEntropy(RECOVERY_WORDS), bip39Passphrase: "" }, noop);
     const c = readChallenge(challengeCbor(), Date.now());
+    // The id signed is the scanned challenge's own: the UI cannot hand the worker a different one.
     const r = await handle(
-      { op: "recoveryTest", requestId: c.requestId, challenge: { recoveryPk: c.recoveryPk, expiresAt: c.expiresAt } },
+      { op: "recoveryTest", challenge: { requestId: c.requestId, recoveryPk: c.recoveryPk, expiresAt: c.expiresAt } },
       noop,
     );
     if (r.op !== "recoveryTest") throw new Error("recoveryTest");
@@ -55,11 +56,7 @@ describe("recovery challenge", () => {
     await handle({ op: "recoveryLoad", entropy: wordsToEntropy(RECOVERY_WORDS), bip39Passphrase: "" }, noop);
     await expect(
       handle(
-        {
-          op: "recoveryTest",
-          requestId: REQUEST_ID,
-          challenge: { recoveryPk: recovery.pk, expiresAt: Date.now() - 1 },
-        },
+        { op: "recoveryTest", challenge: { requestId: REQUEST_ID, recoveryPk: recovery.pk, expiresAt: Date.now() - 1 } },
         noop,
       ),
     ).rejects.toMatchObject({ code: "E-61" });
@@ -67,11 +64,13 @@ describe("recovery challenge", () => {
       handle(
         {
           op: "recoveryTest",
-          requestId: REQUEST_ID,
-          challenge: { recoveryPk: vault.pk, expiresAt: Date.now() + 60_000 },
+          challenge: { requestId: REQUEST_ID, recoveryPk: vault.pk, expiresAt: Date.now() + 60_000 },
         },
         noop,
       ),
     ).rejects.toMatchObject({ code: "E-71" });
+    // Nothing was signed, and no test exists without a challenge: the request type has no other shape.
+    // @ts-expect-error a phone-chosen id is not a request the worker accepts
+    await expect(handle({ op: "recoveryTest", requestId: REQUEST_ID }, noop)).rejects.toThrow();
   });
 });

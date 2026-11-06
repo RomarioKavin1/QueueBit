@@ -95,8 +95,7 @@ async function signTest(ch: ScannedChallenge): Promise<Built> {
   try {
     const r = await call({
       op: "recoveryTest",
-      requestId: ch.requestId,
-      challenge: { recoveryPk: ch.recoveryPk, expiresAt: ch.expiresAt },
+      challenge: { requestId: ch.requestId, recoveryPk: ch.recoveryPk, expiresAt: ch.expiresAt },
     });
     return {
       type: UR_TYPES.recoveryTest,
@@ -192,7 +191,10 @@ function ChallengeCard({ ch }: { ch: ScannedChallenge }) {
       <p className="t-strong" data-testid="challenge-expiry">
         {left > 0 ? `Answer before ${formatClock(ch.expiresAt)} (${left} min left)` : "This test code has expired"}
       </p>
-      <p className="t-small text-muted">The browser accepts one answer to this code.</p>
+      <p className="t-small text-muted">
+        The browser accepts one answer to this code, and may stop a little earlier (it started counting when it showed
+        the code).
+      </p>
     </div>
   );
 }
@@ -209,6 +211,8 @@ export function Ceremony() {
   const [error, setError] = useState<string>();
   const words = useRef<string[]>([]);
   const positions = useRef<number[]>([]);
+  /** The worker holds the key from `generate` until a test attempt wipes it; a retry re-derives it from the words. */
+  const keyLoaded = useRef(false);
 
   const leave = () => {
     words.current = [];
@@ -229,6 +233,7 @@ export function Ceremony() {
     words.current = entropyToWords(e);
     try {
       const r = await call({ op: "recoveryLoad", entropy: e, bip39Passphrase: "" });
+      keyLoaded.current = true;
       setPk(r.pk);
       setPayer(r.payerAddress);
       setStep("words");
@@ -243,6 +248,17 @@ export function Ceremony() {
   const finish = async () => {
     setStep("signing");
     try {
+      if (!keyLoaded.current) {
+        // A previous attempt (an expired code, say) wiped the key: the same words make the same key again.
+        const e = wordsToEntropy(words.current);
+        try {
+          const r = await call({ op: "recoveryLoad", entropy: e, bip39Passphrase: "" });
+          if (r.pk.toLowerCase() !== pk!.toLowerCase()) throw new Error("The Recovery key could not be re-derived.");
+        } finally {
+          e.fill(0);
+        }
+      }
+      keyLoaded.current = false; // signTest wipes the key, whatever happens
       setBuilt(await signTest(ch!));
       words.current = [];
       await store.log_({

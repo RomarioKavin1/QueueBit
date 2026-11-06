@@ -209,7 +209,7 @@ const CASES: Array<{
     name: "linking the Recovery key (executor setRecoveryKey)",
     req: { type: "setRecoveryKey", pk: recovery.pk },
     role: "vault",
-    headline: `Link the Recovery key ending …${recovery.pk.slice(-8)}: takes effect now if this is your first Recovery key; replacing one has to wait`,
+    headline: `Link the Recovery key ending …${recovery.pk.slice(-8)}: takes effect now if this is your first Recovery key; replacing or removing one has to wait`,
   },
   {
     name: "a Recovery cancel",

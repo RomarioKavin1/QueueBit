@@ -188,10 +188,8 @@ describe("signing worker", () => {
     expect(loaded).toEqual({ op: "recoveryLoad", pk: recovery.pk, payerAddress: recovery.payer });
     expect(recovery.payer).not.toBe(vault.payer);
     const id = "7a1e2b3c-4d5e-4f60-8a1b-2c3d4e5f6a7b";
-    const t = (await handle({ op: "recoveryTest", requestId: id }, noop)) as Extract<
-      WorkerResult,
-      { op: "recoveryTest" }
-    >;
+    const challenge = { requestId: id, recoveryPk: recovery.pk, expiresAt: Date.now() + 60_000 };
+    const t = (await handle({ op: "recoveryTest", challenge }, noop)) as Extract<WorkerResult, { op: "recoveryTest" }>;
     const test = decodeRecoveryTest(t.cbor);
     expect(test.recoveryPk).toBe(recovery.pk);
     expect(test.payer).toBe(recovery.payer.toLowerCase());
@@ -209,7 +207,7 @@ describe("signing worker", () => {
     const s = decodeSignature(r.signatureCbor);
     expect(s.payerSig).toBeUndefined();
     expect(verify(fromHex(recovery.pk), fromHex(b.digest), fromHex(s.witness!))).toBe(true);
-    await expect(handle({ op: "recoveryTest", requestId: id }, noop)).rejects.toThrow(/No Recovery key/);
+    await expect(handle({ op: "recoveryTest", challenge }, noop)).rejects.toThrow(/No Recovery key/);
   }, 60_000);
 
   it("the activity log: sealed to the Vault's log key, readable only through the worker with the passphrase", async () => {

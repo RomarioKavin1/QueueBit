@@ -56,7 +56,11 @@ export interface FormatSpec {
   changes?: ChangeSpec[];
   /** `equals` matches a decoded bool or a small integer (an enum, e.g. `RecipientMode.Open` = 0). */
   looserWhen?: { field: string; equals?: boolean | number; greaterThan?: number };
-  derived?: Record<string, { when: { field: string; equals: boolean | number }; template: string }>;
+  /** `equals` / `notEquals`: a decoded bool, a small integer, or a hex string (a `bytes32` such as the zero key). */
+  derived?: Record<
+    string,
+    { when: { field: string; equals?: boolean | number | string; notEquals?: boolean | number | string }; template: string }
+  >;
   compare?: { recipient?: string; amount?: string; token?: string };
 }
 

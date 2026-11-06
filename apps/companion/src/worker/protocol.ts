@@ -61,10 +61,11 @@ export type WorkerRequest =
   | { op: "recoveryLoad"; entropy: Uint8Array; bip39Passphrase: string }
   | {
       op: "recoveryTest";
-      /** The browser's request id (`ur:leaked-recovery-challenge` key 1); phone-chosen ids are refused by browsers. */
-      requestId: string;
-      /** The scanned challenge: the worker refuses a test for another key, or after it expired. */
-      challenge?: { recoveryPk: Hex; expiresAt: number };
+      /**
+       * The scanned `ur:leaked-recovery-challenge`: the worker signs over ITS request id (never one the UI picks, which
+       * browsers refuse anyway), and refuses a test for another key or after the code expired.
+       */
+      challenge: { requestId: string; recoveryPk: Hex; expiresAt: number };
     }
   | { op: "recoveryWipe" };
 

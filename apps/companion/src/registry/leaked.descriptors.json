@@ -1202,12 +1202,42 @@
     "roleExecutor.setRecoveryKey": {
       "role": "vault",
       "admin": true,
-      "intent": "Link the Recovery key ending …{pk}",
-      "consequence": "This Recovery key can replace the Vault and cancel scheduled changes.",
+      "intent": "{linkClause}{removeClause}",
+      "consequence": "{linkEffect}{removeEffect}",
       "timing": "firstInstallNowElseWaits",
       "fields": {
         "pk": {
           "format": "keyTail"
+        }
+      },
+      "derived": {
+        "linkClause": {
+          "when": {
+            "field": "pk",
+            "notEquals": "0x0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "template": "Link the Recovery key ending …{pk}"
+        },
+        "removeClause": {
+          "when": {
+            "field": "pk",
+            "equals": "0x0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "template": "Remove the Recovery key"
+        },
+        "linkEffect": {
+          "when": {
+            "field": "pk",
+            "notEquals": "0x0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "template": "This Recovery key can replace the Vault and cancel scheduled changes."
+        },
+        "removeEffect": {
+          "when": {
+            "field": "pk",
+            "equals": "0x0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "template": "No Recovery key will be able to replace the Vault or cancel scheduled changes. Losing the Vault then means losing the account."
         }
       },
       "action": "vaultSetRecoverySigner"

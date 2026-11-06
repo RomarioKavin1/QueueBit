@@ -606,7 +606,7 @@ function reviewRoleCall(req: SignRequest, ctx: DeviceContext): Review {
 
   const actions =
     entry.format?.kind === "container"
-      ? renderExecutorBatch(entry, args, account, executor, knownExecutor ? known!.hook : undefined, r)
+      ? renderExecutorBatch(entry, args, account, executor, knownExecutor ? known!.hook : undefined, knownExecutor, r)
       : [renderFormatted(entry, args, executor, r)];
   recoveryGuard(ctx, actions);
   // The key that signs must be the one the entry point checks (a Vault call names the Vault's key, and so on).
@@ -632,7 +632,8 @@ function reviewRoleCall(req: SignRequest, ctx: DeviceContext): Review {
 /**
  * A `vaultExec` / `vaultQueue` batch, routed as the executor runs it: calls to the executor itself and to the hook are
  * settings (account first, no value: `_checkShape`), calls to the account itself are module changes, anything else is
- * a call the account makes (a payment, a token call, an app).
+ * a call the account makes (a payment, a token call, an app). Settings are only read as such at the executor and
+ * hook this app knows for the chain: a module it doesn't know gets raw bytes (the `unknown-module` warning says so).
  */
 function renderExecutorBatch(
   entry: FunctionEntry,
@@ -640,6 +641,7 @@ function renderExecutorBatch(
   account: Address,
   executor: Address,
   hook: Address | undefined,
+  knownExecutor: boolean,
   r: RenderCtx,
 ): ActionView[] {
   const calls = (args.calls as ExecCall[]) ?? [];
@@ -648,7 +650,12 @@ function renderExecutorBatch(
   if (calls.length === 0) out.push(unknownAction(r.ctx, r.chainId, account, "0x", 0n, "An empty batch"));
   for (const c of calls) {
     const target = checksum(c.target);
-    if (isAddressEqual(target, executor)) out.push(renderSetter("roleExecutor", target, c, account, inner));
+    if (isAddressEqual(target, executor))
+      out.push(
+        knownExecutor
+          ? renderSetter("roleExecutor", target, c, account, inner)
+          : unknownAction(r.ctx, r.chainId, target, c.data, c.value, "A setting in a module this app doesn't know"),
+      );
     else if (hook && isAddressEqual(target, hook)) out.push(renderSetter("policyHook", target, c, account, inner));
     else if (isAddressEqual(target, account))
       out.push(unknownAction(r.ctx, r.chainId, target, c.data, c.value, "A change to the account's own modules"));
@@ -880,7 +887,8 @@ function renderFormatted(
     });
   }
   for (const [name, d] of Object.entries(f.derived ?? {})) {
-    const on = args[d.when.field] === d.when.equals;
+    const v = args[d.when.field];
+    const on = d.when.equals !== undefined ? v === d.when.equals : v !== d.when.notEquals;
     values[name] = on ? interpolate(d.template, values) : "";
   }
 
@@ -1146,7 +1154,7 @@ function timingFor(t: string, r: RenderCtx, loosening: boolean): TimingView {
     case "sevenDays":
       return { waitSeconds: 604_800n, text: "takes effect in 7 days" };
     case "firstInstallNowElseWaits":
-      return { text: "takes effect now if this is your first Recovery key; replacing one has to wait" };
+      return { text: "takes effect now if this is your first Recovery key; replacing or removing one has to wait" };
     case "tightenNowLoosenWaits":
       return loosening
         ? { waitSeconds: 0n, text: "takes effect now (only allowed if it doesn't raise risk)" }

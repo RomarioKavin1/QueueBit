@@ -193,16 +193,15 @@ export async function handle(
       if (!recoveryKey) throw new SignRefused("No Recovery key is loaded.");
       const pk = toHex(recoveryKey.publicKey);
       const payer = recoveryKey.payer.toLowerCase() as Hex;
-      if (req.challenge) {
-        try {
-          checkChallenge(req.challenge, pk, Date.now());
-        } catch (e) {
-          const c = e as ChallengeRefused;
-          throw new SignRefused(c.message, c.code, c.title, c.body);
-        }
+      // The test answers the browser's challenge only: its key, its request id, while it is fresh.
+      try {
+        checkChallenge(req.challenge, pk, Date.now());
+      } catch (e) {
+        const c = e as ChallengeRefused;
+        throw new SignRefused(c.message, c.code, c.title, c.body);
       }
       // v2 challenge: the witness also covers the Recovery payer address the browser will put in InitConfig.
-      const challenge = recoveryTestChallenge(SCHEME_ID, pk, req.requestId, payer);
+      const challenge = recoveryTestChallenge(SCHEME_ID, pk, req.challenge.requestId, payer);
       progress("sign");
       const witness = pqSign(recoveryKey.secretKey, fromHex(challenge));
       progress("verify");
@@ -210,7 +209,7 @@ export async function handle(
       return {
         op: "recoveryTest",
         cbor: encodeRecoveryTest({
-          requestId: req.requestId,
+          requestId: req.challenge.requestId,
           schemeId: SCHEME_ID,
           recoveryPk: pk,
           witness: toHex(witness),
