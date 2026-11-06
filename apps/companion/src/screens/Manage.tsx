@@ -222,7 +222,9 @@ export function Health() {
                 </p>
                 <p className="mt-1 t-small text-muted">
                   This key type has a limited number of safe signatures per key. This phone counts every signature it
-                  makes (a retry counts too) and asks you to replace the key at 90%; at 100% it stops.
+                  makes (a retry counts too) and asks you to replace the key at 90%; at 100% it stops. The count lives
+                  on this phone only: if you restore the phone from a backup, the count goes back with it, so replace
+                  the key after any such restore.
                   {st.estimatedSecurityBits !== undefined &&
                     Number.isFinite(st.estimatedSecurityBits) &&
                     !st.unknown &&

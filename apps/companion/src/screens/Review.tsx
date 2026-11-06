@@ -459,6 +459,7 @@ function ApproveSheet({
                 Replace the key
               </Button>
             )}
+            {gate.ok && <SwitchNotice review={review} />}
             {gate.ok && <BudgetNotice review={review} />}
             {needsPass && gate.ok && (
               <PassphraseField
@@ -498,6 +499,24 @@ function ApproveSheet({
         )}
       </div>
     </Sheet>
+  );
+}
+
+/**
+ * Key rotation: the request names the prepared replacement key. Approving it is also the moment this phone switches
+ * over and retires the current key, so the user is told before, not only after.
+ */
+function SwitchNotice({ review }: { review: Review }) {
+  const store = useStore();
+  const v = store.vault;
+  if (!v?.next || review.kind !== "frameTx" || review.signingKey !== "next") return null;
+  const k = keyState(v);
+  return (
+    <p className="flex items-start gap-2 t-small text-limit" data-testid="switch-notice">
+      <WarnIcon size={16} className="mt-0.5 shrink-0" />
+      This request is for your new key #{k.next?.keyNumber}. Approving it switches this phone to the new key for good;
+      key #{k.keyNumber} will no longer approve anything. Only do this once the browser has switched to the new key.
+    </p>
   );
 }
 

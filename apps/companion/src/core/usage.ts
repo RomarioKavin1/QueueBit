@@ -14,6 +14,11 @@ import type { SealedBlob } from "./vaultCrypto.js";
  *    between keys without the passphrase. `hint` is a plaintext copy for the screens that run before the passphrase
  *    is entered; the worker enforces `max(sealed, hint)`, so lowering the hint achieves nothing.
  *  - `null` = unknown: a key restored from the words may have signed elsewhere. Unknown counts as "exceeded".
+ *  - What the sealing cannot do: it binds the count to the key and the passphrase, not to time. Restoring this phone's
+ *    storage from a backup (an OS backup, a copied browser profile) brings back an older, lower, perfectly valid
+ *    sealed count, and nothing on the phone can tell. The budget is soft (pq-signer README: security degrades
+ *    gradually past it, no one-time-key cliff), so an undercount by a backup's worth of signatures weakens the key a
+ *    little rather than breaking it; Key health says to replace the key after any restore from a backup.
  */
 
 export interface UsageRecord {

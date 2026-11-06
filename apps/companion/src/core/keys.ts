@@ -11,9 +11,11 @@ import { getAddress, type Address, type Hex } from "viem";
  *    and role, in WASM).
  *  - Path-B payer (fee-payment) key: BIP-32 `m/44'/60'/8141'/0/0` of the same seed (a separate branch).
  *  - Recovery payer key (the Recovery signer's Path-B fee key, so a Recovery key can act on the public mempool):
- *    BIP-32 `m/44'/60'/8141'/1'/0'` of the *Recovery* seed. A different, hardened branch from the Vault's, so the two
- *    fee keys are independent even if one mnemonic were (wrongly) used for both roles, and a leaked child key plus an
- *    xpub of the parent can never reach the other role's branch.
+ *    BIP-32 `m/44'/60'/8141'/1'/0'` of the *Recovery* seed: different words, and a different branch. The branch is
+ *    hardened so that, even if one mnemonic were (wrongly) used for both roles, a leaked Recovery fee key plus any
+ *    xpub can never reach the Vault's branch. (The Vault's `0/0` is not hardened: a leaked Vault fee key plus the
+ *    xpubs of its parents would recover `m/44'/60'/8141'` and with it every branch, so no xpub is ever exported from
+ *    the worker.)
  * Only the signing worker calls the derivations that produce secrets; the UI thread handles words only while the user
  * reads or types them.
  */

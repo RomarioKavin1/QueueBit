@@ -153,8 +153,10 @@ export function UpdateBanner() {
               </div>
             </dl>
             <p className="t-body">
-              Every file of the new build was checked against its build id before it was offered. If you can, compare
-              the new build id with the one LEAKED publishes for this release before you update.
+              Every file of the new build was checked against the fingerprints that build carries, so the download is
+              complete and not a mix of builds. That check can't tell a genuine build from one served by a compromised
+              site: if you can, compare the new build id with the one LEAKED publishes for this release before you
+              update.
             </p>
             <p className="t-small text-muted">
               Your Vault, address book and history stay on this phone. Don't update in the middle of an approval.

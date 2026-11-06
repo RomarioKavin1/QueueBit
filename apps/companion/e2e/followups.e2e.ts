@@ -131,7 +131,13 @@ test("leanSphincs-s restore: count unknown → approvals refused → replace the
   await page.goto("./");
   const built = H.leanFreeze(k2.pk, "0a1b2c3d-4e5f-4a6b-8c7d-8e9f0a1b2c3d");
   await pasteRequest(page, H.requestText(built.cbor));
-  await approveWith(page, H.PASSPHRASE);
+  await page.getByTestId("approve").click();
+  // The switch is announced before the passphrase is asked, not only after the signature.
+  await expect(page.getByTestId("switch-notice")).toContainText("new key #2");
+  await expect(page.getByTestId("switch-notice")).toContainText("key #1 will no longer approve");
+  await page.getByTestId("approve-pass").fill(H.PASSPHRASE);
+  await page.getByTestId("approve-sign").click();
+  await expect(page.getByTestId("signed-banner")).toBeVisible({ timeout: 60_000 });
   await expect(page.getByTestId("signed-banner")).toContainText("now uses your new Vault key");
   const r = await H.checkSignature(await page.getByTestId("ur-text").inputValue(), built, k2.pk);
   expect(r.witnessOk).toBe(true);
@@ -197,7 +203,8 @@ test("activity log: encrypted at rest, readable with the passphrase", async ({ p
         req.onerror = () => reject(req.error);
       }),
   );
-  for (const needle of ["USDC", "Alice", "daily limit", "250"]) expect(dump).not.toContain(needle);
+  // (Not a bare "250": timestamps and the measured signing time are stored in clear and can contain it.)
+  for (const needle of ["USDC", "Alice", "daily limit", "Send 250", "250 USDC"]) expect(dump).not.toContain(needle);
 
   await page.getByTestId("nav-settings").click();
   await expect(page.getByTestId("activity")).toContainText("Activity on this phone (2)");
