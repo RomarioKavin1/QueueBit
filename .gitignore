@@ -15,3 +15,8 @@ coverage/
 playwright-report/
 test-results/
 devnet/data/
+
+# Release output (scripts/release)
+/release/
+/audit/
+/sbom/

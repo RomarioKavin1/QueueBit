@@ -7,3 +7,10 @@ packages:
 overrides:
   # @ngraveio/bc-ur imports it only from its React Native entry; its react-native peer would pull in ~190 packages.
   "@bacons/text-decoder": "-"
+
+# Supply chain (plan 30-extension.md §9 item 5): no dependency lifecycle script (preinstall/install/postinstall) runs.
+# The allowlist is empty on purpose (no dependency in the lockfile needs one: native binaries ship as optional
+# platform packages), and strictDepBuilds fails the install if a new or updated dependency asks for one, so adding to
+# the list is a reviewed change. Playwright browsers are installed explicitly (`playwright install`), not by a hook.
+onlyBuiltDependencies: []
+strictDepBuilds: true
