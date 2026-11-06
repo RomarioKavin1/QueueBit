@@ -312,3 +312,22 @@ export function leanFreeze(pk: Hex, requestId?: string): Built {
 }
 
 export const LEAN_SCHEME_ID = schemes.leanSphincsS.SCHEME_ID;
+
+/** The typed registrations (`6324659`) reaching the phone inside a Vault batch (the account calling itself). */
+export function typedRegistrations(): Built {
+  const deadline = 1_893_456_000n;
+  return wrap(
+    acct("vaultExecute", [
+      [
+        call(ACCOUNT, acct("registerPermit2", [USDC, 25_000_000n, 1_893_456_000, ALICE, deadline, "0x00000000"])),
+        call(ACCOUNT, acct("registerPermit2Transfer", [USDC, 5_000_000n, ALICE, 300n, deadline, "0x00000000"])),
+        call(
+          ACCOUNT,
+          acct("registerTransferAuthorization", [USDC, 1_000_000n, ALICE, 0n, deadline, `0x${"ab".repeat(32)}`, false]),
+        ),
+      ],
+      0n,
+    ]),
+    { policy: POLICY },
+  );
+}

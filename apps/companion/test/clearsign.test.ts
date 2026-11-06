@@ -25,6 +25,7 @@ import {
   recipientMode,
   recovery,
   rotation,
+  typedRegistrations,
   unknownCall,
   usdcWithdrawal,
   vault,
@@ -164,6 +165,20 @@ describe("other actions", () => {
       "Set fee rules: priority fee up to 2 gwei, only the fee tank pays fees, fee tank 0x4444…4444: takes effect after a 48-hour waiting period",
     );
     expect(fee.actions[0]!.details).toContainEqual({ label: "Scheduled as", value: "settings change" });
+  });
+  it("Permit2 / EIP-3009 typed registrations are clear-signed, not unrecognised calls", () => {
+    const r = reviewRequestBytes(typedRegistrations().cbor, ctx());
+    expect(r.unknown).toBe(false);
+    expect(r.actions.map((a) => [a.id, a.unknown === undefined])).toEqual([
+      ["account.registerPermit2", true],
+      ["account.registerPermit2Transfer", true],
+      ["account.registerTransferAuthorization", true],
+    ]);
+    expect(r.actions.map((a) => a.title)).toEqual([
+      "Pre-approve Alice (0xAb58…eC9B) to take up to 25 USDC through Permit2 until Jan 1, 2030, 12:00 AM UTC",
+      "Pre-approve Alice (0xAb58…eC9B) to take 5 USDC once through Permit2 until Jan 1, 2030, 12:00 AM UTC",
+      "Pre-approve a transfer of 1 USDC to Alice (0xAb58…eC9B), valid until Jan 1, 2030, 12:00 AM UTC",
+    ]);
   });
   it("trusting a verifier is an admin action that waits", () => {
     const r = reviewRequestBytes(trustVerifier().cbor, ctx());

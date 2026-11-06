@@ -101,6 +101,9 @@
       "function recoveryFinalizeVaultRotation()",
       "function recoveryStartVaultRotation(address newVaultSigner)",
       "function registerPermit(address token, address spender, uint256 value, uint256 deadline)",
+      "function registerPermit2(address token, uint160 amount, uint48 expiration, address spender, uint256 sigDeadline, bytes4 sessionSelector)",
+      "function registerPermit2Transfer(address token, uint256 amount, address spender, uint256 nonce, uint256 deadline, bytes4 sessionSelector)",
+      "function registerTransferAuthorization(address token, uint256 value, address to, uint256 validAfter, uint256 validBefore, bytes32 nonce, bool receiveAuth)",
       "function vaultCancel(bytes32 opId)",
       "function vaultEnableBunker()",
       "function vaultExecute((address target, uint256 value, bytes data)[] calls, uint256 usdValue)",
@@ -261,6 +264,111 @@
       },
       "compare": {
         "recipient": "spender",
+        "amount": "value",
+        "token": "token"
+      }
+    },
+    "account.registerPermit2": {
+      "role": "any",
+      "action": "approve",
+      "intent": "Pre-approve {spender} to take up to {amount} through Permit2 until {expiration}",
+      "consequence": "An everyday-key action: it counts against your daily limit. The site must use it before {sigDeadline}.",
+      "timing": "now",
+      "fields": {
+        "amount": {
+          "format": "tokenAmount",
+          "tokenPath": "token"
+        },
+        "spender": {
+          "format": "addressName",
+          "recipient": true
+        },
+        "token": {
+          "format": "tokenName"
+        },
+        "expiration": {
+          "format": "date"
+        },
+        "sigDeadline": {
+          "format": "date"
+        },
+        "sessionSelector": {
+          "format": "selector"
+        }
+      },
+      "compare": {
+        "recipient": "spender",
+        "amount": "amount",
+        "token": "token"
+      }
+    },
+    "account.registerPermit2Transfer": {
+      "role": "any",
+      "action": "approve",
+      "intent": "Pre-approve {spender} to take {amount} once through Permit2 until {deadline}",
+      "consequence": "An everyday-key action: it counts against your daily limit.",
+      "timing": "now",
+      "fields": {
+        "amount": {
+          "format": "tokenAmount",
+          "tokenPath": "token"
+        },
+        "spender": {
+          "format": "addressName",
+          "recipient": true
+        },
+        "token": {
+          "format": "tokenName"
+        },
+        "nonce": {
+          "format": "integer"
+        },
+        "deadline": {
+          "format": "date"
+        },
+        "sessionSelector": {
+          "format": "selector"
+        }
+      },
+      "compare": {
+        "recipient": "spender",
+        "amount": "amount",
+        "token": "token"
+      }
+    },
+    "account.registerTransferAuthorization": {
+      "role": "any",
+      "action": "approve",
+      "intent": "Pre-approve a transfer of {value} to {to}, valid until {validBefore}",
+      "consequence": "An everyday-key action: it counts against your daily limit.",
+      "timing": "now",
+      "fields": {
+        "value": {
+          "format": "tokenAmount",
+          "tokenPath": "token"
+        },
+        "to": {
+          "format": "addressName",
+          "recipient": true
+        },
+        "token": {
+          "format": "tokenName"
+        },
+        "validAfter": {
+          "format": "date"
+        },
+        "validBefore": {
+          "format": "date"
+        },
+        "nonce": {
+          "format": "shortHex"
+        },
+        "receiveAuth": {
+          "format": "raw"
+        }
+      },
+      "compare": {
+        "recipient": "to",
         "amount": "value",
         "token": "token"
       }
@@ -1315,6 +1423,9 @@
     "account.recoveryFinalizeVaultRotation": "0x8180feb4",
     "account.recoveryStartVaultRotation": "0x15d06497",
     "account.registerPermit": "0xfde0b559",
+    "account.registerPermit2": "0xe21863ef",
+    "account.registerPermit2Transfer": "0x4e6cd6ea",
+    "account.registerTransferAuthorization": "0x24c939f4",
     "account.vaultCancel": "0xc149d5d0",
     "account.vaultEnableBunker": "0xf4c28ef6",
     "account.vaultExecute": "0xb2ac5883",
