@@ -26,6 +26,8 @@ interface ILeakedRoleContext {
     function rotationPending(address account) external view returns (bool);
     /// True if `account` has a recovery key (bunker needs one, H6 / I-7).
     function hasRecovery(address account) external view returns (bool);
+    /// True if `who` is an enabled guardian of `account` (execution only: not an account-associated slot).
+    function isGuardian(address account, address who) external view returns (bool);
 }
 
 /// @title LeakedPolicyHook
@@ -140,7 +142,7 @@ contract LeakedPolicyHook is IERC7579Hook, ILeakedModules {
         Policy storage p = _policies[account];
         if (p.initialized || p.retired) revert AlreadyInitialized(account);
         HookInit memory c = abi.decode(data, (HookInit));
-        if (c.hotKey == address(0) || c.hotKey == account) revert BadAddress(c.hotKey);
+        _checkHotKey(account, c.hotKey);
         _checkBounds(c.perTxMaxUsd, c.maxFeeWei, c.maxPriorityFeePerGas);
 
         p.initialized = true;
@@ -159,8 +161,14 @@ contract LeakedPolicyHook is IERC7579Hook, ILeakedModules {
             _tokens[address(0)][account] = TokenCfg(true, 18, c.ethUsdPrice);
             emit TokenConfigured(account, address(0), true, 18, c.ethUsdPrice);
         }
-        for (uint256 i; i < c.tokens.length; ++i) {
+        uint256 nt = c.tokens.length;
+        if (nt > MAX_TOKENS) revert TooManyTokens();
+        for (uint256 i; i < nt; ++i) {
             TokenInit memory t = c.tokens[i];
+            // Install-time rules on top of `setToken`'s (mirrors the account's `InitConfig.tokens`): a real contract
+            // (ETH is `ethUsdPrice`; the hot key is never a token), listed once.
+            if (t.token == address(0) || t.token == c.hotKey || t.token.code.length == 0) revert BadAddress(t.token);
+            if (_tokens[t.token][account].allowed) revert DuplicateToken(t.token);
             _setToken(account, p, t.token, true, t.decimals, t.usdPerToken);
         }
         for (uint256 i; i < c.targets.length; ++i) {
@@ -320,7 +328,7 @@ contract LeakedPolicyHook is IERC7579Hook, ILeakedModules {
     /// Hot key rotation; instant (clears bunker).
     function setHotKey(address account, address newHotKey) external onlyExecutor {
         Policy storage p = _initialized(account);
-        if (newHotKey == address(0) || newHotKey == account) revert BadAddress(newHotKey);
+        _checkHotKey(account, newHotKey);
         address old = p.hotKey;
         p.hotKey = newHotKey;
         if (p.bunker) {
@@ -620,7 +628,10 @@ contract LeakedPolicyHook is IERC7579Hook, ILeakedModules {
             if (d.length == 0) {
                 // Plain ETH: to an allowlisted recipient, or (Open) to any recipient, with value (t != 0 above). A
                 // zero-value empty call moves nothing and only runs the target's fallback: it needs the allowlist.
-                if (!_targets[t][account] && (value == 0 || !open)) revert NotAllowed(t, bytes4(0));
+                if (!_targets[t][account]) {
+                    if (value == 0 || !open) revert NotAllowed(t, bytes4(0));
+                    _checkOpenRecipient(account, t, bytes4(0), validation);
+                }
                 staticDebit += _quoteStrict(account, address(0), value);
                 continue;
             }
@@ -638,6 +649,7 @@ contract LeakedPolicyHook is IERC7579Hook, ILeakedModules {
                     uint256(toWord) >> 160 != 0 || to == account || to == t || to == address(this) || to == EXECUTOR
                         || (!_targets[to][account] && (to == address(0) || !open))
                 ) revert NotAllowed(to, sel);
+                if (!_targets[to][account]) _checkOpenRecipient(account, to, sel, validation);
                 staticDebit += _quote(tc, uint256(LeakedExecDecoder.argWord(d, 1)));
                 continue;
             }
@@ -658,6 +670,23 @@ contract LeakedPolicyHook is IERC7579Hook, ILeakedModules {
         }
         assembly ("memory-safe") {
             mstore(sids, k)
+        }
+    }
+
+    /// Open mode, a recipient the vault has not allowlisted (mirrors the account's `ForbiddenRecipient`): never an
+    /// allowlisted token contract (its own balance is not an everyday payee) or an enabled guardian (a freeze-only
+    /// role). The guardian set lives in the executor, outside the account-associated slots ERC-7562 lets validation
+    /// read [STO-021], so it is checked in execution (`preCheck`) only; the userOp then reverts in execution.
+    function _checkOpenRecipient(address account, address to, bytes4 sel, bool validation) internal view {
+        if (_tokens[to][account].allowed) revert NotAllowed(to, sel);
+        if (!validation && ILeakedRoleContext(EXECUTOR).isGuardian(account, to)) revert NotAllowed(to, sel);
+    }
+
+    /// The hot key is never the account or a LEAKED module (roles distinct from the hot key, as the account's
+    /// `BadAddress` for a role signer).
+    function _checkHotKey(address account, address hotKey) internal view {
+        if (hotKey == address(0) || hotKey == account || hotKey == address(this) || hotKey == EXECUTOR) {
+            revert BadAddress(hotKey);
         }
     }
 

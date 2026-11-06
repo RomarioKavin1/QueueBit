@@ -59,6 +59,9 @@ interface ILeakedModules {
         uint256 maxPriorityFeePerGas;
         /// USD (6 decimals) per 1 ETH; 0 = ETH is not hot-spendable.
         uint256 ethUsdPrice;
+        /// At most `MAX_TOKENS`, no duplicates (`DuplicateToken`), each a contract other than the account or a LEAKED
+        /// module (`BadAddress`; ETH is `ethUsdPrice`), `usdPerToken != 0`, `decimals <= 36` (`BadConfig`). One
+        /// `TokenConfigured` each (mirrors the account's `InitConfig.tokens`).
         TokenInit[] tokens;
         address[] targets;
         /// Appended (2026-11-06): Open (0) by default.
@@ -182,6 +185,8 @@ interface ILeakedModules {
     error FreezeNotExpired(uint48 until);
     error NotFrozen();
     error TooManyTokens();
+    /// `HookInit.tokens` lists `token` twice.
+    error DuplicateToken(address token);
     error HookNotInstalled();
     error HostOwnerNotKeyless(address owner);
 
@@ -199,5 +204,7 @@ interface ILeakedModules {
     error PayloadMismatch();
     error BadKind(uint8 kind);
     error GuardianCooldown(uint48 nextAt);
+    /// The vault and the recovery (or a pending vault) would hold the same PQ public key (mirrors the account).
+    error SameRoleKey();
     error CallFailed(uint256 index, bytes reason);
 }

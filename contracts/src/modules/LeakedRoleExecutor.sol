@@ -98,7 +98,8 @@ contract LeakedRoleExecutor is IERC7579Module, ILeakedModules, ILeakedRoleContex
         if (c.verifier.code.length == 0) revert BadAddress(c.verifier);
         uint256 sigLen = _sigLength(c.verifier);
         if (sigLen == 0) revert BadConfig();
-        if (c.vaultPk == bytes32(0) || c.vaultPk == c.recoveryPk) revert BadConfig();
+        if (c.vaultPk == bytes32(0)) revert BadConfig();
+        if (c.vaultPk == c.recoveryPk) revert SameRoleKey();
         uint48 delay = c.timelockDelay == 0 ? DEFAULT_TIMELOCK : c.timelockDelay;
         if (delay < MIN_TIMELOCK || delay > MAX_TIMELOCK) revert BadConfig();
 
@@ -229,7 +230,8 @@ contract LeakedRoleExecutor is IERC7579Module, ILeakedModules, ILeakedRoleContex
         Roles storage r = _activeRecovery(account);
         _useRecoveryNonce(r, nonce);
         _verify(r, r.recoveryPk, _hashTyped(abi.encode(RECOVERY_ROTATE_TYPEHASH, account, nonce, newVaultPk)), pqSig);
-        if (newVaultPk == bytes32(0) || newVaultPk == r.vaultPk || newVaultPk == r.recoveryPk) revert BadConfig();
+        if (newVaultPk == bytes32(0) || newVaultPk == r.vaultPk) revert BadConfig();
+        if (newVaultPk == r.recoveryPk) revert SameRoleKey();
         uint48 eta = uint48(block.timestamp) + ROTATION_DELAY;
         r.pendingVaultPk = newVaultPk;
         r.pendingVaultEta = eta;
@@ -303,7 +305,9 @@ contract LeakedRoleExecutor is IERC7579Module, ILeakedModules, ILeakedRoleContex
     function setRecoveryKey(address account, bytes32 pk) external {
         Roles storage r = _roles[account];
         _authSelf(account, !(r.recoveryPk == bytes32(0) && pk != bytes32(0)));
-        if (pk == r.vaultPk) revert BadConfig();
+        // Role independence (the account's `SameRoleKey`): never the vault's key, nor a pending vault's (the rotation
+        // would otherwise finalize into a vault and a recovery holding one key).
+        if (pk != bytes32(0) && (pk == r.vaultPk || pk == r.pendingVaultPk)) revert SameRoleKey();
         if (pk == bytes32(0)) {
             (,, bool bunker) = r.hook.getFreeze(account);
             if (bunker) revert BunkerNeedsRecovery();
@@ -324,6 +328,10 @@ contract LeakedRoleExecutor is IERC7579Module, ILeakedModules, ILeakedRoleContex
 
     function hasRecovery(address account) external view returns (bool) {
         return _roles[account].recoveryPk != bytes32(0);
+    }
+
+    function isGuardian(address account, address who) external view returns (bool) {
+        return _guardians[account][who].enabled;
     }
 
     // ---------------------------------------------------------------------------------------- digests ------

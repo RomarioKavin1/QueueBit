@@ -5,6 +5,8 @@ import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {PackedUserOperation, Execution} from "../../src/modules/interfaces/IERC7579Modules.sol";
 import {LeakedPolicyHook} from "../../src/modules/LeakedPolicyHook.sol";
+import {LeakedRoleExecutor} from "../../src/modules/LeakedRoleExecutor.sol";
+import {MockToken} from "./mocks/ModuleMocks.sol";
 import {LeakedModulesBase} from "./LeakedModulesBase.sol";
 
 /// A contract whose fallback must never run from a hot batch: a zero-value empty call or ETH with calldata is not a
@@ -32,6 +34,12 @@ contract ModulesHandler is LeakedModulesBase {
     bool public recipientViolation; // a hot payment to a non-allowlisted address went through while Strict
     FallbackProbe public probe;
     address[4] internal sinks;
+    /// A hot payment that reached a self-defeating recipient (an allowlisted token, a guardian, the moved token, a
+    /// module), in either mode (the account's `ForbiddenRecipient`).
+    bool public forbiddenPaid;
+    /// Ever accepted: a recovery key equal to the vault's, or a vault rotation to the recovery's key.
+    bool public sameKeyAccepted;
+    MockToken internal dai;
 
     function _host() internal pure override returns (Host) {
         return Host.MSA;
@@ -41,8 +49,18 @@ contract ModulesHandler is LeakedModulesBase {
         return strictNow ? RecipientMode.Strict : RecipientMode.Open;
     }
 
+    /// Install data with a second listed token (`HookInit.tokens`), a possible forbidden recipient.
+    function _hookInit() internal view override returns (HookInit memory c) {
+        c = super._hookInit();
+        TokenInit[] memory t = new TokenInit[](2);
+        t[0] = c.tokens[0];
+        t[1] = TokenInit(address(dai), 18, 1e6);
+        c.tokens = t;
+    }
+
     function init(bool strict) external {
         strictNow = strict;
+        dai = new MockToken("DAI", 18);
         setUp();
         probe = new FallbackProbe();
         sinks = [recipient, stranger, makeAddr("fresh"), address(probe)];
@@ -82,6 +100,51 @@ contract ModulesHandler is LeakedModulesBase {
         address to = sinks[1 + (seed % 3)];
         amount = bound(amount, 0, 0.01 ether);
         _hot(_single(to, seed % 2 == 0 ? 0 : amount, seed % 2 == 0 ? bytes("") : bytes(hex"deadbeef")));
+    }
+
+    /// ETH / USDC to a forbidden recipient (never allowlisted here): must never arrive, in either mode.
+    function hotForbidden(uint256 seed, uint256 amount, bool eth) external {
+        address[5] memory bad = [address(dai), guardian, address(usdc), address(hook), address(executor)];
+        address to = bad[seed % 5];
+        uint256 u0 = usdc.balanceOf(to);
+        uint256 e0 = to.balance;
+        if (eth) _hot(_single(to, bound(amount, 1, 0.2 ether), ""));
+        else _hot(_single(address(usdc), 0, abi.encodeCall(IERC20.transfer, (to, bound(amount, 1, 600e6)))));
+        if (usdc.balanceOf(to) != u0 || to.balance != e0) forbiddenPaid = true;
+    }
+
+    /// Tries to give the recovery the vault's key (queued change) or to rotate the vault to the recovery's key.
+    function trySameRoleKey(bool rotate) external {
+        if (rotate) {
+            if (rotationPending) return;
+            uint256 rn = _recoveryNonce();
+            bytes memory sig = _pqSign(recoveryPk, executor.hashRecoveryRotate(account, rn, recoveryPk));
+            try executor.recoveryStartVaultRotation(account, recoveryPk, rn, sig) {
+                sameKeyAccepted = true;
+            } catch {}
+            return;
+        }
+        Call[] memory c =
+            _calls1(address(executor), 0, abi.encodeCall(LeakedRoleExecutor.setRecoveryKey, (account, vaultPk)));
+        uint256 n = _vaultNonce();
+        bytes memory sig = _pqSign(vaultPk, executor.hashVaultQueue(account, n, c, 1));
+        bytes32 opId;
+        try executor.vaultQueue(account, c, 1, n, sig) returns (bytes32 id) {
+            opId = id;
+        } catch {
+            return;
+        }
+        if (rotationPending) vaultActedDuringRotation = true;
+        vm.warp(block.timestamp + 48 hours);
+        try executor.executeQueued(account, opId, c) {
+            sameKeyAccepted = true;
+        } catch {}
+        if (rotationPending != executor.rotationPending(account)) rotationCleared = true;
+    }
+
+    function rolesIndependent() external view returns (bool) {
+        (,, bytes32 v, bytes32 r,,,, bytes32 pending,) = executor.getRoles(account);
+        return v != r && (pending == bytes32(0) || pending != r);
     }
 
     function _hotTo(address to, bytes memory executeCall) internal {
@@ -267,7 +330,7 @@ contract LeakedModulesInvariantsTest is Test {
         h = new ModulesHandler();
         h.init(_strict());
         targetContract(address(h));
-        bytes4[] memory sels = new bytes4[](18);
+        bytes4[] memory sels = new bytes4[](20);
         sels[0] = h.hotEth.selector;
         sels[1] = h.hotUsdc.selector;
         sels[2] = h.hotRegister.selector;
@@ -286,6 +349,8 @@ contract LeakedModulesInvariantsTest is Test {
         sels[15] = h.vaultTryOpenInstant.selector;
         sels[16] = h.vaultQueueOpen.selector;
         sels[17] = h.hotEthTo.selector; // weight: payments to arbitrary recipients
+        sels[18] = h.hotForbidden.selector;
+        sels[19] = h.trySameRoleKey.selector;
         targetSelector(FuzzSelector({addr: address(h), selectors: sels}));
     }
 
@@ -313,6 +378,13 @@ contract LeakedModulesInvariantsTest is Test {
         assertFalse(h.recipientViolation(), "Strict payment to a non-allowlisted recipient");
         assertEq(h.probeHits(), 0, "a hot non-payment ran a fallback");
         assertEq(h.modeNow(), h.strictNow(), "mode changed outside the vault paths");
+        assertFalse(h.forbiddenPaid(), "a hot payment reached a self-defeating recipient");
+    }
+
+    /// SameRoleKey (mirrors the account): the vault and the recovery (and a pending vault) never share a PQ key.
+    function invariant_rolesIndependent() public view {
+        assertFalse(h.sameKeyAccepted(), "a same-key role install was accepted");
+        assertTrue(h.rolesIndependent(), "vault and recovery share a key");
     }
 }
 
