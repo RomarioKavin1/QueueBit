@@ -65,7 +65,7 @@ Each entry is tagged with its source. Remove an entry when it lands, and cite th
 - [x] Copy fixes (`e3b9b83`): "Anyone can finish it" while a rotation is pending; tell vault userOp reverts apart from everyday-payment blocks on 4337; module reinstall looks like account creation; avoid "staked lane" wording.
 
 ## Infra / upstream
-- [ ] Open the BUDGET-010 PR upstream (needs the user's GitHub account).
+- [x] Open the BUDGET-010 PR upstream: https://github.com/forshtat/mempool-workshop-sidecar/pull/3
 - [ ] A separate small PR: a sensible default `precompiles` list in the sidecar.
 - [ ] Post the PQ benchmark write-up to ethresear.ch (user).
 - [ ] Watcher: alerts for vault actions pending in the alt mempool; Privacy Pools events.
