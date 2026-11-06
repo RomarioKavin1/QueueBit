@@ -72,6 +72,15 @@ abstract contract LeakedModulesBase is Test, ILeakedModules {
 
     function _host() internal pure virtual returns (Host);
 
+    /// The account's recipient mode at install (Open, the default, unless a suite re-runs in Strict).
+    function _recipientMode() internal view virtual returns (RecipientMode) {
+        return RecipientMode.Open;
+    }
+
+    function _open() internal view returns (bool) {
+        return _recipientMode() == RecipientMode.Open;
+    }
+
     function setUp() public virtual {
         vm.warp(1_800_000_000);
         ep = IEntryPointV08(deployEntryPointV08());
@@ -114,6 +123,7 @@ abstract contract LeakedModulesBase is Test, ILeakedModules {
         c.tokens[0] = TokenInit(address(usdc), 6, 1e6);
         c.targets = new address[](1);
         c.targets[0] = recipient;
+        c.recipientMode = _recipientMode();
     }
 
     function _executorInit() internal view virtual returns (ExecutorInit memory c) {

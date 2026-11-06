@@ -35,8 +35,9 @@ interface ILeakedRoleContext {
 ///         bucket, token prices, recipient allowlist, sessions, registered 1271 hashes and the hot verifier rule
 ///         (read here in execution). Semantics mirror the frame-native account (`src/account`, §10.3.2-§10.3.5):
 ///         - `preCheck`/`postCheck` wrap every execution the host routes through the hook. Anything not coming
-///           from `EXECUTOR` is hot: it must be an `execute(single|batch, default)` of allowlisted ETH sends,
-///           allowlisted ERC-20 `transfer`s to allowlisted recipients, vault-issued session calls (debited by
+///           from `EXECUTOR` is hot: it must be an `execute(single|batch, default)` of ETH sends and allowlisted
+///           (priced) ERC-20 `transfer`s to any non-zero recipient in `RecipientMode.Open` (the install default) or
+///           to allowlisted recipients in Strict, vault-issued session calls (debited by
 ///           measured balance delta; every session called in a batch is charged the batch's whole residual outflow,
 ///           since a hook sees only batch-level deltas) and `registerHash`; the batch's USD value
 ///           (max of static debits and measured outflow, plus registered hashes) must fit `perTxMaxUsd` and the
@@ -90,6 +91,9 @@ contract LeakedPolicyHook is IERC7579Hook, ILeakedModules {
         bool retired;
         /// `HOST_*` (ILeakedModules), detected at install; read by the validator in validation and 1271.
         uint8 host;
+        /// `RecipientMode.Open` when true. Stored inverted (false = Strict) so that an account whose slot was never
+        /// written (or was retired) fails closed to Strict, as the account's `recipientsOpen`.
+        bool recipientsOpen;
         // slot 1 (read in validation)
         uint96 perTxMaxUsd;
         uint128 maxFeeWei;
@@ -146,7 +150,9 @@ contract LeakedPolicyHook is IERC7579Hook, ILeakedModules {
         p.maxFeeWei = uint128(c.maxFeeWei);
         p.maxPriorityFeePerGas = uint128(c.maxPriorityFeePerGas);
         p.bucket.init(c.capUsdPerDay);
+        p.recipientsOpen = c.recipientMode == RecipientMode.Open;
         emit HotKeyRotated(account, address(0), c.hotKey);
+        emit RecipientModeSet(account, c.recipientMode);
         emit CapUpdated(account, c.capUsdPerDay, c.perTxMaxUsd, c.maxFeeWei, c.maxPriorityFeePerGas);
 
         if (c.ethUsdPrice != 0) {
@@ -175,6 +181,7 @@ contract LeakedPolicyHook is IERC7579Hook, ILeakedModules {
         Policy storage p = _policies[account];
         p.initialized = false;
         p.retired = true;
+        p.recipientsOpen = false;
         p.hotKey = address(0);
     }
 
@@ -362,6 +369,18 @@ contract LeakedPolicyHook is IERC7579Hook, ILeakedModules {
         emit TargetConfigured(account, target, allowed);
     }
 
+    /// Hot recipient policy. Open -> Strict (only `setTarget` recipients) is a tightening and instant; Strict -> Open
+    /// is a loosening and must be queued. Only the vault reaches it (a role-executor vault batch; guardians can only
+    /// freeze): a guardian-imposed Strict would be an open-ended, timelocked outage of everyday payments that buys
+    /// nothing a freeze does not (mirrors the account's `vaultSetRecipientMode`).
+    function setRecipientMode(address account, RecipientMode mode) external onlyExecutor {
+        Policy storage p = _initialized(account);
+        bool open = mode == RecipientMode.Open;
+        _authLoosen(account, open && !p.recipientsOpen);
+        p.recipientsOpen = open;
+        emit RecipientModeSet(account, mode);
+    }
+
     /// Session policy `(target, selector, allowanceUsd, expiry)`. New, raised or extended sessions are queued;
     /// lowering or removal (`allowanceUsd == 0` or `expiry == 0`) is instant.
     function setSession(address account, address target, bytes4 selector, uint256 allowanceUsd, uint48 expiry)
@@ -496,6 +515,11 @@ contract LeakedPolicyHook is IERC7579Hook, ILeakedModules {
         return _policies[account].tokenList;
     }
 
+    /// Strict for an account that never installed the hook (or uninstalled it): the zero slot fails closed.
+    function recipientMode(address account) external view returns (RecipientMode) {
+        return _policies[account].recipientsOpen ? RecipientMode.Open : RecipientMode.Strict;
+    }
+
     function isTarget(address account, address target) external view returns (bool) {
         return _targets[target][account];
     }
@@ -570,6 +594,7 @@ contract LeakedPolicyHook is IERC7579Hook, ILeakedModules {
     {
         uint256 n = execs.length;
         if (n == 0 || n > MAX_HOT_CALLS) revert BadCallCount(n);
+        bool open = _policies[account].recipientsOpen;
         sids = new bytes32[](n);
         uint256 k;
         for (uint256 i; i < n; ++i) {
@@ -593,18 +618,22 @@ contract LeakedPolicyHook is IERC7579Hook, ILeakedModules {
             }
             if (t == account || t == EXECUTOR || t == address(0)) revert NotAllowed(t, sel);
             if (d.length == 0) {
-                // Plain ETH to an allowlisted recipient.
-                if (!_targets[t][account]) revert NotAllowed(t, bytes4(0));
+                // Plain ETH: to an allowlisted recipient, or (Open) to any recipient, with value (t != 0 above). A
+                // zero-value empty call moves nothing and only runs the target's fallback: it needs the allowlist.
+                if (!_targets[t][account] && (value == 0 || !open)) revert NotAllowed(t, bytes4(0));
                 staticDebit += _quoteStrict(account, address(0), value);
                 continue;
             }
             TokenCfg storage tc = _tokens[t][account];
             if (tc.allowed && sel == ERC20_TRANSFER) {
-                // ERC-20 transfer of an allowlisted token to an allowlisted recipient (H2: nothing else on a token).
+                // ERC-20 transfer of an allowlisted (priced) token to an allowlisted recipient, or (Open) to any
+                // non-zero recipient (H2: nothing else on a token: approve / permit / transferFrom need a session).
                 if (value != 0 || d.length != 68) revert NotAllowed(t, sel);
                 bytes32 toWord = LeakedExecDecoder.argWord(d, 0);
                 address to = address(uint160(uint256(toWord)));
-                if (uint256(toWord) >> 160 != 0 || !_targets[to][account]) revert NotAllowed(to, sel);
+                if (uint256(toWord) >> 160 != 0 || (!_targets[to][account] && (to == address(0) || !open))) {
+                    revert NotAllowed(to, sel);
+                }
                 staticDebit += _quote(tc, uint256(LeakedExecDecoder.argWord(d, 1)));
                 continue;
             }

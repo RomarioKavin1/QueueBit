@@ -7,8 +7,18 @@ import {PackedUserOperation, Execution} from "../../src/modules/interfaces/IERC7
 import {LeakedPolicyHook} from "../../src/modules/LeakedPolicyHook.sol";
 import {LeakedModulesBase} from "./LeakedModulesBase.sol";
 
+/// A contract whose fallback must never run from a hot batch: a zero-value empty call or ETH with calldata is not a
+/// payment (it needs a session or the allowlist). A plain ETH send (value, no data) is a payment in Open.
+contract FallbackProbe {
+    uint256 public hits;
+
+    fallback() external payable {
+        if (msg.value == 0 || msg.data.length != 0) hits++;
+    }
+}
+
 /// Plays hot key, vault, recovery, attacker and time against an MSA account with the three modules, through the
-/// real EntryPoint. Mirrors plan §10.7.1 layer 3 for the 4337 backend.
+/// real EntryPoint. Mirrors plan §10.7.1 layer 3 for the 4337 backend, in Open or Strict recipient mode.
 contract ModulesHandler is LeakedModulesBase {
     uint256 public t0;
     uint256 public cap0;
@@ -18,13 +28,24 @@ contract ModulesHandler is LeakedModulesBase {
     bool public rotationCleared; // pending rotation ended other than by finalize/cancel
     bool public rotationPending;
     uint256 public hotOps;
+    bool public strictNow; // the recipient mode the vault last set (or installed)
+    bool public recipientViolation; // a hot payment to a non-allowlisted address went through while Strict
+    FallbackProbe public probe;
+    address[4] internal sinks;
 
     function _host() internal pure override returns (Host) {
         return Host.MSA;
     }
 
-    function init() external {
+    function _recipientMode() internal view override returns (RecipientMode) {
+        return strictNow ? RecipientMode.Strict : RecipientMode.Open;
+    }
+
+    function init(bool strict) external {
+        strictNow = strict;
         setUp();
+        probe = new FallbackProbe();
+        sinks = [recipient, stranger, makeAddr("fresh"), address(probe)];
         t0 = block.timestamp;
         cap0 = CAP;
         vm.deal(account, 1000 ether);
@@ -41,6 +62,34 @@ contract ModulesHandler is LeakedModulesBase {
     function hotUsdc(uint256 amount) external {
         amount = bound(amount, 1, 600e6);
         _hot(_single(address(usdc), 0, abi.encodeCall(IERC20.transfer, (recipient, amount))));
+    }
+
+    /// ETH / USDC to any of: the allowlisted recipient, never-allowlisted EOAs, a contract with a fallback.
+    function hotEthTo(uint256 seed, uint256 amount) external {
+        address to = sinks[seed % 4];
+        amount = bound(amount, 1, 0.2 ether);
+        _hotTo(to, _single(to, amount, ""));
+    }
+
+    function hotUsdcTo(uint256 seed, uint256 amount) external {
+        address to = sinks[seed % 4];
+        amount = bound(amount, 1, 600e6);
+        _hotTo(to, _single(address(usdc), 0, abi.encodeCall(IERC20.transfer, (to, amount))));
+    }
+
+    /// Never a payment: zero-value empty calls and ETH with calldata (the probe counts any that runs).
+    function hotNonPayment(uint256 seed, uint256 amount) external {
+        address to = sinks[1 + (seed % 3)];
+        amount = bound(amount, 0, 0.01 ether);
+        _hot(_single(to, seed % 2 == 0 ? 0 : amount, seed % 2 == 0 ? bytes("") : bytes(hex"deadbeef")));
+    }
+
+    function _hotTo(address to, bytes memory executeCall) internal {
+        uint256 u0 = usdc.balanceOf(to);
+        uint256 e0 = to.balance;
+        _hot(executeCall);
+        bool moved = usdc.balanceOf(to) != u0 || to.balance != e0;
+        if (moved && strictNow && to != recipient) recipientViolation = true;
     }
 
     function hotRegister(uint256 amount) external {
@@ -63,12 +112,19 @@ contract ModulesHandler is LeakedModulesBase {
 
     function _hot(bytes memory executeCall) internal returns (bool executed, uint256 outUsd) {
         uint256 u0 = usdc.balanceOf(account);
-        uint256 r0 = recipient.balance;
+        uint256[4] memory e0;
+        for (uint256 i; i < 4; ++i) {
+            e0[i] = sinks[i].balance;
+        }
         try this.submitExternal(_op(executeCall)) returns (bool success) {
             executed = success;
         } catch {}
-        // The account's ETH also pays gas: count the ETH that reached the recipient, and all USDC that left.
-        outUsd = (u0 - usdc.balanceOf(account)) + ((recipient.balance - r0) * ETH_USD) / 1e18;
+        // The account's ETH also pays gas: count the ETH that reached any sink, and all USDC that left.
+        uint256 ethOut;
+        for (uint256 i; i < 4; ++i) {
+            ethOut += sinks[i].balance - e0[i];
+        }
+        outUsd = (u0 - usdc.balanceOf(account)) + (ethOut * ETH_USD) / 1e18;
         hotOps++;
         hotOutUsd += outUsd;
     }
@@ -110,6 +166,45 @@ contract ModulesHandler is LeakedModulesBase {
         Call[] memory c =
             _hookCall(abi.encodeCall(LeakedPolicyHook.setCap, (account, 1e30, 1e20, MAX_FEE_WEI, MAX_PRIO)));
         if (_tryVault(c)) unauthorizedWrite = true;
+    }
+
+    function vaultStrict() external {
+        if (_tryVault(_hookCall(abi.encodeCall(LeakedPolicyHook.setRecipientMode, (account, RecipientMode.Strict))))) {
+            strictNow = true;
+        }
+    }
+
+    /// Strict -> Open without the queue must fail (Open -> Open is a no-op and may pass).
+    function vaultTryOpenInstant() external {
+        bool wasStrict = strictNow;
+        bool ok = _tryVault(_hookCall(abi.encodeCall(LeakedPolicyHook.setRecipientMode, (account, RecipientMode.Open))));
+        if (ok && wasStrict) unauthorizedWrite = true;
+    }
+
+    function vaultQueueOpen() external {
+        Call[] memory c = _hookCall(abi.encodeCall(LeakedPolicyHook.setRecipientMode, (account, RecipientMode.Open)));
+        uint256 n = _vaultNonce();
+        bytes memory sig = _pqSign(vaultPk, executor.hashVaultQueue(account, n, c, 1));
+        bytes32 opId;
+        try executor.vaultQueue(account, c, 1, n, sig) returns (bytes32 id) {
+            opId = id;
+        } catch {
+            return;
+        }
+        if (rotationPending) vaultActedDuringRotation = true;
+        vm.warp(block.timestamp + 48 hours);
+        try executor.executeQueued(account, opId, c) {
+            strictNow = false;
+        } catch {}
+        if (rotationPending != executor.rotationPending(account)) rotationCleared = true;
+    }
+
+    function modeNow() external view returns (bool strict) {
+        strict = hook.recipientMode(account) == RecipientMode.Strict;
+    }
+
+    function probeHits() external view returns (uint256) {
+        return probe.hits();
     }
 
     function vaultSpend(uint256 amount) external {
@@ -164,11 +259,15 @@ contract ModulesHandler is LeakedModulesBase {
 contract LeakedModulesInvariantsTest is Test {
     ModulesHandler internal h;
 
+    function _strict() internal pure virtual returns (bool) {
+        return false;
+    }
+
     function setUp() public {
         h = new ModulesHandler();
-        h.init();
+        h.init(_strict());
         targetContract(address(h));
-        bytes4[] memory sels = new bytes4[](11);
+        bytes4[] memory sels = new bytes4[](18);
         sels[0] = h.hotEth.selector;
         sels[1] = h.hotUsdc.selector;
         sels[2] = h.hotRegister.selector;
@@ -180,6 +279,13 @@ contract LeakedModulesInvariantsTest is Test {
         sels[8] = h.recoveryStart.selector;
         sels[9] = h.recoveryFinalize.selector;
         sels[10] = h.warp.selector;
+        sels[11] = h.hotEthTo.selector;
+        sels[12] = h.hotUsdcTo.selector;
+        sels[13] = h.hotNonPayment.selector;
+        sels[14] = h.vaultStrict.selector;
+        sels[15] = h.vaultTryOpenInstant.selector;
+        sels[16] = h.vaultQueueOpen.selector;
+        sels[17] = h.hotEthTo.selector; // weight: payments to arbitrary recipients
         targetSelector(FuzzSelector({addr: address(h), selectors: sels}));
     }
 
@@ -199,5 +305,19 @@ contract LeakedModulesInvariantsTest is Test {
     function invariant_recoveryOutranksVault() public view {
         assertFalse(h.vaultActedDuringRotation());
         assertFalse(h.rotationCleared());
+    }
+
+    /// I-8 analogue (recipient policy): Strict admits only allowlisted recipients; in both modes no hot batch runs a
+    /// contract's fallback through a non-payment; the mode changes only through the vault, loosening only queued.
+    function invariant_recipientPolicy() public view {
+        assertFalse(h.recipientViolation(), "Strict payment to a non-allowlisted recipient");
+        assertEq(h.probeHits(), 0, "a hot non-payment ran a fallback");
+        assertEq(h.modeNow(), h.strictNow(), "mode changed outside the vault paths");
+    }
+}
+
+contract LeakedModulesInvariantsStrictTest is LeakedModulesInvariantsTest {
+    function _strict() internal pure override returns (bool) {
+        return true;
     }
 }

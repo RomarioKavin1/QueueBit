@@ -377,3 +377,28 @@ contract LeakedModulesAuditKernelTest is LeakedModulesAuditBase {
         );
     }
 }
+
+/// A1-A7 again with the account installed in Strict (the suites above run in Open, the install default).
+contract LeakedModulesAuditSafe7579StrictTest is LeakedModulesAuditSafe7579Test {
+    function _recipientMode() internal pure override returns (RecipientMode) {
+        return RecipientMode.Strict;
+    }
+}
+
+contract LeakedModulesAuditSafeOwnerStrictTest is LeakedModulesAuditSafeOwnerTest {
+    function _recipientMode() internal pure override returns (RecipientMode) {
+        return RecipientMode.Strict;
+    }
+}
+
+contract LeakedModulesAuditMSAStrictTest is LeakedModulesAuditMSATest {
+    function _recipientMode() internal pure override returns (RecipientMode) {
+        return RecipientMode.Strict;
+    }
+}
+
+contract LeakedModulesAuditKernelStrictTest is LeakedModulesAuditKernelTest {
+    function _recipientMode() internal pure override returns (RecipientMode) {
+        return RecipientMode.Strict;
+    }
+}

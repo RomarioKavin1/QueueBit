@@ -69,6 +69,9 @@ contract LeakedRoleExecutor is IERC7579Module, ILeakedModules, ILeakedRoleContex
         uint64 vaultNonce;
         uint64 recoveryNonce;
         uint48 pendingVaultEta;
+        /// `verifier.sigLength()` at install (fixed-length schemes only): the role identity is (verifier, pk,
+        /// sigLength), as a `PQRoleSigner` clone's immutable args; a witness of any other length is refused.
+        uint32 sigLength;
         bytes32 vaultPk;
         bytes32 recoveryPk;
         bytes32 pendingVaultPk;
@@ -93,6 +96,8 @@ contract LeakedRoleExecutor is IERC7579Module, ILeakedModules, ILeakedRoleContex
             revert BadAddress(c.hook);
         }
         if (c.verifier.code.length == 0) revert BadAddress(c.verifier);
+        uint256 sigLen = _sigLength(c.verifier);
+        if (sigLen == 0) revert BadConfig();
         if (c.vaultPk == bytes32(0) || c.vaultPk == c.recoveryPk) revert BadConfig();
         uint48 delay = c.timelockDelay == 0 ? DEFAULT_TIMELOCK : c.timelockDelay;
         if (delay < MIN_TIMELOCK || delay > MAX_TIMELOCK) revert BadConfig();
@@ -100,10 +105,12 @@ contract LeakedRoleExecutor is IERC7579Module, ILeakedModules, ILeakedRoleContex
         r.initialized = true;
         r.hook = LeakedPolicyHook(c.hook);
         r.verifier = IPQVerifier(c.verifier);
+        r.sigLength = uint32(sigLen);
         r.vaultPk = c.vaultPk;
         r.recoveryPk = c.recoveryPk;
         r.timelockDelay = delay;
         r.vaultBucket.init(c.timelockThresholdUsd);
+        emit VaultBound(account, c.vaultPk, c.verifier, sigLen);
         emit TimelockUpdated(account, delay, c.timelockThresholdUsd);
         if (c.recoveryPk != bytes32(0)) emit RecoveryKeySet(account, c.recoveryPk);
         for (uint256 i; i < c.guardians.length; ++i) {
@@ -392,6 +399,11 @@ contract LeakedRoleExecutor is IERC7579Module, ILeakedModules, ILeakedRoleContex
         );
     }
 
+    /// The PQ verifier's fixed witness length bound at install (0 before install).
+    function sigLengthOf(address account) external view returns (uint256) {
+        return _roles[account].sigLength;
+    }
+
     function getVaultBucket(address account) external view returns (uint256 available, uint256 cap, uint48 delay) {
         Roles storage r = _roles[account];
         return (r.vaultBucket.availableNow(), r.vaultBucket.cap, r.timelockDelay);
@@ -443,8 +455,9 @@ contract LeakedRoleExecutor is IERC7579Module, ILeakedModules, ILeakedRoleContex
                 sel == LeakedPolicyHook.setHotKey.selector || sel == LeakedPolicyHook.setCap.selector
                     || sel == LeakedPolicyHook.setToken.selector || sel == LeakedPolicyHook.setTarget.selector
                     || sel == LeakedPolicyHook.setSession.selector || sel == LeakedPolicyHook.setValueVerifier.selector
-                    || sel == LeakedPolicyHook.setTrustedVerifier.selector || sel == LeakedPolicyHook.freeze.selector
-                    || sel == LeakedPolicyHook.unfreeze.selector || sel == LeakedPolicyHook.enableBunker.selector
+                    || sel == LeakedPolicyHook.setTrustedVerifier.selector || sel == LeakedPolicyHook.setRecipientMode.selector
+                    || sel == LeakedPolicyHook.freeze.selector || sel == LeakedPolicyHook.unfreeze.selector
+                    || sel == LeakedPolicyHook.enableBunker.selector
             );
         if (!allowed) revert NotAllowed(c.target, sel);
     }
@@ -485,9 +498,17 @@ contract LeakedRoleExecutor is IERC7579Module, ILeakedModules, ILeakedRoleContex
     }
 
     function _verify(Roles storage r, bytes32 pk, bytes32 digest, bytes calldata sig) internal view {
+        if (sig.length != r.sigLength) revert BadSignature();
         (bool ok, bytes memory ret) =
             address(r.verifier).staticcall(abi.encodeCall(IPQVerifier.verify, (pk, digest, sig)));
         if (!ok || ret.length != 32 || abi.decode(ret, (uint256)) != 1) revert BadSignature();
+    }
+
+    /// `verifier.sigLength()` under `RoleSignerFactory`'s acceptance rule (answers, 1..65535), else 0.
+    function _sigLength(address verifier) internal view returns (uint256 len) {
+        (bool ok, bytes memory ret) = verifier.staticcall(abi.encodeCall(IPQVerifier.sigLength, ()));
+        if (ok && ret.length >= 32) len = abi.decode(ret, (uint256));
+        if (len > type(uint16).max) len = 0;
     }
 
     function _hashTyped(bytes memory structEncoding) internal view returns (bytes32) {

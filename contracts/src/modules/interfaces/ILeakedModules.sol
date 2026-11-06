@@ -16,6 +16,14 @@ uint8 constant HOST_SAFE = 2; // Safe7579: a Safe whose owner path bypasses hook
 interface ILeakedModules {
     // ------------------------------------------------------------------------------------------------ types ------
 
+    /// Who may receive a hot ETH send or allowlisted-token `transfer` (mirrors `ILeakedAccount.RecipientMode`).
+    /// Open (the install default): any non-zero address, within the bucket and `perTxMaxUsd`; Strict: only the
+    /// vault's recipient allowlist (`setTarget`). Open -> Strict is instant, Strict -> Open is queued; vault only.
+    enum RecipientMode {
+        Open,
+        Strict
+    }
+
     struct Call {
         address target;
         uint256 value;
@@ -53,6 +61,8 @@ interface ILeakedModules {
         uint256 ethUsdPrice;
         TokenInit[] tokens;
         address[] targets;
+        /// Appended (2026-11-06): Open (0) by default.
+        RecipientMode recipientMode;
     }
 
     /// The validation-time view of an account's hot policy (one STATICCALL from the validator).
@@ -125,6 +135,8 @@ interface ILeakedModules {
     event Unfrozen(address indexed account, address indexed by);
     event BunkerEnabled(address indexed account);
     event BunkerDisabled(address indexed account);
+    /// At install and on every change (Strict -> Open only inside a queued op, i.e. after `QueueExecuted`'s op).
+    event RecipientModeSet(address indexed account, RecipientMode mode);
 
     event VaultExecuted(address indexed account, uint256 usdDebited, uint256 vaultAvailable, uint256 callCount);
     event Queued(address indexed account, bytes32 indexed opId, uint8 kind, uint48 eta);
@@ -136,6 +148,8 @@ interface ILeakedModules {
     event VaultRotationStarted(address indexed account, bytes32 newVaultPk, uint48 eta);
     event VaultRotationFinalized(address indexed account, bytes32 newVaultPk);
     event VaultRotationCancelled(address indexed account, bytes32 newVaultPk);
+    /// At install: the vault identity is the PQ key itself, verified in execution by `verifier` at `sigLength`.
+    event VaultBound(address indexed account, bytes32 vaultPk, address verifier, uint256 sigLength);
 
     // ----------------------------------------------------------------------------------------------- errors ------
 

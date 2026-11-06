@@ -95,17 +95,156 @@ abstract contract LeakedModulesHostsTest is LeakedModulesBase {
         _submitOk(_op(_single(recipient, 0.15 ether, "")));
     }
 
+    // ------------------------------------------------------------------------------- recipient mode ------
+    // Mirrors the account's `RecipientMode` (IMPLEMENTATION-NOTES "Account: Open recipient mode"): in Open a plain ETH
+    // send (value > 0) or an allowlisted, priced token's `transfer` may go to any non-zero address within the bucket
+    // and `perTxMaxUsd`; everything else needs a session or the allowlist, in both modes.
+
+    /// ETH to an address the vault never allowlisted: an everyday payment in Open, refused in Strict.
     function test_notAllowlistedTarget() public {
-        _expectValidationRevert(
-            _op(_single(stranger, 0.01 ether, "")), abi.encodeWithSelector(NotAllowed.selector, stranger, bytes4(0))
-        );
+        PackedUserOperation memory op = _op(_single(stranger, 0.01 ether, ""));
+        if (_open()) {
+            _submitOk(op);
+            assertEq(stranger.balance, 0.01 ether);
+            assertEq(_available(), CAP - 30e6, "debited like any hot payment");
+        } else {
+            _expectValidationRevert(op, abi.encodeWithSelector(NotAllowed.selector, stranger, bytes4(0)));
+        }
     }
 
     function test_transferToNotAllowlistedRecipient() public {
+        PackedUserOperation memory op = _op(_single(address(usdc), 0, abi.encodeCall(IERC20.transfer, (stranger, 1e6))));
+        if (_open()) {
+            _submitOk(op);
+            assertEq(usdc.balanceOf(stranger), 1e6);
+            assertEq(_available(), CAP - 1e6);
+        } else {
+            _expectValidationRevert(op, abi.encodeWithSelector(NotAllowed.selector, stranger, IERC20.transfer.selector));
+        }
+    }
+
+    function test_recipientMode_installDefault() public view {
+        assertEq(uint8(hook.recipientMode(account)), uint8(_recipientMode()));
+        // Never installed: the zero slot reads Strict (fails closed).
+        assertEq(uint8(hook.recipientMode(stranger)), uint8(RecipientMode.Strict));
+    }
+
+    /// Open never lifts the per-tx bound or the bucket for a new recipient.
+    function test_recipientMode_openStillCapped() public {
+        if (!_open()) return;
         _expectValidationRevert(
-            _op(_single(address(usdc), 0, abi.encodeCall(IERC20.transfer, (stranger, 1e6)))),
-            abi.encodeWithSelector(NotAllowed.selector, stranger, IERC20.transfer.selector)
+            _op(_single(stranger, 0.2 ether, "")), abi.encodeWithSelector(PerTxMaxExceeded.selector, 600e6, PER_TX)
         );
+        _submitOk(_op(_single(stranger, 0.15 ether, ""))); // $450
+        _submitOk(_op(_single(address(usdc), 0, abi.encodeCall(IERC20.transfer, (makeAddr("fresh"), 450e6)))));
+        _expectExecFail(
+            _op(_single(makeAddr("fresh2"), 0.1 ether, "")),
+            abi.encodeWithSelector(RollingCap.OverCap.selector, 300e6, 100e6)
+        );
+        assertEq(makeAddr("fresh2").balance, 0, "nothing moved");
+    }
+
+    /// Both modes: a zero-value empty call (it would only run the target's fallback), ETH with calldata, a transfer
+    /// to address(0), an unallowlisted token's transfer and every non-transfer token selector need a session.
+    function test_recipientMode_nonPaymentsNeedSession() public {
+        _expectValidationRevert(
+            _op(_single(stranger, 0, "")), abi.encodeWithSelector(NotAllowed.selector, stranger, bytes4(0))
+        );
+        _expectValidationRevert(
+            _op(_single(address(router), 0, "")),
+            abi.encodeWithSelector(NotAllowed.selector, address(router), bytes4(0))
+        );
+        _expectValidationRevert(
+            _op(_single(address(router), 0.01 ether, abi.encodeCall(router.swapEth, (stranger)))),
+            abi.encodeWithSelector(NotAllowed.selector, address(router), router.swapEth.selector)
+        );
+        _expectValidationRevert(
+            _op(_single(stranger, 0.01 ether, hex"deadbeef")),
+            abi.encodeWithSelector(NotAllowed.selector, stranger, bytes4(0xdeadbeef))
+        );
+        _expectValidationRevert(
+            _op(_single(address(usdc), 0, abi.encodeCall(IERC20.transfer, (address(0), 1e6)))),
+            abi.encodeWithSelector(NotAllowed.selector, address(0), IERC20.transfer.selector)
+        );
+        _expectValidationRevert(
+            _op(_single(address(0), 0.01 ether, "")), abi.encodeWithSelector(NotAllowed.selector, address(0), bytes4(0))
+        );
+        MockTokenLike other = new MockTokenLike();
+        _expectValidationRevert(
+            _op(_single(address(other), 0, abi.encodeCall(IERC20.transfer, (recipient, 1)))),
+            abi.encodeWithSelector(NotAllowed.selector, address(other), IERC20.transfer.selector)
+        );
+        bytes[3] memory nonTransfer = [
+            abi.encodeCall(IERC20.approve, (stranger, 1e6)),
+            abi.encodeCall(IERC20.transferFrom, (account, stranger, 1e6)),
+            abi.encodeWithSelector(0x39509351, stranger, 1e6) // increaseAllowance
+        ];
+        for (uint256 i; i < 3; ++i) {
+            _expectValidationRevert(
+                _op(_single(address(usdc), 0, nonTransfer[i])),
+                abi.encodeWithSelector(NotAllowed.selector, address(usdc), bytes4(nonTransfer[i]))
+            );
+        }
+        // An Open payment may not target the modules or the account either (checked before the recipient rule).
+        _expectValidationRevert(
+            _op(_single(address(executor), 0.01 ether, "")),
+            abi.encodeWithSelector(NotAllowed.selector, address(executor), bytes4(0))
+        );
+        _expectValidationRevert(
+            _op(_single(account, 0.01 ether, "")), abi.encodeWithSelector(NotAllowed.selector, account, bytes4(0))
+        );
+    }
+
+    function _setModeCall(RecipientMode m) internal view returns (Call[] memory) {
+        return _hookCall(abi.encodeCall(LeakedPolicyHook.setRecipientMode, (account, m)));
+    }
+
+    /// Open -> Strict is instant; Strict -> Open must be queued (from either starting mode).
+    function test_recipientMode_strictInstant_openQueued() public {
+        if (_open()) {
+            _vaultExec(_setModeCall(RecipientMode.Strict), 0);
+            assertEq(uint8(hook.recipientMode(account)), uint8(RecipientMode.Strict));
+        }
+        _expectValidationRevert(
+            _op(_single(stranger, 0.01 ether, "")), abi.encodeWithSelector(NotAllowed.selector, stranger, bytes4(0))
+        );
+        Call[] memory up = _setModeCall(RecipientMode.Open);
+        uint256 n = _vaultNonce();
+        bytes memory sig = _pqSign(vaultPk, executor.hashVaultExec(account, n, up, 0));
+        vm.expectRevert(abi.encodeWithSelector(CallFailed.selector, 0, abi.encodeWithSelector(MustQueue.selector)));
+        executor.vaultExec(account, up, 0, n, sig);
+        // Strict -> Strict is not a loosening (instant, idempotent).
+        _vaultExec(_setModeCall(RecipientMode.Strict), 0);
+        _queueAndRun(up, 1);
+        assertEq(uint8(hook.recipientMode(account)), uint8(RecipientMode.Open));
+        _submitOk(_op(_single(stranger, 0.01 ether, "")));
+        assertEq(stranger.balance, 0.01 ether);
+    }
+
+    /// Only the vault (a PQ-verified executor batch) sets the mode: not the hot key, the account, a guardian, an
+    /// attacker, nor a vault batch naming another account.
+    function test_recipientMode_onlyVault() public {
+        bytes memory toOpen = abi.encodeCall(LeakedPolicyHook.setRecipientMode, (account, RecipientMode.Open));
+        bytes memory toStrict = abi.encodeCall(LeakedPolicyHook.setRecipientMode, (account, RecipientMode.Strict));
+        address[3] memory who = [account, guardian, stranger];
+        for (uint256 i; i < 3; ++i) {
+            vm.prank(who[i]);
+            (bool ok, bytes memory ret) = address(hook).call(toStrict);
+            assertFalse(ok);
+            assertEq(ret, abi.encodeWithSelector(Unauthorized.selector));
+        }
+        _expectValidationRevert(
+            _op(_single(address(hook), 0, toOpen)),
+            abi.encodeWithSelector(NotAllowed.selector, address(hook), LeakedPolicyHook.setRecipientMode.selector)
+        );
+        Call[] memory c = _hookCall(abi.encodeCall(LeakedPolicyHook.setRecipientMode, (stranger, RecipientMode.Strict)));
+        uint256 n = _vaultNonce();
+        bytes memory sig = _pqSign(vaultPk, executor.hashVaultExec(account, n, c, 0));
+        vm.expectRevert(
+            abi.encodeWithSelector(NotAllowed.selector, address(hook), LeakedPolicyHook.setRecipientMode.selector)
+        );
+        executor.vaultExec(account, c, 0, n, sig);
+        assertEq(uint8(hook.recipientMode(account)), uint8(_recipientMode()), "unchanged");
     }
 
     function test_otherTokenSelectorRejected() public {
@@ -651,7 +790,7 @@ abstract contract LeakedModulesHostsTest is LeakedModulesBase {
         _openSessions();
         Execution[] memory e = new Execution[](4);
         e[0] = Execution(recipient, 0.01 ether, "");
-        e[1] = Execution(address(usdc), 0, abi.encodeCall(IERC20.transfer, (recipient, 1e6)));
+        e[1] = Execution(address(usdc), 0, abi.encodeCall(IERC20.transfer, (_open() ? stranger : recipient, 1e6)));
         e[2] = Execution(
             address(hook),
             0,
@@ -708,6 +847,13 @@ abstract contract LeakedModulesHostsTest is LeakedModulesBase {
     }
 }
 
+/// A variable-length scheme (`sigLength() == 0`): not bindable.
+contract VarLenVerifier {
+    function sigLength() external pure returns (uint256) {
+        return 0;
+    }
+}
+
 /// Plain ERC-20 that is not allowlisted (M2 PoC).
 contract MockTokenLike is ERC20 {
     constructor() ERC20("X", "X") {}
@@ -716,6 +862,33 @@ contract MockTokenLike is ERC20 {
 contract LeakedModulesMSATest is LeakedModulesHostsTest {
     function _host() internal pure override returns (Host) {
         return Host.MSA;
+    }
+
+    /// The vault identity is (verifier, pk, sigLength), bound at install with no signer address (in 4337 the PQ
+    /// check runs in execution, inside `vaultExec`): a verifier without a fixed `sigLength` is refused, and a
+    /// witness of another length never reaches the verifier.
+    function test_executor_bindsVaultPkVerifierSigLength() public {
+        (, address v, bytes32 pk,,,,,,) = executor.getRoles(account);
+        assertEq(v, address(pq));
+        assertEq(pk, vaultPk);
+        assertEq(executor.sigLengthOf(account), 32);
+        Call[] memory c = _calls1(stranger, 0.1 ether, "");
+        uint256 n = _vaultNonce();
+        bytes memory sig = _pqSign(vaultPk, executor.hashVaultExec(account, n, c, 0));
+        vm.expectRevert(BadSignature.selector);
+        executor.vaultExec(account, c, 0, n, bytes.concat(sig, hex"00"));
+        executor.vaultExec(account, c, 0, n, sig);
+
+        ExecutorInit memory xi = _executorInit();
+        xi.verifier = address(new VarLenVerifier());
+        vm.prank(stranger);
+        vm.expectRevert(BadConfig.selector);
+        executor.onInstall(abi.encode(xi));
+        vm.recordLogs();
+        vm.prank(stranger);
+        executor.onInstall(abi.encode(_executorInit()));
+        assertEq(executor.sigLengthOf(stranger), 32);
+        assertEq(vm.getRecordedLogs()[0].topics[0], VaultBound.selector, "VaultBound first");
     }
 
     /// Module changes through a queued vault op (MSA: `executeFromExecutor` self-call to `uninstallModule`).
@@ -739,5 +912,24 @@ contract LeakedModulesSafe7579Test is LeakedModulesHostsTest {
 contract LeakedModulesKernelTest is LeakedModulesHostsTest {
     function _host() internal pure override returns (Host) {
         return Host.KERNEL;
+    }
+}
+
+/// Every rule above again with the account installed in Strict (the old recipient allowlist).
+contract LeakedModulesMSAStrictTest is LeakedModulesMSATest {
+    function _recipientMode() internal pure override returns (RecipientMode) {
+        return RecipientMode.Strict;
+    }
+}
+
+contract LeakedModulesSafe7579StrictTest is LeakedModulesSafe7579Test {
+    function _recipientMode() internal pure override returns (RecipientMode) {
+        return RecipientMode.Strict;
+    }
+}
+
+contract LeakedModulesKernelStrictTest is LeakedModulesKernelTest {
+    function _recipientMode() internal pure override returns (RecipientMode) {
+        return RecipientMode.Strict;
     }
 }
