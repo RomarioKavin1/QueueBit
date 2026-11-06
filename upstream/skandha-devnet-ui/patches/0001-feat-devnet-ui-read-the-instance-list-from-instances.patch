@@ -1,0 +1,54 @@
+From 3e3a532dd01085760e39fb3bf07ccc79b5844762 Mon Sep 17 00:00:00 2001
+From: Romario Kavin <98270892+RomarioKavin1@users.noreply.github.com>
+Date: Fri, 6 Nov 2026 14:25:16 +0530
+Subject: [PATCH] feat(devnet-ui): read the instance list from /instances.js at
+ runtime
+
+Self-hosted explorers whose sidecar URLs change after the build (the QueueBit
+shared devnet sits behind a Cloudflare quick tunnel whose hostname changes on
+every restart) can now serve an /instances.js next to the app that sets
+window.__EXPLORER_INSTANCES__ to the same JSON string VITE_EXPLORER_INSTANCES
+takes. index.html loads it as a classic script before the module entry, so
+it is set before the instances store initialises; when it is missing or not
+a string the build-time VITE_EXPLORER_INSTANCES list is used as before.
+
+Serving note: the app uses path routes (/tx/<hash>, /activity, ...), so the
+host needs an SPA fallback to index.html, and /instances.js should be served
+with no-cache (or a 404, which is harmless: the script just fails to load).
+---
+ packages/devnet-ui/index.html                | 1 +
+ packages/devnet-ui/src/instances/context.tsx | 6 +++++-
+ 2 files changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/packages/devnet-ui/index.html b/packages/devnet-ui/index.html
+index 8586642..2a59b1b 100644
+--- a/packages/devnet-ui/index.html
++++ b/packages/devnet-ui/index.html
+@@ -8,6 +8,7 @@
+   </head>
+   <body>
+     <div id="root"></div>
++    <script src="/instances.js"></script>
+     <script type="module" src="/src/main.tsx"></script>
+   </body>
+ </html>
+diff --git a/packages/devnet-ui/src/instances/context.tsx b/packages/devnet-ui/src/instances/context.tsx
+index 16b571b..1c580d8 100644
+--- a/packages/devnet-ui/src/instances/context.tsx
++++ b/packages/devnet-ui/src/instances/context.tsx
+@@ -36,7 +36,11 @@ export function InstancesProvider({
+ }) {
+   const [state, dispatch] = useReducer(instancesReducer, undefined, () => {
+     if (initial) return initial;
+-    const configured = import.meta.env.VITE_EXPLORER_INSTANCES as string | undefined;
++    // QueueBit devnet hosting: /instances.js (served next to the app) names the current public gateway URL, which
++    // changes when its quick tunnel restarts; the build-time list is the fallback.
++    const runtime = (globalThis as { __EXPLORER_INSTANCES__?: unknown }).__EXPLORER_INSTANCES__;
++    const configured =
++      typeof runtime === "string" ? runtime : (import.meta.env.VITE_EXPLORER_INSTANCES as string | undefined);
+     return loadState(browserStorage(), defaultInstances(configured), configuredInstances(configured));
+   });
+ 
+-- 
+2.50.1 (Apple Git-155)
+

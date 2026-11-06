@@ -1,0 +1,5 @@
+origin=https://github.com/forshtat/mempool-workshop-sidecar
+base=2e22ff0a2898e69ea4bf5275bce1be8581a8582a
+branch=devnet-ui-runtime-instances
+# Built on the BUDGET-010 branch (../skandha-budget-010/patches, which also touch packages/devnet-ui/src/logic/rules.ts),
+# then patches/*.patch here. base = master on 2026-10-25, same pin as ../skandha-budget-010/UPSTREAM.
