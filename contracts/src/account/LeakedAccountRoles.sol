@@ -110,7 +110,10 @@ contract LeakedAccountRoles is LeakedAccountBase {
     /// @notice Hot key rotation; instant (clears bunker).
     function vaultSetHotKey(address newHotKey) external delegated {
         LeakedAccountStorage.Layout storage $ = _authVault(false);
-        if (newHotKey == address(0) || newHotKey == address(this)) revert BadAddress(newHotKey);
+        if (
+            newHotKey == address(0) || newHotKey == address(this) || newHotKey == $.vaultSigner
+                || newHotKey == $.recoverySigner || newHotKey == $.pendingVaultSigner
+        ) revert BadAddress(newHotKey);
         address old = $.hotKey;
         $.hotKey = newHotKey;
         if ($.bunker) {
@@ -145,7 +148,13 @@ contract LeakedAccountRoles is LeakedAccountBase {
         bool loosening = maxPriorityFeePerGas > $0.maxPriorityFeePerGas || (selfPay && !$0.selfPay);
         LeakedAccountStorage.Layout storage $ = _authVault(loosening);
         if (maxPriorityFeePerGas > type(uint128).max) revert BadConfig();
-        if (tank == address(this)) revert BadAddress(tank);
+        if (
+            tank == address(this)
+                || (
+                    tank != address(0)
+                        && (tank == $.vaultSigner || tank == $.recoverySigner || tank == $.pendingVaultSigner)
+                )
+        ) revert BadAddress(tank);
         _setFeePolicy($, maxPriorityFeePerGas, selfPay, tank);
     }
 
@@ -249,12 +258,24 @@ contract LeakedAccountRoles is LeakedAccountBase {
         emit TimelockUpdated(delay, thresholdUsd);
     }
 
-    /// @notice Recovery signer. The first install (from none) is instant; any change or removal is queued.
+    /// @notice Recovery signer. The first install (from none) is instant; any change or removal is queued. The new
+    ///         signer must be independent of the vault: a distinct address (and not the account, the hot key or the
+    ///         tank) and, when both signers are deployed, a distinct PQ key (`SameRoleKey`).
     function vaultSetRecoverySigner(address newRecoverySigner) external delegated {
         bool loosening = !(_s().recoverySigner == address(0) && newRecoverySigner != address(0));
         LeakedAccountStorage.Layout storage $ = _authVault(loosening);
-        if (newRecoverySigner == address(this) || newRecoverySigner == $.vaultSigner) {
-            revert BadAddress(newRecoverySigner);
+        if (newRecoverySigner != address(0)) {
+            // Role independence: a distinct signer (account, vault, a pending vault, everyday key, tank) holding a
+            // PQ key distinct from the vault's (and a pending vault's).
+            if (
+                newRecoverySigner == address(this) || newRecoverySigner == $.vaultSigner
+                    || newRecoverySigner == $.pendingVaultSigner || newRecoverySigner == $.hotKey
+                    || newRecoverySigner == $.tank
+            ) revert BadAddress(newRecoverySigner);
+            _checkIndependentKeys(0, $.vaultSigner, 0, newRecoverySigner);
+            if ($.pendingVaultSigner != address(0)) {
+                _checkIndependentKeys(0, $.pendingVaultSigner, 0, newRecoverySigner);
+            }
         }
         if (newRecoverySigner == address(0) && $.bunker) revert BunkerNeedsRecovery();
         $.recoverySigner = newRecoverySigner;
@@ -394,8 +415,10 @@ contract LeakedAccountRoles is LeakedAccountBase {
         LeakedAccountStorage.Layout storage $ = _onlyRecovery();
         if (
             newVaultSigner == address(0) || newVaultSigner == address(this) || newVaultSigner == $.vaultSigner
-                || newVaultSigner == $.recoverySigner
+                || newVaultSigner == $.recoverySigner || newVaultSigner == $.hotKey || newVaultSigner == $.tank
         ) revert BadAddress(newVaultSigner);
+        // Recovery must stay an independent key: the new vault may not hold the recovery's PQ key.
+        _checkIndependentKeys(0, newVaultSigner, 0, $.recoverySigner);
         uint48 eta = uint48(block.timestamp) + ROTATION_DELAY;
         $.pendingVaultSigner = newVaultSigner;
         $.pendingVaultEta = eta;

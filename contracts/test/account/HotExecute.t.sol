@@ -200,6 +200,8 @@ contract HotExecuteTest is AccountTestBase {
 
     function testFuzz_open_anyEoaRecipient_debitEqualsQuote(address to, uint96 amount) public {
         vm.assume(to != address(0) && to != address(account) && to.code.length == 0 && uint160(to) > 0xffff);
+        // Self-defeating recipients are refused (`ForbiddenRecipient`, AccountHardening.t.sol).
+        vm.assume(to != vault && to != recovery && to != guardian);
         uint256 amt = bound(amount, 1, PER_TX);
         uint256 before = usdc.balanceOf(to);
         _hot(amt, _one(_usdcTransfer(to, amt)));

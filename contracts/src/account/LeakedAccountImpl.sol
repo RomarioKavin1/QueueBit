@@ -86,10 +86,18 @@ contract LeakedAccountImpl is LeakedVerify, LeakedAccountBase, Initializable, UU
         if (c.hotKey == address(0) || c.hotKey == address(this)) revert BadAddress(c.hotKey);
         address vaultSigner = _roleSigner(c.roleSignerFactory, c.vault, c.vaultSigner, ROLE_VAULT);
         address recoverySigner = _roleSigner(c.roleSignerFactory, c.recovery, c.recoverySigner, ROLE_RECOVERY);
-        if (vaultSigner == address(0) || vaultSigner == address(this)) revert BadAddress(vaultSigner);
-        if (recoverySigner == address(this) || (recoverySigner != address(0) && recoverySigner == vaultSigner)) {
+        // Role independence: distinct signers (from each other, the account and the everyday key; the tank below)
+        // holding distinct PQ keys.
+        if (vaultSigner == address(0) || vaultSigner == address(this) || vaultSigner == c.hotKey) {
+            revert BadAddress(vaultSigner);
+        }
+        if (
+            recoverySigner != address(0)
+                && (recoverySigner == address(this) || recoverySigner == vaultSigner || recoverySigner == c.hotKey)
+        ) {
             revert BadAddress(recoverySigner);
         }
+        if (recoverySigner != address(0)) _checkIndependentKeys(c.vault.pk, vaultSigner, c.recovery.pk, recoverySigner);
         uint8 frames = c.maxHotFrames == 0 ? DEFAULT_MAX_HOT_FRAMES : c.maxHotFrames;
         uint48 delay = c.timelockDelay == 0 ? DEFAULT_TIMELOCK : c.timelockDelay;
         _checkCapBounds(c.perTxMaxUsd, c.maxFeeWeiPerTx, frames);
@@ -395,7 +403,8 @@ contract LeakedAccountImpl is LeakedVerify, LeakedAccountBase, Initializable, UU
         if (c.data.length == 0) {
             // Plain ETH: to an allowlisted recipient, or (Open) to any recipient, with value. A zero-value empty call
             // moves nothing and only runs the target's fallback: it is a non-transfer call and needs the allowlist.
-            if (!$.targets[t] && (c.value == 0 || !_openRecipient($, t))) revert NotAllowed(t, bytes4(0));
+            if (c.value == 0 && !$.targets[t]) revert NotAllowed(t, bytes4(0));
+            _checkRecipient($, t, address(0), bytes4(0));
             uint256 usd = quoteUsd(address(0), c.value);
             _call(i, t, c.value, "");
             return usd;
@@ -406,7 +415,7 @@ contract LeakedAccountImpl is LeakedVerify, LeakedAccountBase, Initializable, UU
             // recipient (H2: nothing else on a token: no approve / permit / transferFrom outside a session).
             if (c.value != 0 || c.data.length != 68) revert NotAllowed(t, sel);
             (address to, uint256 amount) = abi.decode(c.data[4:], (address, uint256));
-            if (!$.targets[to] && !_openRecipient($, to)) revert NotAllowed(to, sel);
+            _checkRecipient($, to, t, sel);
             uint256 usd = _quote(tc, amount);
             _callToken(i, t, c.data);
             return usd;
@@ -433,10 +442,27 @@ contract LeakedAccountImpl is LeakedVerify, LeakedAccountBase, Initializable, UU
         return used;
     }
 
-    /// Open mode admits any recipient of a plain ETH send or token `transfer` but address(0) (a burn is never an
-    /// everyday payment). The account itself never gets here (self-calls are handled first).
-    function _openRecipient(LeakedAccountStorage.Layout storage $, address to) private view returns (bool) {
-        return to != address(0) && $.recipientsOpen;
+    /// Who may receive a hot ETH send (`token == address(0)`) or a `transfer` of `token`; reverts otherwise.
+    /// - never address(0) (a burn is never an everyday payment): `NotAllowed`;
+    /// - never self-defeating, in either mode (mirrors H2, `_checkPolicyTarget`, for a recipient the vault may have
+    ///   allowlisted before a role change): the account itself, the vault or recovery signer, or the token being
+    ///   moved (`to == token`): `ForbiddenRecipient`. (A pending rotation's signer is not checked: the rotation
+    ///   freezes the hot tier until it finalizes, and neither `vaultUnfreeze` nor `clearExpiredFreeze` lifts it.)
+    /// - an allowlisted recipient is admitted (this is the tank's top-up path: `initialize` allowlists the tank);
+    /// - otherwise Strict: `NotAllowed`; Open: anyone but the tank, a guardian or an allowlisted token contract
+    ///   (`ForbiddenRecipient`): fees, a freeze-only role and a token's own balance are never paid by the hot key
+    ///   without the vault allowlisting them.
+    function _checkRecipient(LeakedAccountStorage.Layout storage $, address to, address token, bytes4 sel)
+        private
+        view
+    {
+        if (to == address(0)) revert NotAllowed(to, sel);
+        if (to == address(this) || to == token || to == $.vaultSigner || to == $.recoverySigner) {
+            revert ForbiddenRecipient(to);
+        }
+        if ($.targets[to]) return;
+        if (!$.recipientsOpen) revert NotAllowed(to, sel);
+        if (to == $.tank || $.guardians[to].enabled || $.tokens[to].allowed) revert ForbiddenRecipient(to);
     }
 
     /// I-6: no approval granted inside the batch survives it.

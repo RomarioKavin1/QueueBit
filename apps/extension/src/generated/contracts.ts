@@ -223,6 +223,17 @@ export const accountAbi = [
   },
   {
     type: "error",
+    name: "ForbiddenRecipient",
+    inputs: [
+      {
+        name: "to",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+  },
+  {
+    type: "error",
     name: "FreezeNotExpired",
     inputs: [
       {
@@ -445,6 +456,11 @@ export const accountAbi = [
         internalType: "address",
       },
     ],
+  },
+  {
+    type: "error",
+    name: "SameRoleKey",
+    inputs: [],
   },
   {
     type: "error",

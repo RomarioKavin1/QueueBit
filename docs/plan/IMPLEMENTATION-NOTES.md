@@ -1041,3 +1041,45 @@ the security review" fixes (A1 to A5) and host matrix are unchanged. Commits `9d
   `LIVE_DEVNET=1` on the local devnet with anvil #9 and passes 26/26 (account `0xA69aBD84…CDcD`). The watcher-core
   ABI now includes the modules' `RecipientModeSet` and `VaultBound`. `RecipientModeSet` decodes by name into a
   settings change, so the frame and 4337 backends alert the same way. No rule reads `VaultBound` yet.
+
+## Account hardening: independent role keys and self-defeating hot recipients (2026-11-06)
+
+Follow-up of the delta review (`9b918a3`). Execution side only: `LeakedVerify` is unchanged, `script/lint-verify.sh`
+passes, and the G1 re-run (all 7 items pass) records the same VERIFY gas as the previous run for every tx (for
+example hot 45,750, Path B 36,213, Path A 151,701).
+
+- **Role independence** (`SameRoleKey()`, `BadAddress`).
+  - `initialize` refuses a recovery holding the vault's PQ public key. The keys come from `InitConfig.vault.pk` /
+    `recovery.pk`. For an explicit signer the account reads `pk()` from the deployed `PQRoleSigner` (gas-bounded
+    staticcall). A code-less or non-PQ signer reports no key and is checked by address only. PoC: with the same pk
+    the two derived addresses differ (the role is in the clone's args), so the old address check let it through.
+  - The vault and recovery signers must also differ from the hot key (and, as before, from each other, the account
+    and the tank).
+  - The same rule applies on every later install: `vaultSetRecoverySigner` (first install and queued change; the new
+    signer also differs from the hot key, the tank and a pending vault) and `recoveryStartVaultRotation` (the new
+    vault differs from the hot key and the tank, and holds no recovery key). `vaultSetHotKey` and
+    `vaultSetFeePolicy` (tank) refuse the vault, recovery and pending-vault signers.
+  - Limit: a counterfactual signer (bound, not yet deployed) passed by address to a later install has no readable
+    key. Only `initialize` sees both keys as parameters. `InitConfig` is unchanged.
+- **Hot recipients** (`ForbiddenRecipient(address)`, `_checkRecipient`).
+  - In both modes an ETH send or `transfer` never pays the account itself, the vault or recovery signer, or the token
+    being moved (`to == token`). This check runs before the allowlist and mirrors H2 (`_checkPolicyTarget`), so a
+    recipient that was allowlisted before a role change (for example made the vault by a rotation) is refused too.
+    A pending vault is not checked: the rotation freezes the hot tier until it finalizes.
+  - In Open mode, a recipient that is not allowlisted is also refused when it is the tank, an enabled guardian or an
+    allowlisted token contract. The tank's top-up path is its allowlist entry from `initialize`, which still works in
+    both modes. A tank re-pinned by `vaultSetFeePolicy` needs `vaultSetTarget`, as before. Strict reports these as
+    `NotAllowed`.
+  - address(0) is still `NotAllowed`. Hot SENDER cost rises by about 4.5k gas per payment leg (G1 hot payment
+    314,037 → 323,033 gas).
+- **Tests.** `test/account/AccountHardening.t.sol` holds 17 units/PoCs, run in Open and Strict
+  (`AccountHardeningStrictTest`). The `HotExecute` Open fuzz now excludes role signers and the guardian. The full forge
+  suite is green (761 pass, 3 skip at this commit).
+- **Extension ABI.** The two new errors were added to `apps/extension/src/generated/contracts.ts` by running
+  `scripts/gen-contracts.mjs`. No `InitConfig` change.
+- **Modules: what they should copy** (`src/modules`, not touched here):
+  - `LeakedRoleExecutor.onInstall` should refuse `recoveryPk == vaultPk` (same verifier or not), and so should any
+    later recovery-key or vault-key rotation.
+  - `LeakedPolicyHook._checkCalls` in Open should refuse a payment `to` the account, the hook, the executor, the
+    token itself (`to == token`), an enabled guardian, the tank, or an allowlisted token, unless it is allowlisted.
+    The account, the hook, the executor and `to == token` should be refused in both modes.

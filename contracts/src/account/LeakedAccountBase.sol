@@ -61,6 +61,28 @@ abstract contract LeakedAccountBase is ILeakedAccount {
         emit FeePolicyUpdated(maxPrio, selfPay, tank);
     }
 
+    /// Recovery must be an independent key: `SameRoleKey` when the vault and the recovery hold the same PQ public key.
+    /// A key not given (`0`) is read from the signer's `pk()` (a deployed `PQRoleSigner`); a counterfactual or
+    /// non-PQ signer reports none and is checked by address only.
+    function _checkIndependentKeys(bytes32 vaultPk, address vaultSigner, bytes32 recoveryPk, address recoverySigner)
+        internal
+        view
+    {
+        if (vaultPk == bytes32(0)) vaultPk = _rolePk(vaultSigner);
+        if (recoveryPk == bytes32(0)) recoveryPk = _rolePk(recoverySigner);
+        if (vaultPk != bytes32(0) && vaultPk == recoveryPk) revert SameRoleKey();
+    }
+
+    /// `signer.pk()` (`PQRoleSigner`), or 0 when it has no code or does not answer. Gas-bounded, 32 bytes copied.
+    function _rolePk(address signer) internal view returns (bytes32 pk) {
+        if (signer.code.length == 0) return bytes32(0);
+        assembly ("memory-safe") {
+            mstore(0, 0x58e14a45) // pk()
+            let ok := staticcall(50000, signer, 0x1c, 4, 0, 32)
+            if and(ok, gt(returndatasize(), 31)) { pk := mload(0) }
+        }
+    }
+
     function _checkCapBounds(uint256 perTxMaxUsd, uint256 maxFeeWeiPerTx, uint8 maxHotFrames) internal pure {
         if (perTxMaxUsd > type(uint96).max || maxFeeWeiPerTx > type(uint128).max) revert BadConfig();
         if (maxHotFrames < 2 || maxHotFrames > 64) revert BadConfig();

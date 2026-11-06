@@ -34,6 +34,14 @@ pragma solidity 0.8.28;
 ///           allowance (cap = timelock threshold) and measures outflow instead of trusting `usdValue`;
 ///         - a recovery rotation also blocks vault spends/queueing/queued execution and voids older vault ops
 ///           (vault epoch); `HotExecuted` carries no sig hash (TXPARAM halts outside a frame tx);
+///         - role independence (2026-11-06 hardening): the vault and recovery signers must hold different PQ public
+///           keys (`SameRoleKey`; checked from the init parameters, else from a deployed signer's `pk()`) and be
+///           distinct from each other, the account, the hot key and the tank (`BadAddress`), at initialize and on
+///           every later install (recovery install/change, vault rotation, hot-key rotation, tank change);
+///         - hot recipients (2026-11-06 hardening): an ETH send or token `transfer` never pays the account itself,
+///           a role signer or (a `transfer`) the token itself, in either mode; an Open-mode recipient that is not
+///           allowlisted is also never the tank, a guardian or an allowlisted token (`ForbiddenRecipient`). The
+///           tank's top-up path is its allowlist entry (set at initialize) and keeps working;
 ///         - `getBucket()` returns `(available, lastUpdate, cap, fullAt)`: the refill is continuous, so "frees up
 ///           at" is when the bucket is full again.
 /// @dev Paths that cannot log, by construction (the watcher must not rely on them):
@@ -238,6 +246,9 @@ interface ILeakedAccount {
     error BadExpiry();
     error FreezeNotExpired(uint48 until);
     error NotFrozen();
+    /// A hot payment (ETH send or token `transfer`) to a self-defeating recipient: the account itself, a role
+    /// signer, the token being moved, or (Open mode, not allowlisted) the tank, a guardian or an allowlisted token.
+    error ForbiddenRecipient(address to);
 
     // Roles and timelock.
     error Unauthorized();
@@ -248,6 +259,8 @@ interface ILeakedAccount {
     error RotationNotReady(uint48 eta);
     error BunkerNeedsRecovery();
     error BadAddress(address a);
+    /// The vault and the recovery hold the same PQ public key (recovery must be an independent key).
+    error SameRoleKey();
     error BadOp(bytes32 opId);
     error OpNotReady(bytes32 opId, uint48 eta);
     error PayloadMismatch();
