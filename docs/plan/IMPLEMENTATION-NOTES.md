@@ -711,9 +711,12 @@ Code: `apps/extension/src/background/{account,engine,routing,policy,payments,act
   `chrome.alarms.create(name, {when})` list.
 - **Copy** follows ux-spec §1.2; a test checks every alert kind for amounts, addresses and the banned words. ntfy push
   carries title/body only; the SSE stream and webhook carry the structured `ref` to authenticated clients.
-- **HMAC** (WebCrypto, works in the MV3 worker): webhook `x-leaked-signature: t=…,v1=…` (5 min skew), stream
-  envelopes `{v,t,alert,sig}` signed with the caller's key (a spoofed server cannot inject "all clear"), request auth
-  `LEAKED-HMAC id,t,sig` over `METHOD\npath\nt` (header or query for EventSource). Pairing QR:
+- **HMAC** (WebCrypto, works in the MV3 worker; format as of `fc88238`, superseding the first version): webhook
+  `x-leaked-signature: t=…,n=…,v2=…` plus `x-leaked-delivery` (stable across retries, for dedupe; 5 min skew),
+  stream envelopes v2 `{v,t,type,seq,alert,sig}` with all of `t,type,seq,alert` signed by the caller's key (v1 refused:
+  `type`/`seq` were unsigned), request auth `LEAKED-HMAC id,t,n,sig` with a per-key nonce cache for the skew window;
+  EventSource uses a single-use 60 s token from a signed `POST /v1/stream-token` (no signature in the URL);
+  `trustProxy` opt-in for rate-limit keys. Pairing QR:
   `{url, topic, keyId, hmacKey}` (`parsePairing`; ux-spec §3.10 lists `{url, topic, hmacKey}`; `keyId` added so one
   watcher can serve several devices).
 - **Reorgs.** Blocks are processed `confirmations` deep; the last `reorgWindow` hashes and per-block core snapshots
