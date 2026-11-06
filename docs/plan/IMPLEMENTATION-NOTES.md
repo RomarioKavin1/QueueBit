@@ -1463,3 +1463,37 @@ Commits `9ccfd58` (`@leaked/privacy`), `d74b8d8` (extension). Plan §30 §10 M6,
   op) takes ~1.4 min.
 - **Companion gap found**: the phone has no `Entrypoint.deposit(uint256)` format and no devnet Entrypoint, so the
   deposit's Vault approval shows "Unrecognised call" (the e2e stand-in confirms it like the user would). Backlog.
+
+## Extension follow-ups: fee top-up, Permit2, key rotation e2e, public exit (2026-11-06)
+
+Commits `410c02f` (companion), `8545f18` (privacy, groth16, devnet-test verifier), `52b1107`, `1c4581e`, `9b760dc`
+(extension). E2E on the local devnet (anvil #7; privacy: anvil #5's sub-account): `e2e/followups.e2e.ts` (1.1 min),
+`e2e/privacy.e2e.ts` (2.4 min, now with the public exit).
+
+- **Fee balance top-up.** The account can't pay a role signer (`ForbiddenRecipient` in both modes), and a Vault
+  approval to fund the Vault's fees would be paid from the balance that is low. So Security › Fee balance › Top up
+  is an everyday payment account → fee tank (allowlisted at initialize) and then a plain tank → signer transfer
+  (`VaultFlow.fundSigner`, receipt awaited); the sheet shows the route first (over the limit: the route copy, no
+  button). 4337: the tank relays approvals, so the top-up stops at the tank.
+- **Permit2.** `classifyTypedData` accepts `PermitSingle` / `PermitTransferFrom` only with the canonical domain
+  (name "Permit2", no version, canonical address) and exactly the canonical struct fields; pre-checks before any
+  window: chain, expiration in (now, now + 30 d], deadlines, Permit2's `allowance().nonce` / `nonceBitmap`. The
+  spender's `sessionSelector` comes from the live allowances (`0x00000000` for an allowed app); `classifyCalls` prices
+  the typed amount and requires `targets[spender]` or a live session (Open mode doesn't widen spenders). After mining,
+  `registeredHashExpiry(typedDigest)` must be set, as for ERC-2612. The e2e deploys the canonical Permit2 (mainnet
+  creation code, keccak pinned in `companion-sim.ts`, CREATE2 through 0x4e59…956c with the mainnet salt; ~15M gas
+  here, code deposit is state gas) and uses the fee tank as the spender (the one target allowlisted at creation;
+  anything else is a queued `vaultSetTarget`). `Permit2.permit` consumed the PermitSingle marker (allowance set);
+  the PermitTransferFrom digest was registered (expiry = its deadline). An `eth_call` "from Permit2" is refused by
+  ethrex (EIP-3607), so the e2e reads `registeredHashExpiry` instead.
+- **Key rotation e2e.** The old everyday key (decrypted from a copy of `storage.local` + the session DEK, as a thief
+  would) builds and simulates a payment with the extension's own `FrameEngine`: admitted before the rotation,
+  refused after; `getHotConfig().hotKey` is index 1 and the keyring adopted it; Send pays with the new key.
+- **Public exit.** The commitment circuit artifacts (3.3 MB) ship in the CRX next to the withdraw ones, pinned by
+  `COMMITMENT_ARTIFACT_PINS`; the proof is self-verified and its signals checked against the note. The devnet e2e
+  pool deploys `CommitmentGroth16Verifier` (after the Entrypoint, so the Entrypoint keeps nonce 4 on a fresh devnet)
+  as `RAGEQUIT_VERIFIER`; the cached pool is redeployed when it has none. On this devnet: Entrypoint `0xd3d84149…ae96`,
+  pool `0xaec49428…e5f0`, verifier `0x125a051c…abe0`. The op is `exit`: phone (note key) → proving → paying (Vault
+  `send` of `pool.ragequit`, usd 0, body gas from an estimate) → done; the full 0.05 ETH came back to the account
+  (the Vault signer paid the fee). Verifier gas on a real proof: 241k (forge).
+
