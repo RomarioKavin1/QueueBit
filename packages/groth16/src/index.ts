@@ -12,8 +12,11 @@
  */
 import {
   createGroth16Prover,
+  createRagequitProver,
   loadPinnedArtifacts,
+  loadPinnedCommitmentArtifacts,
   serveProver,
+  type RagequitProver,
   type ArtifactLoader,
   type PortLike,
   type Prover,
@@ -55,9 +58,25 @@ export function createDefaultProver(o: DefaultProverOptions): Prover {
   });
 }
 
-/** Worker side: serves the default prover on `port` (a Worker's `self`, or a MessagePort). */
+/**
+ * The default public-exit (ragequit) prover: the same engine over the pinned `commitment` circuit artifacts
+ * (`COMMITMENT_ARTIFACT_PINS`), loaded through the same `loader` on first use.
+ */
+export function createDefaultRagequitProver(o: DefaultProverOptions & { loader: ArtifactLoader }): RagequitProver {
+  return createRagequitProver({
+    backend: o.engine ?? createArkworksGroth16(o.engineOptions),
+    artifacts: () => loadPinnedCommitmentArtifacts(o.loader),
+    selfVerify: o.selfVerify ?? true,
+  });
+}
+
+/**
+ * Worker side: serves the default prover on `port` (a Worker's `self`, or a MessagePort); with a `loader`, the
+ * public-exit prover too (its artifacts load only when a ragequit is first proved).
+ */
 export function serveDefaultProver(port: PortLike, o: DefaultProverOptions): Prover {
-  const p = createDefaultProver(o);
-  serveProver(port, p);
+  const engine = o.engine ?? createArkworksGroth16(o.engineOptions);
+  const p = createDefaultProver({ ...o, engine });
+  serveProver(port, p, o.loader ? createDefaultRagequitProver({ ...o, engine, loader: o.loader }) : undefined);
   return p;
 }

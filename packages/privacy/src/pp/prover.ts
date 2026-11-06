@@ -5,6 +5,8 @@
  * not import it; the extension decides how it ships a prover (THIRD_PARTY.md, IMPLEMENTATION-NOTES.md).
  */
 
+import type { CommitmentCircuitInputs, RagequitProveResult, RagequitProver } from "./ragequit.js";
+
 /** The `withdraw` circuit's inputs (`withdraw.circom`, Withdraw(32)). */
 export interface WithdrawCircuitInputs {
   withdrawnValue: bigint;
@@ -69,7 +71,8 @@ export interface Groth16Backend {
 // Artifacts, hash-pinned
 // ---------------------------------------------------------------------------------------------------------------
 
-export type ArtifactName = "withdraw.wasm" | "withdraw.zkey" | "withdraw.vkey";
+export type ArtifactName =
+  "withdraw.wasm" | "withdraw.zkey" | "withdraw.vkey" | "commitment.wasm" | "commitment.zkey" | "commitment.vkey";
 
 /**
  * sha256 of the withdraw-circuit artifacts in npm `@fatsolutions/privacy-pools-core-circuits@1.0.5` (Apache-2.0).
@@ -77,11 +80,12 @@ export type ArtifactName = "withdraw.wasm" | "withdraw.zkey" | "withdraw.vkey";
  * same pins as THIRD_PARTY.md and `contracts/devnet-tests/privacy`). The extension ships these files in the CRX and
  * loads them from `chrome.runtime.getURL(...)`; nothing is fetched remotely, and a mismatch refuses to prove.
  */
-export const WITHDRAW_ARTIFACT_PINS: Readonly<Record<ArtifactName, string>> = Object.freeze({
-  "withdraw.wasm": "36cda22791def3d520a55c0fc808369cd5849532a75fab65686e666ed3d55c10",
-  "withdraw.zkey": "2a893b42174c813566e5c40c715a8b90cd49fc4ecf384e3a6024158c3d6de677",
-  "withdraw.vkey": "666bd0983b20c1611543b04f7712e067fbe8cad69f07ada8a310837ff398d21e",
-});
+export const WITHDRAW_ARTIFACT_PINS: Readonly<Record<"withdraw.wasm" | "withdraw.zkey" | "withdraw.vkey", string>> =
+  Object.freeze({
+    "withdraw.wasm": "36cda22791def3d520a55c0fc808369cd5849532a75fab65686e666ed3d55c10",
+    "withdraw.zkey": "2a893b42174c813566e5c40c715a8b90cd49fc4ecf384e3a6024158c3d6de677",
+    "withdraw.vkey": "666bd0983b20c1611543b04f7712e067fbe8cad69f07ada8a310837ff398d21e",
+  });
 
 export class ArtifactHashMismatchError extends Error {
   constructor(
@@ -110,9 +114,9 @@ export type ArtifactLoader = (name: ArtifactName) => Promise<Uint8Array>;
 /** Loads the three artifacts and checks each against its pin before anything uses it. */
 export async function loadPinnedArtifacts(
   load: ArtifactLoader,
-  pins: Readonly<Record<ArtifactName, string>> = WITHDRAW_ARTIFACT_PINS,
+  pins: Readonly<Record<"withdraw.wasm" | "withdraw.zkey" | "withdraw.vkey", string>> = WITHDRAW_ARTIFACT_PINS,
 ): Promise<WithdrawArtifacts> {
-  const names: ArtifactName[] = ["withdraw.wasm", "withdraw.zkey", "withdraw.vkey"];
+  const names = ["withdraw.wasm", "withdraw.zkey", "withdraw.vkey"] as const;
   const [wasm, zkey, vkey] = await Promise.all(
     names.map(async (n) => {
       const bytes = await load(n);
@@ -218,21 +222,30 @@ export interface PortLike {
   onmessage: ((ev: { data: unknown }) => void) | null;
 }
 
-type ProveRequest = { kind: "pp-prove"; id: number; inputs: WithdrawCircuitInputs };
+type ProveRequest =
+  | { kind: "pp-prove"; id: number; inputs: WithdrawCircuitInputs }
+  | { kind: "pp-prove-ragequit"; id: number; inputs: CommitmentCircuitInputs };
 type ProveResponse =
-  | { kind: "pp-proved"; id: number; result: ProveResult }
+  | { kind: "pp-proved"; id: number; result: ProveResult | RagequitProveResult }
   | { kind: "pp-prove-failed"; id: number; error: { name: string; message: string } };
 
-/** Worker side. Requests are proved one at a time (a second proof would only compete for the same cores). */
-export function serveProver(port: PortLike, prover: Prover): void {
+/**
+ * Worker side. Requests are proved one at a time (a second proof would only compete for the same cores). A
+ * `ragequit` prover (the commitment circuit) is optional; without one, public-exit requests fail.
+ */
+export function serveProver(port: PortLike, prover: Prover, ragequit?: RagequitProver): void {
   let queue: Promise<void> = Promise.resolve();
   port.onmessage = (ev) => {
     const m = ev.data as ProveRequest;
-    if (!m || m.kind !== "pp-prove" || typeof m.id !== "number") return;
+    if (!m || (m.kind !== "pp-prove" && m.kind !== "pp-prove-ragequit") || typeof m.id !== "number") return;
     queue = queue.then(async () => {
       let res: ProveResponse;
       try {
-        res = { kind: "pp-proved", id: m.id, result: await prover.prove(m.inputs) };
+        let result: ProveResult | RagequitProveResult;
+        if (m.kind === "pp-prove") result = await prover.prove(m.inputs);
+        else if (ragequit) result = await ragequit.proveRagequit(m.inputs);
+        else throw new Error("this prover has no public-exit (commitment) circuit");
+        res = { kind: "pp-proved", id: m.id, result };
       } catch (e) {
         const err = e as Error;
         res = { kind: "pp-prove-failed", id: m.id, error: { name: err.name, message: err.message } };
@@ -250,36 +263,41 @@ export class ProverTimeoutError extends Error {
 }
 
 /** Page side: a `Prover` whose work happens behind `port`. */
-export function createWorkerProver(port: PortLike, o: { timeoutMs?: number } = {}): Prover & { close(): void } {
-  const pending = new Map<number, { resolve: (r: ProveResult) => void; reject: (e: Error) => void }>();
+export function createWorkerProver(
+  port: PortLike,
+  o: { timeoutMs?: number } = {},
+): Prover & RagequitProver & { close(): void } {
+  const pending = new Map<number, { resolve: (r: never) => void; reject: (e: Error) => void }>();
   let nextId = 1;
   port.onmessage = (ev) => {
     const m = ev.data as ProveResponse;
     const p = m && pending.get(m.id);
     if (!p) return;
     pending.delete(m.id);
-    if (m.kind === "pp-proved") p.resolve(m.result);
+    if (m.kind === "pp-proved") p.resolve(m.result as never);
     else {
       const e = new Error(m.error.message);
       e.name = m.error.name;
       p.reject(e);
     }
   };
-  return {
-    prove(inputs) {
-      const id = nextId++;
-      return new Promise<ProveResult>((resolve, reject) => {
-        const timeoutMs = o.timeoutMs ?? 300_000;
-        const timer = setTimeout(() => {
-          if (pending.delete(id)) reject(new ProverTimeoutError(timeoutMs));
-        }, timeoutMs);
-        pending.set(id, {
-          resolve: (r) => (clearTimeout(timer), resolve(r)),
-          reject: (e) => (clearTimeout(timer), reject(e)),
-        });
-        port.postMessage({ kind: "pp-prove", id, inputs } satisfies ProveRequest);
+  const send = <R>(req: (id: number) => ProveRequest) => {
+    const id = nextId++;
+    return new Promise<R>((resolve, reject) => {
+      const timeoutMs = o.timeoutMs ?? 300_000;
+      const timer = setTimeout(() => {
+        if (pending.delete(id)) reject(new ProverTimeoutError(timeoutMs));
+      }, timeoutMs);
+      pending.set(id, {
+        resolve: ((r: R) => (clearTimeout(timer), resolve(r))) as (r: never) => void,
+        reject: (e) => (clearTimeout(timer), reject(e)),
       });
-    },
+      port.postMessage(req(id));
+    });
+  };
+  return {
+    prove: (inputs) => send<ProveResult>((id) => ({ kind: "pp-prove", id, inputs })),
+    proveRagequit: (inputs) => send<RagequitProveResult>((id) => ({ kind: "pp-prove-ragequit", id, inputs })),
     close() {
       port.onmessage = null;
       for (const p of pending.values()) p.reject(new Error("prover closed"));

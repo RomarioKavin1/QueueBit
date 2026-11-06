@@ -16,6 +16,8 @@ export const POOL_ABI = parseAbi([
   "function nullifierHashes(uint256 nullifierHash) view returns (bool)",
   "function SCOPE() view returns (uint256)",
   "function ASSET() view returns (address)",
+  "function depositors(uint256 label) view returns (address)",
+  "function ragequit((uint256[2] pA, uint256[2][2] pB, uint256[2] pC, uint256[4] pubSignals) _proof)",
 ]);
 
 export const POOL_EVENTS = {

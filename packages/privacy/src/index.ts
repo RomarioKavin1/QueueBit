@@ -97,6 +97,21 @@ export type {
   WithdrawArtifacts,
   WithdrawCircuitInputs,
 } from "./pp/prover.js";
+export {
+  COMMITMENT_ARTIFACT_PINS,
+  buildRagequitTx,
+  createRagequitProver,
+  loadPinnedCommitmentArtifacts,
+  ragequitInputs,
+  toRagequitSolProof,
+} from "./pp/ragequit.js";
+export type {
+  CommitmentArtifactName,
+  CommitmentCircuitInputs,
+  RagequitProveResult,
+  RagequitProver,
+  RagequitSolProof,
+} from "./pp/ragequit.js";
 export { WithdrawalInputError, buildWithdrawInputs } from "./pp/withdraw.js";
 export type { WithdrawInputsArgs } from "./pp/withdraw.js";
 export {
