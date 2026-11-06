@@ -17,9 +17,16 @@ import {
   type Hex,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { encodeTx, getProfile, roleSignerPathATx, setSignature, sigHash, txHash } from "@leaked/frames";
+import { encodeTx, getProfile, roleSignerPathATx, setSignature, sigHash, signTx, txHash } from "@leaked/frames";
 import { SCHEME_ID, keygen, sign } from "@leaked/pq-signer";
 import { createFrameRpc } from "@leaked/rpc";
+import { HDKey } from "@scure/bip32";
+import { mnemonicToSeedSync } from "@scure/bip39";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { aadFor, decryptWithKey, type EncryptedBlob } from "../../src/background/encryption";
+import { FrameEngine } from "../../src/background/engine";
 import {
   AnimatedUr,
   ROLE,
@@ -493,4 +500,202 @@ export async function stakeRecoverySigner(
     await new Promise((res) => setTimeout(res, 2000));
   }
   throw new Error("stake not mined");
+}
+
+// ---- follow-ups e2e (Permit2 on the devnet, the everyday key outside the extension) ----
+
+/** Canonical Uniswap Permit2 (MIT) and the deterministic-deployment proxy it was deployed through on mainnet. */
+export const PERMIT2: Address = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
+const CREATE2_PROXY: Address = "0x4e59b44847b379578588920ca78fbf26c0b4956c";
+const PERMIT2_SALT: Hex = "0x0000000000000000000000000000000000000000d3af2663da51c10215000000";
+/** keccak256 of the canonical init code (mainnet creation bytecode, e2e/fixtures/permit2.initcode.hex). */
+const PERMIT2_INITCODE_HASH: Hex = "0xe2be1e05eedf35dacd66c65c862f8150ff9ab4b6b24b9bbe62be71b6b16cf0f8";
+
+function extensionDir(): string {
+  let d = dirname(fileURLToPath(import.meta.url));
+  while (!existsSync(join(d, "wxt.config.ts"))) {
+    const up = dirname(d);
+    if (up === d) throw new Error("apps/extension not found");
+    d = up;
+  }
+  return d;
+}
+
+/**
+ * Puts the canonical Permit2 at its canonical address on the devnet (CREATE2 through the deterministic-deployment
+ * proxy with the mainnet salt and init code, so the address and bytecode are the real ones), once.
+ */
+export async function ensurePermit2(): Promise<Address> {
+  const code = await pub.getCode({ address: PERMIT2 });
+  if (code && code !== "0x") return PERMIT2;
+  const init = readFileSync(join(extensionDir(), "e2e", "fixtures", "permit2.initcode.hex"), "utf8").trim() as Hex;
+  if (keccak256(init) !== PERMIT2_INITCODE_HASH) throw new Error("permit2.initcode.hex is not the canonical init code");
+  const data = `${PERMIT2_SALT}${init.slice(2)}` as Hex;
+  // ~15M gas on this devnet: code deposit is charged as state gas here.
+  const est = await pub.estimateGas({ account: funder.account, to: CREATE2_PROXY, data });
+  const hash = await funder.sendTransaction({
+    to: CREATE2_PROXY,
+    data,
+    gas: (est * 6n) / 5n,
+    gasPrice: 2_000_000_000n,
+    type: "legacy",
+    chain: null,
+  });
+  const r = await pub.waitForTransactionReceipt({ hash, timeout: 180_000 });
+  const after = await pub.getCode({ address: PERMIT2 });
+  if (r.status !== "success" || !after || after === "0x") throw new Error("Permit2 deployment failed");
+  return PERMIT2;
+}
+
+const PERMIT2_ABI = [
+  {
+    type: "function",
+    name: "permit",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "owner", type: "address" },
+      {
+        name: "permitSingle",
+        type: "tuple",
+        components: [
+          {
+            name: "details",
+            type: "tuple",
+            components: [
+              { name: "token", type: "address" },
+              { name: "amount", type: "uint160" },
+              { name: "expiration", type: "uint48" },
+              { name: "nonce", type: "uint48" },
+            ],
+          },
+          { name: "spender", type: "address" },
+          { name: "sigDeadline", type: "uint256" },
+        ],
+      },
+      { name: "signature", type: "bytes" },
+    ],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "allowance",
+    stateMutability: "view",
+    inputs: [{ type: "address" }, { type: "address" }, { type: "address" }],
+    outputs: [{ type: "uint160" }, { type: "uint48" }, { type: "uint48" }],
+  },
+] as const;
+
+/** A site consuming a Permit2 PermitSingle pre-approval: `Permit2.permit(owner, permitSingle, signature)`. */
+export async function consumePermit2(args: {
+  owner: Address;
+  token: Address;
+  amount: bigint;
+  expiration: number;
+  nonce: number;
+  spender: Address;
+  sigDeadline: bigint;
+  signature: Hex;
+}): Promise<{ amount: bigint; expiration: number }> {
+  const hash = await funder.writeContract({
+    address: PERMIT2,
+    abi: PERMIT2_ABI,
+    functionName: "permit",
+    args: [
+      args.owner,
+      {
+        details: { token: args.token, amount: args.amount, expiration: args.expiration, nonce: args.nonce },
+        spender: args.spender,
+        sigDeadline: args.sigDeadline,
+      },
+      args.signature,
+    ],
+    gas: 500_000n,
+    gasPrice: 2_000_000_000n,
+    type: "legacy",
+    chain: null,
+  });
+  const r = await pub.waitForTransactionReceipt({ hash, timeout: 180_000 });
+  if (r.status !== "success") throw new Error("Permit2.permit reverted");
+  const [amount, expiration] = await pub.readContract({
+    address: PERMIT2,
+    abi: PERMIT2_ABI,
+    functionName: "allowance",
+    args: [args.owner, args.token, args.spender],
+  });
+  return { amount, expiration };
+}
+
+/** `account.isValidSignature(hash, sig)` as `caller` sees it (eth_call from that address). */
+export async function isValidSignatureFrom(account: Address, caller: Address, hash: Hex, sig: Hex): Promise<Hex> {
+  return pub.readContract({
+    account: caller,
+    address: account,
+    abi: [
+      {
+        type: "function",
+        name: "isValidSignature",
+        stateMutability: "view",
+        inputs: [{ type: "bytes32" }, { type: "bytes" }],
+        outputs: [{ type: "bytes4" }],
+      },
+    ],
+    functionName: "isValidSignature",
+    args: [hash, sig],
+  }) as Promise<Hex>;
+}
+
+/** The EIP-712 digest of typed data (what Permit2 hands the account's ERC-1271). */
+export const typedDigestOf = (td: Parameters<typeof hashTypedData>[0]): Hex => hashTypedData(td);
+
+/**
+ * The extension's everyday key at `index` and its fee-tank key, recovered OUTSIDE the extension from a copy of its
+ * storage (the keyring blob and the unlocked session's key): what a thief with this browser's data would hold.
+ */
+export async function stolenHotKeys(
+  record: { blob: EncryptedBlob; accounts: { everyday: string } },
+  dekHex: string,
+  index: number,
+): Promise<{ everyday: Hex; feeTank: Hex }> {
+  const plain = await decryptWithKey(
+    hexToBytes(`0x${dekHex.replace(/^0x/u, "")}`),
+    record.blob,
+    aadFor(record.accounts.everyday),
+  );
+  const { mnemonic } = JSON.parse(new TextDecoder().decode(plain)) as { mnemonic: string };
+  const root = HDKey.fromMasterSeed(mnemonicToSeedSync(mnemonic));
+  const k = (p: string) => toHex(root.derive(p).privateKey!);
+  return { everyday: k(`m/44'/60'/0'/0/${index}`), feeTank: k(`m/44'/60'/1'/0/0`) };
+}
+
+/**
+ * An everyday payment built and signed exactly like the extension's (FrameEngine), with the given keys, then
+ * simulated by the node: `admitted` false means the account's VERIFY frame refused the key.
+ */
+export async function simulateHotPayment(o: {
+  account: Address;
+  keys: { everyday: Hex; feeTank: Hex };
+  to: Address;
+  valueWei: bigint;
+  declaredUsd: bigint;
+}): Promise<{ admitted: boolean; reason?: string }> {
+  const engine = new FrameEngine(
+    {
+      getTransactionCount: (a, tag) => node.getTransactionCount(a, tag),
+      baseFee: async () => (await pub.getBlock({ blockTag: "latest" })).baseFeePerGas ?? 0n,
+      simulate: (raw) => node.simulateFrameTransaction(raw),
+      sendRawTransaction: (raw) => node.sendRawTransaction(raw),
+      getTransactionReceipt: (h) => node.getTransactionReceipt(h),
+    },
+    async (profile, tx) => signTx(profile, await signTx(profile, tx, o.keys.everyday, 0), o.keys.feeTank, 1),
+  );
+  const p = await engine.prepare({
+    chainId: 1337,
+    profileId: "ethrex-eip8141-tracer",
+    account: o.account,
+    hotKey: privateKeyToAccount(o.keys.everyday).address,
+    tank: privateKeyToAccount(o.keys.feeTank).address,
+    calls: [{ target: o.to, value: o.valueWei, data: "0x" }],
+    declaredUsd: o.declaredUsd,
+  });
+  return { admitted: p.verdict.admitted, ...(p.verdict.reason ? { reason: p.verdict.reason } : {}) };
 }
