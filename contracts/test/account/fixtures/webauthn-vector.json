@@ -1,11 +1,11 @@
 {
   "challenge": "0x55d3081ff93d9a4170403202dad89e1a835c1732aa5f1877a20366b41873fa24",
-  "x": "0x60bed4aef68fa1d494ded82e77c11b2b1d32e9ff1c8bfa5fa8843b4aa6ccbc67",
-  "y": "0xed5aaf3591e5f59f441db1580cb2647ae00d5831e3b87405901c77dc7a95e604",
+  "x": "0x8a218c2df37e81542c897e977068f236a1e821656ed446196dfe2585a16c4113",
+  "y": "0x56aa07dcc60215c97838bf8cd04843c18be35e85e4f032d0d620dccf3e65095a",
   "authenticatorData": "0x12ca17b49af2289436f303e0166030a21e525d266e209267433801a8fd4071a00500000001",
   "clientDataJSON": "{\"type\":\"webauthn.get\",\"challenge\":\"VdMIH_k9mkFwQDIC2tieGoNcFzKqXxh3ogNmtBhz-iQ\",\"origin\":\"http://127.0.0.1:8787\",\"crossOrigin\":false}",
   "challengeIndex": 23,
   "typeIndex": 1,
-  "r": "0x303c1622c787839828f32870c2cc7c852aeb51a37aece60e0e0549c792a4afe4",
-  "s": "0x670e9dcd63fbc7e7b49f1e86782d9809c737d6b6f7568e06c05a9d5c5053060a"
+  "r": "0x125796f15ebcf78789e7473b16d1e91899aba8d3032522d1e207c882ad2ba5fb",
+  "s": "0x345e283adadfa8e3b0bb4da5d8c395f42c5f94913573067e35c5a319680e26a4"
 }

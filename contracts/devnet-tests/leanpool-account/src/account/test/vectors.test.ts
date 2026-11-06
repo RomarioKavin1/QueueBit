@@ -2,12 +2,13 @@ import { test, expect } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import { p256 } from "@noble/curves/p256";
-import { keccak256, toHex } from "viem";
+import { hexToBytes, keccak256, toHex } from "viem";
 import { ROOT } from "../../core/config.ts";
 import { softSign, publicKeyXY, digestOf } from "../webauthn.ts";
 
 test("a WebAuthn assertion verifies like a browser passkey's, and writes the Forge vector", () => {
-  const sk = p256.utils.randomPrivateKey();
+  // A fixed test key: the vector is committed, so it must not change from run to run (ECDSA nonces are RFC 6979).
+  const sk = hexToBytes(keccak256(toHex("queuebit leanaccount webauthn test key")));
   const challenge = keccak256(toHex("a frame tx SIG_HASH"));
   const a = softSign(sk, challenge, "127.0.0.1", "http://127.0.0.1:8787");
   const { x, y } = publicKeyXY(sk);
