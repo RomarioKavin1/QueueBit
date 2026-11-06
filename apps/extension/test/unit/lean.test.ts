@@ -525,6 +525,17 @@ describe("migration planning", () => {
     ).toThrow(/isn't an owner/u);
   });
 
+  it("a Safe whose owners sign in their own wallets needs no imported keys", () => {
+    const contract = src({ code: { kind: "contract" } });
+    const p = planMigration(d, target, contract, {
+      kind: "safe",
+      external: true,
+      safe: { owners: [SOMEONE, TARGET], threshold: 2, signers: [] },
+    });
+    expect(p).toMatchObject({ mode: "safe-move", destination: target.address });
+    expect(p.steps[0]).toMatch(/2 owners sign/u);
+  });
+
   it("a smart account upgrades in place when it is a UUPS proxy, else moves", () => {
     const uups = src({ code: { kind: "contract" }, implementation: SOMEONE, isUUPS: true });
     const up = planMigration(d, target, uups, { kind: "smart-account" });

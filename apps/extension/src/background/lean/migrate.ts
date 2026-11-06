@@ -62,6 +62,8 @@ export interface PlanOptions {
   keepAddress?: boolean;
   /** Safe: its owners and threshold, and the owners whose keys were imported. */
   safe?: { owners: Address[]; threshold: number; signers: Address[] };
+  /** Safe: the owners sign the SafeTx in their own wallets (no imported keys) and one of them sends it. */
+  external?: boolean;
 }
 
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
@@ -121,9 +123,20 @@ export function planMigration(
     const outsiders = s.signers.filter((x) => !owners.has(x.toLowerCase()));
     if (outsiders.length) throw new Error(`${short(outsiders[0]!)} isn't an owner of this Safe.`);
     const signers = new Set(s.signers.map((x) => x.toLowerCase()));
-    if (signers.size < s.threshold)
+    if (!o.external && signers.size < s.threshold)
       throw new Error(`This Safe needs ${s.threshold} owner keys; ${signers.size} imported.`);
     if (src.eth === 0n && tokens.length === 0) throw new Error("This Safe holds nothing to move.");
+    if (o.external)
+      return {
+        ...base,
+        mode: "safe-move",
+        destination: target.address,
+        calls: moveCalls(d, target.options, target.address, tokens, src.eth),
+        steps: [
+          `${s.threshold} owner${s.threshold > 1 ? "s sign" : " signs"} one Safe transaction in their own wallet`,
+          "A connected owner sends it: every token and all the ETH move to your account at once",
+        ],
+      };
     return {
       ...base,
       mode: "safe-move",

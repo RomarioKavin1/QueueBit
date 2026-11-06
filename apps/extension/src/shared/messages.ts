@@ -55,6 +55,35 @@ export interface MigrationRequest {
   external?: boolean;
 }
 
+/** A Safe transaction (JSON-safe: numbers as decimal strings). */
+export interface SafeTxJson {
+  to: `0x${string}`;
+  value: string;
+  data: `0x${string}`;
+  operation: number;
+  safeTxGas: string;
+  baseGas: string;
+  gasPrice: string;
+  gasToken: `0x${string}`;
+  refundReceiver: `0x${string}`;
+  nonce: string;
+}
+
+/** A Safe's move for its owners to sign in their own wallets (`eth_signTypedData_v4` with `typedData`). */
+export interface SafeMove {
+  chainId: number;
+  safe: `0x${string}`;
+  owners: `0x${string}`[];
+  threshold: number;
+  destination: `0x${string}`;
+  steps: string[];
+  tx: SafeTxJson;
+  /** The SafeTx's EIP-712 hash (what every owner signs). */
+  hash: `0x${string}`;
+  /** The typed data as eth_signTypedData_v4 takes it (a JSON string). */
+  typedData: string;
+}
+
 /** A transaction an external wallet sends for a move (JSON-safe: wei and gas as decimal strings). */
 export interface ExternalCall {
   to: `0x${string}`;
@@ -130,6 +159,21 @@ export interface UiApi {
   "migrate:calls": {
     req: MigrationRequest;
     res: { chainId: number; source: `0x${string}`; destination: `0x${string}`; calls: ExternalCall[] };
+  };
+  /** A Safe's move, for its owners to sign in their own wallets (no keys in QueueBit). */
+  "migrate:safeTx": { req: { chainId?: number; address: `0x${string}` }; res: SafeMove };
+  /**
+   * The Safe's execTransaction once enough owners signed: each signature is checked against the Safe's owners and its
+   * on-chain SafeTx hash. A connected owner sends it.
+   */
+  "migrate:safeExec": {
+    req: {
+      chainId?: number;
+      safe: `0x${string}`;
+      tx: SafeTxJson;
+      signatures: { owner: `0x${string}`; signature: `0x${string}` }[];
+    };
+    res: ExternalCall;
   };
   /** The move's last transaction: the rest of the ETH to the account (creating it), less the fee and a margin. */
   "migrate:sweep": { req: MigrationRequest; res: ExternalCall & { leftoverWei: string } };

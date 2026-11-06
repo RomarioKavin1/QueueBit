@@ -1,17 +1,32 @@
 import {
   addSessionCalls,
+  execTransactionCall,
   guardianRecoveryAbi,
+  multiSendSafeTx,
+  packSafeSignatures,
   pruneExpiredCall,
   revokeSessionCall,
+  safeAbi,
+  safeTxTypedData,
   type Call,
+  type SafeTx,
 } from "@queuebit/account";
-import { encodeFunctionData, hexToBytes, isAddress, isHex, type Address, type Hex } from "viem";
+import {
+  encodeFunctionData,
+  hashTypedData,
+  hexToBytes,
+  isAddress,
+  isHex,
+  recoverTypedDataAddress,
+  type Address,
+  type Hex,
+} from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { LOCAL_DEVNET } from "../shared/build";
 import { NO_DEPLOYMENT, findNetwork, getNetwork, toHexChainId } from "../shared/chains";
 import { ProviderRpcError, RpcErrorCode, userRejected } from "../shared/errors";
 import type { KV } from "../shared/kv";
-import type { ApprovalView, MigrationRequest, SendRequest, UiApi, UiType } from "../shared/messages";
+import type { ApprovalView, MigrationRequest, SafeTxJson, SendRequest, UiApi, UiType } from "../shared/messages";
 import { anonStatusFor } from "../shared/offscreen";
 import { siteWarning } from "../shared/sites";
 import type { Approval, ApprovalTx, WalletState } from "../shared/types";
@@ -703,6 +718,7 @@ export class Wallet {
       kind: req.kind,
       ...(req.keepAddress ? { keepAddress: true } : {}),
       ...(safe ? { safe: { owners: safe.owners, threshold: safe.threshold, signers: imported } } : {}),
+      ...(req.kind === "safe" && req.external ? { external: true } : {}),
     });
     return { chainId, plan };
   }
@@ -918,6 +934,82 @@ export class Wallet {
       return this.migrationView(chainId, plan, safe ? { owners: safe.owners, threshold: safe.threshold } : undefined);
     },
     "migrate:run": (req) => this.runMigration(req),
+    "migrate:safeTx": async ({ chainId: cid, address }) => {
+      const { chainId, plan } = await this.migrationPlan({
+        chainId: cid,
+        kind: "safe",
+        address,
+        keys: [],
+        external: true,
+      });
+      const d = this.acct().deployment(chainId);
+      if (!d.multiSend) throw new Error("This network has no MultiSend contract, so a Safe can't move here.");
+      const client = this.env.io!.publicClient(chainId);
+      const safe = await readSafe(client, address);
+      const tx = multiSendSafeTx(d.multiSend, plan.calls, safe.nonce);
+      const typed = safeTxTypedData(chainId, address, tx);
+      const json: SafeTxJson = safeTxToJson(tx);
+      return {
+        chainId,
+        safe: address,
+        owners: safe.owners,
+        threshold: safe.threshold,
+        destination: plan.destination,
+        steps: plan.steps,
+        tx: json,
+        hash: hashTypedData(typed),
+        typedData: JSON.stringify({
+          types: {
+            EIP712Domain: [
+              { name: "chainId", type: "uint256" },
+              { name: "verifyingContract", type: "address" },
+            ],
+            ...typed.types,
+          },
+          primaryType: typed.primaryType,
+          domain: { chainId, verifyingContract: address },
+          message: json,
+        }),
+      };
+    },
+    "migrate:safeExec": async ({ chainId: cid, safe: address, tx: json, signatures }) => {
+      const chainId = await this.chainOr(cid);
+      const client = this.env.io!.publicClient(chainId);
+      const tx = safeTxFromJson(json);
+      const safe = await readSafe(client, address);
+      if (tx.nonce !== safe.nonce) throw new Error("The Safe has moved on since this was signed: start again.");
+      const owners = new Set(safe.owners.map((o) => o.toLowerCase()));
+      const typed = safeTxTypedData(chainId, address, tx);
+      const valid = new Map<string, { owner: Address; signature: Hex }>();
+      for (const s of signatures) {
+        const who = (await recoverTypedDataAddress({ ...typed, signature: s.signature })).toLowerCase();
+        if (who !== s.owner.toLowerCase() || !owners.has(who))
+          throw new Error(`A signature isn't from an owner of this Safe (${s.owner}).`);
+        valid.set(who, { owner: s.owner, signature: s.signature });
+      }
+      if (valid.size < safe.threshold)
+        throw new Error(`This Safe needs ${safe.threshold} owner signatures; ${valid.size} so far.`);
+      const onChain = await client.readContract({
+        address,
+        abi: safeAbi,
+        functionName: "getTransactionHash",
+        args: [
+          tx.to,
+          tx.value,
+          tx.data,
+          tx.operation,
+          tx.safeTxGas,
+          tx.baseGas,
+          tx.gasPrice,
+          tx.gasToken,
+          tx.refundReceiver,
+          tx.nonce,
+        ],
+      });
+      if (onChain !== hashTypedData(typed)) throw new Error("The Safe computes a different transaction hash.");
+      const call = execTransactionCall(address, tx, packSafeSignatures([...valid.values()]));
+      return { to: call.to, valueWei: "0", data: call.data ?? ("0x" as Hex) };
+    },
     "migrate:calls": async (req) => {
       const { chainId, plan } = await this.migrationPlan({ ...req, external: true, keys: [] });
       if (plan.mode !== "move") throw new Error("A connected wallet can only move into a new account.");
@@ -995,3 +1087,29 @@ function hostOf(origin: string): string {
 }
 
 export { AccountError, ethAmount };
+
+const safeTxToJson = (t: SafeTx): SafeTxJson => ({
+  to: t.to,
+  value: t.value.toString(),
+  data: t.data,
+  operation: t.operation,
+  safeTxGas: t.safeTxGas.toString(),
+  baseGas: t.baseGas.toString(),
+  gasPrice: t.gasPrice.toString(),
+  gasToken: t.gasToken,
+  refundReceiver: t.refundReceiver,
+  nonce: t.nonce.toString(),
+});
+
+const safeTxFromJson = (j: SafeTxJson): SafeTx => ({
+  to: j.to,
+  value: BigInt(j.value),
+  data: j.data,
+  operation: j.operation,
+  safeTxGas: BigInt(j.safeTxGas),
+  baseGas: BigInt(j.baseGas),
+  gasPrice: BigInt(j.gasPrice),
+  gasToken: j.gasToken,
+  refundReceiver: j.refundReceiver,
+  nonce: BigInt(j.nonce),
+});
