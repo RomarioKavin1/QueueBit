@@ -231,11 +231,13 @@ function SetupSheet({
         </ul>
         <p className="t-small text-muted">
           Two steps: QueueBit sets the key up on the network (your fee tank pays, about 0.03 ETH, which becomes the
-          key's own fee balance), then your phone approves it.
+          key's own fee balance), then your phone approves it. Like every loosening, it takes effect after your
+          timelock, and you can cancel it until then.
         </p>
         <RiskBanner
           level="info"
-          title="What you trust: the LeanPool node you use could approve a payment you didn't sign, but never more than your daily limit allows, the same bound as a leaked everyday key. Each batch carries a proof anyone can check."
+          title="What you trust"
+          body="The LeanPool node you use could approve a payment you didn't sign, but never more than your daily limit allows: the same bound as a leaked everyday key. Each batch carries a proof anyone can check."
         />
         {error && <RiskBanner level="danger" title={error} />}
         <SheetButtons onBack={onClose}>

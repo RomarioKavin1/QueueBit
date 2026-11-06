@@ -11,10 +11,11 @@ import { createWalletClient, http, parseEther, type Address, type Hex } from "vi
 import { privateKeyToAccount } from "viem/accounts";
 import { describe, expect, it, vi } from "vitest";
 import { SCHEME_ID } from "@queuebit/pq-signer";
-import { createLeanPoolClient, httpTransport } from "@queuebit/rpc";
+import { createFrameRpc, createLeanPoolClient, httpTransport } from "@queuebit/rpc";
 import { publicClient, nodeClient } from "../../src/background/rpc";
 import { Wallet } from "../../src/background/wallet";
 import { MemoryKV } from "../../src/shared/kv";
+import { ACCOUNT_DEFAULTS } from "../../src/background/account";
 import { reviewRequestBytes } from "../../../companion/src/core/clearsign";
 import { entropyToWords, wordsToEntropy } from "../../../companion/src/core/keys";
 import { handle } from "../../../companion/src/worker/handler";
@@ -35,6 +36,12 @@ vi.mock("../../src/shared/leanpoolBuild", () => ({
 }));
 
 const RUN = process.env.LEANPOOL_PUBLIC_E2E === "1";
+/**
+ * FULL=1: the account gets the contract's minimum timelock (1 h, test-only: the extension itself leaves the 48 h
+ * default) so the run continues past the queued approval: Finish, a payment through LeanPool mined, then the node down
+ * and the fallback. About 70 minutes.
+ */
+const FULL = process.env.LEANPOOL_PUBLIC_E2E_FULL === "1";
 const RPC = "https://altmempool.forshtat.com";
 const CHAIN = 1337;
 const PASS = "phone-passphrase-1";
@@ -112,6 +119,8 @@ async function phone() {
 describe.runIf(RUN)("the quantum-safe everyday key on the public devnet (extension code end to end)", () => {
   it("set up → the Vault approves → the install is queued behind the timelock (extension code end to end)", async () => {
     const real = createLeanPoolClient(httpTransport(NODE, { timeoutMs: 15_000 }));
+    let nodeUp = true;
+    if (FULL) (ACCOUNT_DEFAULTS as { timelockDelay: number }).timelockDelay = 3600;
     const wallet = new Wallet({
       local: new MemoryKV(),
       session: new MemoryKV(),
@@ -125,6 +134,10 @@ describe.runIf(RUN)("the quantum-safe everyday key on the public devnet (extensi
         node: nodeClient,
         leanpool: () => ({
           ...real,
+          status: async () => {
+            if (!nodeUp) throw new Error("unreachable");
+            return real.status();
+          },
         }),
       },
     });
@@ -167,7 +180,7 @@ describe.runIf(RUN)("the quantum-safe everyday key on the public devnet (extensi
       const q = await wallet.handleUi("vault:queue", {});
       return q.find((x) => x.state === "pending" && x.title.startsWith("Use a quantum-safe everyday key"));
     });
-    expect(queued.eta - queued.chainNow).toBeGreaterThan(47 * 3600);
+    expect(queued.eta - queued.chainNow).toBeGreaterThan(FULL ? 3000 : 47 * 3600);
     expect(queued.executable).toBe(true); // this wallet holds the calls to execute it after the ETA
     expect(queued.chainNow).toBeLessThan(queued.eta);
     expect(await wallet.handleUi("pq:status", {})).toMatchObject({ state: "awaiting-vault" });
@@ -177,5 +190,48 @@ describe.runIf(RUN)("the quantum-safe everyday key on the public devnet (extensi
     expect(preview.route.route).toBe("hot");
     expect(preview.signingKey).toBeUndefined();
     console.log(`queued: op ${queued.opId}, takes effect at ${new Date(queued.eta * 1000).toISOString()}`);
-  }, 1_200_000);
+    if (!FULL) return;
+
+    // After the timelock: Finish (anyone may execute the queued op; the wallet holds its calls).
+    await until(async () => {
+      const b = await publicClient(CHAIN).getBlock({ blockTag: "latest" });
+      return b.timestamp >= BigInt(queued.eta) ? true : undefined;
+    }, 4_200_000);
+    await wallet.handleUi("vault:executeQueued", { opId: queued.opId });
+    const on = await until(async () => {
+      const v = await wallet.handleUi("pq:status", {});
+      return v.state === "on" ? v : undefined;
+    });
+    expect(on).toMatchObject({ active: true });
+
+    // A payment through LeanPool, followed to mined in the activity.
+    const pqPreview = await payments.preview(CHAIN, pay);
+    expect(pqPreview.signingKey?.kind).toBe("quantum-safe");
+    const entry = await payments.send(CHAIN, pay);
+    expect(entry.lane).toBe("leanpool");
+    const done = await until(async () => {
+      await payments.refreshPending();
+      const e = await wallet.activity.get(entry.id);
+      return e?.status === "confirmed" || e?.status === "failed" ? e : undefined;
+    });
+    expect(done.status).toBe("confirmed");
+    expect(done.steps.map((x) => x.status)).toEqual(["done", "done", "done", "done"]);
+    expect(done.pqBatch?.root).toMatch(/^0x/u);
+    const receipt = await createFrameRpc(RPC).node.getTransactionReceipt(done.hash);
+    expect(receipt?.frameReceipts.map((f) => f.status)).toEqual(["success", "success"]);
+    expect(receipt!.frameReceipts[0]!.gasUsed.execution).toBeLessThan(100_000n);
+    console.log(`PQ everyday payment mined through the extension: ${done.hash} (block ${done.blockNumber})`);
+
+    // LeanPool down at the check: the everyday key, with a note; confirmed.
+    nodeUp = false;
+    const fb = await payments.send(CHAIN, pay);
+    expect(fb.lane).toBeUndefined();
+    expect(fb.fallbackNote).toMatch(/LeanPool/u);
+    const fbDone = await until(async () => {
+      await payments.refreshPending();
+      const e = await wallet.activity.get(fb.id);
+      return e?.status === "confirmed" || e?.status === "failed" ? e : undefined;
+    });
+    expect(fbDone.status).toBe("confirmed");
+  }, 6_000_000);
 });
