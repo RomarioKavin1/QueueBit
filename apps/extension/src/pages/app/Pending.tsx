@@ -43,7 +43,7 @@ export function Pending({ highlight }: { highlight?: string } = {}) {
 
   return (
     <div className="flex flex-col gap-5">
-      <h1 className="text-[24px] leading-[30px] font-semibold">Pending</h1>
+      <h1 className="t-headline">Pending</h1>
       {error && <RiskBanner level="danger" title={error} />}
       <section aria-labelledby="sched-h" className="flex flex-col gap-3">
         <h2 id="sched-h" className="t-small font-semibold tracking-wide text-muted uppercase">

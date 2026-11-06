@@ -49,7 +49,7 @@ export function Limits() {
 
   return (
     <div className="flex flex-col gap-5">
-      <h1 className="text-[24px] leading-[30px] font-semibold">Limits</h1>
+      <h1 className="t-headline">Limits</h1>
       {!v.deployed && (
         <RiskBanner
           level="info"

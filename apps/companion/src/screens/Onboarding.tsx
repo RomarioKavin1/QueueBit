@@ -32,10 +32,13 @@ export function Welcome() {
     <Screen>
       <div className="flex flex-1 flex-col justify-center gap-6 pt-8">
         <div className="flex flex-col items-center gap-3 text-center">
-          <span className="inline-flex h-16 w-16 items-center justify-center rounded-lg bg-vault-bg text-vault">
+          <span className="relative isolate inline-flex h-16 w-16 items-center justify-center overflow-hidden rounded-lg border border-vault bg-vault-bg text-vault">
+            <span aria-hidden="true" className="halftone absolute inset-0 -z-10" />
             <VaultIcon size={36} />
           </span>
-          <h1 className="t-display">QueueBit Vault</h1>
+          <h1 className="t-display">
+            QueueBit <span className="text-vault italic">Vault</span>
+          </h1>
           <p className="max-w-[30ch] t-body text-muted">
             This phone approves the big things. Keep it offline when you can.
           </p>

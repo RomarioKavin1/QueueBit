@@ -247,7 +247,7 @@ function ActionCard({ action: a, primary, titleShown }: { action: ActionView; pr
     <Card className={a.unknown ? "border-danger" : ""}>
       {a.amount && primary ? (
         <>
-          <p className="t-small text-muted">{a.action === "approve" ? "Allow spending" : "Send"}</p>
+          <p className="t-label text-muted">{a.action === "approve" ? "Allow spending" : "Send"}</p>
           <p className="t-display" data-testid="amount">
             {a.amount.text}
           </p>

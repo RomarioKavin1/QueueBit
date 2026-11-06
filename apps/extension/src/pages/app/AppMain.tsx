@@ -188,7 +188,7 @@ function Shell({ route, children }: { route: string; children: ReactNode }) {
               aria-current={current === i.id ? "page" : undefined}
               className={cx(
                 "t-strong flex min-h-10 items-center gap-2 rounded-md px-3",
-                current === i.id ? "bg-bg text-brand" : "text-fg hover:bg-surface-2",
+                current === i.id ? "bg-fg text-inverse" : "text-fg hover:bg-surface-2",
               )}
             >
               <span aria-hidden="true">{i.icon}</span>

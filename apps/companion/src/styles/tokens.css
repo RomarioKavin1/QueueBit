@@ -1,49 +1,57 @@
 /*
- * Design tokens, verbatim from docs/design/ux-spec.md §6.1–6.3 (same values as apps/extension/src/styles/tokens.css).
+ * Design tokens, same values as apps/extension/src/styles/tokens.css: the QueueBit "Citylines Editorial" language
+ * (docs/design/ux-spec.md §6.1–6.3). Warm paper neutrals, ink text, terracotta for the primary action, cobalt for the Vault, halftone dots as the one decorative texture.
  * Components never hard-code colours: Tailwind's palette is reset (globals.css) and only these variables are exposed
- * as utilities.
+ * as utilities. Every text/background pair below is WCAG AA (4.5:1) or better.
  */
 :root {
   color-scheme: light;
-  /* neutrals */
-  --bg: #ffffff;
-  --surface: #f6f7f9;
-  --surface-2: #eceff3;
-  --border: #d9dee5;
-  --text: #111418;
-  --text-muted: #5b6470; /* 5.9:1 on --bg */
-  --text-inverse: #ffffff;
-  /* brand */
-  --brand: #2f5bea;
-  --on-brand: #ffffff; /* 5.6:1 */
-  --brand-hover: #244bc4;
+  /* neutrals: cream paper and ink */
+  --bg: #fcfaf7; /* cream 50 */
+  --surface: #f5f1eb; /* cream 100 */
+  --surface-2: #ede6da;
+  --border: #ded2bf; /* paper border */
+  --border-strong: #c7bcab; /* cream 400: dashed and hover borders */
+  --text: #1e1e1e; /* ink */
+  --text-muted: #5f5a51; /* 6.6:1 on --bg, 5.5:1 on --surface-2 */
+  --text-inverse: #fcfaf7;
+  /* brand: terracotta (deepened from #E05A47 so cream text on it reaches 5.2:1) */
+  --brand: #b8432f;
+  --on-brand: #fcfaf7;
+  --brand-hover: #9f3826;
+  --brand-bg: #fdf1ef;
+  --accent: #e05a47; /* terracotta sun: marks, dots, halftone only, never text */
   /* status: safe (everyday) */
-  --safe: #1b7f4b;
-  --safe-bg: #e6f4ec;
-  --on-safe: #ffffff;
-  /* status: limit (amber) */
-  --limit: #9a5b00;
-  --limit-fill: #ffb020;
-  --limit-bg: #fff4de;
-  /* status: vault (purple) */
-  --vault: #6b3fd6;
-  --vault-bg: #efe9fb;
-  --on-vault: #ffffff;
-  /* status: danger */
-  --danger: #c8102e;
-  --danger-bg: #fde8ec;
-  --on-danger: #ffffff;
+  --safe: #2b6a44;
+  --safe-bg: #e7f0e6;
+  --on-safe: #fcfaf7;
+  /* status: limit (ochre) */
+  --limit: #8a5700;
+  --limit-fill: #e0a43a;
+  --limit-bg: #fbf0d9;
+  /* status: vault (halftone cobalt) */
+  --vault: #2b45a2;
+  --vault-bg: #eef2fb;
+  --on-vault: #fcfaf7;
+  /* status: danger (raspberry crimson, pushed toward magenta so it never reads as the terracotta primary) */
+  --danger: #9e1243;
+  --danger-bg: #fbe8ee;
+  --on-danger: #fcfaf7;
   /* meter */
-  --meter-track: #e3e6ea;
-  --meter-safe: #1b7f4b;
-  --meter-limit: #ffb020;
-  --meter-empty: #c8102e;
+  --meter-track: #e6ddcf;
+  --meter-safe: #2b6a44;
+  --meter-limit: #e0a43a;
+  --meter-empty: #9e1243;
   /* focus */
-  --focus: #2f5bea;
-  --focus-ring: 0 0 0 3px rgba(47, 91, 234, 0.45);
+  --focus: #2b45a2;
+  --focus-ring: 0 0 0 3px rgba(43, 69, 162, 0.4);
   /* elevation (sheets only; cards use a border) */
-  --shadow-sheet: 0 8px 24px rgba(0, 0, 0, 0.18);
-  --scrim: rgba(17, 20, 24, 0.45);
+  --shadow-sheet: 0 10px 30px rgba(30, 30, 30, 0.16);
+  --shadow-press: 0 1px 0 rgba(30, 30, 30, 0.06); /* the hairline lift under pills and inputs */
+  --scrim: rgba(30, 30, 30, 0.42);
+  /* halftone dot colour (pattern lives in globals.css) */
+  --dot: #2b45a2;
+  --dot-opacity: 0.12;
 
   /* spacing (4-pt), radius, motion */
   --s-1: 4px;
@@ -53,85 +61,98 @@
   --s-5: 20px;
   --s-6: 24px;
   --s-8: 32px;
-  --r-sm: 6px;
-  --r-md: 10px;
+  --r-sm: 8px;
+  --r-md: 12px;
   --r-lg: 16px;
   --dur-fast: 120ms;
   --dur-med: 200ms;
   --dur-slow: 320ms;
-  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease: cubic-bezier(0.22, 1, 0.36, 1); /* ease-out-quint */
 
-  /* type */
-  --font-ui: -apple-system, "Segoe UI", Inter, Roboto, system-ui, sans-serif;
-  --font-code: ui-monospace, "SF Mono", Menlo, monospace;
+  /* type: Plus Jakarta Sans for UI, Instrument Serif for display figures and titles, Space Mono for addresses */
+  --font-ui: "Plus Jakarta Sans", -apple-system, "Segoe UI", system-ui, sans-serif;
+  --font-editorial: "Instrument Serif", Georgia, "Times New Roman", serif;
+  --font-code: "Space Mono", ui-monospace, "SF Mono", Menlo, monospace;
 }
 
-/* Dark: duplicated under the system-preference guard so the system theme works without JS; [data-theme] overrides. */
+/* Dark ink. Duplicated under the system-preference guard so the system theme works without JS; [data-theme] overrides. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --bg: #0f1115;
-    --surface: #171a20;
-    --surface-2: #1f242c;
-    --border: #2a2f38;
-    --text: #f2f4f7;
-    --text-muted: #a3acb9;
-    --text-inverse: #0f1115;
-    --brand: #7a9bff;
-    --on-brand: #0f1115;
-    --brand-hover: #92adff;
-    --safe: #4cc38a;
-    --safe-bg: #12291d;
-    --on-safe: #0f1115;
-    --limit: #ffb020;
-    --limit-fill: #ffb020;
+    --bg: #1a1816;
+    --surface: #23201c;
+    --surface-2: #2d2925;
+    --border: #44403c;
+    --border-strong: #5a544d;
+    --text: #f5f1eb;
+    --text-muted: #b3aa9c;
+    --text-inverse: #1a1816;
+    --brand: #f07a66;
+    --on-brand: #1a1816;
+    --brand-hover: #f5927f;
+    --brand-bg: #3a1f19;
+    --accent: #f07a66;
+    --safe: #6fc28e;
+    --safe-bg: #15261b;
+    --on-safe: #1a1816;
+    --limit: #e9b04a;
+    --limit-fill: #e9b04a;
     --limit-bg: #2e2410;
-    --vault: #b39dff;
-    --vault-bg: #221b38;
-    --on-vault: #0f1115;
-    --danger: #ff6b6b;
-    --danger-bg: #351517;
-    --on-danger: #0f1115;
-    --meter-track: #2a2f38;
-    --meter-safe: #4cc38a;
-    --meter-limit: #ffb020;
-    --meter-empty: #ff6b6b;
-    --focus: #7a9bff;
-    --focus-ring: 0 0 0 3px rgba(122, 155, 255, 0.55);
-    --shadow-sheet: 0 8px 24px rgba(0, 0, 0, 0.5);
+    --vault: #93a6f2;
+    --vault-bg: #1f2440;
+    --on-vault: #1a1816;
+    --danger: #ff7fa3;
+    --danger-bg: #3a1624;
+    --on-danger: #1a1816;
+    --meter-track: #3a3530;
+    --meter-safe: #6fc28e;
+    --meter-limit: #e9b04a;
+    --meter-empty: #ff7fa3;
+    --focus: #93a6f2;
+    --focus-ring: 0 0 0 3px rgba(147, 166, 242, 0.5);
+    --shadow-sheet: 0 10px 30px rgba(0, 0, 0, 0.5);
+    --shadow-press: 0 1px 0 rgba(0, 0, 0, 0.3);
     --scrim: rgba(0, 0, 0, 0.6);
+    --dot: #93a6f2;
+    --dot-opacity: 0.12;
   }
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #0f1115;
-  --surface: #171a20;
-  --surface-2: #1f242c;
-  --border: #2a2f38;
-  --text: #f2f4f7;
-  --text-muted: #a3acb9;
-  --text-inverse: #0f1115;
-  --brand: #7a9bff;
-  --on-brand: #0f1115;
-  --brand-hover: #92adff;
-  --safe: #4cc38a;
-  --safe-bg: #12291d;
-  --on-safe: #0f1115;
-  --limit: #ffb020;
-  --limit-fill: #ffb020;
+  --bg: #1a1816;
+  --surface: #23201c;
+  --surface-2: #2d2925;
+  --border: #44403c;
+  --border-strong: #5a544d;
+  --text: #f5f1eb;
+  --text-muted: #b3aa9c;
+  --text-inverse: #1a1816;
+  --brand: #f07a66;
+  --on-brand: #1a1816;
+  --brand-hover: #f5927f;
+  --brand-bg: #3a1f19;
+  --accent: #f07a66;
+  --safe: #6fc28e;
+  --safe-bg: #15261b;
+  --on-safe: #1a1816;
+  --limit: #e9b04a;
+  --limit-fill: #e9b04a;
   --limit-bg: #2e2410;
-  --vault: #b39dff;
-  --vault-bg: #221b38;
-  --on-vault: #0f1115;
-  --danger: #ff6b6b;
-  --danger-bg: #351517;
-  --on-danger: #0f1115;
-  --meter-track: #2a2f38;
-  --meter-safe: #4cc38a;
-  --meter-limit: #ffb020;
-  --meter-empty: #ff6b6b;
-  --focus: #7a9bff;
-  --focus-ring: 0 0 0 3px rgba(122, 155, 255, 0.55);
-  --shadow-sheet: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --vault: #93a6f2;
+  --vault-bg: #1f2440;
+  --on-vault: #1a1816;
+  --danger: #ff7fa3;
+  --danger-bg: #3a1624;
+  --on-danger: #1a1816;
+  --meter-track: #3a3530;
+  --meter-safe: #6fc28e;
+  --meter-limit: #e9b04a;
+  --meter-empty: #ff7fa3;
+  --focus: #93a6f2;
+  --focus-ring: 0 0 0 3px rgba(147, 166, 242, 0.5);
+  --shadow-sheet: 0 10px 30px rgba(0, 0, 0, 0.5);
+  --shadow-press: 0 1px 0 rgba(0, 0, 0, 0.3);
   --scrim: rgba(0, 0, 0, 0.6);
+  --dot: #93a6f2;
+  --dot-opacity: 0.12;
 }

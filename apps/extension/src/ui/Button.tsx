@@ -17,16 +17,16 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variants: Record<ButtonVariant, string> = {
   primary: "bg-brand text-on-brand hover:bg-brand-hover",
-  secondary: "bg-bg text-fg border border-line hover:bg-surface",
+  secondary: "bg-bg text-fg border border-line shadow-press hover:bg-surface-2",
   vault: "bg-vault text-on-vault hover:opacity-90",
   destructive: "bg-danger text-on-danger hover:opacity-90",
-  "danger-outline": "bg-bg text-danger border border-danger hover:bg-danger-bg",
+  "danger-outline": "bg-bg text-danger border border-danger shadow-press hover:bg-danger-bg",
   ghost: "bg-transparent text-fg hover:bg-surface-2",
 };
 
 /**
- * ux-spec §3 conventions: primary = filled brand; secondary = outline; destructive = filled danger; "needs Vault" =
- * filled vault purple with the phone glyph. Minimum target 44 px (md) / 36 px (sm, inline actions only).
+ * ux-spec §3 conventions: primary = filled terracotta; secondary = outline; destructive = filled danger; "needs Vault" =
+ * filled vault cobalt with the phone glyph. Minimum target 44 px (md) / 36 px (sm, inline actions only).
  */
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
   { variant = "primary", size = "md", loading, loadingLabel, icon, block, className, children, disabled, ...rest },

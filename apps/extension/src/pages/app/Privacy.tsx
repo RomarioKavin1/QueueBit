@@ -69,7 +69,7 @@ function PrivacyBody({ view, reload }: { view: PrivacyView; reload: () => void }
   return (
     <div className="flex flex-col gap-5" data-testid="privacy">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <h1 className="text-[24px] leading-[30px] font-semibold">Private balance</h1>
+        <h1 className="t-headline">Private balance</h1>
         <span
           className="t-small inline-flex items-center gap-1.5 rounded-full border border-line px-3 py-1"
           data-testid="privacy-connection"
@@ -199,13 +199,13 @@ function Balances({ view }: { view: PrivacyView }) {
     <div className="grid gap-3 sm:grid-cols-2">
       <Card tone="vault">
         <p className="t-small text-muted">Available</p>
-        <p className="text-[22px] leading-7 font-semibold tabular" data-testid="privacy-available">
+        <p className="t-figure tabular" data-testid="privacy-available">
           {eth(view.approvedWei)}
         </p>
       </Card>
       <Card>
         <p className="t-small text-muted">Waiting for pool review (0xbow)</p>
-        <p className="text-[22px] leading-7 font-semibold tabular" data-testid="privacy-pending">
+        <p className="t-figure tabular" data-testid="privacy-pending">
           {eth(view.pendingWei)}
         </p>
       </Card>

@@ -204,7 +204,7 @@ export const BellIcon = (p: IconProps) => (
   </Icon>
 );
 
-/** The QueueBit mark (same drawing as the toolbar icon). */
+/** The QueueBit "Q:" mark (same drawing as the toolbar icon, src/shared/icon.ts). Fixed colours: it is a logo. */
 export function LogoMark({ size = 24, title }: { size?: number; title?: string }) {
   return (
     <svg
@@ -215,10 +215,11 @@ export function LogoMark({ size = 24, title }: { size?: number; title?: string }
       aria-label={title}
       aria-hidden={title ? undefined : true}
     >
-      <rect width="128" height="128" rx="28" fill="var(--brand)" />
-      <path d="M64 18C64 18 32 55 32 79a32 32 0 0 0 64 0C96 55 64 18 64 18Z" fill="var(--on-brand)" />
-      <circle cx="64" cy="74" r="10" fill="var(--brand)" />
-      <path d="M59 80h10l3 20H56Z" fill="var(--brand)" />
+      <rect x="4" y="4" width="120" height="120" rx="28" fill="#E05A47" stroke="#1E1E1E" strokeWidth="8" />
+      <circle cx="54" cy="62" r="25" fill="none" stroke="#FCFAF7" strokeWidth="14" />
+      <path d="M64 74l18 20" stroke="#FCFAF7" strokeWidth="14" strokeLinecap="round" />
+      <circle cx="99" cy="48" r="8" fill="#FCFAF7" />
+      <circle cx="99" cy="78" r="8" fill="#FCFAF7" />
     </svg>
   );
 }

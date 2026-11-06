@@ -95,7 +95,7 @@ function Title({
 }) {
   return (
     <div className="mb-6">
-      <h1 ref={headingRef} tabIndex={-1} className="text-[24px] leading-[30px] font-semibold outline-none">
+      <h1 ref={headingRef} tabIndex={-1} className="t-headline outline-none">
         {children}
       </h1>
       {sub && <p className="t-body mt-2 text-muted">{sub}</p>}
@@ -531,7 +531,7 @@ export function BackupWords({ onDone }: { onDone: () => void }) {
   useEffect(() => () => setWords(null), []);
   return (
     <div className="flex max-w-[560px] flex-col gap-4" data-testid="backup-words">
-      <h1 className="text-[24px] leading-[30px] font-semibold">Back up your everyday words</h1>
+      <h1 className="t-headline">Back up your everyday words</h1>
       <p className="t-body text-muted">
         Your backup words restore this browser&apos;s everyday spending on a new computer. They don&apos;t control your
         Vault or your Recovery key.

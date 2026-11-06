@@ -55,7 +55,7 @@ export function Security({ state }: { state: WalletState }) {
   if (!s) return <Skeleton className="h-64" />;
   return (
     <div className="flex flex-col gap-5">
-      <h1 className="text-[24px] leading-[30px] font-semibold">Security</h1>
+      <h1 className="t-headline">Security</h1>
       {s.bunker && (
         <RiskBanner
           level="danger"

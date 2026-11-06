@@ -26,6 +26,10 @@
     "release:build": "node scripts/release-build.mjs"
   },
   "dependencies": {
+    "@fontsource/instrument-serif": "5.3.0",
+    "@fontsource/plus-jakarta-sans": "5.3.0",
+    "@fontsource/space-mono": "5.3.0",
+    "@noble/hashes": "2.4.0",
     "@queuebit/frames": "workspace:*",
     "@queuebit/groth16": "workspace:*",
     "@queuebit/pq-signer": "workspace:*",
@@ -34,7 +38,6 @@
     "@queuebit/rpc": "workspace:*",
     "@queuebit/ur": "workspace:*",
     "@queuebit/watcher-core": "workspace:*",
-    "@noble/hashes": "2.4.0",
     "@scure/bip32": "2.4.0",
     "@scure/bip39": "2.4.0",
     "jsqr": "1.4.0",

@@ -935,68 +935,56 @@ Alert "Paused by Sam" → Home banner → Security › Resume with Vault (2) →
 
 ### 6.1 Colour tokens
 
-Four status families map to the product's four ideas: **safe** (Everyday), **limit** (warnings about limits/pauses), **vault** (needs the phone / scheduled), **danger** (Lockdown, admin, mismatch). Text colours below are ≥ 4.5:1 on their background (AA for normal text); fills are used behind white or near-black text at ≥ 4.5:1 as listed.
+The visual language is **Citylines Editorial** (source: `queuebit_design_system_component_library.html`, v1.2): warm cream paper, ink text, a terracotta primary, halftone cobalt for the Vault, and halftone dots as the only decorative texture. The canonical values live in `apps/extension/src/styles/tokens.css` (the companion keeps an identical copy); the table below is a summary.
 
-```css
-:root {
-  /* neutrals */
-  --bg: #FFFFFF;            --surface: #F6F7F9;      --surface-2: #ECEFF3;
-  --border: #D9DEE5;        --text: #111418;         --text-muted: #5B6470;  /* 5.9:1 on --bg */
-  --text-inverse: #FFFFFF;
-  /* brand */
-  --brand: #2F5BEA;         --on-brand: #FFFFFF;     /* 5.6:1 */
-  --brand-hover: #244BC4;
-  /* status: safe (everyday) */
-  --safe: #1B7F4B;          --safe-bg: #E6F4EC;      --on-safe: #FFFFFF;   /* text 5.2:1 on bg; white on fill 5.2:1 */
-  /* status: limit (amber) */
-  --limit: #9A5B00;         --limit-fill: #FFB020;   --limit-bg: #FFF4DE;  /* text 5.5:1 on white; use --text on --limit-fill (10:1) */
-  /* status: vault (purple) */
-  --vault: #6B3FD6;         --vault-bg: #EFE9FB;     --on-vault: #FFFFFF;  /* 6.4:1 */
-  /* status: danger */
-  --danger: #C8102E;        --danger-bg: #FDE8EC;    --on-danger: #FFFFFF; /* 5.9:1 */
-  /* meter */
-  --meter-track: #E3E6EA;   --meter-safe: #1B7F4B;   --meter-limit: #FFB020;  --meter-empty: #C8102E;
-  /* focus */
-  --focus: #2F5BEA;         --focus-ring: 0 0 0 3px rgba(47, 91, 234, 0.45);
-}
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { /* same as [data-theme="dark"] */ } }
-:root[data-theme="dark"] {
-  --bg: #0F1115;            --surface: #171A20;      --surface-2: #1F242C;
-  --border: #2A2F38;        --text: #F2F4F7;         --text-muted: #A3ACB9;  /* 8:1 */
-  --text-inverse: #0F1115;
-  --brand: #7A9BFF;         --on-brand: #0F1115;     /* 7.1:1 */
-  --brand-hover: #92ADFF;
-  --safe: #4CC38A;          --safe-bg: #12291D;      --on-safe: #0F1115;     /* 8.5:1 */
-  --limit: #FFB020;         --limit-fill: #FFB020;   --limit-bg: #2E2410;    /* 10:1 */
-  --vault: #B39DFF;         --vault-bg: #221B38;     --on-vault: #0F1115;    /* 8.3:1 */
-  --danger: #FF6B6B;        --danger-bg: #351517;    --on-danger: #0F1115;   /* 6.8:1 */
-  --meter-track: #2A2F38;   --meter-safe: #4CC38A;   --meter-limit: #FFB020; --meter-empty: #FF6B6B;
-  --focus: #7A9BFF;         --focus-ring: 0 0 0 3px rgba(122, 155, 255, 0.55);
-}
-```
+Four status families map to the product's four ideas: **safe** (Everyday), **limit** (warnings about limits/pauses), **vault** (needs the phone / scheduled), **danger** (Lockdown, admin, mismatch). Every text colour is ≥ 4.5:1 on its background and every fill is ≥ 4.5:1 behind its `--on-*` text.
 
-Tailwind: expose as `colors: { bg: 'var(--bg)', safe: { DEFAULT: 'var(--safe)', bg: 'var(--safe-bg)', on: 'var(--on-safe)' }, … }` in `tailwind.config.ts`; never hard-code hex in components. The dark block is duplicated under the `prefers-color-scheme` guard so the system theme works without JS, and `[data-theme]` overrides it.
+| Role | Light | Dark | Notes |
+|---|---|---|---|
+| `--bg` / `--surface` / `--surface-2` | `#FCFAF7` / `#F5F1EB` / `#EDE6DA` | `#1A1816` / `#23201C` / `#2D2925` | cream paper; panels and the popup header/tab bar sit on `--surface` |
+| `--border` / `--border-strong` | `#DED2BF` / `#C7BCAB` | `#44403C` / `#5A544D` | paper border; strong = dashed and hover borders |
+| `--text` / `--text-muted` | `#1E1E1E` / `#5F5A51` (6.6:1) | `#F5F1EB` / `#B3AA9C` (7.7:1) | ink |
+| `--brand` (primary action) | `#B8432F` (cream on it 5.2:1) | `#F07A66` | terracotta, deepened from `#E05A47` for AA |
+| `--accent` | `#E05A47` | `#F07A66` | terracotta sun: the mark, dots, halftone; never text |
+| `--vault` / `--vault-bg` | `#2B45A2` / `#EEF2FB` (7.6:1) | `#93A6F2` / `#1F2440` | halftone cobalt |
+| `--safe` / `--safe-bg` | `#2B6A44` / `#E7F0E6` | `#6FC28E` / `#15261B` | |
+| `--limit` / `--limit-fill` / `--limit-bg` | `#8A5700` / `#E0A43A` / `#FBF0D9` | `#E9B04A` / same / `#2E2410` | ochre |
+| `--danger` / `--danger-bg` | `#9E1243` / `#FBE8EE` (6.8:1) | `#FF7FA3` / `#3A1624` | raspberry crimson, deliberately pulled toward magenta so it never reads as the terracotta primary |
+| `--focus` | `#2B45A2`, 3 px ring at 40 % | `#93A6F2`, 3 px ring at 50 % | |
+
+Tailwind's default palette is reset; only these variables exist as utilities, so components never hard-code hex. The dark block is duplicated under the `prefers-color-scheme` guard so the system theme works without JS, and `[data-theme]` overrides it.
+
+**Halftone** (`.halftone`, `.halftone-accent`): an 8 px radial-dot grid at 12 % (`--dot`, `--dot-opacity`), placed on an `aria-hidden` layer behind a hero figure only (the popup balance panel, the companion's Vault tile). Never behind body text, never on more than one panel per screen.
 
 Status is **never colour-only**: each family has a glyph (safe: filled circle check; limit: triangle; vault: phone/shield; danger: octagon) and a word.
 
 ### 6.2 Typography
 
-System stack for the popup (fast, native feel): `font-family: -apple-system, "Segoe UI", Inter, Roboto, system-ui, sans-serif`; monospace for addresses, codes and reason codes: `ui-monospace, "SF Mono", Menlo, monospace`.
+Three self-hosted families (`@fontsource/*`, latin subset; CSP `font-src 'self'`, no font CDN):
 
-| Token | Size / line | Weight | Use |
-|---|---|---|---|
-| `--t-display` | 28 / 34 | 600 | balance, the amount on review and clear-signing screens |
-| `--t-title` | 18 / 24 | 600 | screen titles |
-| `--t-body` | 14 / 20 | 400 | default |
-| `--t-body-strong` | 14 / 20 | 600 | labels, button text |
-| `--t-small` | 12 / 16 | 400 | helper, timestamps; never below 12 px |
-| `--t-mono` | 13 / 18 | 500 | addresses (groups of 4), reason codes |
+- **Plus Jakarta Sans** (400–700): all UI text, labels, buttons, data.
+- **Instrument Serif** (400 and italic; never bolded): display figures and titles only. Italic in a brand colour marks the one emphasised word of a hero title ("QueueBit *Vault*").
+- **Space Mono** (400/700): addresses, reason codes, network names, kickers.
 
-Numbers use `font-variant-numeric: tabular-nums`. The 8-character key check uses `--t-display` mono with `letter-spacing: 0.08em`.
+| Class | Family | Size / line | Weight | Use |
+|---|---|---|---|---|
+| `.t-headline` | serif | 34 / 38 | 400 | full-page app page titles |
+| `.t-display` | serif | 34 / 38 | 400 | balance, the amount on review and clear-signing screens |
+| `.t-figure` | serif | 28 / 32 | 400 | secondary figures inside a panel |
+| `.t-title` | serif | 24 / 28 | 400 | screen and sheet titles |
+| `.t-body` | sans | 14 / 20 | 400 | default |
+| `.t-strong` | sans | 14 / 20 | 600 | labels, button text |
+| `.t-small` | sans | 12 / 16 | 400 | helper, timestamps; never below 12 px |
+| `.t-label` | mono | 10 / 14, uppercase, 0.08em | 700 | kicker above a figure or section ("BALANCE ON SEPOLIA") |
+| `.t-mono` | mono | 12 / 18 | 400 | addresses (groups of 4), reason codes |
+
+Numbers use `font-variant-numeric: tabular-nums`. The 8-character key check is Space Mono 28 / 34 bold with `letter-spacing: 0.04em`. Extension pages set the body font and size **unlayered**: Chrome injects `body { font-family: system-ui; font-size: 75% }` into extension pages, which beats anything inside `@layer base`.
 
 ### 6.3 Spacing, radius, elevation
 
-4-pt scale: `--s-1: 4px … --s-6: 24px, --s-8: 32px`. Popup gutters 16 px; cards 12 px padding; list rows 48 px min height. Radius `--r-sm: 6px` (chips), `--r-md: 10px` (cards, inputs), `--r-lg: 16px` (sheets). Elevation: cards use a 1 px `--border`, no shadows in the popup; sheets `0 8px 24px rgba(0,0,0,.18)`. Minimum target size 44 × 44 (WCAG 2.5.8 is 24; we go larger for the phone companion).
+4-pt scale: `--s-1: 4px … --s-6: 24px, --s-8: 32px`. Popup gutters 16 px; cards 12 px padding; list rows 48 px min height. Radius `--r-sm: 8px` (chips), `--r-md: 12px` (buttons, inputs, cards), `--r-lg: 16px` (hero panels, sheets), pills fully rounded. Elevation: cards use a 1 px `--border`; outline buttons and pills get a 1 px `--shadow-press` hairline; sheets `0 10px 30px rgba(30,30,30,.16)`. Minimum target size 44 × 44 (WCAG 2.5.8 is 24; we go larger for the phone companion).
+
+**Mark:** "Q:" in cream on a terracotta tile with an ink keyline (`src/shared/icon.ts`, `LogoMark`), drawn as paths so it renders without fonts. The companion's icon keeps its phone-and-shield drawing on cobalt, the Vault colour.
 
 ### 6.4 Components
 
@@ -1019,7 +1007,7 @@ Outline icons, 20 px in lists, 24 px in headers, 1.75 px stroke (Lucide-compatib
 
 ### 6.6 Motion
 
-Durations: 120 ms (hover/press), 200 ms (sheet, card state change), 320 ms (screen transition). Easing `cubic-bezier(.2,.8,.2,1)`. The LimitMeter fill animates on value change (200 ms). The QR animation is the only continuous motion; it has a visible Pause and honours `prefers-reduced-motion` by defaulting to 2.5 fps and disabling all other transitions. Countdowns tick per minute (per second only in the last 60 s).
+Durations: 120 ms (hover/press), 200 ms (sheet, card state change), 320 ms (screen transition). Easing `cubic-bezier(.22,1,.36,1)` (ease-out-quint). The LimitMeter fill animates on value change (200 ms). The QR animation is the only continuous motion; it has a visible Pause and honours `prefers-reduced-motion` by defaulting to 2.5 fps and disabling all other transitions. Countdowns tick per minute (per second only in the last 60 s).
 
 ---
 

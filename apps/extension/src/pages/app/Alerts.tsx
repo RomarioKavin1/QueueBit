@@ -49,7 +49,7 @@ export function Alerts() {
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-[24px] leading-[30px] font-semibold">Alerts</h1>
+        <h1 className="t-headline">Alerts</h1>
         <div className="flex gap-2">
           <Button size="sm" variant="ghost" icon={<RefreshIcon size={16} />} loading={busy} onClick={check}>
             Check now

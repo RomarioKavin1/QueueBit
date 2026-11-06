@@ -106,7 +106,7 @@ export function VaultHandoff({
           <p className="t-small font-semibold tracking-wide text-vault uppercase">
             {rec.role === "recovery" ? "Recovery key approval" : "Vault approval"}
           </p>
-          <h1 className="text-[24px] leading-[30px] font-semibold">
+          <h1 className="t-headline">
             {rec.status === "waiting"
               ? rec.role === "recovery"
                 ? "Approve with your Recovery key"

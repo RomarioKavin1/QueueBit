@@ -110,9 +110,9 @@ function Unlocked({ state, close, initialTab }: { state: WalletState; close: () 
 
   return (
     <Frame>
-      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-line pr-1 pl-3">
-        <LogoMark size={22} />
-        <h1 className="t-strong">QueueBit</h1>
+      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-line bg-surface pr-1 pl-3">
+        <LogoMark size={24} />
+        <h1 className="t-strong tracking-tight">QueueBit</h1>
         <NetworkSwitcher chainId={state.settings.selectedChainId} />
         <MenuButton
           label="More"
@@ -176,7 +176,7 @@ function NetworkSwitcher({ chainId }: { chainId: number }) {
         id="network-switcher"
         value={String(chainId)}
         onChange={(e) => void call("settings:update", { selectedChainId: Number(e.target.value) })}
-        className="t-small min-h-9 cursor-pointer appearance-none rounded-full border border-line bg-surface py-1 pr-7 pl-3 font-semibold text-fg hover:bg-surface-2"
+        className="min-h-9 cursor-pointer appearance-none rounded-full border border-line bg-bg py-1 pr-7 pl-3 font-mono text-[11px] leading-4 text-fg shadow-press hover:bg-surface-2"
       >
         {NETWORKS.map((n) => (
           <option key={n.chainId} value={n.chainId}>
@@ -201,7 +201,7 @@ const TABS: Array<{ id: Tab; label: string; icon: React.ReactNode }> = [
 
 function TabBar({ tab, onChange }: { tab: Tab; onChange: (t: Tab) => void }) {
   return (
-    <nav aria-label="Main" className="grid h-12 shrink-0 grid-cols-4 border-t border-line bg-bg">
+    <nav aria-label="Main" className="grid h-12 shrink-0 grid-cols-4 border-t border-line bg-surface">
       {TABS.map((t) => (
         <button
           key={t.id}
@@ -210,7 +210,7 @@ function TabBar({ tab, onChange }: { tab: Tab; onChange: (t: Tab) => void }) {
           onClick={() => onChange(t.id)}
           className={cx(
             "flex flex-col items-center justify-center gap-0.5 text-[12px] leading-4",
-            tab === t.id ? "font-semibold text-brand" : "text-muted hover:text-fg",
+            tab === t.id ? "font-bold text-brand" : "text-muted hover:text-fg",
           )}
         >
           <span aria-hidden="true">{t.icon}</span>

@@ -1,4 +1,13 @@
 @import "tailwindcss";
+/* Self-hosted (CSP font-src 'self'; no font CDN). Latin subsets and only the weights the UI uses. */
+@import "@fontsource/plus-jakarta-sans/latin-400.css";
+@import "@fontsource/plus-jakarta-sans/latin-500.css";
+@import "@fontsource/plus-jakarta-sans/latin-600.css";
+@import "@fontsource/plus-jakarta-sans/latin-700.css";
+@import "@fontsource/instrument-serif/latin-400.css";
+@import "@fontsource/instrument-serif/latin-400-italic.css";
+@import "@fontsource/space-mono/latin-400.css";
+@import "@fontsource/space-mono/latin-700.css";
 @import "./tokens.css";
 
 /* Only the design tokens exist as colours; the default palette is removed so hex values can't creep in. */
@@ -14,12 +23,15 @@
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
   --color-line: var(--border);
+  --color-line-strong: var(--border-strong);
   --color-fg: var(--text);
   --color-muted: var(--text-muted);
   --color-inverse: var(--text-inverse);
   --color-brand: var(--brand);
   --color-brand-hover: var(--brand-hover);
   --color-on-brand: var(--on-brand);
+  --color-brand-bg: var(--brand-bg);
+  --color-accent: var(--accent);
   --color-safe: var(--safe);
   --color-safe-bg: var(--safe-bg);
   --color-on-safe: var(--on-safe);
@@ -36,12 +48,20 @@
   --color-transparent: transparent;
   --font-sans: var(--font-ui);
   --font-mono: var(--font-code);
+  --font-display: var(--font-editorial);
   --radius-sm: var(--r-sm);
   --radius-md: var(--r-md);
   --radius-lg: var(--r-lg);
   --radius-full: 9999px;
   --shadow-sheet: var(--shadow-sheet);
+  --shadow-press: var(--shadow-press);
   --ease-out: var(--ease);
+}
+
+/* Unlayered on purpose: Chrome injects `body { font-family: system-ui }` into extension pages, and an injected sheet
+   beats anything inside @layer base. */
+body {
+  font-family: var(--font-ui);
 }
 
 @layer base {
@@ -81,23 +101,52 @@
     -webkit-tap-highlight-color: transparent;
   }
   ::selection {
-    background: var(--vault-bg);
+    background: var(--brand-bg);
+    color: var(--text);
   }
 }
 
 @layer components {
   /* Type scale (ux-spec §6.2). */
+  /* Display figures and screen titles are set in Instrument Serif (one weight: never bold it). */
   .t-display {
-    font-size: 28px;
-    line-height: 34px;
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
+    font-family: var(--font-editorial);
+    font-size: 34px;
+    line-height: 38px;
+    font-weight: 400;
     letter-spacing: -0.01em;
+    font-variant-numeric: lining-nums;
   }
   .t-title {
-    font-size: 18px;
-    line-height: 24px;
-    font-weight: 600;
+    font-family: var(--font-editorial);
+    font-size: 24px;
+    line-height: 28px;
+    font-weight: 400;
+    letter-spacing: -0.005em;
+  }
+  /* Page headline in the full-page app ("Limits", "Pending"). */
+  .t-headline {
+    font-family: var(--font-editorial);
+    font-size: 34px;
+    line-height: 38px;
+    font-weight: 400;
+    letter-spacing: -0.01em;
+  }
+  /* Secondary serif figure (a balance inside a panel). */
+  .t-figure {
+    font-family: var(--font-editorial);
+    font-size: 28px;
+    line-height: 32px;
+    font-weight: 400;
+  }
+  /* Small-caps mono kicker above figures and sections ("BALANCE ON SEPOLIA"). */
+  .t-label {
+    font-family: var(--font-code);
+    font-size: 10px;
+    line-height: 14px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
   }
   .t-body {
     font-size: 14px;
@@ -116,9 +165,23 @@
   }
   .t-mono {
     font-family: var(--font-code);
-    font-size: 13px;
+    font-size: 12px;
     line-height: 18px;
-    font-weight: 500;
+    font-weight: 400;
+  }
+  /* Halftone: the one decorative texture. Put it on an absolutely positioned, aria-hidden layer behind hero figures. */
+  .halftone {
+    background-image: radial-gradient(var(--dot) 1.3px, transparent 1.3px);
+    background-size: 8px 8px;
+    opacity: var(--dot-opacity);
+    pointer-events: none;
+  }
+  .halftone-accent {
+    --dot: var(--accent);
+    --dot-opacity: 0.2;
+  }
+  .border-dashed-paper {
+    border: 1.5px dashed var(--border-strong);
   }
   .tabular {
     font-variant-numeric: tabular-nums;

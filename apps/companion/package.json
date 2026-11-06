@@ -32,12 +32,15 @@
     "vitest": "5.1.0"
   },
   "dependencies": {
+    "@fontsource/instrument-serif": "5.3.0",
+    "@fontsource/plus-jakarta-sans": "5.3.0",
+    "@fontsource/space-mono": "5.3.0",
+    "@noble/curves": "2.4.0",
+    "@noble/hashes": "2.4.0",
     "@queuebit/frames": "workspace:*",
     "@queuebit/pq-signer": "workspace:*",
     "@queuebit/relay-client": "workspace:*",
     "@queuebit/ur": "workspace:*",
-    "@noble/curves": "2.4.0",
-    "@noble/hashes": "2.4.0",
     "@scure/bip32": "2.4.0",
     "@scure/bip39": "2.4.0",
     "@zxcvbn-ts/core": "4.2.0",

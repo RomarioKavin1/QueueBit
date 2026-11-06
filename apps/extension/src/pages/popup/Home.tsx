@@ -80,9 +80,13 @@ export function Home({
         />
       )}
 
-      <section aria-labelledby="balance-h">
+      <section
+        aria-labelledby="balance-h"
+        className="relative isolate overflow-hidden rounded-lg border border-line bg-surface p-4"
+      >
+        <div aria-hidden="true" className="halftone absolute inset-0 -z-10" />
         <div className="flex items-center justify-between">
-          <h2 id="balance-h" className="t-small text-muted">
+          <h2 id="balance-h" className="t-label text-muted">
             Balance on {net.name}
           </h2>
           <button

@@ -92,10 +92,10 @@ type Variant = "primary" | "secondary" | "danger" | "dangerOutline" | "ghost" | 
 const variants: Record<Variant, string> = {
   primary: "bg-brand text-on-brand hover:bg-brand-hover",
   vault: "bg-vault text-on-vault hover:opacity-90",
-  secondary: "border border-line bg-bg text-fg hover:bg-surface",
+  secondary: "border border-line bg-bg text-fg shadow-press hover:bg-surface-2",
   danger: "bg-danger text-on-danger hover:opacity-90",
   /** A destructive path that must not look like the main call to action (the unknown-step long-press). */
-  dangerOutline: "border border-danger bg-bg text-danger hover:bg-danger-bg",
+  dangerOutline: "border border-danger bg-bg text-danger shadow-press hover:bg-danger-bg",
   ghost: "text-brand hover:bg-surface",
 };
 

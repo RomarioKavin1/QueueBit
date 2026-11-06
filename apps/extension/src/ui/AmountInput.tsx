@@ -54,9 +54,11 @@ export function AmountInput({
             const v = e.target.value.replace(",", ".");
             if (DECIMAL.test(v)) onChange(v);
           }}
-          className={cx(inputClass, "tabular pr-24")}
+          className={cx(inputClass, "min-h-12 pr-24 font-display text-[24px] leading-8 tabular")}
         />
-        <span className="t-small pointer-events-none absolute right-14 text-muted">{asset.symbol}</span>
+        <span className="pointer-events-none absolute right-14 font-mono text-[11px] font-bold text-muted">
+          {asset.symbol}
+        </span>
         {balance !== undefined && (
           <button
             type="button"
