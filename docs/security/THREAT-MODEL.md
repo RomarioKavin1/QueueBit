@@ -240,11 +240,18 @@ in such a root. So:
 - **Accountability is after the fact.** Every batch's recursive STARK hash is attached on-chain and the STARK is served
   by the node; `queuebit-leanpool-verify-batch` checks it and that its claims rebuild the posted root. A forged root
   fails that check. There is no on-chain slashing: the EVM cannot verify leanVM signatures or STARKs yet.
-- **Response:** pause the hot tier (Guardian or Vault freeze stops `hotExecuteFrom` too), and have the Vault replace or
-  remove the signer (`vaultSetPQHotSigner`, instant). The aggregator is part of the signer's address, so switching
-  aggregator means a new signer.
-- **Liveness:** a LeanPool node that is down or censors only delays quantum-safe payments: the extension falls back to
-  the ECDSA everyday key and says so. Its txs read storage outside the sender, so the canonical mempool refuses them
+- **Response:** pause the hot tier (Guardian or Vault freeze stops `hotExecuteFrom` too), and have the Vault remove the
+  signer (`vaultSetPQHotSigner(0)`, instant) or Lockdown (which removes it for good). Installing or replacing a signer
+  trusts a new aggregator, so it is loosening: queued behind the timelock, cancellable by Recovery. The aggregator is
+  part of the signer's address, so switching aggregator means a new signer.
+- **A removed signer still passes its own VERIFY** (it never reads the account): an aggregator that keeps posting roots
+  for it can make it pay gas for transactions whose `hotExecuteFrom` then reverts, up to its own fee balance and at most
+  `maxFee` each. Nothing of the account moves. Keep its fee balance small; don't top up a removed signer.
+- **Liveness:** a LeanPool node that is down before a payment is handed over only means that payment goes out with the
+  ECDSA everyday key, and says so. A node that takes payments and never batches them holds them: the activity marks
+  them as taking longer than usual, they use up to 8 nonce lanes, and once all 8 are held further payments use the
+  ECDSA key (with a note). A payment the node may have received (no answer to the hand-over) is never re-sent with the
+  other key, so nothing is paid twice. Its txs read storage outside the sender, so the canonical mempool refuses them
   (`StorageReadNonSender`, measured): they only travel through the ERC-8421 alt mempool, which admits them unstaked
   because the slot is keyed by the signer (STO-021).
 - **Fees:** the signer pays its own gas from a small balance (the fee tank funds it); each payment's cost is bounded by

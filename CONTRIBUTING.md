@@ -42,7 +42,8 @@ chore(deploy): redeploy QueueBitAccountImpl and the 7579 modules with the typed 
 
 Types: `feat`, `fix`, `test`, `docs`, `chore`, `refactor`, `perf`, `ci`, `build`. Scopes are the component:
 `account`, `modules`, `roles`, `privacy`, `pq-signer`, `groth16`, `frames`, `ur`, `rpc`, `extension`, `companion`,
-`watcher`, `bench`, `devnet`, `deploy`, `g1`, `ci`, `release`, `security`, `backlog`, `plan`.
+`watcher`, `bench`, `devnet`, `deploy`, `g1`, `ci`, `release`, `security`, `backlog`, `plan`, `lean-sphincs`,
+`leanpool-node`.
 
 Commits made with an AI assistant end with its `Co-Authored-By:` trailer.
 
@@ -60,7 +61,8 @@ cd contracts && forge build && forge test && forge fmt --check && ./script/lint-
 
 Plus, when you touched them: `pnpm --filter @queuebit/companion e2e`, `pnpm --filter @queuebit/extension e2e`,
 `cd contracts/devnet-tests/4337 && bun run e2e`, and the devnet suites (`README.md` "Quickstart"). A change to
-`packages/pq-signer/rust` or `packages/groth16/rust` must rebuild and commit `wasm/` (`bash scripts/build-wasm.sh`):
+`packages/pq-signer/rust`, `packages/groth16/rust` or `packages/lean-sphincs/rust` must rebuild and commit `wasm/`
+(`bash scripts/build-wasm.sh`):
 CI rebuilds it and fails on any byte difference.
 
 ## Dependencies

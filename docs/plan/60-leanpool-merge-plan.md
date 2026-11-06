@@ -20,15 +20,15 @@ The target is the QueueBit repo. The product stays a browser extension.
 | Phase | State | Verified by |
 |---|---|---|
 | P1 spike: leanSPHINCS in WASM | done | byte-identical keys/signatures vs native lean-pq 0.7.0; reproducible WASM (CI job) |
-| P2 shared code (`lean-sphincs`, `frames` shape, `rpc` client) | done | vitest |
-| P3 contracts (`DepsRegistry`, `LeanPoolHotSigner` + factory, `hotExecuteFrom`, `vaultSetPQHotSigner`) | done | forge: 1,026 pass (32 new + the 44-case parity suite); lint-verify OK |
-| P4 node service (`services/leanpool-node`) | done | vitest 55 incl. real STARK proving; Dockerfile written (not built here: no docker) |
-| P5 extension (Security, payments lane, activity, previews) | done | vitest 253; public-devnet test through the extension's own code (`test/devnet/leanpool.public.test.ts`) |
-| P6 companion (clear-sign `vaultSetPQHotSigner`) | done | interop test with the extension's own request |
-| P7 live + docs | done | `contracts/devnet-tests/leanpool` PASS on chain 1337 (VERIFY 61,449 gas, STARK VALID); THREAT-MODEL §8.1, ARCHITECTURE, research page |
-| Local devnet compose service + Playwright UI case | open | BACKLOG (no docker on the build machine) |
+| P2 shared code | done, one deviation | `lean-sphincs`, frames shape (refuses length-elision profiles), rpc client. The triple/witness/Merkle code stayed in the node (no separate `packages/leanpool-core`): the extension only needs the tx shape, which lives in frames. A signature counter enforces the 120K budget (falls back when spent). |
+| P3 contracts | done, amended | `DepsRegistry`, `LeanPoolHotSigner` + factory, `hotExecuteFrom`; `vaultSetPQHotSigner`: **install/replace is queued (loosening), removal instant** (C4); Lockdown removes the signer. Forge: 33 + the 44-case parity suite; `lint-verify.sh` §5 covers the signer's VERIFY (self-tested). Deviations from C2: the aggregator and fee bound are clone args (no storage), the witness is the variable-length `(root, ring, proof[])` LeanPool already uses, no `getRoles` (the signer is bound to one account). |
+| P4 node service | done | vitest 56 incl. real STARK proving; bounded pool/known/STARK memory (older STARKs served from disk); Dockerfile written (not built here: no docker) |
+| P5 extension | done, partial on 7.3/7.4 | Security row (set up → queued Vault approval → Finish after the timelock), payments lane with safe fallback (never pays twice), activity steps, stuck flag, batch root/proof hash and the audit command in details. Not built: an in-extension STARK verifier (the node CLI verifies; the extension shows the hash). Lane choice lives in payments, not `lanes.ts`. |
+| P6 companion | done | clear-signs `vaultSetPQHotSigner`; interop test with the extension's request |
+| P7 live + docs | done | `contracts/devnet-tests/leanpool` PASS on chain 1337 with the queued install; the extension's own code on the public devnet up to the queued approval (`test/devnet/leanpool.public.test.ts`); THREAT-MODEL §8.1, ARCHITECTURE, research page |
+| Not done | open | C6 (LeanAccount copy, `osaka` profile), L3 gas table in `bench/` and moving `DirectPQWallet`, N5 compose service + 7.6 Playwright case: BACKLOG |
 
-The task tables below are the plan as written; option H's tasks are the ones built.
+The task tables below are the plan as written; option H's tasks are the ones built, with the amendments above.
 
 ## 1. What each project is
 
@@ -182,7 +182,7 @@ Each task ends with the check that proves it is done. Phases are ordered; tasks 
 | C1 | Port DepsRegistry and MerkleLib (cancun) | ported registry tests pass; the leaf matches 2.2's vector |
 | C2 | `PQHotSigner` clone: args `account ‖ pk ‖ registry`; slot 0 `aggregator`, `maxFee`; VERIFY parses the triple (scheme 0x10, zero data_hash, vk == pk), leaf = keccak(0x10‖SIG_HASH‖pk), reads `rootAt(aggregator, self, ring)`, checks the fixed-length proof, walks frames (only `hotExecuteFrom`), checks the fee bound, then APPROVE; exposes `pk()` and `getRoles` | Forge on FrameSim: approves its own included triple; refuses a wrong pk, foreign data_hash, wrong root/ring, wrong length, foreign SENDER and an over-fee tx |
 | C3 | Lint rule set for role/hot signers (allow one STATICCALL to the pinned registry, ban everything else); measure VERIFY | lint passes with a self-test; VERIFY < 100k (estimate 48–55k) |
-| C4 | Account: `hotExecuteFrom(declaredUsd, calls)` with `msg.sender == hotSigner`, sharing `hotExecute`'s cap, allowlist, max, freeze and fee logic; Vault-set `hotSigner` (tightening instant, adding timelocked); bunker and freeze disable it | Forge parity suite: every existing `hotExecute` test also run through `hotExecuteFrom`; a thief through the signer gets at most the remaining allowance; existing account tests stay green |
+| C4 | Account: `hotExecuteFrom(declaredUsd, calls)` with `msg.sender == hotSigner`, sharing `hotExecute`'s cap, allowlist, max, freeze and fee logic; Vault-set `hotSigner` (tightening instant, adding timelocked: built as specified after review); bunker and freeze disable it (bunker removes it) | Forge parity suite: every existing `hotExecute` test also run through `hotExecuteFrom`; a thief through the signer gets at most the remaining allowance; existing account tests stay green |
 | C5 | Factory and deploy: `createPQHotSigner` / predict; `devnet/deploy` writes the addresses | Forge determinism; addresses file updated |
 | C6 | Copy the LeanAccount stack under an `osaka` profile (D4) | its 29 tests pass in QueueBit CI under that profile |
 | C7 | 4337 parity decision: H stays frame-native only; document it | THREAT-MODEL / ARCHITECTURE note |

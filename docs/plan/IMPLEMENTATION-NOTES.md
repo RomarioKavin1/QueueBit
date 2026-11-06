@@ -1506,8 +1506,10 @@ A/B). Evidence and LeanPool's original write-up: `docs/research/leanpool.md`.
 - **Contracts.** `hotExecute` and the new `hotExecuteFrom` share one private body (`_hotExecute`), so the two entries
   cannot drift; `HotExecuteFromParity.t.sol` re-runs all 44 `HotExecuteTest` cases through `hotExecuteFrom`.
   `pqHotSigner` is appended to the ERC-7201 layout (execution-only, never read in VERIFY: I-2 holds, lint-verify OK).
-  `vaultSetPQHotSigner` is instant (like `vaultSetHotKey`: same bucket, so the maximum loss is unchanged) and refuses a
-  signer whose `account()` is not this account. `QueueBitAccountImpl` is 23,320 bytes (1,256 under EIP-170).
+  `vaultSetPQHotSigner(0)` is instant; installing or replacing a signer is loosening (it trusts a new aggregator) and
+  must be queued (first built instant; changed after review to match plan C4 and "loosening is timelocked"). It refuses
+  a signer whose `account()` is not this account. `vaultEnableBunker` clears it (review: otherwise a new hot key would
+  have revived the old signer). `QueueBitAccountImpl` is 23,320 bytes (1,256 under EIP-170).
 - **LeanPoolHotSigner** is a Solady clone with immutable args `account ‖ registry ‖ aggregator ‖ pk ‖ maxFee` and no
   storage: changing aggregator or fee bound means a new signer. Its VERIFY data is the raw 96-byte EIP-8288 triple
   (frame target null) and it exposes `vk()`, so LeanPool's node binds it exactly like `LeanWallet8288`. FrameSim shows
@@ -1526,7 +1528,10 @@ A/B). Evidence and LeanPool's original write-up: `docs/research/leanpool.md`.
   naming a different aggregator is refused at intake (its VERIFY would never read our root); auto-bond.
 - **Extension.** `background/leanpool.ts` (`PqEveryday`): seed = HKDF(recovery phrase, "queuebit.pq-everyday.v1",
   scheme label), independent of the everyday index; the built key is kept while unlocked and disposed on lock. The
-  fee tank creates and funds the signer; the Vault installs it (`setPQHotSigner`). Payments use it when installed,
-  preferred, funded (≥ 0.002 ETH) and the node answers, else the checked ECDSA tx goes out with a `fallbackNote`.
-  Nonce lanes 1–8 (EIP-8250) let several PQ payments wait for batches; speed-up/cancel are refused for them.
+  fee tank creates and funds the signer; the Vault queues its install (`setPQHotSigner`), and Security offers
+  "Finish" once the timelock passed (`executable` only means the wallet holds the calls). Payments use it when
+  installed, preferred, funded (≥ 0.002 ETH) and the node answers. Fallback to the checked ECDSA tx only for failures
+  before the hand-over (node down at the check, fee balance, all 8 lanes held, signature budget); a hand-over without
+  an answer is followed by its own id (the pre-witness tx hash) and never re-sent; a node refusal is shown. Nonce lanes
+  1–8 (EIP-8250); speed-up/cancel are refused for PQ payments; after ~6 blocks they show as taking longer.
 - **Forge fmt.** Forge 1.7.x formats differently from CI's pinned 1.3.5: format only touched files, with 1.3.5.
