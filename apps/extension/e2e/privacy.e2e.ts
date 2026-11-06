@@ -165,6 +165,9 @@ test("M6: shield → sync → withdraw via PoolPayer to a fresh address; the wat
   await page.goto(extUrl(extensionId, "app.html#privacy"));
   await expect(page.getByTestId("privacy-available")).toHaveText("0 ETH");
   await expect(page.getByTestId("privacy-connection")).toContainText("off on this network");
+  // The sync-source badge: which node the pool state came from, unverified (no light client on the devnet).
+  await expect(page.getByTestId("privacy-sync-source")).toContainText("Synced from localhost:8545 · unverified");
+  await expect(page.getByTestId("privacy-sync-source")).toHaveAttribute("title", /approval order/u);
   await shot("app-privacy-empty", page);
   await page.getByRole("button", { name: "Move to private" }).click();
   await page.getByLabel("Amount (ETH)").fill("0.1");

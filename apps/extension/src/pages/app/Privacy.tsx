@@ -80,6 +80,20 @@ function PrivacyBody({ view, reload }: { view: PrivacyView; reload: () => void }
           />
           Private connection: {view.connection.anonymous ? "on" : "off on this network"}
         </span>
+        {view.syncSource && (
+          <span
+            className="t-small inline-flex items-center gap-1.5 rounded-full border border-line px-3 py-1"
+            data-testid="privacy-sync-source"
+            title={`Pool state read from ${view.syncSource.node}${view.syncSource.scannedTo ? ` up to block ${view.syncSource.scannedTo}` : ""}, ${view.syncSource.verified ? "checked by a light client" : "not checked by a light client"}. Reviewer list: ${view.syncSource.asp}.`}
+          >
+            <span
+              aria-hidden="true"
+              className={view.syncSource.verified ? "size-2 rounded-full bg-safe" : "size-2 rounded-full bg-limit"}
+            />
+            Synced from {view.syncSource.node}
+            {view.syncSource.verified ? "" : " · unverified"}
+          </span>
+        )}
       </div>
 
       <Card className="bg-surface">

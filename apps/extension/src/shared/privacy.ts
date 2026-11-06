@@ -117,4 +117,9 @@ export interface PrivacyView {
   proofEstimateMs?: number;
   connection: { anonymous: boolean; text: string };
   readsVerified: boolean;
+  /**
+   * Where the balance's pool state and reviewer (ASP) list come from, for the sync-source badge: the node (host
+   * only), whether its reads are light-client checked, the ASP source, and the block the last sync reached.
+   */
+  syncSource?: { node: string; verified: boolean; asp: string; scannedTo?: string };
 }

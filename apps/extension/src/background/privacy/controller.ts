@@ -300,6 +300,16 @@ export class PrivacyController {
         ? { anonymous: true, text: "Private connection on: the network provider doesn't see your IP." }
         : { anonymous: false, text: anon.reason },
       readsVerified: false,
+      ...(cfg && net
+        ? {
+            syncSource: {
+              node: hostOfUrl(net.rpcUrl),
+              verified: false,
+              asp: ASP_SOURCE_TEXT[cfg.asp] ?? cfg.asp,
+              ...(rec.sync.scannedTo ? { scannedTo: rec.sync.scannedTo } : {}),
+            },
+          }
+        : {}),
     };
   }
 
@@ -760,6 +770,19 @@ export class PrivacyController {
 export function withdrawalProvider(clients: { node: { transport: Parameters<typeof eip1193FromTransport>[0] } }) {
   return createHostProvider({ rpc: eip1193FromTransport(clients.node.transport) });
 }
+
+/** How each reviewer-list source reads on the sync-source badge. */
+const ASP_SOURCE_TEXT: Record<string, string> = {
+  "pool-order": "the pool's own approval order (devnet stand-in for 0xbow's published list)",
+};
+
+const hostOfUrl = (u: string): string => {
+  try {
+    return new URL(u).host;
+  } catch {
+    return u;
+  }
+};
 
 function archive(rec: PrivacyRecord): PrivacyOp[] {
   return rec.op && isFinal(rec.op) ? [rec.op, ...rec.history].slice(0, HISTORY) : rec.history;
