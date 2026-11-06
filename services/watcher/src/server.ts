@@ -32,6 +32,8 @@ export interface ServerOptions {
   status: () => Record<string, unknown>;
   heartbeatMs?: number;
   now?: () => number;
+  /** Where an internal error's detail goes (never to the client). */
+  log?: (msg: string) => void;
 }
 
 const json = (res: ServerResponse, status: number, body: unknown) => {
@@ -113,7 +115,9 @@ export function createWatcherServer(o: ServerOptions): Server {
         streams.set(auth.keyId, Math.max(0, (streams.get(auth.keyId) ?? 1) - 1));
       });
     } catch (e) {
-      if (!res.headersSent) json(res, 500, { error: "internal", message: (e as Error).message });
+      // The detail stays server-side: an error message can carry internals (paths, RPC URLs, addresses).
+      (o.log ?? console.error)(`watcher: internal error: ${(e as Error).message}`);
+      if (!res.headersSent) json(res, 500, { error: "internal" });
       else res.end();
     }
   });

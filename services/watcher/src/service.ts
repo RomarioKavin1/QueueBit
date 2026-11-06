@@ -83,6 +83,7 @@ export async function createService(
 
   const server = createWatcherServer({
     hub,
+    log: (m) => log("http", { error: m }),
     apiKeys: cfg.apiKeys,
     rateLimit: cfg.rateLimit,
     status: () => ({
