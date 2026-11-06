@@ -1,6 +1,6 @@
 {
-  "$comment": "LEAKED clear-signing registry (ERC-7730-style, bundled, never fetched). The ONLY place the companion learns ABIs, intents and token metadata. The `abis` and `selectors` sections are GENERATED from the forge artifacts by `pnpm --filter @leaked/companion abi:sync` (scripts/abi-sync.mjs); test/registry.test.ts fails on drift. Edit `formats` by hand. Sources: contracts/src/account/{ILeakedAccount,LeakedAccountRoles}.sol, contracts/src/roles/PQRoleSigner.sol; Privacy Pools core IEntrypoint.{deposit,relay}; ERC-20. Intent strings interpolate decoded fields only (ERC-7730 'interpolated intent': constants + decoded values, no request-supplied labels).",
-  "version": "leaked-descriptors/2026-11-06.5",
+  "$comment": "LEAKED clear-signing registry (ERC-7730-style, bundled, never fetched). The ONLY place the companion learns ABIs, intents and token metadata. The `abis` and `selectors` sections are GENERATED from the forge artifacts by `pnpm --filter @leaked/companion abi:sync` (scripts/abi-sync.mjs); test/registry.test.ts fails on drift. Edit `formats` by hand. Sources: contracts/src/account/{ILeakedAccount,LeakedAccountRoles}.sol, contracts/src/roles/PQRoleSigner.sol; Privacy Pools core IEntrypoint.{deposit,relay}, IPrivacyPool.ragequit; ERC-20. Intent strings interpolate decoded fields only (ERC-7730 'interpolated intent': constants + decoded values, no request-supplied labels).",
+  "version": "leaked-descriptors/2026-11-06.6",
   "units": {
     "usd": "USD amounts are uint256 with 6 decimals (10-contracts.md §10.3 conventions)",
     "usdPerToken": "USD (6 decimals) per one whole token (10**decimals base units): usd6 = amount * usdPerToken / 10**decimals (ILeakedAccount.TokenCfg)"
@@ -65,11 +65,14 @@
     }
   },
   "privacyPools": {
-    "$comment": "0xbow entrypoints, kohaku privacy-pools config.ts:33-45 (40-privacy-infra.md §1.3). 1337: the local devnet's Entrypoint proxy as the extension privacy e2e deploys it (apps/extension/e2e/support/privacy-pool.ts: nonce 4 of its sub-account keccak256(\"leaked/extension-e2e-privacy/v1\") on a fresh devnet; IMPLEMENTATION-NOTES 'Extension M6' results). A pool deployed any other way on the devnet shows as 'Unfamiliar privacy pool'.",
+    "$comment": "0xbow entrypoints, kohaku privacy-pools config.ts:33-45 (40-privacy-infra.md §1.3). 1337: the local devnet's Entrypoint proxy as the extension privacy e2e deploys it (apps/extension/e2e/support/privacy-pool.ts: nonce 4 of its sub-account keccak256(\"leaked/extension-e2e-privacy/v1\") on a fresh devnet; IMPLEMENTATION-NOTES 'Extension M6' results). A pool deployed any other way on the devnet shows as 'Unfamiliar privacy pool'. `pools`: the native-ETH pool a public exit (`ragequit`) is sent to; 1337 is the same e2e deployment's PrivacyPoolSimple (nonce 6 of that sub-account on a fresh devnet). No pool is recorded for 1 / 11155111 yet, so a public exit there shows as 'Unfamiliar privacy pool' (raw call, long-press).",
     "entrypoints": {
       "1": "0x6818809eefce719e480a7526d76bd3e561526b46",
       "1337": "0x03b483f613e62e57fe6b2d007ae1b5b7d2a395a9",
       "11155111": "0x34a2068192b1297f2a7f85d7d8cde66f8f0921cb"
+    },
+    "pools": {
+      "1337": "0xc7d1b85c5ce485ec03e06162a08134baabe8998c"
     }
   },
   "aaModules": {
@@ -132,6 +135,10 @@
       "struct WithdrawProof { uint256[2] pA; uint256[2][2] pB; uint256[2] pC; uint256[8] pubSignals; }",
       "function relay(Withdrawal withdrawal, WithdrawProof proof, uint256 scope)",
       "function deposit(uint256 _precommitment) payable returns (uint256)"
+    ],
+    "privacyPool": [
+      "struct RagequitProof { uint256[2] pA; uint256[2][2] pB; uint256[2] pC; uint256[4] pubSignals; }",
+      "function ragequit(RagequitProof _proof)"
     ],
     "policyHook": [
       "function enableBunker(address account)",
@@ -850,6 +857,28 @@
       },
       "compare": {
         "recipient": "pool",
+        "amount": "amount",
+        "token": "@.native"
+      }
+    },
+    "privacyPool.ragequit": {
+      "role": "any",
+      "action": "send",
+      "bindTo": "privacyPools.pools",
+      "intent": "Take {amount} out of the private pool publicly (Public exit): this is visible on-chain and links the deposit to your account",
+      "fields": {
+        "amount": {
+          "format": "tokenAmount",
+          "tokenPath": "@.native",
+          "path": "_proof.pubSignals[2]"
+        },
+        "pool": {
+          "format": "contractName",
+          "name": "Privacy Pools",
+          "path": "@.target"
+        }
+      },
+      "compare": {
         "amount": "amount",
         "token": "@.native"
       }

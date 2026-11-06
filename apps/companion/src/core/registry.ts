@@ -89,7 +89,7 @@ interface RawRegistry {
   chains: Record<string, string>;
   nativeCurrency: TokenInfo;
   tokens: Record<string, Record<string, TokenInfo | string>>;
-  privacyPools: { entrypoints: Record<string, string> };
+  privacyPools: { entrypoints: Record<string, string>; pools?: Record<string, string> };
   aaModules: Record<string, { executor: string; hook: string } | string>;
   abis: Record<string, string[]>;
   /** Generated with the ABIs (scripts/abi-sync.mjs): the selector each format id must decode. */
@@ -173,6 +173,11 @@ export function tokenInfo(chainId: bigint, token: Address): TokenInfo | undefine
 
 export function privacyEntrypoint(chainId: bigint): Address | undefined {
   return reg.privacyPools.entrypoints[chainId.toString()] as Address | undefined;
+}
+
+/** The native-ETH Privacy Pools pool this app knows on a chain (where a public exit, `ragequit`, is sent). */
+export function privacyPool(chainId: bigint): Address | undefined {
+  return reg.privacyPools.pools?.[chainId.toString()] as Address | undefined;
 }
 
 /** The LEAKED ERC-7579 modules on a compatible-account chain (tx-type 3), if this app knows them. */

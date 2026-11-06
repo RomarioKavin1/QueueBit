@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { ROLE_SIGNER_ABI, reviewRequestBytes } from "../src/core/clearsign.js";
 import type { DeviceContext } from "../src/core/types.js";
 import { wordsToEntropy } from "../src/core/keys.js";
-import { privacyEntrypoint } from "../src/core/registry.js";
+import { privacyEntrypoint, privacyPool } from "../src/core/registry.js";
 import { handle } from "../src/worker/handler.js";
 import type { WorkerResult } from "../src/worker/protocol.js";
 import {
@@ -41,6 +41,13 @@ interface PrivacyLike {
   buildNoteEnvelope(ref: { chainId: bigint; entrypoint: Address; depositIndex: number; secretIndex: number }): never;
   deriveNoteSecrets(sig: Hex): { precommitment: bigint };
   buildDepositTx(entrypoint: Address, value: bigint, precommitment: bigint): { to: Address; data: Hex; value: bigint };
+  buildRagequitTx(pool: Address, proof: RagequitProofLike): { to: Address; data: Hex; value: bigint };
+}
+interface RagequitProofLike {
+  pA: readonly [bigint, bigint];
+  pB: readonly [readonly [bigint, bigint], readonly [bigint, bigint]];
+  pC: readonly [bigint, bigint];
+  pubSignals: readonly [bigint, bigint, bigint, bigint];
 }
 type BuildVaultAction = (
   account: Address,
@@ -102,6 +109,44 @@ async function extensionDeposit(entrypoint: Address) {
     },
     current,
   );
+  return { ...(await vaultRequest(built, signRequest)), precommitment, data: tx.data };
+}
+
+/**
+ * The extension's public exit (`controller.ts` `advanceExit`): `buildRagequitTx(pool, proof)` from `@leaked/privacy`
+ * sent as a Vault `send` with no value, its label as the controller writes it. The proof is a stand-in with the real
+ * shape (pubSignals: commitment, nullifier hash, value, label); the phone reads only the value from it.
+ */
+async function extensionExit(pool: Address) {
+  const pp = (await import(/* @vite-ignore */ PRIVACY)) as PrivacyLike;
+  const { buildVaultAction } = (await import(/* @vite-ignore */ EXTENSION_VAULT_ACTIONS)) as {
+    buildVaultAction: BuildVaultAction;
+  };
+  const { signRequest } = (await import(/* @vite-ignore */ EXTENSION_VAULT)) as { signRequest: ExtSignRequest };
+  const tx = pp.buildRagequitTx(pool, {
+    pA: [11n, 12n],
+    pB: [
+      [21n, 22n],
+      [23n, 24n],
+    ],
+    pC: [31n, 32n],
+    pubSignals: [0xc0ffeen, 0xbeefn, VALUE, 0x1abe1n],
+  });
+  const built = buildVaultAction(
+    ACCOUNT,
+    {
+      type: "send",
+      calls: [{ target: tx.to, value: "0", data: tx.data }],
+      usd6: "0",
+      body: { execution: "1900000", state: "1000000" },
+      label: "Public exit: take 0.05 ETH back from Privacy Pools to your account",
+    },
+    current,
+  );
+  return { ...(await vaultRequest(built, signRequest)), data: tx.data, value: tx.value };
+}
+
+async function vaultRequest(built: ReturnType<BuildVaultAction>, signRequest: ExtSignRequest) {
   const frame = roleSignerPathBTx(profile, {
     chainId: CHAIN_ID,
     nonceSeq: 3n,
@@ -128,7 +173,7 @@ async function extensionDeposit(entrypoint: Address) {
     built,
     policy: POLICY,
   });
-  return { cbor: encodeSignRequest(req), digest: sigHash(profile, frame), precommitment, data: tx.data };
+  return { cbor: encodeSignRequest(req), digest: sigHash(profile, frame) };
 }
 
 const ctx = (): DeviceContext => ({
@@ -227,5 +272,62 @@ describe("Privacy Pools deposit (the extension's shield payment)", () => {
     const r = reviewRequestBytes(b.cbor, ctx());
     expect(r.actions[0]!.title).toMatch(/^Unfamiliar privacy pool at /);
     expect(r.approval).toBe("unknown");
+  });
+});
+
+/** The local devnet's Privacy Pools pool (the registry's 1337 `pools` entry: the extension privacy e2e's deployment). */
+const DEVNET_POOL: Address = "0xC7d1B85C5cE485ec03e06162a08134bAaBE8998C";
+
+describe("Privacy Pools public exit (the extension's ragequit)", () => {
+  it("the registry knows the devnet pool the extension e2e deploys", () => {
+    expect(getAddress(privacyPool(1337n)!)).toBe(DEVNET_POOL);
+  });
+
+  it("clear-signs the extension's exit: the amount, public and linking, the pool by name; normal approve", async () => {
+    const b = await extensionExit(DEVNET_POOL);
+    const r = reviewRequestBytes(b.cbor, ctx());
+    expect(r.digest).toBe(b.digest);
+    expect(r.unknown).toBe(false);
+    expect(r.approval).toBe("normal");
+    expect(r.mismatch).toEqual([]);
+    expect(r.headline).toBe(
+      "Take 0.05 ETH out of the private pool publicly (Public exit): this is visible on-chain and links the deposit to your account",
+    );
+    const a = r.actions[0]!;
+    expect(a.id).toBe("privacyPool.ragequit");
+    expect(a.amount?.text).toBe("0.05 ETH");
+    expect(a.title).not.toMatch(/and send/);
+    expect(a.details).toContainEqual({ label: "Contract", value: `Privacy Pools (${DEVNET_POOL})` });
+  });
+
+  it("the Vault signs it without the unknown-step confirmation", async () => {
+    const b = await extensionExit(DEVNET_POOL);
+    const review = reviewRequestBytes(b.cbor, ctx());
+    const r = (await vaultSigns(b.cbor, review.digest)) as Extract<WorkerResult, { op: "sign" }>;
+    const s = decodeSignature(r.signatureCbor);
+    expect(verify(fromHex(vault.pk), fromHex(b.digest), fromHex(s.witness!))).toBe(true);
+  }, 60_000);
+
+  it("an unknown pool: 'Unfamiliar privacy pool', the raw call, long-press only", async () => {
+    const other: Address = "0x5FE0b7510AB29f1C09295e45aCB746fE099927BD";
+    const b = await extensionExit(other);
+    const r = reviewRequestBytes(b.cbor, ctx());
+    expect(r.unknown).toBe(true);
+    expect(r.approval).toBe("unknown");
+    expect(r.headline).toBe("Unfamiliar privacy pool");
+    const a = r.actions[0]!;
+    expect(a.title).toBe("Unfamiliar privacy pool at 0x5FE0…27BD");
+    expect(a.unknown?.data).toBe(b.data);
+    expect(a.unknown?.reason).toMatch(/not the Privacy Pools pool this app knows for LEAKED devnet/);
+    await expect(vaultSigns(b.cbor, r.digest)).rejects.toThrow(/unrecognised steps/);
+    const ok = (await vaultSigns(b.cbor, r.digest, true)) as Extract<WorkerResult, { op: "sign" }>;
+    expect(decodeSignature(ok.signatureCbor).witness).toBeTruthy();
+  }, 60_000);
+
+  it("the Entrypoint is not the pool: an exit sent to it is unfamiliar too", async () => {
+    const b = await extensionExit(DEVNET_ENTRYPOINT);
+    const r = reviewRequestBytes(b.cbor, ctx());
+    expect(r.approval).toBe("unknown");
+    expect(r.headline).toBe("Unfamiliar privacy pool");
   });
 });

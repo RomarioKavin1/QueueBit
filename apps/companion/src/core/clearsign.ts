@@ -46,6 +46,7 @@ import {
   enumLabel,
   lookup,
   privacyEntrypoint,
+  privacyPool,
   tokenInfo,
   typedDataSpec,
   type ChangeSpec,
@@ -831,7 +832,24 @@ function renderExternalCall(target: Address, value: bigint, data: Hex, r: Render
       "Unfamiliar privacy pool",
     );
   }
-  const entry = ppEntry ?? erc20;
+  const poolAt = privacyPool(r.chainId);
+  const poolShape = lookup("privacyPool", data);
+  const poolEntry = poolAt && isAddressEqual(poolAt, target) ? poolShape : undefined;
+  if (poolShape && !poolEntry && !erc20) {
+    // A public exit (`ragequit`) to a contract that is not the pool this app knows for the chain: same as above.
+    return unknownAction(
+      r.ctx,
+      r.chainId,
+      target,
+      data,
+      value,
+      poolAt
+        ? `It looks like a Privacy Pools public exit, but ${shortAddress(target)} is not the Privacy Pools pool this app knows for ${chainName(r.chainId)}.`
+        : `It looks like a Privacy Pools public exit, but this app knows no Privacy Pools pool on ${chainName(r.chainId)}.`,
+      "Unfamiliar privacy pool",
+    );
+  }
+  const entry = ppEntry ?? poolEntry ?? erc20;
   if (!entry) return unknownAction(r.ctx, r.chainId, target, data, value, "Unrecognised call");
   let args: Record<string, unknown>;
   try {
