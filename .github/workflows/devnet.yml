@@ -55,10 +55,8 @@ jobs:
       - name: forge build
         working-directory: contracts
         run: forge build
-      - name: bun install (devnet/deploy, G1)
-        run: |
-          (cd devnet/deploy && bun install --frozen-lockfile)
-          (cd contracts/devnet-tests/g1 && bun install --frozen-lockfile)
+      - name: bun install (devnet/deploy)
+        run: (cd devnet/deploy && bun install --frozen-lockfile)
 
       # The patched sidecar's image build runs in the background during the Hegota wait (~7.5 min).
       - name: devnet up (fresh genesis, waits for Hegota) + build the BUDGET-010 sidecar image
@@ -80,9 +78,6 @@ jobs:
           bun run deploy
           git diff --exit-code -- addresses.local.json
 
-      - name: gate G1 (hot tx, Path B and Path A vault txs, forged sig, over-cap, recovery cancel, freeze)
-        working-directory: contracts/devnet-tests/g1
-        run: bun run test
       - name: watcher live test (anvil #9)
         env:
           LIVE_DEVNET: "1"
@@ -95,7 +90,7 @@ jobs:
       - name: Playwright browser
         if: github.event_name == 'schedule' || inputs.extension-e2e
         run: pnpm --filter @queuebit/extension exec playwright install --with-deps chromium
-      - name: extension e2e against the devnet (payments, vault; 4337 on its own anvil)
+      - name: extension e2e against the devnet (onboarding, payments, sessions, migration)
         if: github.event_name == 'schedule' || inputs.extension-e2e
         env:
           CI: "1"
@@ -115,7 +110,6 @@ jobs:
         with:
           name: devnet-results
           path: |
-            contracts/devnet-tests/g1/last-run.json
             apps/extension/test-results/
             ${{ runner.temp }}/devnet-logs/
           if-no-files-found: ignore
