@@ -10,6 +10,7 @@ import {
 } from "viem";
 import { describe, expect, it } from "vitest";
 import { OwnerKey } from "../../src/background/lean/owner";
+import { OWNER_NONCE_KEY } from "../../src/background/lean/account";
 import { SAME_ADDRESS_WARNING, planMigration } from "../../src/background/lean/migrate";
 import { ACCOUNT_SALT, accountOptions, accountPlan, frameMaxCost } from "../../src/background/lean/plan";
 import { addSpend, sessionCovers, sessionSpec, type SessionRecord } from "../../src/background/lean/sessions";
@@ -273,6 +274,9 @@ describe("payment routing: owner vs session", () => {
     expect(chain.frames).toHaveLength(0);
     const [e] = await wallet.activity.list();
     expect(e).toMatchObject({ signer: "owner", via: "leanpool", stage: "pooled", origin: ORIGIN });
+    // Owner payments use their own keyed lane (EIP-8250), never the account's plain nonce or a session's lane.
+    expect(e!.nonceKey).toBe(OWNER_NONCE_KEY.toString());
+    expect(OWNER_NONCE_KEY).toBe(0x1000n);
     // Stages follow LeanPool; the site's receipt lookup is answered for the id it holds.
     chain.stages.set(hash as string, "mined");
     await wallet.refreshActivity();
@@ -309,7 +313,7 @@ describe("payment routing: owner vs session", () => {
     const [e2] = await wallet.activity.list();
     chain.stages.delete(chain.pooled[1]!.id);
     const account = (await wallet.handleUi("account:status", { chainId: 1337 })).address!;
-    chain.txCount.set(account.toLowerCase(), Number(e2!.nonceSeq) + 1);
+    chain.setKeyedNonce(account, BigInt(e2!.nonceKey!), BigInt(e2!.nonceSeq!) + 1n);
     await wallet.refreshActivity();
     expect(await wallet.activity.get(e2!.id)).toMatchObject({ status: "confirmed" });
   });

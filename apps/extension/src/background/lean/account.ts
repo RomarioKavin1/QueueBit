@@ -63,7 +63,11 @@ export interface SendOptions {
 
 /** The session lane: one EIP-8250 nonce key per session key, so sessions never wait on the owner or each other. */
 export const sessionNonceKey = (index: number): bigint => BigInt(index + 1);
-const OWNER_NONCE_KEY = 0n;
+/**
+ * The owner's lane: its own EIP-8250 nonce key, apart from the account's plain nonce (key 0) and the session lanes
+ * (1, 2, …). Accounts that paid on key 0 before keep that history; the signature count reads both lanes.
+ */
+export const OWNER_NONCE_KEY = 0x1000n;
 
 const toEntryCalls = (calls: Call[]) =>
   calls.map((c) => ({ target: c.to, value: (c.value ?? 0n).toString(), data: c.data ?? ("0x" as Hex) }));
@@ -192,20 +196,25 @@ export class AccountService {
   }
 
   /**
-   * How many owner transactions the account made: its owner lane's nonce on chain, plus owner transactions still on
-   * their way. Over-counts by at most one (a contract's nonce starts at 1), never under.
+   * How many owner transactions the account made: its owner lane's nonce on chain, plus the account's plain nonce
+   * (owner payments before the keyed lane, and a contract's starting 1), plus owner transactions still on their way.
+   * Over-counts by at most one, never under.
    */
   async ownerTxCount(chainId: number, address: Address): Promise<number> {
     if (!(await this.deployed(chainId, address))) return 0;
-    const onChain = Number(await this.nonce(chainId, address, OWNER_NONCE_KEY));
+    const [lane, plain] = await Promise.all([
+      this.nonce(chainId, address, OWNER_NONCE_KEY),
+      this.nonce(chainId, address, 0n),
+    ]);
     const pending = (await this.d.activity.pending()).filter(
       (e) =>
         e.chainId === chainId &&
         e.signer === "owner" &&
         e.account.toLowerCase() === address.toLowerCase() &&
-        BigInt(e.nonceSeq ?? "0") >= BigInt(onChain),
+        e.nonceKey === OWNER_NONCE_KEY.toString() &&
+        BigInt(e.nonceSeq ?? "0") >= lane,
     ).length;
-    return onChain + pending;
+    return Number(lane) + Number(plain) + pending;
   }
 
   /** Raises the owner key's signature count to what the account shows it made. */

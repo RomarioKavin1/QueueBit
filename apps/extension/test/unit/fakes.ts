@@ -1,5 +1,5 @@
 import { sha256 } from "@noble/hashes/sha2.js";
-import { keccak256, parseGwei, type Address, type Hex } from "viem";
+import { concat, keccak256, pad, parseGwei, toHex, type Address, type Hex } from "viem";
 import { vi } from "vitest";
 import type { ApprovalWindows } from "../../src/background/approvals";
 import type { LeanIo } from "../../src/background/lean/account";
@@ -32,6 +32,7 @@ export function fakeChain() {
   const stages = new Map<string, string>();
   const receipts = new Map<string, "success" | "reverted">();
   const txCount = new Map<string, number>();
+  const storage = new Map<string, Hex>();
   /** Knobs: the sidecar refuses frame txs with this message; the LeanPool node reports another address or is down. */
   const knobs: {
     refuseFrames?: string;
@@ -48,7 +49,8 @@ export function fakeChain() {
     getGasPrice: async () => parseGwei("1"),
     getBlock: async () => ({ baseFeePerGas: parseGwei("1") }),
     getTransactionCount: async ({ address }: { address: Address }) => txCount.get(k(address)) ?? 0,
-    getStorageAt: async () => "0x0",
+    // EIP-8250 keyed nonces live in the nonce manager at keccak(account ‖ key), as AccountService.nonce reads them.
+    getStorageAt: async ({ slot }: { slot: Hex }) => storage.get(slot.toLowerCase()) ?? "0x0",
     estimateGas: async () => 200_000n,
     sendRawTransaction: async ({ serializedTransaction }: { serializedTransaction: Hex }) => {
       legacy.push(serializedTransaction);
@@ -105,6 +107,9 @@ export function fakeChain() {
     knobs,
     deploy: (a: Address) => code.set(k(a), "0x6001"),
     fund: (a: Address, wei: bigint) => balances.set(k(a), wei),
+    /** The next nonce_seq of (account, key) on a keyed lane (key 0 is txCount). */
+    setKeyedNonce: (a: Address, key: bigint, seq: bigint) =>
+      storage.set(keccak256(concat([pad(a), toHex(key, { size: 32 })])).toLowerCase(), toHex(seq)),
   };
 }
 
