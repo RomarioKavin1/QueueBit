@@ -1,6 +1,6 @@
 # Measured: post-quantum signatures inside EIP-8141 VERIFY frames, against the ERC-8421 budgets
 
-*Draft for ethresear.ch. LEAKED project, 2026-11-06. Numbers from `bench/results/results.json` (run of
+*Draft for ethresear.ch. QueueBit project, 2026-11-06. Numbers from `bench/results/results.json` (run of
 2026-11-05). Reproduce with `pnpm --filter bench run all` on the local chain-1337 devnet; `pnpm --filter bench run ci`
 re-runs the Forge verify and tamper checks on the committed vectors without a devnet.*
 
@@ -39,7 +39,7 @@ profile and fork schedule as `altmempool.forshtat.com`.
 **unmodified upstream verifier** directly. The calldata is `selector ‖ key words ‖ TXPARAM(SIG_HASH) ‖ witness`, and
 the witness is copied straight from the ARBITRARY signature entry with `SIGDATACOPY`. It reads no storage in VERIFY
 and uses GAS only before STATICCALL. The VERIFY-frame number is therefore "verifier plus the least glue an account
-can have". A production account (LEAKED's `PQRoleSigner`) adds its own policy on top.
+can have". A production account (QueueBit's `PQRoleSigner`) adds its own policy on top.
 
 **Two shapes per scheme.**
 

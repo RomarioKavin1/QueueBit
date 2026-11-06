@@ -1,5 +1,5 @@
 /// SPDX-License-Identifier: MIT
-// Vendored for LEAKED tests from npm poseidon-solidity@0.0.5 (PoseidonT4.sol; MIT), unmodified below this line. See THIRD_PARTY.md.
+// Vendored for QueueBit tests from npm poseidon-solidity@0.0.5 (PoseidonT4.sol; MIT), unmodified below this line. See THIRD_PARTY.md.
 pragma solidity >=0.7.0;
 
 library PoseidonT4 {

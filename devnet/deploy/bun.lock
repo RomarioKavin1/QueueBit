@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "leaked-devnet-deploy",
+      "name": "queuebit-devnet-deploy",
       "dependencies": {
         "viem": "2.57.16",
       },

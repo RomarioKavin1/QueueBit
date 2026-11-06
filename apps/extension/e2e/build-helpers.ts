@@ -20,16 +20,16 @@ async function bundlerUp(): Promise<boolean> {
 /**
  * The local 4337 chain for the compatible-account e2e (anvil :8546 + EntryPoint v0.8 + modules + the minimal
  * bundler :4337, `devnet/deploy/up-4337.ts`). Reused when already running; else started here and stopped at the end.
- * Skipped with `LEAKED_E2E_NO_4337=1` (the 4337 tests then skip themselves).
+ * Skipped with `QUEUEBIT_E2E_NO_4337=1` (the 4337 tests then skip themselves).
  */
 async function start4337(): Promise<ChildProcess | undefined> {
-  if (process.env.LEAKED_E2E_NO_4337 === "1" || (await bundlerUp())) return undefined;
+  if (process.env.QUEUEBIT_E2E_NO_4337 === "1" || (await bundlerUp())) return undefined;
   const cwd = fileURLToPath(new URL("../../../devnet/deploy/", import.meta.url));
   const child = spawn("bun", ["run", "up-4337.ts"], { cwd, stdio: ["ignore", "pipe", "inherit"] });
   await new Promise<void>((resolve, reject) => {
     const t = setTimeout(() => reject(new Error("the local 4337 chain did not start")), 120_000);
     child.stdout!.on("data", (b: Buffer) => {
-      if (b.toString().includes("LEAKED-4337-READY")) {
+      if (b.toString().includes("QUEUEBIT-4337-READY")) {
         clearTimeout(t);
         resolve();
       }
@@ -45,7 +45,7 @@ async function start4337(): Promise<ChildProcess | undefined> {
  * workspace packages' TypeScript sources, bc-ur with its "buffer/" import, the inlined WASM signer) into one plain ESM
  * file the test process can import, as apps/companion's e2e does.
  */
-export const HELPERS_OUT = fileURLToPath(new URL("../node_modules/.cache/leaked-extension-e2e/", import.meta.url));
+export const HELPERS_OUT = fileURLToPath(new URL("../node_modules/.cache/queuebit-extension-e2e/", import.meta.url));
 
 export default async function globalSetup(): Promise<() => void> {
   const chain = await start4337().catch((e: Error) => {

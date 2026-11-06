@@ -162,7 +162,7 @@ describe("recent roots (EIP-8272 current text)", () => {
   });
 });
 
-describe("LEAKED shapes (plan §10.2.2)", () => {
+describe("QueueBit shapes (plan §10.2.2)", () => {
   const body = { data: "0xdeadbeef" as Hex, execution: 200_000n, state: 50_000n };
 
   it("verifyFrame selectors are explicit, never empty calldata", () => {

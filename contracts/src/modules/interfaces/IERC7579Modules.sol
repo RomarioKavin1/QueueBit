@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-/// @title Minimal ERC-4337 / ERC-7579 interfaces used by the LEAKED modules
+/// @title Minimal ERC-4337 / ERC-7579 interfaces used by the QueueBit modules
 /// @notice Written from the standards' text so that `src/modules` imports nothing from the (partly GPL) host and
 ///         EntryPoint repositories. Each item names its source:
 ///         - `PackedUserOperation`: ERC-4337 (EntryPoint v0.7/v0.8 struct), field order as in

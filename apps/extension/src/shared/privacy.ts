@@ -38,7 +38,7 @@ export type PrivacyStep = "preparing" | "phone" | "paying" | "proving" | "submit
 
 export interface PhoneAsk {
   requestId: string;
-  /** The `ur:leaked-sign-request` (tx-type 2) CBOR, hex. */
+  /** The `ur:queuebit-sign-request` (tx-type 2) CBOR, hex. */
   cbor: Hex;
   depositIndex: number;
   secretIndex: number;

@@ -14,9 +14,9 @@ import {
     ERC1271_MAGIC,
     ERC1271_INVALID
 } from "./interfaces/IERC7579Modules.sol";
-import {ILeakedModules, HOST_KERNEL, HOST_SAFE} from "./interfaces/ILeakedModules.sol";
-import {LeakedExecDecoder} from "./lib/LeakedExecDecoder.sol";
-import {LeakedPolicyHook} from "./LeakedPolicyHook.sol";
+import {IQueueBitModules, HOST_KERNEL, HOST_SAFE} from "./interfaces/IQueueBitModules.sol";
+import {QueueBitExecDecoder} from "./lib/QueueBitExecDecoder.sol";
+import {QueueBitPolicyHook} from "./QueueBitPolicyHook.sol";
 
 /// What the validator asks the host account (all views; in validation only the account's own storage is read).
 interface IHostView {
@@ -44,9 +44,9 @@ interface IHostView {
         );
 }
 
-/// @title LeakedHotValidator
-/// @notice ERC-7579 validator (type 1) for the everyday ("hot") key of a LEAKED account on ERC-4337 (plan
-///         `10-contracts.md` §10.4.2). Stateless: the policy lives in `HOOK` (`LeakedPolicyHook`), and every slot
+/// @title QueueBitHotValidator
+/// @notice ERC-7579 validator (type 1) for the everyday ("hot") key of a QueueBit account on ERC-4337 (plan
+///         `10-contracts.md` §10.4.2). Stateless: the policy lives in `HOOK` (`QueueBitPolicyHook`), and every slot
 ///         read during validation is account-associated there ([STO-021]).
 ///
 ///         `validateUserOp` (ERC-4337 validation; no TIMESTAMP/NUMBER/BALANCE, [OP-011]) checks, in this order:
@@ -83,26 +83,26 @@ interface IHostView {
 ///         3. the ERC-7739 support sentinel, for anyone. Nothing else is valid while frozen or bunkered, and nothing
 ///            at all on Kernel (`HOST_KERNEL`): Kernel rewraps every hash in its own domain, so no app hash can
 ///            match legitimately while a hot key could register or sign the wrapped one (audit A3).
-///         The ERC-7739 "account domain" is this module's (name "LeakedHotValidator", version "1") with
+///         The ERC-7739 "account domain" is this module's (name "QueueBitHotValidator", version "1") with
 ///         `verifyingContract = account`: the reference MSA and Safe7579 do not implement ERC-5267.
-contract LeakedHotValidator is IERC7579Validator, ILeakedModules {
+contract QueueBitHotValidator is IERC7579Validator, IQueueBitModules {
     using MessageHashUtils for bytes32;
     using ERC7739Utils for *;
 
     /// ERC-1271 marker for a registered hash (same value as the frame-native account's).
-    bytes4 public constant REGISTERED_MARKER = 0xdc6b87c9; // bytes4(keccak256("leaked.account.registeredHash"))
+    bytes4 public constant REGISTERED_MARKER = 0x427a9529; // bytes4(keccak256("queuebit.account.registeredHash"))
 
     bytes32 private constant SENTINEL_7739 = 0x7739773977397739773977397739773977397739773977397739773977397739;
     bytes32 private constant DOMAIN_TYPEHASH =
         keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
-    bytes32 private constant NAME_HASH = keccak256("LeakedHotValidator");
+    bytes32 private constant NAME_HASH = keccak256("QueueBitHotValidator");
     bytes32 private constant VERSION_HASH = keccak256("1");
     /// Kernel v3 `ValidationId` of this validator: type 0x01 ‖ address.
     bytes1 private constant KERNEL_VALIDATION_TYPE_VALIDATOR = 0x01;
 
-    LeakedPolicyHook public immutable HOOK;
+    QueueBitPolicyHook public immutable HOOK;
 
-    constructor(LeakedPolicyHook hook) {
+    constructor(QueueBitPolicyHook hook) {
         if (address(hook).code.length == 0) revert BadAddress(address(hook));
         HOOK = hook;
     }
@@ -136,7 +136,7 @@ contract LeakedHotValidator is IERC7579Validator, ILeakedModules {
         if (!_hookBound(account, v.host)) revert HookNotInstalled();
         _checkFees(userOp, v);
 
-        Execution[] memory execs = LeakedExecDecoder.decodeUserOpCallData(userOp.callData);
+        Execution[] memory execs = QueueBitExecDecoder.decodeUserOpCallData(userOp.callData);
         uint256 usd = HOOK.checkHotCalls(account, execs);
         if (usd > v.perTxMaxUsd) revert PerTxMaxExceeded(usd, v.perTxMaxUsd);
         if (usd > v.capUsdPerDay) revert OverDailyCap(usd, v.capUsdPerDay);

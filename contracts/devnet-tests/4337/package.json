@@ -1,9 +1,9 @@
 {
-  "name": "leaked-contracts-devnet-tests-4337",
+  "name": "queuebit-contracts-devnet-tests-4337",
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "M7: ERC-4337 + ERC-7579 backend on a standard EVM (anvil): fixture generator for the Foundry C13 test and the local e2e (EntryPoint v0.8 at its canonical address, minimal handleOps bundler). Run with bun; standalone, not a pnpm workspace package. @leaked/* resolve to the workspace sources via tsconfig paths.",
+  "description": "M7: ERC-4337 + ERC-7579 backend on a standard EVM (anvil): fixture generator for the Foundry C13 test and the local e2e (EntryPoint v0.8 at its canonical address, minimal handleOps bundler). Run with bun; standalone, not a pnpm workspace package. @queuebit/* resolve to the workspace sources via tsconfig paths.",
   "scripts": {
     "gen-fixtures": "bun run gen-fixtures.ts",
     "e2e": "bun run e2e.ts",

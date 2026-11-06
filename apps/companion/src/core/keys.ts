@@ -7,7 +7,7 @@ import { getAddress, type Address, type Hex } from "viem";
 
 /**
  * Key material (plan §20 §3.3): one BIP-39 mnemonic (24 words, optional passphrase) is the only backup.
- *  - Vault / Recovery PQ key: `@leaked/pq-signer` `keygen(seed, { role })` (HMAC-SHA512 domain-separated by scheme
+ *  - Vault / Recovery PQ key: `@queuebit/pq-signer` `keygen(seed, { role })` (HMAC-SHA512 domain-separated by scheme
  *    and role, in WASM).
  *  - Path-B payer (fee-payment) key: BIP-32 `m/44'/60'/8141'/0/0` of the same seed (a separate branch).
  *  - Recovery payer key (the Recovery signer's Path-B fee key, so a Recovery key can act on the public mempool):
@@ -69,7 +69,7 @@ export function addressOf(privateKey: Uint8Array): Address {
   return getAddress(bytesToHex(keccak_256(pub.subarray(1)).subarray(12))) as Address;
 }
 
-/** secp256k1 over a 32-byte digest, RFC 6979, low s: `v ‖ r ‖ s` with v ∈ {0, 1} (the `@leaked/frames` entry form). */
+/** secp256k1 over a 32-byte digest, RFC 6979, low s: `v ‖ r ‖ s` with v ∈ {0, 1} (the `@queuebit/frames` entry form). */
 export function signDigestVrs(privateKey: Uint8Array, digest: Uint8Array): Uint8Array {
   return secp256k1.sign(digest, privateKey, { prehash: false, lowS: true, format: "recovered" });
 }

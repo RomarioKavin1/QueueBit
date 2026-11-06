@@ -26,12 +26,12 @@
       "address": "0xda155ad9f9a33b69d023ed3368134d4bd14fe122",
       "gasUsed": "2932364"
     },
-    "LeakedAccountRoles": {
+    "QueueBitAccountRoles": {
       "hash": "0xf2e88495491161cf6a2f2cee2a204fdfea1bba725d995b0ba02c04914235ca59",
       "address": "0xbf85e6afcf0d2fad0f4b4dc97d151243c94a7429",
       "gasUsed": "28856172"
     },
-    "LeakedAccountImpl": {
+    "QueueBitAccountImpl": {
       "hash": "0xeb7162bea2f4e67d2a784cdd8a5abde34b8cbde9fb341d108a4c9f3232b82556",
       "address": "0x0ec12ab3a020f26e779dd362855fff7f15ae6e39",
       "gasUsed": "38474647"

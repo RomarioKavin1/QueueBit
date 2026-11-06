@@ -1,4 +1,4 @@
-import type { Alert } from "@leaked/watcher-core";
+import type { Alert } from "@queuebit/watcher-core";
 
 export interface HubEntry {
   seq: number;

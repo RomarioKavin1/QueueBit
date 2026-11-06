@@ -27,7 +27,7 @@ import {
  *   salt      = first 31 bytes of keccak256("salt" ‖ rs)
  *
  * so the same vault key yields the same notes as Kohaku's software signer for the same key. The companion
- * (`apps/companion/src/registry/leaked.descriptors.json`, `typedData.PrivacyPoolNote`) clear-signs exactly this
+ * (`apps/companion/src/registry/queuebit.descriptors.json`, `typedData.PrivacyPoolNote`) clear-signs exactly this
  * domain and type.
  */
 

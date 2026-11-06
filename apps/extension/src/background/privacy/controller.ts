@@ -1,5 +1,5 @@
 import { decodeFunctionResult, encodeFunctionData, getAddress, parseGwei, type Address, type Hex } from "viem";
-import { getProfile } from "@leaked/frames";
+import { getProfile } from "@queuebit/frames";
 import {
   EncryptedStorage,
   FramePaymasterBroadcaster,
@@ -23,7 +23,7 @@ import {
   type PublicNote,
   type RagequitProver,
   type StorageBackend,
-} from "@leaked/privacy";
+} from "@queuebit/privacy";
 import { findNetwork, getNetwork } from "../../shared/chains";
 import type { KV } from "../../shared/kv";
 import type { AnonStatus } from "../../shared/offscreen";
@@ -38,7 +38,7 @@ import { PrivacyConfigStore, poolOrderAsp, validatePrivacyConfig, type PrivacyCo
 import { failureFor, isFinal, newOp, proofEstimate, transition, type PrivacyEvent } from "./machine";
 import { NeedsPhoneError, NoteAnswers, acceptPhoneAnswer, phoneAsk, phoneSigner } from "./phoneSigner";
 
-export const PRIVACY_STATE_KEY = (chainId: number) => `leaked:privacy:${chainId}`;
+export const PRIVACY_STATE_KEY = (chainId: number) => `queuebit:privacy:${chainId}`;
 const HISTORY = 20;
 
 /**
@@ -276,7 +276,7 @@ export class PrivacyController {
         ok: false,
         reason: this.d.localDevnet
           ? "No Privacy Pools deployment is set for this network yet. Enter the local pool in Settings."
-          : "Privacy Pools isn't available on this network in LEAKED yet.",
+          : "Privacy Pools isn't available on this network in QueueBit yet.",
         ...(this.d.localDevnet ? { action: "settings" as const } : {}),
       };
     else if (!setup.vault?.payer)
@@ -431,7 +431,7 @@ export class PrivacyController {
     return this.view(chainId);
   }
 
-  /** The phone's answer (the scanned `ur:leaked-signature`, CBOR hex) for the operation's current question. */
+  /** The phone's answer (the scanned `ur:queuebit-signature`, CBOR hex) for the operation's current question. */
   async answerPhone(chainId: number, opId: string, signature: Hex): Promise<PrivacyView> {
     const rec = await this.record(chainId);
     const op = rec.op;
@@ -577,7 +577,7 @@ export class PrivacyController {
       // The deposit is a public payment from the account: instant within the daily limit, else a Vault approval.
       const preview = await this.d.payments.preview(chainId, [call]);
       if (preview.route.route === "hot") {
-        const entry = await this.d.payments.send(chainId, [call], { origin: "LEAKED Private balance" });
+        const entry = await this.d.payments.send(chainId, [call], { origin: "QueueBit Private balance" });
         await this.apply(chainId, { type: "paying", route: "hot", activityId: entry.id });
       } else if (preview.route.route === "needs-vault") {
         // A deposit inserts into the pool's Poseidon tree: far more gas than a transfer, so the Vault request's body
@@ -594,7 +594,7 @@ export class PrivacyController {
             body: { execution: (700_000n + 2n * est).toString(), state: (400_000n + est).toString() },
             label: `Deposit ${fmtEth(call.value)} ETH into your private balance`,
           },
-          { origin: "LEAKED Private balance" },
+          { origin: "QueueBit Private balance" },
         );
         await this.apply(chainId, { type: "paying", route: "vault", vaultRequestId: req.id });
       } else {
@@ -700,7 +700,7 @@ export class PrivacyController {
           body: { execution: (700_000n + 2n * est).toString(), state: (400_000n + est).toString() },
           label: `Public exit: take ${fmtEth(note.value)} ETH back from Privacy Pools to your account`,
         },
-        { origin: "LEAKED Private balance" },
+        { origin: "QueueBit Private balance" },
       );
       op = await this.apply(chainId, { type: "exit-proved", vaultRequestId: req.id, provedMs: r.ms });
       await ctx.answers.clear().catch(() => undefined); // the proof is made: the note key leaves memory

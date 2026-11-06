@@ -1,12 +1,12 @@
-import { getProfile, recoverSecp256k1Signer, setSignature } from "@leaked/frames";
-import { SCHEME_ID, verify } from "@leaked/pq-signer";
+import { getProfile, recoverSecp256k1Signer, setSignature } from "@queuebit/frames";
+import { SCHEME_ID, verify } from "@queuebit/pq-signer";
 import {
   decodeRecoveryTest,
   decodeSignature,
   fromHex,
   recoveryTestChallenge,
   recoveryTestChallengeOf,
-} from "@leaked/ur";
+} from "@queuebit/ur";
 import { describe, expect, it } from "vitest";
 import { hashTypedData, recoverAddress, type Hex } from "viem";
 import { reviewRequestBytes } from "../src/core/clearsign.js";

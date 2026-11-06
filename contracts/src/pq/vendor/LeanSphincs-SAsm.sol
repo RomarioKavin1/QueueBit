@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // SPDX-FileCopyrightText: 2026 Nicolas Consigny <nicolas@ethereum.org>
 //
-// Vendored by LEAKED from https://github.com/nconsigny/SPHINCS- at commit
+// Vendored by QueueBit from https://github.com/nconsigny/SPHINCS- at commit
 // 4c76aaf113d326df9adede63d015f3b394ab84f4, file src/keccak/LeanSphincs-SAsm.sol.
 // Code below this comment is byte-identical to upstream (only this provenance block was added).
 // License: MIT, see ./LICENSE-SPHINCS-minus. Recorded in THIRD_PARTY.md.

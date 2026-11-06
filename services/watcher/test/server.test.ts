@@ -1,7 +1,14 @@
 import type { AddressInfo } from "node:net";
 import { createServer, type Server } from "node:http";
 import { afterEach, describe, expect, it } from "vitest";
-import { NonceCache, authHeader, verifyAlert, verifyWebhook, type Alert, type SignedAlert } from "@leaked/watcher-core";
+import {
+  NonceCache,
+  authHeader,
+  verifyAlert,
+  verifyWebhook,
+  type Alert,
+  type SignedAlert,
+} from "@queuebit/watcher-core";
 import { atLeast, ntfySink, webhookSink } from "../src/delivery.js";
 import { Hub } from "../src/hub.js";
 import { RateLimiter, clientIp, createWatcherServer } from "../src/server.js";
@@ -272,7 +279,7 @@ describe("delivery", () => {
   it("webhook: the receiver verifies the HMAC; a wrong secret fails; severity filter applies", async () => {
     const got: { body: string; sig: string; delivery: string }[] = [];
     const url = await receiver((body, h) =>
-      got.push({ body, sig: String(h["x-leaked-signature"]), delivery: String(h["x-leaked-delivery"]) }),
+      got.push({ body, sig: String(h["x-queuebit-signature"]), delivery: String(h["x-queuebit-delivery"]) }),
     );
     const sink = webhookSink({ url, secret: KEY, minSeverity: "warning" });
     await sink({ seq: 1, type: "alert", alert: alert("w1") });
@@ -394,10 +401,10 @@ describe("config", () => {
       /ntfy\.url/,
     );
     const ok = parseConfig(
-      { ...base, webhook: { url: "https://hooks.example/leaked", secret: KEY } },
+      { ...base, webhook: { url: "https://hooks.example/queuebit", secret: KEY } },
       { WATCHER_NTFY_TOPIC: "t", WATCHER_NTFY_URL: "https://ntfy.example/" },
     );
-    expect(ok.webhook?.url).toBe("https://hooks.example/leaked");
+    expect(ok.webhook?.url).toBe("https://hooks.example/queuebit");
     expect(ok.ntfy?.url).toBe("https://ntfy.example");
   });
 });

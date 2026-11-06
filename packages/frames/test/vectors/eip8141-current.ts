@@ -1,4 +1,4 @@
-// PINNED by `PIN_PROFILE=eip8141-current pnpm pin-vectors` (@leaked/frames). Do not regenerate once a network depends on this profile.
+// PINNED by `PIN_PROFILE=eip8141-current pnpm pin-vectors` (@queuebit/frames). Do not regenerate once a network depends on this profile.
 export const vectors = [
   {
     name: "self-relay",

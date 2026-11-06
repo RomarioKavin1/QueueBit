@@ -7,7 +7,7 @@
 // eth_getUserOperationReceipt, eth_getUserOperationByHash. Any path ("/" and "/rpc"), CORS, single + batch requests.
 // Gas estimation:
 //   callGasLimit         = node eth_estimateGas({from: EntryPoint, to: sender, data: callData}) * 1.2 + 30,000
-//   verificationGasLimit = constant 500,000 (the LEAKED validator + MSA + hook validation measures ~150-250k; a
+//   verificationGasLimit = constant 500,000 (the QueueBit validator + MSA + hook validation measures ~150-250k; a
 //                          dummy signature makes simulated validation unreliable), + factory estimate * 1.2 when
 //                          the op carries a factory (account deployment runs in the verification phase)
 //   preVerificationGas   = 50,000 + 16 * byte length of the ABI-encoded PackedUserOperation
@@ -282,7 +282,7 @@ const server = createServer((req: IncomingMessage, res: ServerResponse) => {
     return;
   }
   if (req.method !== "POST") {
-    res.writeHead(200, { ...cors, "content-type": "text/plain" }).end("LEAKED dev bundler (EntryPoint v0.8): POST JSON-RPC\n");
+    res.writeHead(200, { ...cors, "content-type": "text/plain" }).end("QueueBit dev bundler (EntryPoint v0.8): POST JSON-RPC\n");
     return;
   }
   const chunks: Buffer[] = [];
@@ -301,7 +301,7 @@ const server = createServer((req: IncomingMessage, res: ServerResponse) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`LEAKED bundler on http://localhost:${PORT} (node ${NODE}, entry point ${ENTRY_POINT}, bundler EOA ${bundlerAccount.address})`);
+  console.log(`QueueBit bundler on http://localhost:${PORT} (node ${NODE}, entry point ${ENTRY_POINT}, bundler EOA ${bundlerAccount.address})`);
 });
 const stop = () => {
   console.log("bundler: shutting down");

@@ -204,7 +204,7 @@ export const BellIcon = (p: IconProps) => (
   </Icon>
 );
 
-/** The LEAKED mark (same drawing as the toolbar icon). */
+/** The QueueBit mark (same drawing as the toolbar icon). */
 export function LogoMark({ size = 24, title }: { size?: number; title?: string }) {
   return (
     <svg

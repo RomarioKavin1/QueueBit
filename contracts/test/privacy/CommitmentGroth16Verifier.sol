@@ -4,7 +4,7 @@ pragma solidity 0.8.28;
 import {CommitmentVkey as K} from "./CommitmentVkey.sol";
 
 /// @title CommitmentGroth16Verifier
-/// @notice A Groth16 (BN254) verifier for the Privacy Pools commitment circuit (ragequit), for LEAKED's tests and the
+/// @notice A Groth16 (BN254) verifier for the Privacy Pools commitment circuit (ragequit), for QueueBit's tests and the
 ///         devnet pool only: the same check as `WithdrawalGroth16Verifier` (MIT, not 0xbow's GPL snarkjs template)
 ///         over the commitment circuit's published key. Public signals: commitmentHash, nullifierHash, value, label
 ///         (`ProofLib.RagequitProof`).

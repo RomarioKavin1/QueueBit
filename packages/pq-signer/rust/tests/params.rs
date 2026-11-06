@@ -1,6 +1,6 @@
 //! Parameter identities: every literal hard-coded in `SPHINCs-C13Asm.sol` must follow from the
 //! named parameters (upstream review C13-V-f4), and the scheme id must be the plan's keccak.
-use leaked_pq::params::*;
+use queuebit_pq::params::*;
 
 #[test]
 fn verifier_literals_follow_from_parameters() {
@@ -23,7 +23,7 @@ fn verifier_literals_follow_from_parameters() {
 
 #[test]
 fn scheme_id_is_keccak_of_label() {
-    assert_eq!(leaked_pq::hash::keccak256(SCHEME_ID_PREIMAGE), SCHEME_ID);
+    assert_eq!(queuebit_pq::hash::keccak256(SCHEME_ID_PREIMAGE), SCHEME_ID);
     assert_eq!(
         hex::encode(SCHEME_ID),
         "b2062c48f163f38edbf050c4a98b6abbe194acda9a6de525b69b330a739aa054"
@@ -33,22 +33,22 @@ fn scheme_id_is_keccak_of_label() {
 #[test]
 fn keccak_matches_ethereum() {
     assert_eq!(
-        hex::encode(leaked_pq::hash::keccak256(b"")),
+        hex::encode(queuebit_pq::hash::keccak256(b"")),
         "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
     );
     // multi-block (> 136 bytes) path
     let long = [0x61u8; 300];
-    let split = leaked_pq::hash::keccak256_parts(&[&long[..7], &long[7..140], &long[140..]]);
-    assert_eq!(split, leaked_pq::hash::keccak256(&long));
+    let split = queuebit_pq::hash::keccak256_parts(&[&long[..7], &long[7..140], &long[140..]]);
+    assert_eq!(split, queuebit_pq::hash::keccak256(&long));
     assert_eq!(
-        hex::encode(leaked_pq::hash::keccak256(&[0x61u8; 136])),
-        hex::encode(leaked_pq::hash::keccak256_parts(&[&[0x61u8; 100], &[0x61u8; 36]]))
+        hex::encode(queuebit_pq::hash::keccak256(&[0x61u8; 136])),
+        hex::encode(queuebit_pq::hash::keccak256_parts(&[&[0x61u8; 100], &[0x61u8; 36]]))
     );
 }
 
 #[test]
 fn fast_path_tweakable_hashes_equal_generic_keccak() {
-    use leaked_pq::hash::*;
+    use queuebit_pq::hash::*;
     for i in 0u8..50 {
         let seed = [i; 16];
         let a = adrs(i as u32, 0x0102030405060708 ^ i as u64, 3, 7, i as u32 + 1, 0xdead_beef);

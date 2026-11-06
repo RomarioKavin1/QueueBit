@@ -1,8 +1,8 @@
-# LEAKED: full critical feasibility analysis (2026-11-05)
+# QueueBit: full critical feasibility analysis (2026-11-05)
 
 **Scope:** the whole product as discussed: the two-tier 8141 account, PQ vault, vault-leak mitigations, browser extension, private transactions, and positioning against Kohaku. Time is not a constraint.
 **Method:** four independent adversarial reviews (account/crypto, privacy, market, engineering/op-sec), each reading the project files plus primary specs (EIP-8141, ERC-8421, EIP-8250, EIP-8272, ERC-8286, PORST source, SPHINCS- post). The two claims the verdict depends on most (ERC-8286, and Kohaku's spending policies) were re-checked by hand.
-**Design reviewed:** the session brief `leaked-v3-design-brief.md` (v3 = v2 hackathon spec + the extension + the privacy layer).
+**Design reviewed:** the session brief `queuebit-v3-design-brief.md` (v3 = v2 hackathon spec + the extension + the privacy layer).
 
 ---
 
@@ -32,7 +32,7 @@
 These were stated in chat and are **wrong or overstated**:
 
 1. **"Kohaku doesn't cover caps or session keys."** Wrong. Kohaku's roadmap lists *"spending policies: account policies with spending limits for different signers"* and a *"post-quantum killswitch"* (secondary sources, consistent across several). The leaked-key-containment idea is **on their roadmap**, just not shipped.
-2. **"The pool contract becomes an 8141 account and pays its own gas, while plugging into existing pools for a big anonymity set."** These two claims are mutually exclusive. `APPROVE` (opcode 0xaa) must be executed by the sender's own code. Privacy Pools, Tornado and Railgun contracts don't contain it and aren't LEAKED's to upgrade. A self-paying sender means **a new, empty pool**. The workable form is a **staked paymaster** that pays gas out of an existing pool's withdrawal, which is essentially a relayer with a stake.
+2. **"The pool contract becomes an 8141 account and pays its own gas, while plugging into existing pools for a big anonymity set."** These two claims are mutually exclusive. `APPROVE` (opcode 0xaa) must be executed by the sender's own code. Privacy Pools, Tornado and Railgun contracts don't contain it and aren't QueueBit's to upgrade. A self-paying sender means **a new, empty pool**. The workable form is a **staked paymaster** that pays gas out of an existing pool's withdrawal, which is essentially a relayer with a stake.
 3. **"Recent roots" is an alt-mempool feature for privacy.** It's **EIP-8272**, a protocol system contract (an 8,192-slot ring, ~27h). It only helps pools that write to it, and existing pools don't.
 4. **"Allowance notes" enforce a private cap.** Unsound:
    - the vault must sign daily, so it isn't cold;
@@ -85,7 +85,7 @@ These were stated in chat and are **wrong or overstated**:
 - ERC-8421 blames the entity whose VERIFY changed behaviour. ~20 invalidations/hour would throttle and then ban the paymaster on every node.
 - *Fix:* nullifier-keyed nonces (needs 8250), a root *history* for ASP roots, and an admission/dedup service. The last of these is the relayer again.
 
-**F7. Regulatory exposure** if LEAKED deploys a pool or runs a fee-taking paymaster.
+**F7. Regulatory exposure** if QueueBit deploys a pool or runs a fee-taking paymaster.
 - Samourai (non-custodial devs, 4–5 years, unlicensed money transmission) and Storm (convicted on the same count; retrial Apr 2027) set the precedent.
 - India's FIU-IND (Jan 2026) told reporting entities to block mixer flows.
 - *Fix:* integrate 0xbow's pool, which runs its own ASP. Any paymaster runs at cost or is self-paid. **Never operate a pool or relayer from India.**

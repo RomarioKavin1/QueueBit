@@ -3,7 +3,7 @@ pragma solidity 0.8.28;
 
 import {HegotaSupport, Devnet} from "@forshtat/hegota-support/contracts/HegotaSupport.sol";
 import {Scope, TxParam, FrameParam, FrameMode, SigParam} from "@forshtat/hegota-support/contracts/Params.sol";
-import {ILeakedAccountRoles} from "../interfaces/ILeakedAccountRoles.sol";
+import {IQueueBitAccountRoles} from "../interfaces/IQueueBitAccountRoles.sol";
 import {FeeProfile} from "./FeeProfile.sol";
 
 /// @title GuardianSigner
@@ -18,7 +18,7 @@ import {FeeProfile} from "./FeeProfile.sol";
 contract GuardianSigner is HegotaSupport {
     uint256 private constant SCHEME_SECP256K1 = 1;
 
-    /// The LEAKED account this guardian may freeze.
+    /// The QueueBit account this guardian may freeze.
     address public immutable account;
     /// The guardian's ECDSA key (signature entry 0).
     address public immutable guardianKey;
@@ -70,7 +70,7 @@ contract GuardianSigner is HegotaSupport {
             frameparam(i, FrameParam.MODE) != uint256(FrameMode.SENDER)
                 || address(uint160(frameparam(i, FrameParam.RESOLVED_TARGET))) != account
                 || frameparam(i, FrameParam.VALUE) != 0 || frameparam(i, FrameParam.DATA_LENGTH) != 4
-                || bytes4(framedataload(0, i)) != ILeakedAccountRoles.guardianFreeze.selector
+                || bytes4(framedataload(0, i)) != IQueueBitAccountRoles.guardianFreeze.selector
         ) revert BadFrameShape(i);
 
         approve(Scope.EXECUTION_AND_PAYMENT);

@@ -1,8 +1,8 @@
-// LeakedAccount integration test on the LOCAL devnet (devnet/README.md; `cd devnet && ./up.sh`).
+// QueueBitAccount integration test on the LOCAL devnet (devnet/README.md; `cd devnet && ./up.sh`).
 //
 //   cd contracts && forge build && cd devnet-tests/account && bun install && bun run test
 //
-// 1. Deploys LeakedAccountRoles, LeakedAccountImpl (HegotaSupport ERC8421_WORKSHOP, per-gas MAX_FEE) and
+// 1. Deploys QueueBitAccountRoles, QueueBitAccountImpl (HegotaSupport ERC8421_WORKSHOP, per-gas MAX_FEE) and
 //    AccountFactory, then a proxy through the factory with: ETH priced at init, the fee-tank EOA allowlisted at init,
 //    a $10/day bucket and an $8 per-tx bound. Funding from anvil #0 only.
 // 2. Hot tx [only_verify(account, verifyFrame()), pay(tank EOA), SENDER(hotExecute)]: an ETH top-up of the tank
@@ -32,7 +32,7 @@ import {
   type Hex,
 } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
-import { encodeTx, getProfile, hotSpendTx, sigHash, signTx, txHash, type FrameTx } from "@leaked/frames";
+import { encodeTx, getProfile, hotSpendTx, sigHash, signTx, txHash, type FrameTx } from "@queuebit/frames";
 import { artifact, call, deploy, json, legacy, log, pub, rpc, waitReceipt } from "./lib.js";
 
 const profile = getProfile("ethrex-eip8141-tracer");
@@ -47,8 +47,8 @@ const ZERO = "0x0000000000000000000000000000000000000000" as Address;
 
 const results: Record<string, unknown> = { startedAt: new Date().toISOString() };
 
-const rolesArt = artifact("LeakedAccountRoles.sol", "LeakedAccountRoles");
-const implArt = artifact("LeakedAccountImpl.sol", "LeakedAccountImpl");
+const rolesArt = artifact("QueueBitAccountRoles.sol", "QueueBitAccountRoles");
+const implArt = artifact("QueueBitAccountImpl.sol", "QueueBitAccountImpl");
 const factoryArt = artifact("AccountFactory.sol", "AccountFactory");
 const accountAbi = [...implArt.abi, ...rolesArt.abi.filter((x) => (x as { type: string }).type === "function")];
 
@@ -97,7 +97,7 @@ const initCfg = {
   tokens: [] as { token: Address; decimals: number; usdPerToken: bigint }[], // InitConfig.tokens
 };
 const initData = encodeFunctionData({ abi: implArt.abi, functionName: "initialize", args: [initCfg] });
-const salt = keccak256(stringToHex(`leaked-devnet-${Date.now()}`));
+const salt = keccak256(stringToHex(`queuebit-devnet-${Date.now()}`));
 const account = (await pub.readContract({
   address: factoryD.address,
   abi: factoryArt.abi,
@@ -303,7 +303,7 @@ const bal = (a: Address) => rpc.node.getBalance(a);
 
 // --------------------------------------------------------------------------- 3. registerHash + 1271 ----------
 {
-  const h = keccak256(stringToHex("leaked devnet value-bearing typed data"));
+  const h = keccak256(stringToHex("queuebit devnet value-bearing typed data"));
   const block = await pub.getBlock();
   const expiry = Number(block.timestamp) + 3600;
   const reg = encodeFunctionData({
@@ -426,9 +426,9 @@ const bal = (a: Address) => rpc.node.getBalance(a);
   const rsf = dep.contracts.RoleSignerFactory.address as Address;
   const c13 = dep.contracts.C13Verifier.address as Address;
   const rsfArt = artifact("RoleSignerFactory.sol", "RoleSignerFactory");
-  const vaultPk = keccak256(stringToHex(`leaked-devnet-bound-vault-pk-${Date.now()}`));
+  const vaultPk = keccak256(stringToHex(`queuebit-devnet-bound-vault-pk-${Date.now()}`));
   const vaultPayer = privateKeyToAccount(generatePrivateKey()).address;
-  const bSalt = keccak256(stringToHex(`leaked-devnet-bound-${Date.now()}`));
+  const bSalt = keccak256(stringToHex(`queuebit-devnet-bound-${Date.now()}`));
   const cfg = {
     ...initCfg,
     roleSignerFactory: rsf,

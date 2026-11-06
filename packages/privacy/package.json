@@ -1,5 +1,5 @@
 {
-  "name": "@leaked/privacy",
+  "name": "@queuebit/privacy",
   "version": "0.0.0",
   "private": true,
   "description": "Privacy Pools v1 integration: Kohaku-compatible Host adapters, the vault EnvelopeSigner over QR, sync/prove/withdraw (0xbow relayer or the PoolPayer frame paymaster)",
@@ -23,9 +23,9 @@
     "test:live": "LIVE_DEVNET=1 vitest run"
   },
   "dependencies": {
-    "@leaked/frames": "workspace:*",
-    "@leaked/rpc": "workspace:*",
-    "@leaked/ur": "workspace:*",
+    "@queuebit/frames": "workspace:*",
+    "@queuebit/rpc": "workspace:*",
+    "@queuebit/ur": "workspace:*",
     "@zk-kit/lean-imt": "2.2.2",
     "poseidon-lite": "0.3.0",
     "viem": "2.57.16"

@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-/// @title ILeakedAccountRoles
-/// @notice The role entry points of the LEAKED account (`src/account/LeakedAccountRoles.sol`, DELEGATECALLed from
-///         `LeakedAccountImpl`'s fallback) that the role signers call, plus the permissionless executors of queued
+/// @title IQueueBitAccountRoles
+/// @notice The role entry points of the QueueBit account (`src/account/QueueBitAccountRoles.sol`, DELEGATECALLed from
+///         `QueueBitAccountImpl`'s fallback) that the role signers call, plus the permissionless executors of queued
 ///         operations and the role views (plan `10-contracts.md` §10.3.2, "Role entry points", as amended by
-///         `ILeakedAccount`'s header: no `vaultSetDomain`; `vaultSetFeePolicy`, `vaultSetValueVerifier`,
+///         `IQueueBitAccount`'s header: no `vaultSetDomain`; `vaultSetFeePolicy`, `vaultSetValueVerifier`,
 ///         `vaultSetTrustedVerifier`, `vaultSetRecipientMode` and `recoveryFinalizeVaultRotation` added). The account authorises the caller
 ///         by `msg.sender` (vault / recovery signer, guardian). This file exists so that the role signers (an
 ///         unbound `PQRoleSigner` reads `getRoles`), their tests and scripts can encode calldata without depending
-///         on the account implementation; `test/roles` asserts selector parity with `LeakedAccountRoles`.
-interface ILeakedAccountRoles {
-    /// Same layout as `ILeakedAccount.Call`.
+///         on the account implementation; `test/roles` asserts selector parity with `QueueBitAccountRoles`.
+interface IQueueBitAccountRoles {
+    /// Same layout as `IQueueBitAccount.Call`.
     struct Call {
         address target;
         uint256 value;
@@ -28,7 +28,7 @@ interface ILeakedAccountRoles {
     function vaultSetFeePolicy(uint256 maxPriorityFeePerGas, bool selfPay, address tank) external;
     function vaultSetToken(address token, bool allowed, uint8 decimals, uint256 usdPerToken) external;
     function vaultSetTarget(address target, bool allowed) external;
-    /// `mode` is `ILeakedAccount.RecipientMode` (0 = Open, 1 = Strict; ABI type uint8).
+    /// `mode` is `IQueueBitAccount.RecipientMode` (0 = Open, 1 = Strict; ABI type uint8).
     function vaultSetRecipientMode(uint8 mode) external;
     function vaultSetSession(address target, bytes4 selector, uint256 allowanceUsd, uint48 expiry) external;
     function vaultSetValueVerifier(address verifier, bool denied) external;

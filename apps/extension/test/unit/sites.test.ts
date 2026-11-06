@@ -18,12 +18,12 @@ describe("known-bad site lists (docs/release/phishing-list.md)", () => {
   });
 
   it("warns on a listed host and its subdomains, any port or scheme; not on lookalike suffixes", () => {
-    expect(siteWarning("https://leaked-phishing-test.invalid")).toMatchObject({ kind: "listed" });
-    expect(siteWarning("http://app.leaked-phishing-test.invalid:8080")).toMatchObject({
+    expect(siteWarning("https://queuebit-phishing-test.invalid")).toMatchObject({ kind: "listed" });
+    expect(siteWarning("http://app.queuebit-phishing-test.invalid:8080")).toMatchObject({
       kind: "listed",
-      host: "app.leaked-phishing-test.invalid",
+      host: "app.queuebit-phishing-test.invalid",
     });
-    expect(siteWarning("https://notleaked-phishing-test.invalid")).toBeNull();
+    expect(siteWarning("https://notqueuebit-phishing-test.invalid")).toBeNull();
     expect(siteWarning("https://app.uniswap.org")).toBeNull();
     expect(siteWarning("not a url")).toBeNull();
   });

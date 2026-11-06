@@ -1,10 +1,10 @@
 // Integration test on the LOCAL devnet (devnet/README.md; `cd devnet && ./up.sh`, then `cd contracts && forge build`):
 //
-//   LIVE_DEVNET=1 pnpm --filter @leaked/watcher test
+//   LIVE_DEVNET=1 pnpm --filter @queuebit/watcher test
 //
 // Funds from anvil #9 only (README "Funding-key allocation": watcher / misc). Reuses the CREATE2 deployment recorded in
 // devnet/deploy/addresses.local.json when its code is on chain and its init code matches the current artifacts;
-// otherwise deploys LeakedAccountRoles / LeakedAccountImpl / AccountFactory itself (the contracts/devnet-tests/account
+// otherwise deploys QueueBitAccountRoles / QueueBitAccountImpl / AccountFactory itself (the contracts/devnet-tests/account
 // recipe). Then creates an account (the Vault and the Guardian are stand-in EOAs: role calls authenticate by
 // msg.sender), starts the watcher service in-process against the node, and performs:
 //   1. a hot payment within the daily limit (no alert),
@@ -32,9 +32,9 @@ import {
   type Hex,
 } from "viem";
 import { generatePrivateKey, privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
-import { encodeTx, getProfile, hotSpendTx, signTx } from "@leaked/frames";
-import { createFrameRpc } from "@leaked/rpc";
-import { authHeader, verifyAlert, verifyWebhook, type Alert, type SignedAlert } from "@leaked/watcher-core";
+import { encodeTx, getProfile, hotSpendTx, signTx } from "@queuebit/frames";
+import { createFrameRpc } from "@queuebit/rpc";
+import { authHeader, verifyAlert, verifyWebhook, type Alert, type SignedAlert } from "@queuebit/watcher-core";
 import { parseConfig } from "../src/config.js";
 import { createService, type Service } from "../src/service.js";
 
@@ -55,7 +55,7 @@ const profile = getProfile("ethrex-eip8141-tracer");
 
 const chain = {
   id: CHAIN_ID,
-  name: "leaked-devnet",
+  name: "queuebit-devnet",
   nativeCurrency: { name: "ETH", symbol: "ETH", decimals: 18 },
   rpcUrls: { default: { http: [ETHREX] } },
 } as const;
@@ -107,8 +107,8 @@ async function reusableDeployment(
   if (d.network?.chainId !== CHAIN_ID) return null;
   const c = d.contracts;
   const checks: [ReturnType<typeof art>, { address: Address; args: unknown[]; initCodeHash: Hex }][] = [
-    [rolesA, c.LeakedAccountRoles],
-    [implA, c.LeakedAccountImpl],
+    [rolesA, c.QueueBitAccountRoles],
+    [implA, c.QueueBitAccountImpl],
     [factA, c.AccountFactory],
   ];
   for (const [a, rec] of checks) {
@@ -119,8 +119,8 @@ async function reusableDeployment(
     if (!code || code === "0x") return null;
   }
   return {
-    roles: c.LeakedAccountRoles.address as Address,
-    impl: c.LeakedAccountImpl.address as Address,
+    roles: c.QueueBitAccountRoles.address as Address,
+    impl: c.QueueBitAccountImpl.address as Address,
     factory: c.AccountFactory.address as Address,
   };
 }
@@ -162,7 +162,7 @@ async function deploy(a: ReturnType<typeof art>, args: unknown[], gas: bigint): 
 
 const devnetUp = async () => {
   try {
-    return (await rpc.node.chainId()) === BigInt(CHAIN_ID) && existsSync(join(OUT, "LeakedAccountImpl.sol"));
+    return (await rpc.node.chainId()) === BigInt(CHAIN_ID) && existsSync(join(OUT, "QueueBitAccountImpl.sol"));
   } catch {
     return false;
   }
@@ -181,8 +181,8 @@ describe.skipIf(!LIVE)("watcher on the local devnet", () => {
 
   it("alerts on a Vault-queued loosening, a Guardian pause and an over-limit attempt within N blocks", async () => {
     if (!(await devnetUp())) throw new Error(`no chain-1337 devnet at ${ETHREX} or no contracts/out (forge build)`);
-    const rolesA = art("LeakedAccountRoles.sol", "LeakedAccountRoles");
-    const implA = art("LeakedAccountImpl.sol", "LeakedAccountImpl");
+    const rolesA = art("QueueBitAccountRoles.sol", "QueueBitAccountRoles");
+    const implA = art("QueueBitAccountImpl.sol", "QueueBitAccountImpl");
     const factA = art("AccountFactory.sol", "AccountFactory");
     const accountAbi = [...implA.abi, ...rolesA.abi.filter((x) => x.type === "function")] as Abi;
 
@@ -226,7 +226,7 @@ describe.skipIf(!LIVE)("watcher on the local devnet", () => {
         }),
       ],
     });
-    const salt = keccak256(stringToHex(`leaked-watcher-devnet-${Date.now()}`));
+    const salt = keccak256(stringToHex(`queuebit-watcher-devnet-${Date.now()}`));
     const account = (await pub.readContract({
       address: d.factory,
       abi: factA.abi,
@@ -255,7 +255,7 @@ describe.skipIf(!LIVE)("watcher on the local devnet", () => {
       let b = "";
       req.on("data", (c) => (b += c));
       req.on("end", () => {
-        hooks.push({ body: b, sig: String(req.headers["x-leaked-signature"]) });
+        hooks.push({ body: b, sig: String(req.headers["x-queuebit-signature"]) });
         res.writeHead(204).end();
       });
     });
@@ -270,7 +270,7 @@ describe.skipIf(!LIVE)("watcher on the local devnet", () => {
       pollIntervalMs: 1000,
       startBlock: startBlock.toString(),
       accounts: [{ address: account, backend: "frame" }],
-      store: `file:${join(mkdtempSync(join(tmpdir(), "leaked-watcher-")), "state.json")}`,
+      store: `file:${join(mkdtempSync(join(tmpdir(), "queuebit-watcher-")), "state.json")}`,
       http: { host: "127.0.0.1", port: 0, trustProxy: 0 },
       apiKeys: [{ id: "ext", secret: KEY }],
       webhook: {

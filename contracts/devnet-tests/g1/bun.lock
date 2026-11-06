@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "leaked-contracts-devnet-tests",
+      "name": "queuebit-contracts-devnet-tests",
       "dependencies": {
         "viem": "2.57.16",
       },

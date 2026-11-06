@@ -107,19 +107,23 @@ export function ApproveApp() {
 
       {!state.initialized ? (
         <div className="flex flex-1 flex-col gap-4 p-4">
-          <RiskBanner level="info" title="Set up LEAKED first" body="You need an account before a site can connect." />
+          <RiskBanner
+            level="info"
+            title="Set up QueueBit first"
+            body="You need an account before a site can connect."
+          />
           <div className="mt-auto flex gap-2">
             <Button variant="secondary" block onClick={() => void reject()}>
               Cancel
             </Button>
             <Button block onClick={() => (openFullApp("#onboarding"), void reject())}>
-              Set up LEAKED
+              Set up QueueBit
             </Button>
           </div>
         </div>
       ) : !state.unlocked ? (
         <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-4">
-          <p className="t-body">Unlock LEAKED to review this request.</p>
+          <p className="t-body">Unlock QueueBit to review this request.</p>
           <UnlockForm compact />
           <Button variant="ghost" onClick={() => void reject()}>
             Cancel request

@@ -1,12 +1,12 @@
-import { SCHEME_ID, verify } from "@leaked/pq-signer";
-import { decodeRecoveryTest, encodeRecoveryChallenge, fromHex, recoveryTestChallengeOf } from "@leaked/ur";
+import { SCHEME_ID, verify } from "@queuebit/pq-signer";
+import { decodeRecoveryTest, encodeRecoveryChallenge, fromHex, recoveryTestChallengeOf } from "@queuebit/ur";
 import { afterEach, describe, expect, it } from "vitest";
 import { wordsToEntropy } from "../src/core/keys.js";
 import { CHALLENGE_TTL_MS, ChallengeRefused, checkChallenge, readChallenge } from "../src/core/recoveryChallenge.js";
 import { handle } from "../src/worker/handler.js";
 import { RECOVERY_WORDS, recovery, vault } from "./fixtures/requests.js";
 
-/** The browser-issued recovery test challenge (`ur:leaked-recovery-challenge`, extension M2). */
+/** The browser-issued recovery test challenge (`ur:queuebit-recovery-challenge`, extension M2). */
 
 const REQUEST_ID = "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
 const challengeCbor = (pk = recovery.pk) => encodeRecoveryChallenge({ requestId: REQUEST_ID, recoveryPk: pk });

@@ -9,9 +9,9 @@
     "types": ["node"],
     "noEmit": true,
     "paths": {
-      "@leaked/frames": ["../../../packages/frames/src/index.ts"],
-      "@leaked/rpc": ["../../../packages/rpc/src/index.ts"],
-      "@leaked/pq-signer": ["../../../packages/pq-signer/src/index.ts"]
+      "@queuebit/frames": ["../../../packages/frames/src/index.ts"],
+      "@queuebit/rpc": ["../../../packages/rpc/src/index.ts"],
+      "@queuebit/pq-signer": ["../../../packages/pq-signer/src/index.ts"]
     }
   },
   "include": ["*.ts"]

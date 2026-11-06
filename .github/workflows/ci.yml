@@ -64,11 +64,11 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Playwright browser
-        run: pnpm --filter @leaked/companion exec playwright install --with-deps chromium
+        run: pnpm --filter @queuebit/companion exec playwright install --with-deps chromium
       - name: e2e (build + preview + playwright)
         env:
           CI: "1"
-        run: pnpm --filter @leaked/companion run e2e
+        run: pnpm --filter @queuebit/companion run e2e
       - if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -107,11 +107,11 @@ jobs:
         working-directory: devnet/deploy
         run: bun install --frozen-lockfile
       - name: Playwright browser
-        run: pnpm --filter @leaked/extension exec playwright install --with-deps chromium
+        run: pnpm --filter @queuebit/extension exec playwright install --with-deps chromium
       - name: e2e (wxt build + playwright)
         env:
           CI: "1"
-        run: pnpm --filter @leaked/extension run e2e
+        run: pnpm --filter @queuebit/extension run e2e
       - if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -121,7 +121,7 @@ jobs:
 
   aa-4337-e2e:
     # contracts/devnet-tests/4337: the ERC-4337 + ERC-7579 backend on anvil (EntryPoint v0.8 at its canonical
-    # address, the LEAKED modules on the reference MSA, a fresh C13 vault signature, a minimal handleOps bundler).
+    # address, the QueueBit modules on the reference MSA, a fresh C13 vault signature, a minimal handleOps bundler).
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -192,7 +192,7 @@ jobs:
           test -z "$(git status --porcelain -- wasm/)" # no new untracked files either
 
   groth16-wasm:
-    # @leaked/groth16 (the MIT Groth16 engine): same committed-wasm pattern as pq-signer-wasm, plus the snarkjs and
+    # @queuebit/groth16 (the MIT Groth16 engine): same committed-wasm pattern as pq-signer-wasm, plus the snarkjs and
     # on-chain (forge) cross-checks, which must run here (GROTH16_REQUIRE_FORGE) rather than silently skip.
     runs-on: ubuntu-24.04
     timeout-minutes: 40
@@ -236,7 +236,7 @@ jobs:
           bash scripts/build-wasm.sh
           git diff --exit-code -- wasm/
           test -z "$(git status --porcelain -- wasm/)"
-      - name: cross-checks (snarkjs, forge on-chain verifier, @leaked/privacy prove path)
+      - name: cross-checks (snarkjs, forge on-chain verifier, @queuebit/privacy prove path)
         env:
           GROTH16_REQUIRE_FORGE: "1"
         run: pnpm vitest run --project groth16

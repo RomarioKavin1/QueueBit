@@ -1,13 +1,13 @@
 # Chrome Web Store listing (draft)
 
-Draft for the first store submission of the LEAKED extension. **Not submitted**: the release checklist
+Draft for the first store submission of the QueueBit extension. **Not submitted**: the release checklist
 ([`CHECKLIST.md`](CHECKLIST.md)) gates it (audits, the circom artifact's legal review, mainnet addresses).
 `apps/extension/scripts/store-package.mjs` reads the "Short description" and "Permission justifications" sections
 of this file: keep their headings and the table format (`| \`permission\` | justification |`).
 
 ## Name
 
-LEAKED
+QueueBit
 
 ## Short description
 
@@ -19,13 +19,13 @@ Productivity (Chrome has no wallet category; other wallets list here too).
 
 ## Detailed description
 
-LEAKED is an Ethereum wallet built on the assumption that the key in your browser will one day leak.
+QueueBit is an Ethereum wallet built on the assumption that the key in your browser will one day leak.
 
 - **Everyday payments are instant, up to a daily limit you choose.** The browser key can only spend within that
   limit, to the apps and tokens you allowed. The limit is enforced by your account contract on chain, not by this
   extension.
 - **Everything else needs your phone.** Bigger payments, raising a limit, adding an app, a new browser key: the
-  extension shows a QR code and your offline phone (the LEAKED companion) checks and signs it with a quantum-safe
+  extension shows a QR code and your offline phone (the QueueBit companion) checks and signs it with a quantum-safe
   key that never touches the browser.
 - **Changes that loosen your protection wait.** A time lock lets you, a guardian and the alerts see a change
   before it takes effect, and cancel it.
@@ -40,7 +40,7 @@ Test networks only until the audits are complete.
 
 ## Single purpose
 
-Manage a LEAKED smart account: connect it to websites, make payments within an on-chain limit, and hand every other
+Manage a QueueBit smart account: connect it to websites, make payments within an on-chain limit, and hand every other
 action to the user's phone for approval.
 
 ## Permission justifications
@@ -65,7 +65,7 @@ and changes only with a release ([`phishing-list.md`](phishing-list.md)).
 
 ## Data usage (privacy practices tab)
 
-- Collected: none. The extension has no analytics, no telemetry and no LEAKED server.
+- Collected: none. The extension has no analytics, no telemetry and no QueueBit server.
 - Stored on the user's computer only: the encrypted wallet, settings, activity, alerts.
 - Sent to third parties: blockchain requests (addresses, signed transactions) to the network's node, as with any
   wallet; to a self-hosted watcher only if the user pairs one.
@@ -74,7 +74,7 @@ and changes only with a release ([`phishing-list.md`](phishing-list.md)).
 ## Screenshots
 
 1280×800 (or 640×400), 1–5 images. To render at that size from the screenshot suite
-(`pnpm --filter @leaked/extension run screenshots`, `apps/extension/docs/screenshots/`): `popup-home`,
+(`pnpm --filter @queuebit/extension run screenshots`, `apps/extension/docs/screenshots/`): `popup-home`,
 `approve-transaction`, `app-vault-handoff`, `app-limits`, `app-privacy-withdrawn`. The current files are the
 review-size renders and must be re-rendered at a store size before submission.
 
@@ -83,5 +83,5 @@ review-size renders and must be re-rendered at a store size before submission.
 1. `node scripts/release/build.mjs` from the release tag; publish `SHA256SUMS`.
 2. `node apps/extension/scripts/store-package.mjs release/<tag>` (refuses a permission change without a changelog
    line and an updated `apps/extension/store/permissions.json`).
-3. Upload `release/<tag>/store/leaked-extension-<version>-chrome.zip` in the Developer Dashboard (manual until a
+3. Upload `release/<tag>/store/queuebit-extension-<version>-chrome.zip` in the Developer Dashboard (manual until a
    Chrome Web Store API client and its credentials exist), paste this listing, attach the screenshots.

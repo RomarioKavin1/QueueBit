@@ -44,7 +44,7 @@ pub fn fors_secret(sk_seed: &[u8; 32], tree: u32, leaf: u32, ht_idx: u32) -> Nod
 ///
 /// - `opt_rand = None` (deterministic, upstream-identical):
 ///   `R = keccak256(skSeed32 || "R_grind" || msg32 || nonce as uint256)[..16]` (103-byte preimage).
-/// - `opt_rand = Some(rnd)` (hedged, LEAKED default):
+/// - `opt_rand = Some(rnd)` (hedged, QueueBit default):
 ///   `R = keccak256(skSeed32 || "R_hedge" || rnd32 || msg32 || nonce as uint256)[..16]`
 ///   (135-byte preimage: one keccak block, different tag and length from the deterministic form).
 ///

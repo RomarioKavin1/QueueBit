@@ -1,11 +1,11 @@
 # Release checklist
 
-Gate G4 of the plan ([`LEAKED-implementation-plan.md` §5.2](../plan/LEAKED-implementation-plan.md)): audits closed;
+Gate G4 of the plan ([`QueueBit-implementation-plan.md` §5.2](../plan/QueueBit-implementation-plan.md)): audits closed;
 the 4337 backend released to mainnet; the frame-native backend on Hegotá testnets, waiting for the fork. Nothing
 reaches a store, a host or a mainnet address until every box that applies to the release is ticked, **with a link to
 the evidence** (a commit, a report, a written confirmation). A box that does not apply says why.
 
-Status on 2026-11-06: **none of the release gates below is met.** LEAKED is pre-audit, devnet and anvil only.
+Status on 2026-11-06: **none of the release gates below is met.** QueueBit is pre-audit, devnet and anvil only.
 
 ## 1. Code and build
 
@@ -32,7 +32,7 @@ Status on 2026-11-06: **none of the release gates below is met.** LEAKED is pre-
 - [ ] Cryptanalysis review of the PQ scheme and its implementations: the vendored SPHINCS- C13 verifier, the Rust
       signer (`packages/pq-signer/rust`), and leanSphincs-s if it ships (it has no formal proof; it is experimental).
 - [ ] Extension and companion (key handling, the QR protocol, the clear-signing registry, CSP, the update path).
-- [ ] `@leaked/groth16` (our zkey reader, QAP reduction and witness glue). The circuits themselves are 0xbow's and
+- [ ] `@queuebit/groth16` (our zkey reader, QAP reduction and witness glue). The circuits themselves are 0xbow's and
       are not audited by us.
 - [ ] Every finding is fixed or accepted in writing, with a regression test; `docs/security/THREAT-MODEL.md` is
       updated to match; the audit reports are linked from `SECURITY.md`.
@@ -53,11 +53,11 @@ Status on 2026-11-06: **none of the release gates below is met.** LEAKED is pre-
       circom's field-arithmetic runtime, and circom is GPL-3.0. Whether that reaches the generated artifact depends on
       the artifact's license and on circom's position on generated code. Get a written opinion from counsel, or a
       written license statement from 0xbow, before any store release that bundles it
-      ([`IMPLEMENTATION-NOTES.md`](../plan/IMPLEMENTATION-NOTES.md), "license exceptions for `@leaked/groth16`").
+      ([`IMPLEMENTATION-NOTES.md`](../plan/IMPLEMENTATION-NOTES.md), "license exceptions for `@queuebit/groth16`").
 - [ ] Kohaku: written license terms from the maintainers before shipping anything that bundles `@kohaku-eth/*`
       (plan §1 item 15). Today nothing does; re-check that the lockfile still has no `@kohaku-eth/*`.
 - [ ] Phishing list data license (plan §30 §9 item 2): only permissively licensed lists or ours are bundled
-      ([`phishing-list.md`](phishing-list.md); today only LEAKED's own MIT list); `eth-phishing-detect` (DBAD) is
+      ([`phishing-list.md`](phishing-list.md); today only QueueBit's own MIT list); `eth-phishing-detect` (DBAD) is
       excluded. Confirm with counsel before any third-party list is added.
 - [ ] Accepted non-MIT/Apache licenses are still only `subtle` (BSD-3-Clause) and `foldhash` (Zlib) in the WASM
       (check the cargo SBOMs), and `THIRD_PARTY.md` lists every copied file.
@@ -70,7 +70,7 @@ Status on 2026-11-06: **none of the release gates below is met.** LEAKED is pre-
       (`upstream/skandha-budget-010/PR.md`; not opened yet, it needs the maintainer's GitHub account). If it has not
       landed, Path A and PoolPayer run only on our own staked sidecar, the release notes say so, and Path B stays the
       default for the Vault.
-- [ ] EIP-8141 and ERC-8421 text versus the pinned codec profile (`@leaked/frames` profiles, plan §10.8 spec drift):
+- [ ] EIP-8141 and ERC-8421 text versus the pinned codec profile (`@queuebit/frames` profiles, plan §10.8 spec drift):
       no unreviewed change since the audit.
 - [ ] 0xbow: ASP root history and the custom `processooor` path confirmed for the target chain.
 
@@ -81,8 +81,8 @@ Status on 2026-11-06: **none of the release gates below is met.** LEAKED is pre-
       After the fork: re-run gate G1 on a public Hegotá testnet with the mainnet build, then on mainnet with small
       funds.
 - [ ] **4337 mainnet addresses.** EntryPoint v0.8 is the canonical `0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108`
-      (verify its code hash on the chain). The LEAKED modules (`LeakedHotValidator`, `LeakedPolicyHook`,
-      `LeakedRoleExecutor`), `C13Verifier`, the MSA v0.8 shim and `MSAFactory` are deployed by CREATE2 from the
+      (verify its code hash on the chain). The QueueBit modules (`QueueBitHotValidator`, `QueueBitPolicyHook`,
+      `QueueBitRoleExecutor`), `C13Verifier`, the MSA v0.8 shim and `MSAFactory` are deployed by CREATE2 from the
       audited commit; each address, init-code hash and the audit commit are recorded in the repo and checked by the
       extension's drift test. Sepolia and mainnet stay disabled in the extension until that record exists
       (`BACKLOG.md`, extension M2 follow-ups). A public bundler's pricing of the 4.2 KB Vault calldata is measured.

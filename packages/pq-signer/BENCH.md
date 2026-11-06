@@ -1,4 +1,4 @@
-# @leaked/pq-signer benchmarks
+# @queuebit/pq-signer benchmarks
 
 Measured 2026-11-06. Plan section 20 §3.6 marks phone/WASM signing time `[UNVERIFIED]`; this file
 records what has been measured so far. Only laptop numbers exist yet: phone rows are still
@@ -8,7 +8,7 @@ Machine: Apple M3 (8 cores), macOS, single thread. Rust 1.94 release (`lto`, `co
 Node v26.0.0. Commands:
 
 ```
-cd rust && cargo run --release --bin leaked-pq -- bench 20     # native
+cd rust && cargo run --release --bin queuebit-pq -- bench 20     # native
 node bench/wasm-bench.mjs 20                                     # WASM (the inlined build, Node)
 ```
 
@@ -45,7 +45,7 @@ Same machine and toolchain. Light-tier keys (kept subtree 2¹³), no node cache:
 the 2¹³-leaf subtree. Commands:
 
 ```
-cd rust && cargo run --release --bin leaked-pq -- bench-lean 20     # native
+cd rust && cargo run --release --bin queuebit-pq -- bench-lean 20     # native
 node bench/wasm-bench.mjs 20 leanSphincsS                             # WASM (the inlined build, Node)
 ```
 

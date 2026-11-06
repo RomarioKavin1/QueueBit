@@ -1,12 +1,12 @@
-//! leaked-groth16 CLI (native; witness generation through wasmi).
+//! queuebit-groth16 CLI (native; witness generation through wasmi).
 //!
-//!   leaked-groth16 prove <circuit.wasm> <circuit.zkey> <input.json>   → {"proof": snarkjs JSON, "publicSignals": [...]}
-//!   leaked-groth16 bench <circuit.wasm> <circuit.zkey> <input.json> [runs]
+//!   queuebit-groth16 prove <circuit.wasm> <circuit.zkey> <input.json>   → {"proof": snarkjs JSON, "publicSignals": [...]}
+//!   queuebit-groth16 bench <circuit.wasm> <circuit.zkey> <input.json> [runs]
 
 use std::time::Instant;
 
 use ark_ff::{BigInteger, PrimeField};
-use leaked_groth16::{prove, witness::Circuit, zkey};
+use queuebit_groth16::{prove, witness::Circuit, zkey};
 use num_bigint::BigUint;
 use rand::RngCore;
 
@@ -17,7 +17,7 @@ fn dec<F: PrimeField>(x: F) -> String {
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     if a.len() < 5 || !(a[1] == "prove" || a[1] == "bench") {
-        eprintln!("usage: leaked-groth16 prove|bench <circuit.wasm> <circuit.zkey> <input.json> [runs]");
+        eprintln!("usage: queuebit-groth16 prove|bench <circuit.wasm> <circuit.zkey> <input.json> [runs]");
         std::process::exit(2);
     }
     let rd = |p: &str| std::fs::read(p).unwrap_or_else(|e| panic!("{p}: {e}"));

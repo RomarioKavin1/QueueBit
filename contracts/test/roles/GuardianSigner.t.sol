@@ -4,12 +4,12 @@ pragma solidity 0.8.28;
 import {Devnet} from "@forshtat/hegota-support/contracts/Devnet.sol";
 import {TxParam} from "@forshtat/hegota-support/contracts/Params.sol";
 import {FrameSim} from "../frame/FrameSim.sol";
-import {ILeakedAccountRoles} from "../../src/interfaces/ILeakedAccountRoles.sol";
+import {IQueueBitAccountRoles} from "../../src/interfaces/IQueueBitAccountRoles.sol";
 import {GuardianSigner} from "../../src/roles/GuardianSigner.sol";
-import {MockLeakedAccount} from "./RoleMocks.sol";
+import {MockQueueBitAccount} from "./RoleMocks.sol";
 
 contract GuardianSignerTest is FrameSim {
-    MockLeakedAccount internal account;
+    MockQueueBitAccount internal account;
     GuardianSigner internal g;
     address internal key;
     uint256 internal keyPk;
@@ -17,7 +17,7 @@ contract GuardianSignerTest is FrameSim {
     uint256 internal constant MAX_FEE = 0.01 ether;
 
     function setUp() public {
-        account = new MockLeakedAccount();
+        account = new MockQueueBitAccount();
         (key, keyPk) = makeAddrAndKey("guardian");
         g = new GuardianSigner(Devnet.ERC8421_WORKSHOP, address(account), key, MAX_FEE, TxParam.MAX_COST);
         simAttach(address(g));
@@ -35,7 +35,7 @@ contract GuardianSignerTest is FrameSim {
     }
 
     function test_freeze() public {
-        _tx(address(account), abi.encodeCall(ILeakedAccountRoles.guardianFreeze, ()), keyPk, key);
+        _tx(address(account), abi.encodeCall(IQueueBitAccountRoles.guardianFreeze, ()), keyPk, key);
         SimResult memory r = simRunValid();
         assertEq(r.frames[0].foreignSloads, 0);
         assertFalse(r.frames[0].staticViolation);
@@ -45,35 +45,35 @@ contract GuardianSignerTest is FrameSim {
 
     function test_wrongKey_rejected() public {
         (address m, uint256 mPk) = makeAddrAndKey("mallory");
-        _tx(address(account), abi.encodeCall(ILeakedAccountRoles.guardianFreeze, ()), mPk, m);
+        _tx(address(account), abi.encodeCall(IQueueBitAccountRoles.guardianFreeze, ()), mPk, m);
         SimResult memory r = simRun();
         assertFalse(r.valid);
         assertEq(bytes4(r.frames[0].returnData), GuardianSigner.BadSignature.selector);
     }
 
     function test_onlyFreeze_otherSelectorRejected() public {
-        _tx(address(account), abi.encodeCall(ILeakedAccountRoles.vaultFreeze, ()), keyPk, key);
+        _tx(address(account), abi.encodeCall(IQueueBitAccountRoles.vaultFreeze, ()), keyPk, key);
         SimResult memory r = simRun();
         assertFalse(r.valid);
         assertEq(bytes4(r.frames[0].returnData), GuardianSigner.BadFrameShape.selector);
     }
 
     function test_onlyAccount_otherTargetRejected() public {
-        _tx(makeAddr("other"), abi.encodeCall(ILeakedAccountRoles.guardianFreeze, ()), keyPk, key);
+        _tx(makeAddr("other"), abi.encodeCall(IQueueBitAccountRoles.guardianFreeze, ()), keyPk, key);
         SimResult memory r = simRun();
         assertFalse(r.valid);
         assertEq(bytes4(r.frames[0].returnData), GuardianSigner.BadFrameShape.selector);
     }
 
     function test_extraCalldataRejected() public {
-        _tx(address(account), abi.encodePacked(ILeakedAccountRoles.guardianFreeze.selector, uint256(1)), keyPk, key);
+        _tx(address(account), abi.encodePacked(IQueueBitAccountRoles.guardianFreeze.selector, uint256(1)), keyPk, key);
         SimResult memory r = simRun();
         assertFalse(r.valid);
         assertEq(bytes4(r.frames[0].returnData), GuardianSigner.BadFrameShape.selector);
     }
 
     function test_feeBound() public {
-        _tx(address(account), abi.encodeCall(ILeakedAccountRoles.guardianFreeze, ()), keyPk, key);
+        _tx(address(account), abi.encodeCall(IQueueBitAccountRoles.guardianFreeze, ()), keyPk, key);
         simSetFees(1 gwei, 2 gwei, MAX_FEE + 1);
         simSignSecp256k1(0, keyPk);
         SimResult memory r = simRun();
@@ -85,7 +85,7 @@ contract GuardianSignerTest is FrameSim {
         simBegin(address(g));
         simSetFees(1 gwei, 2 gwei, 0.001 ether);
         simVerify(SELF_VERIFY, address(0), 60_000, abi.encodeCall(GuardianSigner.verifyFrame, ()));
-        simSender(address(account), 100_000, 0, abi.encodeCall(ILeakedAccountRoles.guardianFreeze, ()));
+        simSender(address(account), 100_000, 0, abi.encodeCall(IQueueBitAccountRoles.guardianFreeze, ()));
         simAddArbitrary(hex"01");
         SimResult memory r = simRun();
         assertFalse(r.valid);
@@ -93,7 +93,7 @@ contract GuardianSignerTest is FrameSim {
     }
 
     function test_twoSignatures_rejected() public {
-        _tx(address(account), abi.encodeCall(ILeakedAccountRoles.guardianFreeze, ()), keyPk, key);
+        _tx(address(account), abi.encodeCall(IQueueBitAccountRoles.guardianFreeze, ()), keyPk, key);
         simAddSecp256k1(key);
         simSignSecp256k1(0, keyPk);
         simSignSecp256k1(1, keyPk);
@@ -104,8 +104,8 @@ contract GuardianSignerTest is FrameSim {
     }
 
     function test_extraSenderFrame_rejected() public {
-        _tx(address(account), abi.encodeCall(ILeakedAccountRoles.guardianFreeze, ()), keyPk, key);
-        simSender(address(account), 100_000, 0, abi.encodeCall(ILeakedAccountRoles.guardianFreeze, ()));
+        _tx(address(account), abi.encodeCall(IQueueBitAccountRoles.guardianFreeze, ()), keyPk, key);
+        simSender(address(account), 100_000, 0, abi.encodeCall(IQueueBitAccountRoles.guardianFreeze, ()));
         simSignSecp256k1(0, keyPk);
         SimResult memory r = simRun();
         assertFalse(r.valid);
@@ -117,7 +117,7 @@ contract GuardianSignerTest is FrameSim {
         simBegin(address(g));
         simSetFees(1 gwei, 2 gwei, 0.001 ether);
         simVerify(ONLY_VERIFY, address(0), 60_000, abi.encodeCall(GuardianSigner.verifyFrame, ()));
-        simSender(address(account), 100_000, 0, abi.encodeCall(ILeakedAccountRoles.guardianFreeze, ()));
+        simSender(address(account), 100_000, 0, abi.encodeCall(IQueueBitAccountRoles.guardianFreeze, ()));
         simAddSecp256k1(key);
         simSignSecp256k1(0, keyPk);
         SimResult memory r = simRun();
@@ -129,7 +129,7 @@ contract GuardianSignerTest is FrameSim {
         simBegin(address(g));
         simSetFees(1 gwei, 2 gwei, 0.001 ether);
         simVerify(SELF_VERIFY, address(0), 60_000, abi.encodeCall(GuardianSigner.verifyFrame, ()));
-        simSender(address(account), 100_000, 1, abi.encodeCall(ILeakedAccountRoles.guardianFreeze, ()));
+        simSender(address(account), 100_000, 1, abi.encodeCall(IQueueBitAccountRoles.guardianFreeze, ()));
         simAddSecp256k1(key);
         simSignSecp256k1(0, keyPk);
         SimResult memory r = simRun();

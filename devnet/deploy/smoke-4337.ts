@@ -1,4 +1,4 @@
-// Smoke test of the local ERC-4337 chain (`bun run up:4337` first): creates a LEAKED MSA account (validator +
+// Smoke test of the local ERC-4337 chain (`bun run up:4337` first): creates a QueueBit MSA account (validator +
 // executor + hook, like contracts/devnet-tests/4337/e2e.ts step 2) with a plain MSAFactory.createAccount tx, funds it,
 // and pushes one hot ETH userOp through the bundler (eth_estimateUserOperationGas -> eth_sendUserOperation ->
 // eth_getUserOperationReceipt), asserting it is mined with success and the ETH moved.
@@ -33,11 +33,11 @@ const EP = d.entryPoint;
 const FUNDER = privateKeyToAccount("0x4bbbf85ce3377467afe5d46f804f221813b2bb87f24d81f60f1fcdbf7cbf4356");
 const HOT = privateKeyToAccount("0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6");
 const RECIPIENT: Address = "0x000000000000000000000000000000000000bEEF";
-const FAKE_VAULT_PK = keccak256(stringToHex("leaked/smoke-4337/fake-vault-pk"));
+const FAKE_VAULT_PK = keccak256(stringToHex("queuebit/smoke-4337/fake-vault-pk"));
 
 const chain = {
   id: d.network.chainId,
-  name: "leaked-anvil-4337",
+  name: "queuebit-anvil-4337",
   nativeCurrency: { name: "ETH", symbol: "ETH", decimals: 18 },
   rpcUrls: { default: { http: [ANVIL_URL] } },
 } as const;
@@ -76,18 +76,18 @@ const execInit = encodeAbiParameters(
     { name: "hook", type: "address" }, { name: "verifier", type: "address" }, { name: "vaultPk", type: "bytes32" }, { name: "recoveryPk", type: "bytes32" },
     { name: "timelockDelay", type: "uint48" }, { name: "timelockThresholdUsd", type: "uint256" }, { name: "guardians", type: "address[]" },
   ] }],
-  [{ hook: C.LeakedPolicyHook.address, verifier: C.C13Verifier.address, vaultPk: FAKE_VAULT_PK, recoveryPk: pad("0x00", { size: 32 }), timelockDelay: 172800, timelockThresholdUsd: 5000_000000n, guardians: [] }],
+  [{ hook: C.QueueBitPolicyHook.address, verifier: C.C13Verifier.address, vaultPk: FAKE_VAULT_PK, recoveryPk: pad("0x00", { size: 32 }), timelockDelay: 172800, timelockThresholdUsd: 5000_000000n, guardians: [] }],
 );
 const bootAbi = parseAbi(["struct Cfg { address module; bytes data; }", "function initMSA(Cfg[] validators, Cfg[] executors, Cfg hook, Cfg[] fallbacks)"]);
 const initCall = encodeFunctionData({
   abi: bootAbi,
   functionName: "initMSA",
-  args: [[{ module: C.LeakedHotValidator.address, data: "0x" }], [{ module: C.LeakedRoleExecutor.address, data: execInit }], { module: C.LeakedPolicyHook.address, data: hookInit }, []],
+  args: [[{ module: C.QueueBitHotValidator.address, data: "0x" }], [{ module: C.QueueBitRoleExecutor.address, data: execInit }], { module: C.QueueBitPolicyHook.address, data: hookInit }, []],
 });
 const initCode = encodeAbiParameters([{ type: "address" }, { type: "bytes" }], [C.Bootstrap.address, initCall]);
 const factoryAbi = parseAbi(["function getAddress(bytes32 salt, bytes initCode) view returns (address)", "function createAccount(bytes32 salt, bytes initCode) payable returns (address)"]);
 // A fresh account per run (the chain may be reused).
-const salt = keccak256(toHex(`leaked-smoke-4337/${Date.now()}/${Math.random()}`));
+const salt = keccak256(toHex(`queuebit-smoke-4337/${Date.now()}/${Math.random()}`));
 const account = await pub.readContract({ address: C.MSAFactory.address, abi: factoryAbi, functionName: "getAddress", args: [salt, initCode] });
 const created = await send(C.MSAFactory.address, encodeFunctionData({ abi: factoryAbi, functionName: "createAccount", args: [salt, initCode] }));
 await send(account, "0x", parseEther("1"));
@@ -99,7 +99,7 @@ if (Number(chainIdB) !== d.network.chainId) throw new Error(`bundler chainId ${c
 const eps = await rpc<Address[]>(BUNDLER, "eth_supportedEntryPoints");
 if (eps[0]?.toLowerCase() !== EP.toLowerCase()) throw new Error(`bundler entry points ${eps}`);
 
-const key = BigInt(C.LeakedHotValidator.address) << 32n; // MSA: the validator in the nonce key's top 20 bytes
+const key = BigInt(C.QueueBitHotValidator.address) << 32n; // MSA: the validator in the nonce key's top 20 bytes
 const nonce = await pub.readContract({ address: EP, abi: epAbi, functionName: "getNonce", args: [account, key] });
 const value = parseEther("0.01");
 const callData = encodeFunctionData({

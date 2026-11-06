@@ -21,10 +21,10 @@ const PP_ARTIFACTS = [
 ];
 
 // Host permissions cover only the fixed RPCs (plan §30 §2.5: no <all_urls>, no dapp-supplied RPC URLs). A
-// local-devnet build (VITE_LEAKED_LOCAL_DEVNET=1: e2e, development) also reaches the devnet fork on localhost.
-const LOCAL_DEVNET = process.env.VITE_LEAKED_LOCAL_DEVNET === "1";
+// local-devnet build (VITE_QUEUEBIT_LOCAL_DEVNET=1: e2e, development) also reaches the devnet fork on localhost.
+const LOCAL_DEVNET = process.env.VITE_QUEUEBIT_LOCAL_DEVNET === "1";
 // The design gallery (app.html#design): development and screenshot builds only (src/shared/build.ts).
-const DESIGN = process.env.VITE_LEAKED_DESIGN === "1";
+const DESIGN = process.env.VITE_QUEUEBIT_DESIGN === "1";
 const RPC_HOSTS = [
   "https://altmempool.forshtat.com/*",
   "https://ethereum-sepolia-rpc.publicnode.com/*",
@@ -45,8 +45,8 @@ export default defineConfig({
     plugins: [tailwindcss()],
     // Build flags as literals, so production folds the devnet and gallery branches away (src/shared/build.ts).
     define: {
-      __LEAKED_LOCAL_DEVNET__: JSON.stringify(LOCAL_DEVNET),
-      __LEAKED_DESIGN__: JSON.stringify(DESIGN || env.mode === "development"),
+      __QUEUEBIT_LOCAL_DEVNET__: JSON.stringify(LOCAL_DEVNET),
+      __QUEUEBIT_DESIGN__: JSON.stringify(DESIGN || env.mode === "development"),
     },
     // The offscreen prover Worker is an ES module (it imports the WASM engine and the privacy package).
     worker: { format: "es" },
@@ -55,7 +55,7 @@ export default defineConfig({
     build: { sourcemap: false },
   }),
   manifest: {
-    name: "LEAKED",
+    name: "QueueBit",
     description:
       "A wallet whose everyday key is safe to lose: small payments are instant, your phone approves the rest.",
     // offscreen: the one offscreen document (the withdraw prover's Worker, plan §30 §2.1); notifications: Alerts
@@ -64,12 +64,12 @@ export default defineConfig({
     host_permissions: RPC_HOSTS,
     // A self-hosted watcher (Security › Alerts › Pair a watcher): Chrome asks for that one site when the user pairs.
     optional_host_permissions: ["https://*/*", "http://localhost/*"],
-    action: { default_title: "LEAKED" },
+    action: { default_title: "QueueBit" },
     content_security_policy: {
       // Chrome's minimum is `script-src 'self'; object-src 'self'`. 'wasm-unsafe-eval' (and nothing else) is added for
-      // the quantum-safe signature check (`@leaked/pq-signer`, WASM inlined: `initSync` from embedded bytes, no fetch),
+      // the quantum-safe signature check (`@queuebit/pq-signer`, WASM inlined: `initSync` from embedded bytes, no fetch),
       // which runs in the service worker before any Vault approval is sent (plan §30 §2.5, §6.2), and for the private
-      // balance's Groth16 prover (`@leaked/groth16`) and its circuit witness module in the offscreen document's Worker.
+      // balance's Groth16 prover (`@queuebit/groth16`) and its circuit witness module in the offscreen document's Worker.
       // connect-src also lists 'self': that Worker reads the pinned circuit files packaged with the extension. The
       // extra directives bound what
       // extension pages and the service worker may load or connect to (the fixed RPC hosts over https, or a local

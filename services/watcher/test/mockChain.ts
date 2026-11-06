@@ -1,5 +1,5 @@
 import { encodeAbiParameters, encodeEventTopics, keccak256, stringToHex, type Abi, type Address, type Hex } from "viem";
-import { frameAccountAbi, type MinedFrameReceipt, type RpcLog } from "@leaked/watcher-core";
+import { frameAccountAbi, type MinedFrameReceipt, type RpcLog } from "@queuebit/watcher-core";
 import type { BlockInfo, ChainClient, RawTx } from "../src/chain.js";
 
 interface MockBlock {

@@ -1,9 +1,9 @@
-# LEAKED v4: locked design decisions (input to the implementation plan)
+# QueueBit v4: locked design decisions (input to the implementation plan)
 
-Date: 2026-11-06. This applies the fixes from `../research/01-LEAKED-critical-analysis.md` (read it). The **product is a browser wallet extension**, which is the user's decision. Everything below is binding for the plan unless a workstream **proves with a source** that a decision is infeasible. In that case, flag it; don't silently change it.
+Date: 2026-11-06. This applies the fixes from `../research/01-QueueBit-critical-analysis.md` (read it). The **product is a browser wallet extension**, which is the user's decision. Everything below is binding for the plan unless a workstream **proves with a source** that a decision is infeasible. In that case, flag it; don't silently change it.
 
 ## Product
-**LEAKED** is a browser-extension wallet (Chromium MV3 first). It holds an everyday **hot key** that can be leaked with bounded loss, and it gates everything else behind **stateless post-quantum keys held on a separate device**. It routes transactions between Ethereum's public mempool and the ERC-8421 alternative mempool.
+**QueueBit** is a browser-extension wallet (Chromium MV3 first). It holds an everyday **hot key** that can be leaked with bounded loss, and it gates everything else behind **stateless post-quantum keys held on a separate device**. It routes transactions between Ethereum's public mempool and the ERC-8421 alternative mempool.
 
 ## Two account backends (one extension)
 1. **Frame-native backend (EIP-8141)**: Hegotá devnets and testnets now, mainnet after Hegotá.
@@ -42,7 +42,7 @@ Date: 2026-11-06. This applies the fixes from `../research/01-LEAKED-critical-an
 - Plan to **operate one staked ERC-8421 sidecar** if needed, and to **submit a sidecar PR implementing BUDGET-010 staked budgets**.
 
 ## Privacy (scoped down)
-- **No LEAKED-operated pool, no fee-taking relayer, no allowance notes, no PQ claims for stealth addresses.**
+- **No QueueBit-operated pool, no fee-taking relayer, no allowance notes, no PQ claims for stealth addresses.**
 - The extension integrates **Privacy Pools (0xbow) via the Kohaku SDK plugin interface** (Railgun when Kohaku's package is out of maintenance).
 - Private spends are **vault-approved only in v1** (the hot key holds no pool spend key).
 - **Contribution:** a staked `PoolPayer` 8141 paymaster (`[only_verify, pay]` style) so that Privacy Pools withdrawals pay gas out of the withdrawal. It's offered for 0xbow/Kohaku to operate (at cost), and documents the mass-invalidation issue.

@@ -5,10 +5,10 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ERC1967Utils} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {C13Verifier} from "../../src/pq/C13Verifier.sol";
-import {ILeakedAccount} from "../../src/account/ILeakedAccount.sol";
-import {LeakedAccountImpl} from "../../src/account/LeakedAccountImpl.sol";
-import {LeakedAccountRoles} from "../../src/account/LeakedAccountRoles.sol";
-import {LeakedAccountStorage} from "../../src/account/LeakedAccountStorage.sol";
+import {IQueueBitAccount} from "../../src/account/IQueueBitAccount.sol";
+import {QueueBitAccountImpl} from "../../src/account/QueueBitAccountImpl.sol";
+import {QueueBitAccountRoles} from "../../src/account/QueueBitAccountRoles.sol";
+import {QueueBitAccountStorage} from "../../src/account/QueueBitAccountStorage.sol";
 import {PQRoleSigner} from "../../src/roles/PQRoleSigner.sol";
 import {C13Kat} from "../pq/C13Kat.sol";
 import {AccountTestBase} from "./AccountTestBase.sol";
@@ -26,8 +26,8 @@ contract InitTokensAndPayersTest is AccountTestBase {
     MockToken internal dai;
     MockToken internal eurc;
 
-    function _mode() internal pure virtual returns (ILeakedAccount.RecipientMode) {
-        return ILeakedAccount.RecipientMode.Open;
+    function _mode() internal pure virtual returns (IQueueBitAccount.RecipientMode) {
+        return IQueueBitAccount.RecipientMode.Open;
     }
 
     function setUp() public virtual override {
@@ -36,27 +36,27 @@ contract InitTokensAndPayersTest is AccountTestBase {
         eurc = new MockToken("EURC", 6);
     }
 
-    function _tok(address t, uint8 d, uint256 p) internal pure returns (ILeakedAccount.TokenInit memory) {
-        return ILeakedAccount.TokenInit(t, d, p);
+    function _tok(address t, uint8 d, uint256 p) internal pure returns (IQueueBitAccount.TokenInit memory) {
+        return IQueueBitAccount.TokenInit(t, d, p);
     }
 
-    function _two() internal view returns (ILeakedAccount.TokenInit[] memory l) {
-        l = new ILeakedAccount.TokenInit[](2);
+    function _two() internal view returns (IQueueBitAccount.TokenInit[] memory l) {
+        l = new IQueueBitAccount.TokenInit[](2);
         l[0] = _tok(address(dai), 18, 1 * USD);
         l[1] = _tok(address(eurc), 6, 1_100_000); // $1.10
     }
 
-    function _cfg(ILeakedAccount.TokenInit[] memory l) internal view returns (ILeakedAccount.InitConfig memory c) {
+    function _cfg(IQueueBitAccount.TokenInit[] memory l) internal view returns (IQueueBitAccount.InitConfig memory c) {
         c = _defaultCfg();
         c.recipientMode = _mode();
         c.tokens = l;
     }
 
-    function _create(ILeakedAccount.InitConfig memory c) internal returns (LeakedAccountImpl) {
-        return LeakedAccountImpl(payable(factory.createAccount(bytes32(saltN++), address(impl), _initData(c))));
+    function _create(IQueueBitAccount.InitConfig memory c) internal returns (QueueBitAccountImpl) {
+        return QueueBitAccountImpl(payable(factory.createAccount(bytes32(saltN++), address(impl), _initData(c))));
     }
 
-    function _createReverts(ILeakedAccount.InitConfig memory c, bytes memory err) internal {
+    function _createReverts(IQueueBitAccount.InitConfig memory c, bytes memory err) internal {
         bytes memory init = _initData(c);
         bytes32 salt = bytes32(saltN++);
         vm.expectRevert(err);
@@ -64,23 +64,23 @@ contract InitTokensAndPayersTest is AccountTestBase {
     }
 
     function _badAddress(address a) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(ILeakedAccount.BadAddress.selector, a);
+        return abi.encodeWithSelector(IQueueBitAccount.BadAddress.selector, a);
     }
 
     /// A recipient the hot key may pay in this mode: anyone in Open, the tank (allowlisted at initialize) in Strict.
     function _payee() internal view returns (address) {
-        return _mode() == ILeakedAccount.RecipientMode.Open ? stranger : tank;
+        return _mode() == IQueueBitAccount.RecipientMode.Open ? stranger : tank;
     }
 
     // ------------------------------------------------------------------------------- 1. initial tokens ------
 
     function test_initTokens_setAtomically_sameEventsAsVaultSetToken() public {
-        ILeakedAccount.InitConfig memory c = _cfg(_two());
+        IQueueBitAccount.InitConfig memory c = _cfg(_two());
         vm.recordLogs();
-        LeakedAccountImpl a = _create(c);
+        QueueBitAccountImpl a = _create(c);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 seen;
-        bytes32 topic = ILeakedAccount.TokenConfigured.selector;
+        bytes32 topic = IQueueBitAccount.TokenConfigured.selector;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter != address(a) || logs[i].topics[0] != topic) continue;
             address t = address(uint160(uint256(logs[i].topics[1])));
@@ -99,12 +99,12 @@ contract InitTokensAndPayersTest is AccountTestBase {
             }
         }
         assertEq(seen, 3, "one TokenConfigured per listed token");
-        LeakedAccountRoles r = LeakedAccountRoles(payable(address(a)));
+        QueueBitAccountRoles r = QueueBitAccountRoles(payable(address(a)));
         address[] memory list = r.getTokenList();
         assertEq(list.length, 2);
         assertEq(list[0], address(dai));
         assertEq(list[1], address(eurc));
-        ILeakedAccount.TokenCfg memory e = a.getToken(address(eurc));
+        IQueueBitAccount.TokenCfg memory e = a.getToken(address(eurc));
         assertTrue(e.allowed);
         assertEq(e.decimals, 6);
         assertEq(e.usdPerToken, 1_100_000);
@@ -115,10 +115,10 @@ contract InitTokensAndPayersTest is AccountTestBase {
     /// The point of the list: a fresh account pays in a listed token at once (no ≥ 1 h queued `vaultSetToken`), the
     /// payment is priced and debited, and the balance-delta accounting watches the token from block one.
     function test_initTokens_hotPaymentWithoutQueue() public {
-        LeakedAccountImpl a = _create(_cfg(_two()));
+        QueueBitAccountImpl a = _create(_cfg(_two()));
         eurc.mint(address(a), 1_000e6);
-        ILeakedAccount.Call[] memory c = _one(
-            ILeakedAccount.Call(address(eurc), 0, abi.encodeWithSelector(IERC20.transfer.selector, _payee(), 10e6))
+        IQueueBitAccount.Call[] memory c = _one(
+            IQueueBitAccount.Call(address(eurc), 0, abi.encodeWithSelector(IERC20.transfer.selector, _payee(), 10e6))
         );
         vm.prank(address(a));
         a.hotExecute(11 * USD, c);
@@ -127,20 +127,22 @@ contract InitTokensAndPayersTest is AccountTestBase {
         assertEq(avail, CAP - 11 * USD, "debited at the initial price");
         // Under-declared: the measured price is binding.
         vm.prank(address(a));
-        vm.expectRevert(abi.encodeWithSelector(ILeakedAccount.DeclaredUsdExceeded.selector, 11 * USD, 10 * USD));
+        vm.expectRevert(abi.encodeWithSelector(IQueueBitAccount.DeclaredUsdExceeded.selector, 11 * USD, 10 * USD));
         a.hotExecute(10 * USD, c);
     }
 
     /// ERC-2612 pre-approval on a fresh account (extension M3): `registerPermit` needs an allowlisted token.
     function test_initTokens_registerPermitWithoutQueue() public {
         PermitToken1271 p = new PermitToken1271("PUSD");
-        ILeakedAccount.TokenInit[] memory l = new ILeakedAccount.TokenInit[](1);
+        IQueueBitAccount.TokenInit[] memory l = new IQueueBitAccount.TokenInit[](1);
         l[0] = _tok(address(p), 18, 1 * USD);
-        LeakedAccountImpl a = _create(_cfg(l));
+        QueueBitAccountImpl a = _create(_cfg(l));
         uint256 deadline = block.timestamp + 1 hours;
-        ILeakedAccount.Call[] memory c = _one(
-            ILeakedAccount.Call(
-                address(a), 0, abi.encodeCall(LeakedAccountImpl.registerPermit, (address(p), alice, 5 ether, deadline))
+        IQueueBitAccount.Call[] memory c = _one(
+            IQueueBitAccount.Call(
+                address(a),
+                0,
+                abi.encodeCall(QueueBitAccountImpl.registerPermit, (address(p), alice, 5 ether, deadline))
             )
         );
         vm.prank(address(a));
@@ -154,7 +156,7 @@ contract InitTokensAndPayersTest is AccountTestBase {
     function test_initTokens_rejects_zero_codeless_hot_tank() public {
         address[4] memory bad = [address(0), makeAddr("eoa"), hot, tank];
         for (uint256 i; i < 4; ++i) {
-            ILeakedAccount.TokenInit[] memory l = _two();
+            IQueueBitAccount.TokenInit[] memory l = _two();
             l[1].token = bad[i];
             _createReverts(_cfg(l), _badAddress(bad[i]));
         }
@@ -162,7 +164,7 @@ contract InitTokensAndPayersTest is AccountTestBase {
 
     /// The account's own address and a role signer: refused even when they have code (explicit, deployed signers).
     function test_initTokens_rejects_account_and_roleSigners() public {
-        ILeakedAccount.InitConfig memory c = _cfg(_two());
+        IQueueBitAccount.InitConfig memory c = _cfg(_two());
         bytes memory probe = _initData(c);
         bytes32 salt = bytes32(saltN);
         address predicted = factory.predictAccount(salt, address(impl), probe);
@@ -171,69 +173,69 @@ contract InitTokensAndPayersTest is AccountTestBase {
         _createReverts(c, _badAddress(predicted));
 
         // Explicit mode with deployed (contract) signers named as tokens.
-        ILeakedAccount.InitConfig memory e = _explicitCfg(address(dai), address(eurc));
+        IQueueBitAccount.InitConfig memory e = _explicitCfg(address(dai), address(eurc));
         e.recipientMode = _mode();
         e.tokens = _two();
         _createReverts(e, _badAddress(address(dai)));
-        e.tokens = new ILeakedAccount.TokenInit[](1);
+        e.tokens = new IQueueBitAccount.TokenInit[](1);
         e.tokens[0] = _tok(address(eurc), 6, 1 * USD);
         _createReverts(e, _badAddress(address(eurc)));
     }
 
     function test_initTokens_rejects_duplicate() public {
-        ILeakedAccount.TokenInit[] memory l = new ILeakedAccount.TokenInit[](3);
+        IQueueBitAccount.TokenInit[] memory l = new IQueueBitAccount.TokenInit[](3);
         l[0] = _tok(address(dai), 18, 1 * USD);
         l[1] = _tok(address(eurc), 6, 1 * USD);
         l[2] = _tok(address(dai), 18, 2 * USD); // same token, any price
-        _createReverts(_cfg(l), abi.encodeWithSelector(ILeakedAccount.DuplicateToken.selector, address(dai)));
+        _createReverts(_cfg(l), abi.encodeWithSelector(IQueueBitAccount.DuplicateToken.selector, address(dai)));
     }
 
     function test_initTokens_rejects_badPriceOrDecimals() public {
-        ILeakedAccount.TokenInit[] memory l = _two();
+        IQueueBitAccount.TokenInit[] memory l = _two();
         l[0].usdPerToken = 0;
-        _createReverts(_cfg(l), abi.encodeWithSelector(ILeakedAccount.BadConfig.selector));
+        _createReverts(_cfg(l), abi.encodeWithSelector(IQueueBitAccount.BadConfig.selector));
         l = _two();
         l[1].decimals = 37;
-        _createReverts(_cfg(l), abi.encodeWithSelector(ILeakedAccount.BadConfig.selector));
+        _createReverts(_cfg(l), abi.encodeWithSelector(IQueueBitAccount.BadConfig.selector));
         l[1].decimals = 36; // the setter's bound, inclusive
         _create(_cfg(l));
     }
 
     function test_initTokens_boundedByMaxTokens() public {
         uint256 max = impl.MAX_TOKENS();
-        ILeakedAccount.TokenInit[] memory l = new ILeakedAccount.TokenInit[](max + 1);
+        IQueueBitAccount.TokenInit[] memory l = new IQueueBitAccount.TokenInit[](max + 1);
         for (uint256 i; i <= max; ++i) {
             l[i] = _tok(address(new MockToken("T", 6)), 6, 1 * USD);
         }
-        _createReverts(_cfg(l), abi.encodeWithSelector(ILeakedAccount.TooManyTokens.selector));
+        _createReverts(_cfg(l), abi.encodeWithSelector(IQueueBitAccount.TooManyTokens.selector));
         assembly ("memory-safe") {
             mstore(l, max)
         }
-        LeakedAccountImpl a = _create(_cfg(l));
-        assertEq(LeakedAccountRoles(payable(address(a))).getTokenList().length, max);
+        QueueBitAccountImpl a = _create(_cfg(l));
+        assertEq(QueueBitAccountRoles(payable(address(a))).getTokenList().length, max);
         // Full: the vault cannot add a 17th (the setter's bound holds after initialize too).
-        (address v,,,,) = LeakedAccountRoles(payable(address(a))).getRoles();
-        ILeakedAccount.Call[] memory q = _one(
-            ILeakedAccount.Call(
+        (address v,,,,) = QueueBitAccountRoles(payable(address(a))).getRoles();
+        IQueueBitAccount.Call[] memory q = _one(
+            IQueueBitAccount.Call(
                 address(a),
                 0,
-                abi.encodeCall(LeakedAccountRoles.vaultSetToken, (address(new MockToken("X", 6)), true, 6, USD))
+                abi.encodeCall(QueueBitAccountRoles.vaultSetToken, (address(new MockToken("X", 6)), true, 6, USD))
             )
         );
         vm.prank(v);
-        bytes32 op = LeakedAccountRoles(payable(address(a))).vaultQueue(q, 1);
+        bytes32 op = QueueBitAccountRoles(payable(address(a))).vaultQueue(q, 1);
         vm.warp(vm.getBlockTimestamp() + DELAY);
         vm.expectRevert();
-        LeakedAccountRoles(payable(address(a))).executeQueued(op, q);
+        QueueBitAccountRoles(payable(address(a))).executeQueued(op, q);
     }
 
     /// After initialize the list is ordinary vault state: removal and a price raise are instant, a lower price queued.
     function test_initTokens_thenVaultSetterRulesApply() public {
-        LeakedAccountImpl a = _create(_cfg(_two()));
-        LeakedAccountRoles r = LeakedAccountRoles(payable(address(a)));
+        QueueBitAccountImpl a = _create(_cfg(_two()));
+        QueueBitAccountRoles r = QueueBitAccountRoles(payable(address(a)));
         (address v,,,,) = r.getRoles();
         vm.startPrank(v);
-        vm.expectRevert(ILeakedAccount.MustQueue.selector);
+        vm.expectRevert(IQueueBitAccount.MustQueue.selector);
         r.vaultSetToken(address(dai), true, 18, USD / 2);
         r.vaultSetToken(address(dai), true, 18, 2 * USD);
         r.vaultSetToken(address(eurc), false, 0, 0);
@@ -250,7 +252,7 @@ contract InitTokensAndPayersTest is AccountTestBase {
         for (uint256 i; i < 8; ++i) {
             pool[i] = address(new MockToken("P", 6));
         }
-        ILeakedAccount.TokenInit[] memory l = new ILeakedAccount.TokenInit[](n);
+        IQueueBitAccount.TokenInit[] memory l = new IQueueBitAccount.TokenInit[](n);
         bool dup;
         for (uint256 i; i < n; ++i) {
             address t = pool[uint256(keccak256(abi.encode(seed, i))) % 8];
@@ -260,16 +262,16 @@ contract InitTokensAndPayersTest is AccountTestBase {
             l[i] = _tok(t, uint8(seed >> (i % 200)) % 37, 1 + (seed % 1e12));
         }
         if (badPrice && n != 0) l[n - 1].usdPerToken = 0;
-        ILeakedAccount.InitConfig memory c = _cfg(l);
+        IQueueBitAccount.InitConfig memory c = _cfg(l);
         bytes memory init = _initData(c);
         bytes32 salt = bytes32(saltN++);
         try factory.createAccount(salt, address(impl), init) returns (address acct) {
             assertTrue(n <= 16 && !dup && !(badPrice && n != 0), "accepted a bad list");
-            address[] memory list = LeakedAccountRoles(payable(acct)).getTokenList();
+            address[] memory list = QueueBitAccountRoles(payable(acct)).getTokenList();
             assertEq(list.length, n);
             for (uint256 i; i < n; ++i) {
                 assertEq(list[i], l[i].token);
-                ILeakedAccount.TokenCfg memory tc = LeakedAccountImpl(payable(acct)).getToken(l[i].token);
+                IQueueBitAccount.TokenCfg memory tc = QueueBitAccountImpl(payable(acct)).getToken(l[i].token);
                 assertTrue(tc.allowed);
                 assertEq(tc.decimals, l[i].decimals);
                 assertEq(tc.usdPerToken, l[i].usdPerToken);
@@ -284,12 +286,12 @@ contract InitTokensAndPayersTest is AccountTestBase {
     /// the same gas as on the account without a list.
     function test_I2_initTokensSlotsDisjointFromVerify_sameGas() public {
         // Same-shape accounts, both created in this test (equally warm), measured after a warm-up of the helpers.
-        LeakedAccountImpl plain = _create(_cfg(new ILeakedAccount.TokenInit[](0)));
-        ILeakedAccount.InitConfig memory c = _cfg(_two());
+        QueueBitAccountImpl plain = _create(_cfg(new IQueueBitAccount.TokenInit[](0)));
+        IQueueBitAccount.InitConfig memory c = _cfg(_two());
         vm.record();
-        LeakedAccountImpl a = _create(c);
+        QueueBitAccountImpl a = _create(c);
         (, bytes32[] memory iwrites) = vm.accesses(address(a));
-        uint256 base = uint256(LeakedAccountStorage.SLOT);
+        uint256 base = uint256(QueueBitAccountStorage.SLOT);
         bytes32 tokenSlot = keccak256(abi.encode(address(eurc), base + 7)); // tokens[eurc] (mapping at base+7)
         bool wroteTokenCfg;
         for (uint256 i; i < iwrites.length; ++i) {
@@ -298,7 +300,7 @@ contract InitTokensAndPayersTest is AccountTestBase {
         assertTrue(wroteTokenCfg, "initialize wrote tokens[eurc] (layout probe)");
 
         account = a;
-        roles = LeakedAccountRoles(payable(address(a)));
+        roles = QueueBitAccountRoles(payable(address(a)));
         eurc.mint(address(a), 1_000e6);
         _verifyGas(account); // warm-up (FrameSim helpers)
         uint256 gasBase = _verifyGas(plain);
@@ -335,13 +337,13 @@ contract InitTokensAndPayersTest is AccountTestBase {
         assertEq(eurc.balanceOf(_payee()), 1e6);
     }
 
-    function _eurcTransfer(address to, uint256 amount) internal view returns (ILeakedAccount.Call memory) {
-        return ILeakedAccount.Call(address(eurc), 0, abi.encodeWithSelector(IERC20.transfer.selector, to, amount));
+    function _eurcTransfer(address to, uint256 amount) internal view returns (IQueueBitAccount.Call memory) {
+        return IQueueBitAccount.Call(address(eurc), 0, abi.encodeWithSelector(IERC20.transfer.selector, to, amount));
     }
 
     /// Gas of one VERIFY frame of the canonical hot shape on `a` (a payment to the tank, allowlisted in both modes).
-    function _verifyGas(LeakedAccountImpl a) internal returns (uint256 used) {
-        LeakedAccountImpl saved = account;
+    function _verifyGas(QueueBitAccountImpl a) internal returns (uint256 used) {
+        QueueBitAccountImpl saved = account;
         account = a;
         _beginHotTx(_hotData(1 * USD, _one(_ethSend(tank, 1 wei))));
         _signHotTx();
@@ -358,7 +360,7 @@ contract InitTokensAndPayersTest is AccountTestBase {
     // ------------------------------------------------------------------------------------ 2. payer keys ------
 
     function test_payerKey_neverHotKeyOrTank() public {
-        ILeakedAccount.InitConfig memory c = _cfg(_two());
+        IQueueBitAccount.InitConfig memory c = _cfg(_two());
         c.vault.payerKey = hot;
         _createReverts(c, _badAddress(hot));
         c = _cfg(_two());
@@ -373,7 +375,7 @@ contract InitTokensAndPayersTest is AccountTestBase {
     }
 
     function test_payerKey_distinctBetweenRoles() public {
-        ILeakedAccount.InitConfig memory c = _cfg(_two());
+        IQueueBitAccount.InitConfig memory c = _cfg(_two());
         c.recovery.payerKey = vaultPayer;
         _createReverts(c, _badAddress(vaultPayer));
         c.recovery.payerKey = makeAddr("recoveryDevicePayer");
@@ -388,13 +390,13 @@ contract InitTokensAndPayersTest is AccountTestBase {
     /// `RoleSignerDerived` logs it so anyone can deploy the clone lazily.
     function test_recoveryPayerKey_inDerivation() public {
         address rp = makeAddr("recoveryDevicePayer");
-        ILeakedAccount.InitConfig memory c = _cfg(_two());
+        IQueueBitAccount.InitConfig memory c = _cfg(_two());
         c.recovery.payerKey = rp;
         bytes memory init = _initData(c);
         bytes32 salt = bytes32(saltN++);
         address predicted = factory.predictAccount(salt, address(impl), init);
         vm.expectEmit(true, true, true, true, predicted);
-        emit ILeakedAccount.RoleSignerDerived(
+        emit IQueueBitAccount.RoleSignerDerived(
             2,
             _derivedSigner(predicted, 2, RECOVERY_PK, rp),
             address(signerFactory),
@@ -404,7 +406,7 @@ contract InitTokensAndPayersTest is AccountTestBase {
             rp
         );
         address a = factory.createAccount(salt, address(impl), init);
-        (, address r,,,) = LeakedAccountRoles(payable(a)).getRoles();
+        (, address r,,,) = QueueBitAccountRoles(payable(a)).getRoles();
         assertEq(r, _derivedSigner(a, 2, RECOVERY_PK, rp));
         assertTrue(r != _derivedSigner(a, 2, RECOVERY_PK, address(0)), "payer key is part of the address");
         PQRoleSigner s = PQRoleSigner(
@@ -422,17 +424,17 @@ contract InitTokensAndPayersTest is AccountTestBase {
 contract RecoveryPathBTest is AccountTestBase {
     C13Verifier internal c13;
     C13Kat.Vector internal kat;
-    LeakedAccountImpl internal acct;
-    LeakedAccountRoles internal acctRoles;
+    QueueBitAccountImpl internal acct;
+    QueueBitAccountRoles internal acctRoles;
     address internal recPayer;
     uint256 internal recPayerPk;
     bytes32 internal constant SALT = keccak256("recovery-path-b");
 
     function _create(address payer) internal returns (address vaultS, address recS) {
-        ILeakedAccount.InitConfig memory c = _defaultCfg();
-        c.recovery = ILeakedAccount.RoleSignerParams(SALT, kat.pk, address(c13), payer);
-        acct = LeakedAccountImpl(payable(factory.createAccount(SALT, address(impl), _initData(c))));
-        acctRoles = LeakedAccountRoles(payable(address(acct)));
+        IQueueBitAccount.InitConfig memory c = _defaultCfg();
+        c.recovery = IQueueBitAccount.RoleSignerParams(SALT, kat.pk, address(c13), payer);
+        acct = QueueBitAccountImpl(payable(factory.createAccount(SALT, address(impl), _initData(c))));
+        acctRoles = QueueBitAccountRoles(payable(address(acct)));
         (vaultS, recS,,,) = acctRoles.getRoles();
     }
 
@@ -445,9 +447,9 @@ contract RecoveryPathBTest is AccountTestBase {
     }
 
     function _queueLoosening(address vaultS) internal returns (bytes32 opId) {
-        ILeakedAccount.Call[] memory q = _one(
-            ILeakedAccount.Call(
-                address(acct), 0, abi.encodeCall(LeakedAccountRoles.vaultSetCap, (CAP * 2, PER_TX, MAX_FEE_WEI, 4))
+        IQueueBitAccount.Call[] memory q = _one(
+            IQueueBitAccount.Call(
+                address(acct), 0, abi.encodeCall(QueueBitAccountRoles.vaultSetCap, (CAP * 2, PER_TX, MAX_FEE_WEI, 4))
             )
         );
         vm.prank(vaultS);
@@ -476,13 +478,13 @@ contract RecoveryPathBTest is AccountTestBase {
         _pathB(
             address(s),
             abi.encodeCall(
-                PQRoleSigner.executePQ, (0, address(acct), abi.encodeCall(LeakedAccountRoles.recoveryCancel, (opId)))
+                PQRoleSigner.executePQ, (0, address(acct), abi.encodeCall(QueueBitAccountRoles.recoveryCancel, (opId)))
             )
         );
         SimResult memory r = simRunValid();
         assertEq(r.payer, address(s), "the RecoverySigner pays for itself");
         assertEq(r.frames[1].status, STATUS_SUCCESS);
-        assertEq(uint256(acctRoles.getQueued(opId).state), uint256(ILeakedAccount.OpState.CANCELLED));
+        assertEq(uint256(acctRoles.getQueued(opId).state), uint256(IQueueBitAccount.OpState.CANCELLED));
     }
 
     function test_recovery_withoutPayerKey_pathBDisabled() public {
@@ -495,17 +497,17 @@ contract RecoveryPathBTest is AccountTestBase {
         _pathB(
             address(s),
             abi.encodeCall(
-                PQRoleSigner.executePQ, (0, address(acct), abi.encodeCall(LeakedAccountRoles.recoveryCancel, (opId)))
+                PQRoleSigner.executePQ, (0, address(acct), abi.encodeCall(QueueBitAccountRoles.recoveryCancel, (opId)))
             )
         );
         SimResult memory r = simRun();
         assertFalse(r.valid, "no payer key: Path B refused in VERIFY");
-        assertEq(uint256(acctRoles.getQueued(opId).state), uint256(ILeakedAccount.OpState.PENDING));
+        assertEq(uint256(acctRoles.getQueued(opId).state), uint256(IQueueBitAccount.OpState.PENDING));
     }
 }
 
 contract InitTokensAndPayersStrictTest is InitTokensAndPayersTest {
-    function _mode() internal pure override returns (ILeakedAccount.RecipientMode) {
-        return ILeakedAccount.RecipientMode.Strict;
+    function _mode() internal pure override returns (IQueueBitAccount.RecipientMode) {
+        return IQueueBitAccount.RecipientMode.Strict;
     }
 }

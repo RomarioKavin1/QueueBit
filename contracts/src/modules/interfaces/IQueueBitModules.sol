@@ -7,16 +7,16 @@ uint8 constant HOST_GENERIC = 0; // any ERC-7579 account with a global hook (ref
 uint8 constant HOST_KERNEL = 1; // Kernel v3: hook bound per validator; 1271 hashes rewrapped (hot 1271 is off)
 uint8 constant HOST_SAFE = 2; // Safe7579: a Safe whose owner path bypasses hooks (owners must be keyless)
 
-/// @title ILeakedModules
-/// @notice Types, events and errors of the LEAKED ERC-7579 backend (plan `10-contracts.md` §10.4): the hot-key
+/// @title IQueueBitModules
+/// @notice Types, events and errors of the QueueBit ERC-7579 backend (plan `10-contracts.md` §10.4): the hot-key
 ///         validator (type 1), the policy hook (type 4) and the role executor (type 2). Policy semantics follow the
 ///         frame-native account (`src/account`, §10.3.2-§10.3.5); the type layouts are duplicated here on purpose so
 ///         that the module audit scope does not move when the account's interface changes (see
 ///         `docs/plan/IMPLEMENTATION-NOTES.md`, "Contracts M7").
-interface ILeakedModules {
+interface IQueueBitModules {
     // ------------------------------------------------------------------------------------------------ types ------
 
-    /// Who may receive a hot ETH send or allowlisted-token `transfer` (mirrors `ILeakedAccount.RecipientMode`).
+    /// Who may receive a hot ETH send or allowlisted-token `transfer` (mirrors `IQueueBitAccount.RecipientMode`).
     /// Open (the install default): any non-zero address, within the bucket and `perTxMaxUsd`; Strict: only the
     /// vault's recipient allowlist (`setTarget`). Open -> Strict is instant, Strict -> Open is queued; vault only.
     enum RecipientMode {
@@ -48,7 +48,7 @@ interface ILeakedModules {
         uint256 usdPerToken;
     }
 
-    /// `LeakedPolicyHook.onInstall` data (abi-encoded). The hot key and the initial allowlist are set by the account
+    /// `QueueBitPolicyHook.onInstall` data (abi-encoded). The hot key and the initial allowlist are set by the account
     /// creator; afterwards only the role executor writes policy.
     struct HookInit {
         address hotKey;
@@ -59,7 +59,7 @@ interface ILeakedModules {
         uint256 maxPriorityFeePerGas;
         /// USD (6 decimals) per 1 ETH; 0 = ETH is not hot-spendable.
         uint256 ethUsdPrice;
-        /// At most `MAX_TOKENS`, no duplicates (`DuplicateToken`), each a contract other than the account or a LEAKED
+        /// At most `MAX_TOKENS`, no duplicates (`DuplicateToken`), each a contract other than the account or a QueueBit
         /// module (`BadAddress`; ETH is `ethUsdPrice`), `usdPerToken != 0`, `decimals <= 36` (`BadConfig`). One
         /// `TokenConfigured` each (mirrors the account's `InitConfig.tokens`).
         TokenInit[] tokens;
@@ -82,7 +82,7 @@ interface ILeakedModules {
         uint8 host;
     }
 
-    /// `LeakedRoleExecutor.onInstall` data (abi-encoded).
+    /// `QueueBitRoleExecutor.onInstall` data (abi-encoded).
     struct ExecutorInit {
         address hook;
         address verifier;

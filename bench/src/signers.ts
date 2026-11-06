@@ -2,7 +2,7 @@
  * One signer per benchmarked scheme, behind a common interface: `keygen()` once (cached under .cache/keys; these are
  * throwaway bench keys derived from public labels, never real keys) and `sign(digest)` per transaction.
  *
- * Sources: C13 = this repo's @leaked/pq-signer (bit-identical to upstream); C7 = upstream Python reference
+ * Sources: C13 = this repo's @queuebit/pq-signer (bit-identical to upstream); C7 = upstream Python reference
  * `script/signer.py`; leanSphincs-s = upstream Rust `lssk` (Light tier key file); SLH-DSA-SHA2-128-24 = upstream C
  * fork of the sphincsplus reference; SLH-DSA-SHA2-128s = @noble/post-quantum 0.7.1; PORST = ./porst.ts;
  * ETHFALCON = upstream Python `pythonref/`.
@@ -11,7 +11,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { keccak_256 } from "@noble/hashes/sha3.js";
 import { slh_dsa_sha2_128s } from "@noble/post-quantum/slh-dsa.js";
-import { keygen as c13Keygen, sign as c13Sign } from "@leaked/pq-signer";
+import { keygen as c13Keygen, sign as c13Sign } from "@queuebit/pq-signer";
 import { KEYS_DIR, readJson, run, toolEnv, writeJson } from "./env.js";
 import { PORST_R16, PORST_R256, porstKeygen, porstSign, type PorstKey, type PorstParams } from "./porst.js";
 
@@ -19,7 +19,7 @@ export type Hex = `0x${string}`;
 
 export const hex = (b: Uint8Array): Hex => `0x${Buffer.from(b).toString("hex")}`;
 export const unhex = (h: string): Uint8Array => new Uint8Array(Buffer.from(h.replace(/^0x/, ""), "hex"));
-const label = (s: string): Uint8Array => keccak_256(new TextEncoder().encode(`leaked-bench/v1/${s}`));
+const label = (s: string): Uint8Array => keccak_256(new TextEncoder().encode(`queuebit-bench/v1/${s}`));
 /** A 16-byte value as a top-aligned 32-byte word (the SPHINCS- verifiers' key encoding). */
 const top16 = (b: Uint8Array): Hex => hex(Uint8Array.from([...b.subarray(0, 16), ...new Uint8Array(16)]));
 

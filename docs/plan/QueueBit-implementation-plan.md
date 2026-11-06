@@ -1,9 +1,9 @@
-# LEAKED: implementation plan (master)
+# QueueBit: implementation plan (master)
 
 **Date:** 2026-11-06. **Product:** a browser-extension wallet (Chromium MV3). It has a capped hot key that is safe to leak, stateless post-quantum vault and recovery keys on a separate device, and routing between the public and ERC-8421 alternative mempools.
 **Inputs:**
 - [`00-v4-design-decisions.md`](00-v4-design-decisions.md): the binding design;
-- [`../research/01-LEAKED-critical-analysis.md`](../research/01-LEAKED-critical-analysis.md): why the design looks like this.
+- [`../research/01-QueueBit-critical-analysis.md`](../research/01-QueueBit-critical-analysis.md): why the design looks like this.
 
 This document is the **index, integration layer and schedule**. The build specs are the four section files. Every implementation step in them carries a source tag, and engineers build from the sections:
 
@@ -42,17 +42,17 @@ These override `00-v4-design-decisions.md` where they conflict:
 | 5 | "Auto-select A/B from the mempool's advertised budget" | No sidecar advertises budgets (`skandha_config` probed) (§30.5) | A static table plus runtime `eth_estimateFrameTransactionGas`; the BUDGET-010 PR also adds `budgets` to `skandha_config` |
 | 6 | Gas tank contract | A contract payer reading its own storage in a `pay` frame is inadmissible in the public mempool (§10.0.3) | **Gas tank = default-code EOA payer.** Hot tx shape `[only_verify(account, verifyFrame()), pay(tank EOA), SENDER(hotExecute)]`; optional `selfPay` |
 | 7 | Freeze auto-expiry / timelocks checked in validation | `TIMESTAMP` is banned in VERIFY (§10.0.5) | VERIFY reads a `frozen` boolean; expiry via a permissionless `clearExpiredFreeze()` |
-| 8 | ERC-8286 validator works anywhere | On third-party 7579 accounts, the validator's own policy storage is "outside `tx.sender`", so it's **alt-mempool-only** (§10.0.6) | Frame-native `LeakedAccount` is unaffected. The 8286 route ships later and is gated on the ERC's TBDs |
+| 8 | ERC-8286 validator works anywhere | On third-party 7579 accounts, the validator's own policy storage is "outside `tx.sender`", so it's **alt-mempool-only** (§10.0.6) | Frame-native `QueueBitAccount` is unaffected. The 8286 route ships later and is gated on the ERC's TBDs |
 | 9 | VERIFY entry via empty calldata | Solidity routes empty calldata to `receive()`, so VERIFY would never run (verification fix) | **Explicit `verifyFrame()` selector** on the account and the role signers |
 | 10 | Role-signer admin `onlySelf` | Unreachable through the walker (verification fix) | Admin only via `executePQ`/`relay` with `target == this` |
 | 11 | PoolPayer `[only_verify, pay]` withdraws in validation | VERIFY is static; `pre_verify` can't write pool slots (STORAGE-033) (§40.2.1) | **Verify-then-front:** proof + read-only checks in `pay`; `withdraw` (processooor = PoolPayer) in the body; `refund()` as the last frame |
-| 12 | (new) PoolPayer pays for failed withdrawals | `APPROVE_PAYMENT` collects `max_cost` before the body runs; a reverted body is still included (EIP-8141 L777–782, L452, L1304) | 3 mandatory rules: non-reverting payout (pull fallback); `verify` requires `refund()` to be the last frame; state gas for a fresh recipient. ETH pool only in v1. **v1 sender = a fresh default-code EOA**, not the LEAKED account |
+| 12 | (new) PoolPayer pays for failed withdrawals | `APPROVE_PAYMENT` collects `max_cost` before the body runs; a reverted body is still included (EIP-8141 L777–782, L452, L1304) | 3 mandatory rules: non-reverting payout (pull fallback); `verify` requires `refund()` to be the last frame; state gas for a fresh recipient. ETH pool only in v1. **v1 sender = a fresh default-code EOA**, not the QueueBit account |
 | 13 | "~20 invalidations/hour bans PoolPayer" | Throttle at **110** / ban at **510** excess never-included txs from a clean slate. Sustained-ban threshold I > 9T + 20.8 per hour. **Attacker cost ≈ 1.9 ETH to throttle, ≈ 8.9 ETH to ban** at 30 gwei (§40.2.8) | Documented. Mitigation: keyed nonces, prompt inclusion, a monitor |
 | 14 | Fork the Kohaku/Ambire extension | Ambire is GPL-3.0, ~238k LOC, RN-web/webpack/ethers 6, userOp-shaped (§30.1) | **Build from scratch:** WXT + viem, MIT. Reuse Kohaku packages subject to item 15 |
 | 15 | "Kohaku SDK is MIT" | **The repo has no LICENSE file and GitHub detects no license** (re-checked 2026-11-06). `@kohaku-eth/privacy-pools` declares MIT in `package.json`; `@kohaku-eth/plugins` declares none (§40 verification log) | **Gate:** get written license confirmation from the maintainers before shipping |
 | 16 | Reuse the privacy-paymaster | `Robert-MacWha/privacy-paymaster` is `UNLICENSED` | Write PoolPayer from scratch; copy no code |
 | 17 | QR scanning in an offscreen document | Offscreen documents have no visible surface (§30.6) | Camera/QR in a full-tab `app.html`. One shared `offscreen.html` hosts Anon-RPC + the prover |
-| 18 | One frame codec | The latest EIP-8141 text differs from both devnets (2-item fees, sig-length commitment) (§30.4) | `@leaked/frames`: a profile-driven codec with pinned vectors per network; viem PR #5165 still open |
+| 18 | One frame codec | The latest EIP-8141 text differs from both devnets (2-item fees, sig-length commitment) (§30.4) | `@queuebit/frames`: a profile-driven codec with pinned vectors per network; viem PR #5165 still open |
 | 19 | Same account address on both backends | Third-party 7579 hosts derive their own addresses (§30.8) | Different addresses per backend. The UI shows both; no claim of address parity |
 | 20 | Stake 0.01 ETH | The draft is **~USD 1,000 per staked entity**, 1-day unstake | Budget stake per role signer and for PoolPayer |
 
@@ -64,7 +64,7 @@ These override `00-v4-design-decisions.md` where they conflict:
  ┌────────────────────────── Browser (Chromium MV3) ──────────────────────────┐
  │ inpage provider (EIP-1193 + 6963, world:MAIN) ⇄ content script ⇄ SW        │
  │ Service worker: keyring (hot key, tank key m/44'/60'/1'/0/k), router,     │
- │   FrameEngine (@leaked/frames), 4337 engine (viem AA + permissionless),   │
+ │   FrameEngine (@queuebit/frames), 4337 engine (viem AA + permissionless),   │
  │   policy/typed-data classifier, watcher-light (alarms)                    │
  │ app.html (full tab): onboarding, vault QR display + camera scan           │
  │ offscreen.html: Anon-RPC harness + Privacy Pools prover (WASM)            │
@@ -73,18 +73,18 @@ These override `00-v4-design-decisions.md` where they conflict:
                 │                              │  (own staked sidecar + BUDGET-010 PR)
  ┌──────────────▼──────────────────────────────▼─────────────────────────────┐
  │ Frame-native (Hegotá devnets → mainnet after Hegotá)                       │
- │  LeakedAccount (UUPS)  ◄─ msg.sender ─  VaultSigner / RecoverySigner      │
+ │  QueueBitAccount (UUPS)  ◄─ msg.sender ─  VaultSigner / RecoverySigner      │
  │   hotExecute, RollingCap, allowlists,     (PQRoleSigner: own sender,      │
  │   scoped 1271 (7739 + registerHash),       own nonce, own stake)          │
  │   session policies, timelock, bunker,     GuardianSigner (freeze only)    │
  │   freeze, upgrade/migrate                 PoolPayer (privacy paymaster)   │
  │ Pre-Hegotá (mainnet/Sepolia now): ERC-4337 + 7579 modules                  │
- │  LeakedHotValidator(1) · LeakedPolicyHook(4) · LeakedRoleExecutor(2)       │
- │  later: LeakedFrameValidator (ERC-8286, type 11, TBD)                      │
+ │  QueueBitHotValidator(1) · QueueBitPolicyHook(4) · QueueBitRoleExecutor(2)       │
+ │  later: QueueBitFrameValidator (ERC-8286, type 11, TBD)                      │
  └────────────────────────────────────────────────────────────────────────────┘
-        ▲ ur:leaked-sign-request / ur:leaked-signature (BC-UR, animated QR)
+        ▲ ur:queuebit-sign-request / ur:queuebit-signature (BC-UR, animated QR)
  ┌──────┴───────────── Vault companion (separate device) ─────────────────────┐
- │ PWA → native shell (Expo + uniffi). @leaked/pq-signer (Rust→WASM, C13),    │
+ │ PWA → native shell (Expo + uniffi). @queuebit/pq-signer (Rust→WASM, C13),    │
  │ recomputes sig hash itself, clear-signs decoded frames (ERC-7730 style),   │
  │ holds vault PQ key + path-B payer ECDSA key; recovery = offline ceremony   │
  └────────────────────────────────────────────────────────────────────────────┘
@@ -96,11 +96,11 @@ These override `00-v4-design-decisions.md` where they conflict:
 
 | Package | Owner § | Contents |
 |---|---|---|
-| `contracts/` | 10 | Foundry. `LeakedAccountImpl` + libs, `PQRoleSigner`, `GuardianSigner`, `AccountFactory`, 7579 modules, `LeakedFrameValidator`, `C13Adapter` + vendored verifier, `PoolPayer` (40), `FrameSim` + Hegota mocks |
-| `packages/frames` (`@leaked/frames`) | 30 | Profile-driven 8141 codec, sig-hash, vectors (shared with the companion; pinned by hash) |
-| `packages/pq-signer` (`@leaked/pq-signer`) | 20 | Rust core → WASM + TS: `keygen`, `sign(secret, digest32) → 3,688 B`, `verify`, `SIG_LENGTH`, `SCHEME_ID`; KAT sets A/B/C |
-| `packages/ur` | 20/30 | BC-UR types `leaked-sign-request` (keys incl. 10 = profile-id, 11 = advisory intent, tx-type 2 = PP envelope), `leaked-signature` |
-| `packages/privacy` (`@leaked/privacy`) | 40 | Kohaku host adapters, the `frame-paymaster` broadcaster, the vault `EnvelopeSigner` over QR |
+| `contracts/` | 10 | Foundry. `QueueBitAccountImpl` + libs, `PQRoleSigner`, `GuardianSigner`, `AccountFactory`, 7579 modules, `QueueBitFrameValidator`, `C13Adapter` + vendored verifier, `PoolPayer` (40), `FrameSim` + Hegota mocks |
+| `packages/frames` (`@queuebit/frames`) | 30 | Profile-driven 8141 codec, sig-hash, vectors (shared with the companion; pinned by hash) |
+| `packages/pq-signer` (`@queuebit/pq-signer`) | 20 | Rust core → WASM + TS: `keygen`, `sign(secret, digest32) → 3,688 B`, `verify`, `SIG_LENGTH`, `SCHEME_ID`; KAT sets A/B/C |
+| `packages/ur` | 20/30 | BC-UR types `queuebit-sign-request` (keys incl. 10 = profile-id, 11 = advisory intent, tx-type 2 = PP envelope), `queuebit-signature` |
+| `packages/privacy` (`@queuebit/privacy`) | 40 | Kohaku host adapters, the `frame-paymaster` broadcaster, the vault `EnvelopeSigner` over QR |
 | `apps/extension` | 30 | WXT + viem extension |
 | `apps/companion` | 20 | Vault PWA, later the native shell |
 | `services/watcher` | 40 | Self-hosted alerts (an in-extension light mode also exists) |
@@ -129,7 +129,7 @@ function relay(address target, bytes calldata data) external;                   
 - **Hot tx:** `[only_verify(account, verifyFrame()), pay(tank EOA), SENDER(hotExecute)]`.
 - **Account ABI and event names:** the canonical list is in §10.3.2 / §10.11. §30 §12 and §40 were aligned to it.
 - **Open cross-section items** (tracked, not hidden):
-  - (a) PoolPayer with the LEAKED account as sender is rejected by walker step 6 (§10.5.1); v1 uses a fresh EOA sender.
+  - (a) PoolPayer with the QueueBit account as sender is rejected by walker step 6 (§10.5.1); v1 uses a fresh EOA sender.
   - (b) Whether `isValidSignature` should accept a 36-byte marker for registered hashes (some dapp SDKs reject empty signatures).
   - (c) Event coverage: the registered-hash/empty-sig path and `OverCap` reverts emit no log, so the watcher must not rely on them.
   - (d) A typed-data UR type for the Privacy Pools `EnvelopeSigner` flow (§20 to add).
@@ -165,7 +165,7 @@ function relay(address target, bytes calldata data) external;                   
 **Phase 1: core loop on devnet (≈ weeks 3–10)**
 - Contracts M2–M4: account, role surface, `PQRoleSigner` with the C13 adapter.
 - Crypto M1–M2: verifier vendored, Rust/WASM signer, KATs.
-- Extension M0–M1: shell, keyring, `@leaked/frames`, hot send on devnet.
+- Extension M0–M1: shell, keyring, `@queuebit/frames`, hot send on devnet.
 - **Gate G1:** on the devnet, a hot tx and a path-B C13 vault tx are both mined by the public mempool; a forged vault sig moves nothing; an over-cap hot tx reverts and charges only the tank.
 
 **Phase 2: usable wallet (≈ weeks 8–18)**

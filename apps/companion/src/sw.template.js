@@ -1,5 +1,5 @@
 /* global self, caches, __PRECACHE__, __INTEGRITY__ -- service-worker scope; filled in at build time. */
-/* LEAKED Vault service worker (generated from src/sw.template.js by vite.config.ts).
+/* QueueBit Vault service worker (generated from src/sw.template.js by vite.config.ts).
  *
  * Offline-first and network-free: on install it caches exactly the files of this build; afterwards every request is
  * answered from a cache, and anything not in it fails. It never fetches at runtime, so once installed the app makes
@@ -20,9 +20,9 @@ const VERSION = "__VERSION__";
 const BUILD = "__BUILD__";
 const PRECACHE = __PRECACHE__;
 const INTEGRITY = __INTEGRITY__;
-const PREFIX = "leaked-vault-";
+const PREFIX = "queuebit-vault-";
 const CACHE = `${PREFIX}${VERSION}`;
-const META = "leaked-vault-meta";
+const META = "queuebit-vault-meta";
 const APPROVED = "./__approved__";
 
 const hex = (buf) => Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, "0")).join("");

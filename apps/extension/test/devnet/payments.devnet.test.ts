@@ -1,13 +1,13 @@
 // Contract-in-the-loop (plan §30 §10.1) on the LOCAL devnet (devnet/README.md) with the devnet/deploy contracts:
-//   LOCAL_DEVNET=1 VITE_LEAKED_LOCAL_DEVNET=1 pnpm vitest run test/devnet
+//   LOCAL_DEVNET=1 VITE_QUEUEBIT_LOCAL_DEVNET=1 pnpm vitest run test/devnet
 // Funds from anvil #7 only (the extension e2e key). Activates a fresh account through the Wallet's service-worker
 // code, sends an everyday payment, and checks that over-limit and not-allowed payments are classified before
 // submission and never reach eth_sendRawTransaction.
 import { createWalletClient, http, parseEther, toHex, type Address, type Hex } from "viem";
-import { SCHEME_ID, keygen } from "@leaked/pq-signer";
+import { SCHEME_ID, keygen } from "@queuebit/pq-signer";
 import { privateKeyToAccount } from "viem/accounts";
 import { describe, expect, it, vi } from "vitest";
-import { createFrameRpc } from "@leaked/rpc";
+import { createFrameRpc } from "@queuebit/rpc";
 import { RouteError } from "../../src/background/payments";
 import { publicClient, nodeClient } from "../../src/background/rpc";
 import { Wallet } from "../../src/background/wallet";

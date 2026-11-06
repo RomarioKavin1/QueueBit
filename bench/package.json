@@ -2,12 +2,12 @@
   "name": "bench",
   "version": "0.0.0",
   "private": true,
-  "description": "LEAKED M3: measured cost of post-quantum signature verification inside EIP-8141 VERIFY frames vs the ERC-8421 budgets",
+  "description": "QueueBit M3: measured cost of post-quantum signature verification inside EIP-8141 VERIFY frames vs the ERC-8421 budgets",
   "license": "MIT",
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "build:deps": "pnpm --filter @leaked/frames --filter @leaked/pq-signer run build",
+    "build:deps": "pnpm --filter @queuebit/frames --filter @queuebit/pq-signer run build",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
     "setup": "bash scripts/setup.sh",
@@ -20,8 +20,8 @@
     "all": "bash scripts/setup.sh && pnpm run build:deps && pnpm run build && node dist/cli.js all"
   },
   "dependencies": {
-    "@leaked/frames": "workspace:*",
-    "@leaked/pq-signer": "workspace:*",
+    "@queuebit/frames": "workspace:*",
+    "@queuebit/pq-signer": "workspace:*",
     "@noble/hashes": "2.4.0",
     "@noble/post-quantum": "0.7.1",
     "viem": "2.57.16"

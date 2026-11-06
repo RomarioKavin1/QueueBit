@@ -1,7 +1,7 @@
 import { Tag, decode, encode } from "cbor2";
 
 /**
- * Strict CBOR for the LEAKED UR payloads. Everything we emit is CBOR Core Deterministic Encoding (RFC 8949 §4.2.1:
+ * Strict CBOR for the QueueBit UR payloads. Everything we emit is CBOR Core Deterministic Encoding (RFC 8949 §4.2.1:
  * preferred integer sizes, definite lengths, map keys sorted bytewise), and the decoder accepts **only** that: a
  * second encoding of the same request would let two QR codes mean one thing, and a lenient decoder is where parser
  * differentials between the extension and the companion hide.

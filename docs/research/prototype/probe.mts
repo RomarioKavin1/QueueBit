@@ -1,4 +1,4 @@
-// LEAKED component probe: validation-gas ceilings per mempool, and a PORST-validated frame tx.
+// QueueBit component probe: validation-gas ceilings per mempool, and a PORST-validated frame tx.
 // Usage: npx tsx probe.ts <phase>   phases: deploy | gas | stake | gas-staked | porst | porst-staked
 import fs from "node:fs";
 import { encodeAbiParameters, encodeDeployData, keccak256, numberToHex, type Address, type Hex } from "viem";

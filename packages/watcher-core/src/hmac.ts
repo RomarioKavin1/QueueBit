@@ -2,13 +2,13 @@ import type { Alert } from "./alerts.js";
 
 /**
  * HMAC-SHA256 signing for everything the watcher sends, with WebCrypto only (MV3 service worker and Node >= 20 alike):
- *  - webhook bodies: header `x-leaked-signature: t=<unix s>,n=<nonce>,v2=<hex HMAC(key, "<t>.<n>.<body>")>`; the
- *    nonce is also sent as `x-leaked-delivery` and is the same across retries, so a receiver dedupes on it (and a
+ *  - webhook bodies: header `x-queuebit-signature: t=<unix s>,n=<nonce>,v2=<hex HMAC(key, "<t>.<n>.<body>")>`; the
+ *    nonce is also sent as `x-queuebit-delivery` and is the same across retries, so a receiver dedupes on it (and a
  *    replay inside the timestamp tolerance is caught by `verifyWebhook`'s `seen` hook);
  *  - stream envelopes: `{v: 2, t, type, seq, alert, sig}` with sig = HMAC(key, envelopeMessage(...)) covering every
  *    field, so a spoofed or compromised relay can neither inject an "all clear" (plan §40 §5) nor relabel a replayed
  *    alert as a retraction nor forge its sequence number;
- *  - stream/API requests: `authorization: LEAKED-HMAC id=<keyId>,t=<unix s>,n=<nonce>,sig=<hex HMAC(key,
+ *  - stream/API requests: `authorization: QUEUEBIT-HMAC id=<keyId>,t=<unix s>,n=<nonce>,sig=<hex HMAC(key,
  *    "<METHOD>\n<path>\n<t>\n<n>")>`; the server remembers nonces for the skew window, so a request is single-use.
  * Keys are `0x`-hex (preferred; e.g. 32 random bytes from the pairing QR) or UTF-8 strings.
  */
@@ -151,7 +151,7 @@ export interface SignedAlert {
  * enum, none of which can contain the `\n` separator, so the encoding is unambiguous.
  */
 export function envelopeMessage(e: { t: number; type: EnvelopeType; seq: number; alert: Alert }): string {
-  return `leaked-alert-v2\n${e.t}\n${e.type}\n${e.seq}\n${JSON.stringify(e.alert)}`;
+  return `queuebit-alert-v2\n${e.t}\n${e.type}\n${e.seq}\n${JSON.stringify(e.alert)}`;
 }
 
 export async function signAlert(
@@ -185,7 +185,7 @@ export async function verifyAlert(
 
 // --------------------------------------------------------------------------------------------- request auth ----
 
-export const AUTH_SCHEME = "LEAKED-HMAC";
+export const AUTH_SCHEME = "QUEUEBIT-HMAC";
 
 export async function authHeader(
   keyId: string,

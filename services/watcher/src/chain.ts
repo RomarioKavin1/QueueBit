@@ -1,6 +1,6 @@
 import { decodeFunctionResult, encodeFunctionData, parseAbi, type Address, type Hex } from "viem";
-import { httpTransport, type Transport } from "@leaked/rpc";
-import type { MinedFrameReceipt, MinedFrameTx, RpcLog } from "@leaked/watcher-core";
+import { httpTransport, type Transport } from "@queuebit/rpc";
+import type { MinedFrameReceipt, MinedFrameTx, RpcLog } from "@queuebit/watcher-core";
 
 /** A block as the poller needs it. `transactions` only when fetched with full bodies. */
 export interface BlockInfo {

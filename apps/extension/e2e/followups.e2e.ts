@@ -40,7 +40,7 @@ async function devnetReady(): Promise<string | undefined> {
 }
 
 type Win = Window & {
-  leaked(): { request(a: { method: string; params?: unknown[] }): Promise<unknown> };
+  queuebit(): { request(a: { method: string; params?: unknown[] }): Promise<unknown> };
   __result?: unknown;
   __error?: { code: number; message: string; data?: unknown };
 };
@@ -51,7 +51,7 @@ async function start(dapp: Page, method: string, params: unknown[]) {
       const w = window as unknown as Win;
       delete w.__result;
       delete w.__error;
-      w.leaked()
+      w.queuebit()
         .request({ method: m as string, params: p as unknown[] })
         .then(
           (r) => (w.__result = r),
@@ -94,12 +94,12 @@ async function storageCopy(sw: Worker) {
         chrome: { storage: Record<"local" | "session", { get(k: string): Promise<Record<string, unknown>> }> };
       }
     ).chrome.storage;
-    const record = (await c.local.get("leaked:keyring"))["leaked:keyring"] as {
+    const record = (await c.local.get("queuebit:keyring"))["queuebit:keyring"] as {
       blob: never;
       accounts: { everyday: string };
       hot?: { index: number; address: string };
     };
-    const session = (await c.session.get("leaked:session"))["leaked:session"] as { dek: string };
+    const session = (await c.session.get("queuebit:session"))["queuebit:session"] as { dek: string };
     return { record, dek: session.dek };
   });
 }
@@ -125,7 +125,7 @@ test("follow-ups: Vault fee top-up, Permit2 pre-approvals, everyday-key rotation
     const c = (
       globalThis as unknown as { chrome: { storage: { local: { get(k: string): Promise<Record<string, unknown>> } } } }
     ).chrome.storage.local;
-    return (await c.get("leaked:accountPlans"))["leaked:accountPlans"] as Record<string, { vaultSigner: Address }>;
+    return (await c.get("queuebit:accountPlans"))["queuebit:accountPlans"] as Record<string, { vaultSigner: Address }>;
   });
   const vaultSigner = plans["1337"]!.vaultSigner;
   await expect
@@ -154,7 +154,7 @@ test("follow-ups: Vault fee top-up, Permit2 pre-approvals, everyday-key rotation
   const spender = feeTank as Address; // an allowed app at creation (the tank), so the registration is everyday
   const dapp = await context.newPage();
   await dapp.goto(dappUrl);
-  await dapp.getByRole("button", { name: "Connect LEAKED" }).click();
+  await dapp.getByRole("button", { name: "Connect QueueBit" }).click();
   const connect = await waitForApproval(context);
   await Promise.all([connect.waitForEvent("close"), connect.getByRole("button", { name: "Connect" }).click()]);
   const now = Number((await pub.getBlock({ blockTag: "latest" })).timestamp);
@@ -197,7 +197,7 @@ test("follow-ups: Vault fee top-up, Permit2 pre-approvals, everyday-key rotation
     pre.getByRole("button", { name: "Pre-approve" }).click(),
   ]);
   const marker = await result(dapp);
-  expect(marker.slice(0, 10)).toBe("0xdc6b87c9");
+  expect(marker.slice(0, 10)).toBe("0x427a9529");
   const allowance = await sim.consumePermit2({
     owner: account,
     token: usdc.address,
@@ -243,7 +243,7 @@ test("follow-ups: Vault fee top-up, Permit2 pre-approvals, everyday-key rotation
   ]);
   const marker2 = await result(dapp);
   const digest = sim.typedDigestOf(transfer as never);
-  expect(marker2.toLowerCase()).toBe(`0xdc6b87c9${digest.slice(2)}`.toLowerCase());
+  expect(marker2.toLowerCase()).toBe(`0x427a9529${digest.slice(2)}`.toLowerCase());
   const expiry = await pub.readContract({
     address: account,
     abi: [

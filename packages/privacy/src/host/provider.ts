@@ -96,7 +96,7 @@ export function createHostProvider(opts: HostProviderOptions): HostProvider {
   };
 }
 
-/** An EIP-1193 `request` over a `@leaked/rpc`-style transport. */
+/** An EIP-1193 `request` over a `@queuebit/rpc`-style transport. */
 export function eip1193FromTransport(t: {
   request<T>(method: string, params?: readonly unknown[]): Promise<T>;
 }): Eip1193Like {

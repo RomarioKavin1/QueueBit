@@ -5,7 +5,7 @@
 use std::sync::OnceLock;
 
 use ark_bn254::Fr;
-use leaked_groth16::{prove, witness::Circuit, zkey, Error};
+use queuebit_groth16::{prove, witness::Circuit, zkey, Error};
 use num_bigint::BigUint;
 use serde_json::Value;
 

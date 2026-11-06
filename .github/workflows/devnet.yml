@@ -86,20 +86,20 @@ jobs:
       - name: watcher live test (anvil #9)
         env:
           LIVE_DEVNET: "1"
-        run: pnpm --filter @leaked/watcher test
+        run: pnpm --filter @queuebit/watcher test
       - name: rpc live test
         env:
           LIVE_DEVNET: "1"
-        run: pnpm --filter @leaked/rpc test
+        run: pnpm --filter @queuebit/rpc test
 
       - name: Playwright browser
         if: github.event_name == 'schedule' || inputs.extension-e2e
-        run: pnpm --filter @leaked/extension exec playwright install --with-deps chromium
+        run: pnpm --filter @queuebit/extension exec playwright install --with-deps chromium
       - name: extension e2e against the devnet (payments, vault; 4337 on its own anvil)
         if: github.event_name == 'schedule' || inputs.extension-e2e
         env:
           CI: "1"
-        run: pnpm --filter @leaked/extension run e2e
+        run: pnpm --filter @queuebit/extension run e2e
 
       - name: container logs
         if: failure()
@@ -109,7 +109,7 @@ jobs:
           for s in ethrex lighthouse-beacon lighthouse-beacon-2 lighthouse-validator skandha; do
             docker compose --profile sidecar logs --no-color "$s" > "$RUNNER_TEMP/devnet-logs/$s.log" 2>&1 || true
           done
-          docker logs leaked-devnet-skandha-budget-1 > "$RUNNER_TEMP/devnet-logs/skandha-budget.log" 2>&1 || true
+          docker logs queuebit-devnet-skandha-budget-1 > "$RUNNER_TEMP/devnet-logs/skandha-budget.log" 2>&1 || true
       - if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

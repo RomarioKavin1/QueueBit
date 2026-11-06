@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
-/// @title ILeakedAccount
-/// @notice Types, events and errors of the LEAKED frame-native account (`LeakedAccountImpl`). Names follow
+/// @title IQueueBitAccount
+/// @notice Types, events and errors of the QueueBit frame-native account (`QueueBitAccountImpl`). Names follow
 ///         `docs/plan/sections/10-contracts.md` §10.3.2 / §10.11. Deviations from that text:
-///         - role entry points live in `LeakedAccountRoles`, DELEGATECALLed from the implementation's fallback
+///         - role entry points live in `QueueBitAccountRoles`, DELEGATECALLed from the implementation's fallback
 ///           (EIP-170: one contract was 30.6 KB); unknown selectors still revert;
 ///         - `initialize(InitConfig)` (adds tank, ETH price, priority-fee bound, timelock fields); the tank is
 ///           allowlisted as a hot recipient at initialize (UX decision);
@@ -59,7 +59,7 @@ pragma solidity 0.8.28;
 ///        visible only in the frame receipt (`frameReceipts[i].status == 0`);
 ///      - `isValidSignature` is a view: accepting a registered hash or a 7739 signature emits nothing;
 ///      - a VERIFY frame is static: a rejected hot transaction is never included and emits nothing.
-interface ILeakedAccount {
+interface IQueueBitAccount {
     // ------------------------------------------------------------------------------------------------ types ------
 
     /// One call of a hot batch, a vault batch or a queued operation.

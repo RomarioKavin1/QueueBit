@@ -229,10 +229,10 @@ describe("sign-in approvals (M3, ux-spec E-50)", () => {
       await flush();
       const [a] = await wallet.approvals.store.pending();
       expect(a!.sig).toMatchObject({ siwe: { domain: "evil.example" }, domainOk: false });
-      expect(a!.routeDenial).toMatchObject({ leakedRule: "SIG-DOMAIN-NOT-ALLOWED" });
+      expect(a!.routeDenial).toMatchObject({ queuebitRule: "SIG-DOMAIN-NOT-ALLOWED" });
       // The service worker refuses even an "approve" from the page (the screen never offers one).
       await wallet.resolveApproval(a!.id, approved);
-      await expect(p).rejects.toMatchObject({ code: 4100, data: { leakedRule: "SIG-DOMAIN-NOT-ALLOWED" } });
+      await expect(p).rejects.toMatchObject({ code: 4100, data: { queuebitRule: "SIG-DOMAIN-NOT-ALLOWED" } });
     }
   });
 
@@ -282,7 +282,7 @@ describe("sign-in approvals (M3, ux-spec E-50)", () => {
           { origin: ORIGIN, requestId: `p:${owner}:${chainId}` },
           { method: "eth_signTypedData_v4", params: [ACCOUNT, permit(owner, chainId)] },
         ),
-      ).rejects.toMatchObject({ code: 4100, data: { leakedRule: "SIG-PERMIT-MISMATCH" } });
+      ).rejects.toMatchObject({ code: 4100, data: { queuebitRule: "SIG-PERMIT-MISMATCH" } });
     }
     expect(w.open).not.toHaveBeenCalled();
   });

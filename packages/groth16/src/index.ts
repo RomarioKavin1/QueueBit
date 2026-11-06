@@ -1,5 +1,5 @@
 /**
- * @leaked/groth16: the MIT Groth16 (BN254) engine for `@leaked/privacy`, replacing snarkjs (GPL-3.0) in the
+ * @queuebit/groth16: the MIT Groth16 (BN254) engine for `@queuebit/privacy`, replacing snarkjs (GPL-3.0) in the
  * shipped extension. arkworks (MIT/Apache-2.0) in Rust/WASM for proving and verifying; the circom witness module runs
  * in the host's WebAssembly engine through our own glue. Proofs and public signals are snarkjs-shaped, so
  * `toSolProof` / PoolPayer / the 0xbow relayer take them unchanged.
@@ -8,7 +8,7 @@
  *
  *   serveDefaultProver(self, { loader: fetchArtifactLoader(chrome.runtime.getURL("pp-circuits/")) });
  *
- * and on the page side `createWorkerProver(worker)` from `@leaked/privacy`.
+ * and on the page side `createWorkerProver(worker)` from `@queuebit/privacy`.
  */
 import {
   createGroth16Prover,
@@ -21,7 +21,7 @@ import {
   type PortLike,
   type Prover,
   type WithdrawArtifacts,
-} from "@leaked/privacy";
+} from "@queuebit/privacy";
 import { createArkworksGroth16, type ArkworksGroth16, type ArkworksGroth16Options } from "./engine.js";
 
 export {
@@ -47,7 +47,7 @@ export interface DefaultProverOptions {
   engineOptions?: ArkworksGroth16Options;
 }
 
-/** The default `@leaked/privacy` withdraw prover: arkworks engine + hash-pinned artifacts + self-verification. */
+/** The default `@queuebit/privacy` withdraw prover: arkworks engine + hash-pinned artifacts + self-verification. */
 export function createDefaultProver(o: DefaultProverOptions): Prover {
   const artifacts = o.artifacts ?? (o.loader ? () => loadPinnedArtifacts(o.loader!) : undefined);
   if (!artifacts) throw new TypeError("createDefaultProver: pass `loader` or `artifacts`");

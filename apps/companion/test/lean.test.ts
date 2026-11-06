@@ -1,5 +1,5 @@
-import { schemes } from "@leaked/pq-signer";
-import { decodeSignature, fromHex } from "@leaked/ur";
+import { schemes } from "@queuebit/pq-signer";
+import { decodeSignature, fromHex } from "@queuebit/ur";
 import { describe, expect, it } from "vitest";
 import { afterSign, keyState, signGate, signKeyParams } from "../src/app/vaultKey.js";
 import { reviewRequestBytes } from "../src/core/clearsign.js";

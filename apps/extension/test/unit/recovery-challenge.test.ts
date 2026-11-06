@@ -1,5 +1,5 @@
 import { hexToBytes, toHex, type Hex } from "viem";
-import { SCHEME_ID, keygen, sign } from "@leaked/pq-signer";
+import { SCHEME_ID, keygen, sign } from "@queuebit/pq-signer";
 import {
   AnimatedUr,
   UR_TYPES,
@@ -8,14 +8,14 @@ import {
   randomUuid,
   recoveryTestChallenge,
   type RecoveryChallenge,
-} from "@leaked/ur";
+} from "@queuebit/ur";
 import { beforeAll, describe, expect, it } from "vitest";
 import { Wallet } from "../../src/background/wallet";
 import { MemoryKV } from "../../src/shared/kv";
 
 /**
  * The recovery test's request id is chosen by the browser (a single-use challenge shown as
- * `ur:leaked-recovery-challenge`), and the v2 test's payer address becomes `InitConfig.recovery.payerKey`.
+ * `ur:queuebit-recovery-challenge`), and the v2 test's payer address becomes `InitConfig.recovery.payerKey`.
  */
 
 const rec = keygen(new Uint8Array(64).fill(0x22), { role: "recovery" });

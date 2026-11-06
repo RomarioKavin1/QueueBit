@@ -1,4 +1,4 @@
-# LEAKED local EIP-8141 devnet: ethrex (eip8141-tracer fork) + Lighthouse (2 beacon nodes + 1 validator client)
+# QueueBit local EIP-8141 devnet: ethrex (eip8141-tracer fork) + Lighthouse (2 beacon nodes + 1 validator client)
 # + the ERC-8421 mempool sidecar (skandha fork), all on one Docker network with static IPs.
 #
 # Derived from forshtat/mempool-workshop-sidecar deploy/devnet/docker-compose.yml (MIT, (c) 2023 Etherspot /
@@ -14,7 +14,7 @@
 #
 # Usage: ./up.sh (never run `docker compose up` by hand the first time; genesis needs GENESIS_TIMESTAMP).
 
-name: leaked-devnet
+name: queuebit-devnet
 
 networks:
   default:

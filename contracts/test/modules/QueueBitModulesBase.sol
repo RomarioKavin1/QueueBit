@@ -4,10 +4,10 @@ pragma solidity 0.8.28;
 import {Test, Vm} from "forge-std/Test.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {PackedUserOperation, Execution} from "../../src/modules/interfaces/IERC7579Modules.sol";
-import {ILeakedModules} from "../../src/modules/interfaces/ILeakedModules.sol";
-import {LeakedPolicyHook} from "../../src/modules/LeakedPolicyHook.sol";
-import {LeakedHotValidator} from "../../src/modules/LeakedHotValidator.sol";
-import {LeakedRoleExecutor} from "../../src/modules/LeakedRoleExecutor.sol";
+import {IQueueBitModules} from "../../src/modules/interfaces/IQueueBitModules.sol";
+import {QueueBitPolicyHook} from "../../src/modules/QueueBitPolicyHook.sol";
+import {QueueBitHotValidator} from "../../src/modules/QueueBitHotValidator.sol";
+import {QueueBitRoleExecutor} from "../../src/modules/QueueBitRoleExecutor.sol";
 import {IPQVerifier} from "../../src/interfaces/IPQVerifier.sol";
 import {MockPQVerifier, MockToken, MockRouter} from "./mocks/ModuleMocks.sol";
 import {
@@ -25,11 +25,11 @@ import {
 } from "./hosts/HostInterfaces.sol";
 
 /// ModuleKit-style harness: one `AccountInstance`-like account per host (reference MSA, Safe7579, Kernel v3.3) with
-/// the three LEAKED modules installed, driven through a real EntryPoint v0.8.0 at its canonical address with
+/// the three QueueBit modules installed, driven through a real EntryPoint v0.8.0 at its canonical address with
 /// `handleOps`. (ModuleKit itself is not used: it is unmaintained since 2026-09 (modulekit commit 2210e2b, README), pulls
 /// its dependencies through npm and is AGPL/GPL; this harness reimplements the parts we need, see
 /// IMPLEMENTATION-NOTES.md.)
-abstract contract LeakedModulesBase is Test, ILeakedModules {
+abstract contract QueueBitModulesBase is Test, IQueueBitModules {
     enum Host {
         MSA,
         SAFE7579,
@@ -53,9 +53,9 @@ abstract contract LeakedModulesBase is Test, ILeakedModules {
     uint256 internal constant VAULT_THRESHOLD = 5000e6;
 
     IEntryPointV08 internal ep;
-    LeakedRoleExecutor internal executor;
-    LeakedPolicyHook internal hook;
-    LeakedHotValidator internal validator;
+    QueueBitRoleExecutor internal executor;
+    QueueBitPolicyHook internal hook;
+    QueueBitHotValidator internal validator;
     IPQVerifier internal pq;
     MockToken internal usdc;
     MockRouter internal router;
@@ -106,9 +106,9 @@ abstract contract LeakedModulesBase is Test, ILeakedModules {
     }
 
     function _deployModules() internal virtual {
-        executor = new LeakedRoleExecutor();
-        hook = new LeakedPolicyHook(address(executor));
-        validator = new LeakedHotValidator(hook);
+        executor = new QueueBitRoleExecutor();
+        hook = new QueueBitPolicyHook(address(executor));
+        validator = new QueueBitHotValidator(hook);
         pq = new MockPQVerifier();
     }
 
@@ -160,7 +160,7 @@ abstract contract LeakedModulesBase is Test, ILeakedModules {
             bootstrap,
             abi.encodeCall(IMSABootstrap.initMSA, (vals, execs, MSABootstrapConfig(address(hook), hookData), fbs))
         );
-        return IMSAFactory(factory).createAccount(keccak256("leaked-msa"), initCode);
+        return IMSAFactory(factory).createAccount(keccak256("queuebit-msa"), initCode);
     }
 
     function _createSafe(bytes memory hookData, bytes memory execData) internal returns (address) {
@@ -218,7 +218,7 @@ abstract contract LeakedModulesBase is Test, ILeakedModules {
         bytes memory init = abi.encodeCall(
             IKernelInit.initialize, (rootVid, address(hook), "", abi.encodePacked(bytes1(0x00), hookData), cfg)
         );
-        return IKernelFactory(factory).createAccount(init, keccak256("leaked-kernel"));
+        return IKernelFactory(factory).createAccount(init, keccak256("queuebit-kernel"));
     }
 
     // ----------------------------------------------------------------------------------------- userOps ------

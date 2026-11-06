@@ -1,9 +1,9 @@
-import { schemeById, schemes, type BudgetStatus, type PQScheme } from "@leaked/pq-signer";
+import { schemeById, schemes, type BudgetStatus, type PQScheme } from "@queuebit/pq-signer";
 import type { Hex } from "viem";
 import type { SealedBlob } from "./vaultCrypto.js";
 
 /**
- * The per-key signature counter (leanSphincs-s usage guard; `@leaked/pq-signer` README "Usage counter and key
+ * The per-key signature counter (leanSphincs-s usage guard; `@queuebit/pq-signer` README "Usage counter and key
  * rotation"). SPHINCS- C13 is not counted: by product decision its 2²² budget is shown as "unlimited" (one counter
  * would be more confusing than useful at 10 approvals a day for 1,000 years).
  *

@@ -45,7 +45,7 @@ import {
 
 /**
  * Everyday payments on the 4337 backend (plan §30 §3.2 column U): the same routing rules as the native account, read
- * from LeakedPolicyHook; an ERC-4337 v0.8 user operation signed by the everyday key, gas estimated by the bundler,
+ * from QueueBitPolicyHook; an ERC-4337 v0.8 user operation signed by the everyday key, gas estimated by the bundler,
  * the exact signed bytes simulated (`eth_call handleOps` + the account's `execute` from the EntryPoint) and only then
  * sent with `eth_sendUserOperation`. The account pays its own network fee from its balance, bounded by the hook's
  * `maxFeeWei` (the native account's fee tank plays that role there); the fee tank only relays Vault approvals.
@@ -114,7 +114,7 @@ export class AaPayments {
     if (!n) {
       throw new AaError(
         "unsupported",
-        `LEAKED's compatible-account contracts aren't on ${findNetwork(chainId)?.name ?? "this network"} yet.`,
+        `QueueBit's compatible-account contracts aren't on ${findNetwork(chainId)?.name ?? "this network"} yet.`,
       );
     }
     return n;
@@ -301,7 +301,8 @@ export class AaPayments {
   /** `MSAFactory.createAccount(salt, initCode)` from the fee tank: the account and its three modules, one transaction. */
   async activate(chainId: number): Promise<ActivityEntry> {
     const plan = await this.d.plans.get(chainId);
-    if (!plan) throw new AaError("no-plan", "Finish setting up LEAKED first: pair your Vault and choose your limits.");
+    if (!plan)
+      throw new AaError("no-plan", "Finish setting up QueueBit first: pair your Vault and choose your limits.");
     const client = this.d.io.publicClient(chainId);
     if (await this.deployed(client, plan.address)) throw new AaError("not-pending", "Your account is already active.");
     const accounts = (await this.d.keyring.accounts())!;
@@ -345,7 +346,7 @@ export class AaPayments {
       replaced: [],
       nonce: nonce.toString(),
       headline: "Activating your account",
-      detail: "Creates your account with your limits and installs LEAKED's modules. Paid by your fee tank.",
+      detail: "Creates your account with your limits and installs QueueBit's modules. Paid by your fee tank.",
       steps: [{ label: "Create account with your limits and your Vault", status: "pending" }],
       backend: "4337",
       createdAt: now,
@@ -485,7 +486,7 @@ export class AaPayments {
       fees: { maxFeePerGas: p.op.maxFeePerGas.toString(), maxPriorityFeePerGas: p.op.maxPriorityFeePerGas.toString() },
       headline: `Sending ${intentTitle(acalls, labels)}`,
       detail: mismatch
-        ? "Sent, but the bundler answered with a different id than LEAKED computed; LEAKED tracks both."
+        ? "Sent, but the bundler answered with a different id than QueueBit computed; QueueBit tracks both."
         : `Network fee about ${feeAmount(p.feeWei)} from your account.`,
       steps: pendingSteps(acalls),
       feeWei: p.feeWei.toString(),

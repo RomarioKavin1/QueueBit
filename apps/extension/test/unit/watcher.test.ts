@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { encodeAbiParameters, encodeEventTopics, type Abi, type Address, type Hex } from "viem";
-import { frameAccountAbi, hmacHex, signAlert, type Alert, type RpcLog } from "@leaked/watcher-core";
+import { frameAccountAbi, hmacHex, signAlert, type Alert, type RpcLog } from "@queuebit/watcher-core";
 import type { AccountPlan } from "../../src/background/account";
 import { DeployBlocks, findDeployBlock } from "../../src/background/deployBlock";
 import {
@@ -18,7 +18,7 @@ import { MemoryKV } from "../../src/shared/kv";
 
 /**
  * Watcher light mode (plan §40 §5, §30 §6.5): the account's events from its deployment block through
- * @leaked/watcher-core, mapped to the notification, the badge and the in-app list with deep links (ux-spec §2.3).
+ * @queuebit/watcher-core, mapped to the notification, the badge and the in-app list with deep links (ux-spec §2.3).
  */
 
 const ACCOUNT: Address = "0x1111111111111111111111111111111111111111";
@@ -278,7 +278,7 @@ describe("WatcherLight", () => {
 describe("pairing with a self-hosted watcher", () => {
   const code = JSON.stringify({
     url: "https://watcher.example/",
-    topic: "leaked-7f3a",
+    topic: "queuebit-7f3a",
     keyId: "laptop",
     hmacKey: "00112233445566778899aabbccddeeff",
   });
@@ -286,12 +286,12 @@ describe("pairing with a self-hosted watcher", () => {
   it("reads the pairing code {url, topic, keyId, hmacKey}; refuses anything else in plain words", () => {
     expect(readPairingCode(code)).toEqual({
       url: "https://watcher.example",
-      topic: "leaked-7f3a",
+      topic: "queuebit-7f3a",
       keyId: "laptop",
       hmacKey: "00112233445566778899aabbccddeeff",
     });
     expect(() => readPairingCode('{"url":"ftp://x","topic":"t","keyId":"k","hmacKey":"00"}')).toThrow(
-      /isn't a LEAKED watcher pairing code/,
+      /isn't a QueueBit watcher pairing code/,
     );
     expect(() => readPairingCode("not json")).toThrow(/pairing code/);
   });
@@ -343,7 +343,7 @@ describe("pairing with a self-hosted watcher", () => {
       1000,
     );
     expect(seen[0]!.url).toBe("https://watcher.example/v1/alerts?since=0");
-    expect(seen[0]!.auth).toMatch(/^LEAKED-HMAC id=laptop,t=1000,n=[0-9a-f]{32},sig=[0-9a-f]{64}$/u);
+    expect(seen[0]!.auth).toMatch(/^QUEUEBIT-HMAC id=laptop,t=1000,n=[0-9a-f]{32},sig=[0-9a-f]{64}$/u);
     expect(r.alerts.map((a) => a.id)).toEqual(["w1"]);
     expect(r.retracted).toEqual(["w0"]);
     expect(r.rejected).toBe(6);

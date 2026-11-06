@@ -1,7 +1,7 @@
 import { parseEther, type Address, type Hex, type PublicClient } from "viem";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { decodeTx, getProfile, txHash, type FrameTxReceipt } from "@leaked/frames";
-import type { NodeClient, SimulationResult } from "@leaked/rpc";
+import { decodeTx, getProfile, txHash, type FrameTxReceipt } from "@queuebit/frames";
+import type { NodeClient, SimulationResult } from "@queuebit/rpc";
 import { accountSalt } from "../../src/background/account";
 import { bucketFromStatus } from "../../src/background/bucket";
 import { Wallet } from "../../src/background/wallet";

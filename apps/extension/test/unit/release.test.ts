@@ -61,7 +61,7 @@ function unzip(zip: Buffer): { name: string; data: Buffer; mode: number; extra: 
 
 describe("deterministic zip (scripts/release/lib.mjs)", () => {
   it("same inputs → same bytes; sorted, fixed mode, no extra fields, round-trips", () => {
-    const d = tmp("leaked-zip-");
+    const d = tmp("queuebit-zip-");
     mkdirSync(join(d, "b"));
     writeFileSync(join(d, "b/x.js"), "x".repeat(1000));
     writeFileSync(join(d, "a.json"), "{}");
@@ -78,11 +78,11 @@ describe("deterministic zip (scripts/release/lib.mjs)", () => {
 
 describe("production extension build (apps/extension/scripts/release-build.mjs)", () => {
   it("is a clean store build: the zip is the unpacked tree, no gallery, no devnet paths", async () => {
-    const out = tmp("leaked-ext-rel-");
+    const out = tmp("queuebit-ext-rel-");
     const m = await rb.releaseBuild(out);
-    expect(m.name).toBe("leaked-extension");
+    expect(m.name).toBe("queuebit-extension");
     expect(m.version).toMatch(/^\d+\.\d+\.\d+$/u);
-    const zip = readFileSync(join(out, `leaked-extension-${m.version}-chrome.zip`));
+    const zip = readFileSync(join(out, `queuebit-extension-${m.version}-chrome.zip`));
     expect(sha256(zip)).toBe(m.zipSha256);
     const entries = unzip(zip);
     expect(Object.fromEntries(entries.map((x) => [x.name, sha256(x.data)]))).toEqual(m.files);
@@ -94,7 +94,7 @@ describe("production extension build (apps/extension/scripts/release-build.mjs)"
     expect(text).not.toContain("0x1234567890abcdef1234567890abcdef1234abcd"); // design gallery demo address
     expect(text).not.toMatch(/localhost:(8545|8546|4337|14337|14340)/u);
     expect(text).not.toContain("Local devnet");
-    expect(text).not.toContain("__leakedPq");
+    expect(text).not.toContain("__queuebitPq");
     expect(entries.some((x) => x.name.endsWith(".map"))).toBe(false);
     const mf = JSON.parse(entries.find((x) => x.name === "manifest.json")!.data.toString()) as {
       host_permissions: string[];
@@ -106,9 +106,9 @@ describe("production extension build (apps/extension/scripts/release-build.mjs)"
 
   it("the checker refuses a local-devnet + design build (the markers are real)", async () => {
     const saved = { ...process.env };
-    process.env.VITE_LEAKED_LOCAL_DEVNET = "1";
-    process.env.VITE_LEAKED_DESIGN = "1";
-    const outDir = tmp("leaked-ext-dev-");
+    process.env.VITE_QUEUEBIT_LOCAL_DEVNET = "1";
+    process.env.VITE_QUEUEBIT_DESIGN = "1";
+    const outDir = tmp("queuebit-ext-dev-");
     try {
       const { build } = await import("wxt");
       await build({
@@ -135,7 +135,7 @@ describe("production extension build (apps/extension/scripts/release-build.mjs)"
   }, 120_000);
 
   it("store package: passes on the release, refuses a permission change and a missing justification", async () => {
-    const out = tmp("leaked-ext-store-");
+    const out = tmp("queuebit-ext-store-");
     const m = await rb.releaseBuild(out);
     const { submission } = sp.checkStorePackage(out);
     expect(submission.zipSha256).toBe(m.zipSha256);
@@ -150,16 +150,16 @@ describe("production extension build (apps/extension/scripts/release-build.mjs)"
     const listing = join(out, "listing.md");
     writeFileSync(listing, "## Short description\n\nx\n\n## Permission justifications\n\n| `storage` | x |\n");
     expect(() => sp.checkStorePackage(out, { listing })).toThrow(/no justification for `alarms`/u);
-    writeFileSync(join(out, `leaked-extension-${m.version}-chrome.zip`), "tampered");
+    writeFileSync(join(out, `queuebit-extension-${m.version}-chrome.zip`), "tampered");
     expect(() => sp.checkStorePackage(out)).toThrow();
   }, 120_000);
 
   it("refuses to build with the devnet flags set", async () => {
-    process.env.VITE_LEAKED_LOCAL_DEVNET = "1";
+    process.env.VITE_QUEUEBIT_LOCAL_DEVNET = "1";
     try {
-      await expect(rb.buildProduction()).rejects.toThrow(/VITE_LEAKED_LOCAL_DEVNET is set/u);
+      await expect(rb.buildProduction()).rejects.toThrow(/VITE_QUEUEBIT_LOCAL_DEVNET is set/u);
     } finally {
-      delete process.env.VITE_LEAKED_LOCAL_DEVNET;
+      delete process.env.VITE_QUEUEBIT_LOCAL_DEVNET;
     }
   });
 });

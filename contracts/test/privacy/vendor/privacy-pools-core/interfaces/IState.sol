@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Vendored for LEAKED tests from github.com/0xbow-io/privacy-pools-core @ df4bf730214bf9d0c717a9258f7a74861758c269, packages/contracts/src/interfaces/IState.sol (Apache-2.0, see ./LICENSE). Modified: import paths only (made relative). See THIRD_PARTY.md.
+// Vendored for QueueBit tests from github.com/0xbow-io/privacy-pools-core @ df4bf730214bf9d0c717a9258f7a74861758c269, packages/contracts/src/interfaces/IState.sol (Apache-2.0, see ./LICENSE). Modified: import paths only (made relative). See THIRD_PARTY.md.
 pragma solidity 0.8.28;
 
 import {IEntrypoint} from './IEntrypoint.sol';

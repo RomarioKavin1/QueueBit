@@ -1,11 +1,11 @@
 // Shared helpers for the M7 (ERC-4337 + ERC-7579) scripts: the executor's EIP-712 digests (an independent encoding
-// of LeakedRoleExecutor's typehashes, cross-checked against the contract in the Foundry C13 test and the e2e), the
+// of QueueBitRoleExecutor's typehashes, cross-checked against the contract in the Foundry C13 test and the e2e), the
 // fixed test PQ keys, and Foundry artifacts.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { encodeAbiParameters, hashTypedData, keccak256, toHex, type Abi, type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { keygen } from "@leaked/pq-signer";
+import { keygen } from "@queuebit/pq-signer";
 
 export interface Call {
   target: Address;
@@ -29,7 +29,7 @@ export function callsHash(calls: Call[]): Hex {
 }
 
 function domain(chainId: number, executor: Address) {
-  return { name: "LeakedRoleExecutor", version: "1", chainId, verifyingContract: executor } as const;
+  return { name: "QueueBitRoleExecutor", version: "1", chainId, verifyingContract: executor } as const;
 }
 
 /** `VaultExec(address account,uint256 nonce,bytes32 callsHash,uint256 usdValue)` (plan §10.11). */

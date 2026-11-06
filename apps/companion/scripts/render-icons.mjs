@@ -1,5 +1,5 @@
 // Rasterise public/icon.svg into the PWA icons (public/icon-192.png, icon-512.png, icon-maskable-512.png).
-// Usage: pnpm --filter @leaked/companion icons   (needs `npx playwright install chromium` once)
+// Usage: pnpm --filter @queuebit/companion icons   (needs `npx playwright install chromium` once)
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";

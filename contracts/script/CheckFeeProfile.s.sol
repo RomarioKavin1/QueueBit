@@ -19,7 +19,7 @@ interface IFeeParam {
 ///   ROLE_SIGNER_FACTORY=0x… [FEE_CHECK_ADDRESSES=0x…,0x…] \
 ///     forge script script/CheckFeeProfile.s.sol --rpc-url http://localhost:8545
 ///
-/// @dev `LeakedAccountImpl`'s `PER_GAS_MAX_FEE` is an internal immutable without a getter, so the account
+/// @dev `QueueBitAccountImpl`'s `PER_GAS_MAX_FEE` is an internal immutable without a getter, so the account
 ///      implementation is not covered here; its constructor argument (`perGasMaxFee = true` on 1337) is pinned by
 ///      the deploy scripts (`devnet/deploy/deploy.ts`, `devnet-tests/*`).
 contract CheckFeeProfile is Script {

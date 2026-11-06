@@ -5,7 +5,7 @@ import type { Route, RouteCopy, RuleId } from "../background/routing";
 
 export interface AccountStatus {
   chainId: number;
-  /** LEAKED can create a native account here (frame backend with a deployment). */
+  /** QueueBit can create a native account here (frame backend with a deployment). */
   supported: boolean;
   unsupportedReason?: string;
   /** The address sites see on this chain. */

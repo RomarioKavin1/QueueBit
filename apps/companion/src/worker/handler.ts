@@ -1,5 +1,11 @@
-import { SCHEME_ID, keygen, sign as pqSign, verify as pqVerify, type KeyPair } from "@leaked/pq-signer";
-import { encodeRecoveryTest, encodeSignature, recoveryTestChallenge, toHex, type SignatureResponse } from "@leaked/ur";
+import { SCHEME_ID, keygen, sign as pqSign, verify as pqVerify, type KeyPair } from "@queuebit/pq-signer";
+import {
+  encodeRecoveryTest,
+  encodeSignature,
+  recoveryTestChallenge,
+  toHex,
+  type SignatureResponse,
+} from "@queuebit/ur";
 import type { Address, Hex } from "viem";
 import { RequestRejected, reviewRequestBytes } from "../core/clearsign.js";
 import { checkChallenge, type ChallengeRefused } from "../core/recoveryChallenge.js";

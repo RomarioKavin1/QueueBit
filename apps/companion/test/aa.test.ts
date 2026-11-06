@@ -1,5 +1,5 @@
-import { SCHEME_ID, verify } from "@leaked/pq-signer";
-import { decodeSignature, encodeSignRequest, fromHex } from "@leaked/ur";
+import { SCHEME_ID, verify } from "@queuebit/pq-signer";
+import { decodeSignature, encodeSignRequest, fromHex } from "@queuebit/ur";
 import { describe, expect, it } from "vitest";
 import { RequestRejected, reviewRequestBytes, updateSnapshots } from "../src/core/clearsign.js";
 import { wordsToEntropy } from "../src/core/keys.js";
@@ -25,7 +25,7 @@ import {
 } from "./fixtures/aa.js";
 import { ALICE, PASSPHRASE, RECOVERY_WORDS, VAULT_WORDS, recovery, vault } from "./fixtures/requests.js";
 
-/** tx-type 3 (compatible accounts): the phone's reading of a `LeakedRoleExecutor` call and its signature. */
+/** tx-type 3 (compatible accounts): the phone's reading of a `QueueBitRoleExecutor` call and its signature. */
 
 const ctx = (over: Partial<DeviceContext> = {}): DeviceContext => ({
   mode: "vault",

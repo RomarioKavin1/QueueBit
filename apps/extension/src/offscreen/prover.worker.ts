@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
-import { serveDefaultProver } from "@leaked/groth16";
-import { fetchArtifactLoader, type PortLike } from "@leaked/privacy";
+import { serveDefaultProver } from "@queuebit/groth16";
+import { fetchArtifactLoader, type PortLike } from "@queuebit/privacy";
 
 /**
  * The withdraw prover (Worker inside the offscreen document): arkworks Groth16 engine (MIT, WASM inlined, compiled

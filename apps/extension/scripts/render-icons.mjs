@@ -1,5 +1,5 @@
-// Rasterise the LEAKED mark (src/shared/icon.ts) into the toolbar/store icons in public/icon/.
-// Usage: pnpm --filter @leaked/extension icons   (needs `npx playwright install chromium` once)
+// Rasterise the QueueBit mark (src/shared/icon.ts) into the toolbar/store icons in public/icon/.
+// Usage: pnpm --filter @queuebit/extension icons   (needs `npx playwright install chromium` once)
 import { readFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";

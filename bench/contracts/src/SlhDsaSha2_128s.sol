@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-/// @title SlhDsaSha2_128sVerifier (LEAKED bench, M3 time-boxed port)
+/// @title SlhDsaSha2_128sVerifier (QueueBit bench, M3 time-boxed port)
 /// @notice FIPS 205 SLH-DSA-SHA2-128s verification (external / "pure" SLH-DSA.Verify, Algorithm 24, with an EMPTY
 ///         context: M' = 0x00 ‖ 0x00 ‖ M) on the EVM, using the SHA-256 precompile.
-/// @dev    BENCHMARK CODE, NOT AUDITED, NOT FOR FUNDS. Written for LEAKED as a port of the structure of
+/// @dev    BENCHMARK CODE, NOT AUDITED, NOT FOR FUNDS. Written for QueueBit as a port of the structure of
 ///         `SLH_DSA_SHA2_128_24_Verifier` by Nicolas Consigny (nconsigny/SPHINCS- @ 4c76aaf,
 ///         `src/sha/SLH-DSA-SHA2-128-24verifier.sol`, MIT; memory layout and ADRSc packing follow it), generalised
 ///         from (d=1, w=4, a=24, k=6) to the FIPS 205 Table 2 "SLH-DSA-SHA2-128s" set. Validated in

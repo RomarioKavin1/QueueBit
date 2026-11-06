@@ -1,4 +1,4 @@
-// Proving-time benchmark in Node: @leaked/groth16 (single-threaded WASM core + host-WebAssembly witness) and, for
+// Proving-time benchmark in Node: @queuebit/groth16 (single-threaded WASM core + host-WebAssembly witness) and, for
 // reference, snarkjs 0.7.5 (dev-only, multi-threaded). Needs `pnpm build`. Usage: node bench/wasm-bench.mjs [runs]
 import { readFileSync } from "node:fs";
 import { availableParallelism, cpus } from "node:os";

@@ -12,7 +12,7 @@ import {
   type Hex,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { decodeSignRequest, encodeSignature } from "@leaked/ur";
+import { decodeSignRequest, encodeSignature } from "@queuebit/ur";
 import {
   ENTRYPOINT_ABI,
   EncryptedStorage,
@@ -29,7 +29,7 @@ import {
   type HostProvider,
   type PoolState,
   type PublicNote,
-} from "@leaked/privacy";
+} from "@queuebit/privacy";
 import { KeyringController } from "../../src/background/keyring";
 import { MemoryKV } from "../../src/shared/kv";
 import {

@@ -2,7 +2,7 @@
 
 ## Status: unaudited
 
-LEAKED has had **no external audit** of any component: contracts, the post-quantum signer and verifier, the browser
+QueueBit has had **no external audit** of any component: contracts, the post-quantum signer and verifier, the browser
 extension, the vault companion, the Groth16 engine or the watcher. It runs on local devnets and anvil only. Do not use
 it with funds you are not prepared to lose. The threat model, including what is known to be missing, is
 [`docs/security/THREAT-MODEL.md`](docs/security/THREAT-MODEL.md) (§11 lists the open gaps).

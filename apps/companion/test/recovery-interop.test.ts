@@ -1,5 +1,12 @@
-import { encodeTx, getProfile, recoverSecp256k1Signer, roleSignerPathBTx, setSignature, sigHash } from "@leaked/frames";
-import { SCHEME_ID, verify } from "@leaked/pq-signer";
+import {
+  encodeTx,
+  getProfile,
+  recoverSecp256k1Signer,
+  roleSignerPathBTx,
+  setSignature,
+  sigHash,
+} from "@queuebit/frames";
+import { SCHEME_ID, verify } from "@queuebit/pq-signer";
 import {
   decodeRecoveryTest,
   decodeSignature,
@@ -7,7 +14,7 @@ import {
   fromHex,
   recoveryTestChallengeOf,
   type SignRequest,
-} from "@leaked/ur";
+} from "@queuebit/ur";
 import { encodeFunctionData, type Address, type Hex } from "viem";
 import { describe, expect, it } from "vitest";
 import { ACCOUNT_ABI, ROLE_SIGNER_ABI, reviewRequestBytes, type RequestRejected } from "../src/core/clearsign.js";
@@ -29,7 +36,7 @@ import {
  * The Recovery fee key (Recovery bootstrap): the Recovery device derives its own secp256k1 payer key, announces it in
  * the pairing and recovery-test codes, and signs entry 1 of a Recovery Path-B transaction exactly as the Vault does.
  * The request is built with the extension's own request builder (`signRequest` in apps/extension's Vault flow) over a
- * `@leaked/frames` Path-B transaction, the shape G1 (e) mined on the public mempool; the answer is checked the way the
+ * `@queuebit/frames` Path-B transaction, the shape G1 (e) mined on the public mempool; the answer is checked the way the
  * extension pre-verifies it (witness against the signer's pk, entry 1 recovered against its `payerKey()`).
  */
 
@@ -81,7 +88,7 @@ async function extensionRecoveryRequest(fn: "recoveryCancel" | "recoveryStartVau
     schemeId: SCHEME_ID,
     pk: recovery.pk,
     profileId: PROFILE_ID,
-    origin: "LEAKED extension",
+    origin: "QueueBit extension",
     built: { action: fn, title: fn === "recoveryCancel" ? "Cancel a change" : "Replace the Vault" },
   });
   return { cbor: encodeSignRequest(req), tx, digest: sigHash(profile, tx) };

@@ -16,8 +16,8 @@ import {
   type Hex,
 } from "viem";
 import { privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
-import type { FrameTxReceipt } from "@leaked/frames";
-import { createFrameRpc } from "@leaked/rpc";
+import type { FrameTxReceipt } from "@queuebit/frames";
+import { createFrameRpc } from "@queuebit/rpc";
 
 export const ETHREX = process.env.ETHREX_URL ?? "http://localhost:8545";
 export const SIDECAR = process.env.SIDECAR_URL ?? "http://localhost:14337/rpc";
@@ -29,14 +29,14 @@ export const STAKING_REGISTRY = (process.env.STAKING_REGISTRY ?? "0x8464135c8F25
 /** anvil #0 (public test key, never real): funds the derived deployer only. */
 const FUNDER_KEY: Hex = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
 /** Derived from a public string: a devnet-only key. */
-const DEPLOYER_KEY: Hex = keccak256(stringToHex("leaked/devnet-tests/g1/deployer/v1"));
+const DEPLOYER_KEY: Hex = keccak256(stringToHex("queuebit/devnet-tests/g1/deployer/v1"));
 
 export const rpc = createFrameRpc(ETHREX, { sidecarUrl: SIDECAR });
 export const budgetRpc = createFrameRpc(ETHREX, { sidecarUrl: BUDGET_SIDECAR });
 
 const chain = {
   id: CHAIN_ID,
-  name: "leaked-devnet",
+  name: "queuebit-devnet",
   nativeCurrency: { name: "ETH", symbol: "ETH", decimals: 18 },
   rpcUrls: { default: { http: [ETHREX] } },
 } as const;

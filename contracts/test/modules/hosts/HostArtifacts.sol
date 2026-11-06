@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
-// The host accounts the LEAKED modules are tested on (plan 10-contracts.md §10.4.3), compiled from their pinned
+// The host accounts the QueueBit modules are tested on (plan 10-contracts.md §10.4.3), compiled from their pinned
 // sources (THIRD_PARTY.md). Tests deploy them with `vm.deployCode("HostArtifacts.sol:<Name>")` and talk to them
 // through `HostInterfaces.sol`, so no test file imports a host (Safe v1.4.1 must be compiled without via-IR, see the
 // `compilation_restrictions` in foundry.toml, and whatever imports it inherits that pipeline).
@@ -11,7 +11,7 @@ pragma solidity 0.8.28;
 // `safe7579/core/AccessControl.sol:36`). The plan pins EntryPoint v0.8 (§10.4.3), so these subclasses only override
 // `entryPoint()`. Kernel v3.3 takes the EntryPoint as a constructor argument.
 
-// EntryPoint v0.8.0 is not compiled here: tests deploy the exact mainnet initcode (see LeakedModulesBase).
+// EntryPoint v0.8.0 is not compiled here: tests deploy the exact mainnet initcode (see QueueBitModulesBase).
 import {SimpleAccount} from "account-abstraction/accounts/SimpleAccount.sol";
 import {MSAAdvanced} from "erc7579/MSAAdvanced.sol";
 import {MSAFactory} from "erc7579/MSAFactory.sol";

@@ -188,7 +188,7 @@ export function AppsTab() {
         <EmptyState
           icon={<AppsIcon />}
           title="No sites connected"
-          body="When a site asks to connect, you'll decide here in LEAKED."
+          body="When a site asks to connect, you'll decide here in QueueBit."
         />
       ) : (
         <ul className="flex flex-col divide-y divide-line rounded-md border border-line" aria-label="Connected sites">

@@ -72,7 +72,7 @@ export function buildCompanion(outDir) {
   const commit = git("rev-parse", "HEAD");
   if (commit && build !== commit.slice(0, build.length)) throw new Error(`sw.js BUILD ${build} is not HEAD ${commit}`);
   return {
-    name: "leaked-companion",
+    name: "queuebit-companion",
     version: pkg.version,
     build,
     swVersion,

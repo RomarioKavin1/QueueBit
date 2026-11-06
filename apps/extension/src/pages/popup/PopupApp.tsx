@@ -50,7 +50,7 @@ export function PopupApp({ inTab = false, initialTab = "home" }: { inTab?: boole
     return (
       <Frame>
         <div className="grid flex-1 place-items-center text-muted">
-          {error ? <p className="t-small p-4 text-center">{error}</p> : <Spinner size={24} label="Loading LEAKED" />}
+          {error ? <p className="t-small p-4 text-center">{error}</p> : <Spinner size={24} label="Loading QueueBit" />}
         </div>
       </Frame>
     );
@@ -61,7 +61,7 @@ export function PopupApp({ inTab = false, initialTab = "home" }: { inTab?: boole
         <div className="flex flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
           <LogoMark size={64} />
           <div>
-            <h1 className="t-title">Welcome to LEAKED</h1>
+            <h1 className="t-title">Welcome to QueueBit</h1>
             <p className="t-body mt-1 text-muted">Small payments are instant. Your phone approves the rest.</p>
           </div>
           <Button
@@ -71,7 +71,7 @@ export function PopupApp({ inTab = false, initialTab = "home" }: { inTab?: boole
               close();
             }}
           >
-            Set up LEAKED
+            Set up QueueBit
           </Button>
         </div>
       </Frame>
@@ -112,7 +112,7 @@ function Unlocked({ state, close, initialTab }: { state: WalletState; close: () 
     <Frame>
       <header className="flex h-12 shrink-0 items-center gap-2 border-b border-line pr-1 pl-3">
         <LogoMark size={22} />
-        <h1 className="t-strong">LEAKED</h1>
+        <h1 className="t-strong">QueueBit</h1>
         <NetworkSwitcher chainId={state.settings.selectedChainId} />
         <MenuButton
           label="More"

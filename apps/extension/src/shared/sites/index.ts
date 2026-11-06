@@ -1,4 +1,4 @@
-import { LEAKED_LIST } from "./leaked-list";
+import { QUEUEBIT_LIST } from "./queuebit-list";
 
 /**
  * Known-bad sites (plan §30 §9 item 2; policy in docs/release/phishing-list.md). Lists are bundled data, updated
@@ -23,7 +23,7 @@ export const ALLOWED_LICENSES = [
   "0BSD",
 ] as const;
 
-export const SITE_LISTS: readonly SiteList[] = [LEAKED_LIST];
+export const SITE_LISTS: readonly SiteList[] = [QUEUEBIT_LIST];
 
 export type SiteWarning =
   | { kind: "listed"; host: string; list: string }

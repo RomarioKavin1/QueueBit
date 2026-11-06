@@ -7,7 +7,7 @@ import {
   type CoreState,
   type RpcLog,
   type WatchTargets,
-} from "@leaked/watcher-core";
+} from "@queuebit/watcher-core";
 import { aaNetwork } from "../aa/payments";
 import type { AccountPlan } from "../account";
 import type { CodeReader, DeployBlocks } from "../deployBlock";
@@ -16,7 +16,7 @@ import type { KV } from "../../shared/kv";
 /**
  * The watcher's light mode (plan §40 §5 "In-extension light mode"; plan §30 §6.5): a `chrome.alarms` job in the
  * service worker reads the account's own events with `eth_getLogs` from its deployment block (then from a cursor),
- * runs them through `@leaked/watcher-core` (the same rules and copy as the self-hosted watcher), and hands new alerts
+ * runs them through `@queuebit/watcher-core` (the same rules and copy as the self-hosted watcher), and hands new alerts
  * to the caller (notification, badge, the in-app list). The core's state (deadlines, dedup) is persisted, so an SW
  * restart neither repeats nor loses alerts.
  *
@@ -24,7 +24,7 @@ import type { KV } from "../../shared/kv";
  * is not detected here (the self-hosted watcher reads the blocks for that); reorgs deeper than `confirmations` are
  * not rewound.
  */
-export const WATCHER_STATE_KEY = (chainId: number) => `leaked:watcher:${chainId}`;
+export const WATCHER_STATE_KEY = (chainId: number) => `queuebit:watcher:${chainId}`;
 
 export interface WatcherState {
   account: Address;

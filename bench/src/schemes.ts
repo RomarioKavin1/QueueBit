@@ -66,7 +66,7 @@ export const SCHEMES: SchemeDef[] = [
     security: "128-bit classical at <= 2^22 sigs/key (upstream sec_N table); keccak256",
     upstream: { ...SPHINCS, verifier: "src/keccak/SPHINCs-C13Asm.sol" },
     signerDesc: {
-      impl: "@leaked/pq-signer (Rust/WASM, bit-identical to upstream signer-c13)",
+      impl: "@queuebit/pq-signer (Rust/WASM, bit-identical to upstream signer-c13)",
       note: "WASM in Node, one thread",
     },
     verifier: {

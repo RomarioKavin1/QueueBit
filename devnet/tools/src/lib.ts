@@ -39,7 +39,7 @@ export const STAKING_REGISTRY: Address = (process.env.STAKING_REGISTRY as Addres
 export const ENTRY_POINT: Address = "0x00000000000000000000000000000000000000aa";
 
 export const chain = {
-  id: CHAIN_ID, name: "leaked-devnet", nativeCurrency: { name: "ETH", symbol: "ETH", decimals: 18 },
+  id: CHAIN_ID, name: "queuebit-devnet", nativeCurrency: { name: "ETH", symbol: "ETH", decimals: 18 },
   rpcUrls: { default: { http: [ETHREX] } },
 } as const;
 

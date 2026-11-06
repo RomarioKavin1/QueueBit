@@ -19,7 +19,7 @@ import {SphincsC13Asm} from "./vendor/SPHINCs-C13Asm.sol";
 ///         (~100 gas plus the 3.7 KB calldata copy). A residual revert (out of gas) is mapped to `false`.
 ///         No storage, no environment opcodes: usable in a VERIFY frame. `GAS` appears only right before STATICCALL.
 contract C13Verifier is SphincsC13Asm, IPQVerifier {
-    /// keccak256("SPHINCS-C13/keccak/fips-adrs/v1"); equals `SCHEME_ID` exported by the leaked pq-signer package.
+    /// keccak256("SPHINCS-C13/keccak/fips-adrs/v1"); equals `SCHEME_ID` exported by the queuebit pq-signer package.
     bytes32 public constant SCHEME_ID = 0xb2062c48f163f38edbf050c4a98b6abbe194acda9a6de525b69b330a739aa054;
     /// `SPHINCs-C13Asm.sol` rejects any other length.
     uint256 public constant SIG_LENGTH = 3688;

@@ -17,7 +17,7 @@ type Win = Window & {
   __events: Array<{ ev: string; data: unknown }>;
   __result?: unknown;
   __error?: { code: number; message: string };
-  leaked(): { request(a: { method: string; params?: unknown[] }): Promise<unknown> };
+  queuebit(): { request(a: { method: string; params?: unknown[] }): Promise<unknown> };
 };
 
 /** Fire a provider request in the dapp without awaiting it; the outcome lands in window.__result / __error. */
@@ -26,7 +26,7 @@ async function startRequest(dapp: Page, method: string) {
     const w = window as unknown as Win;
     delete w.__result;
     delete w.__error;
-    w.leaked()
+    w.queuebit()
       .request({ method: m })
       .then(
         (r) => (w.__result = r),
@@ -41,7 +41,7 @@ const rpc = (dapp: Page, method: string, params?: unknown[]) =>
       try {
         return {
           result: await (window as unknown as Win)
-            .leaked()
+            .queuebit()
             .request({ method: m as string, params: p as unknown[] | undefined }),
         };
       } catch (e) {
@@ -106,7 +106,7 @@ test("lock and unlock", async ({ context, extensionId }) => {
   await expect(more).toBeFocused();
 });
 
-test("a dapp discovers LEAKED via EIP-6963, connects, and gets the account", async ({
+test("a dapp discovers QueueBit via EIP-6963, connects, and gets the account", async ({
   context,
   extensionId,
   serviceWorker,
@@ -120,7 +120,7 @@ test("a dapp discovers LEAKED via EIP-6963, connects, and gets the account", asy
 
   const info = await dapp.evaluate(() => (window as unknown as Win).__providers.map((p) => p.info));
   expect(info).toHaveLength(1);
-  expect(info[0]).toMatchObject({ name: "LEAKED", rdns: "xyz.leaked.wallet" });
+  expect(info[0]).toMatchObject({ name: "QueueBit", rdns: "xyz.queuebit.wallet" });
   expect(info[0]!.icon).toMatch(/^data:image\/svg\+xml;base64,/u);
   expect(info[0]!.uuid).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u);
   expect(await dapp.evaluate(() => "ethereum" in window)).toBe(false);
@@ -151,7 +151,7 @@ test("a dapp discovers LEAKED via EIP-6963, connects, and gets the account", asy
     )
     .toEqual(["0xaa36a7"]);
   expect(await rpc(dapp, "eth_chainId")).toEqual({ result: "0xaa36a7" });
-  expect((await rpc(dapp, "leaked_unlock")).error?.code).toBe(-32601);
+  expect((await rpc(dapp, "queuebit_unlock")).error?.code).toBe(-32601);
 
   // The popup's Apps tab lists the site; disconnecting it empties eth_accounts.
   const popup = await openPopup(context, extensionId);
@@ -229,7 +229,7 @@ test("a request from a cross-origin frame is attributed to the frame and flagged
   await expect.poll(() => frame.evaluate(() => (window as unknown as Win).__providers.length)).toBe(1);
   await frame.evaluate(() => {
     const w = window as unknown as Win;
-    w.leaked()
+    w.queuebit()
       .request({ method: "eth_requestAccounts" })
       .then(
         (r) => (w.__result = r),

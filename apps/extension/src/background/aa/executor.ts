@@ -20,9 +20,9 @@ import {
 } from "../vaultActions";
 
 /**
- * Vault and Recovery approvals on the 4337 backend: a `LeakedRoleExecutor` call whose PQ signature covers the
+ * Vault and Recovery approvals on the 4337 backend: a `QueueBitRoleExecutor` call whose PQ signature covers the
  * executor's EIP-712 digest (IMPLEMENTATION-NOTES "Contracts M7"). The request the phone signs is
- * `ur:leaked-sign-request` tx-type 3: key 4 = the executor calldata with an EMPTY `pqSig`, key 14 = the executor.
+ * `ur:queuebit-sign-request` tx-type 3: key 4 = the executor calldata with an EMPTY `pqSig`, key 14 = the executor.
  * Config calls target the hook / the executor with the account as first argument; spends go through the account.
  */
 
@@ -55,7 +55,7 @@ const CALLS = [
 export const execCallsHash = (calls: readonly ExecCall[]): Hex => keccak256(encodeAbiParameters(CALLS, [calls]));
 
 const domain = (chainId: number, executor: Address) =>
-  ({ name: "LeakedRoleExecutor", version: "1", chainId, verifyingContract: executor }) as const;
+  ({ name: "QueueBitRoleExecutor", version: "1", chainId, verifyingContract: executor }) as const;
 
 /**
  * The EIP-712 digest the role key signs for an (unsigned) executor call, recomputed from the calldata alone: what the

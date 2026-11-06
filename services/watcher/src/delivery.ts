@@ -1,4 +1,4 @@
-import { randomNonce, signWebhook, type Severity } from "@leaked/watcher-core";
+import { randomNonce, signWebhook, type Severity } from "@queuebit/watcher-core";
 import type { HubEntry, Sink } from "./hub.js";
 
 const RANK: Record<Severity, number> = { info: 0, warning: 1, urgent: 2 };
@@ -26,9 +26,9 @@ async function withRetry(fn: () => Promise<Response>, tries: number, log: Log, w
 
 /**
  * HMAC-signed webhook: `POST url` with body `{"type":"alert"|"retract","seq":n,"alert":{...}}`,
- * `x-leaked-signature: t=<unix s>,n=<nonce>,v2=<hex HMAC-SHA256(secret, "<t>.<n>.<body>")>` and
- * `x-leaked-delivery: <nonce>`. One delivery keeps its nonce (and signature) across retries, so a receiver dedupes
- * on it; verify with `verifyWebhook` from @leaked/watcher-core, passing a `NonceCache` as `seen` to refuse replays
+ * `x-queuebit-signature: t=<unix s>,n=<nonce>,v2=<hex HMAC-SHA256(secret, "<t>.<n>.<body>")>` and
+ * `x-queuebit-delivery: <nonce>`. One delivery keeps its nonce (and signature) across retries, so a receiver dedupes
+ * on it; verify with `verifyWebhook` from @queuebit/watcher-core, passing a `NonceCache` as `seen` to refuse replays
  * inside the 5-minute tolerance.
  */
 export function webhookSink(
@@ -48,9 +48,9 @@ export function webhookSink(
           method: "POST",
           headers: {
             "content-type": "application/json",
-            "x-leaked-signature": sig,
-            "x-leaked-delivery": nonce,
-            "x-leaked-event": e.type,
+            "x-queuebit-signature": sig,
+            "x-queuebit-delivery": nonce,
+            "x-queuebit-event": e.type,
           },
           body,
           // The body carries the account address: never follow a redirect to somewhere the operator did not name.

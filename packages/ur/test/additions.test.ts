@@ -17,7 +17,7 @@ import {
 } from "../src/index.js";
 import { bytes, fullRequest, hex, minimalRequest } from "./fixtures.js";
 
-/** Additions of 2026-11-06 (backward compatible): tx-type 3 + key 14, and `ur:leaked-recovery-challenge`. */
+/** Additions of 2026-11-06 (backward compatible): tx-type 3 + key 14, and `ur:queuebit-recovery-challenge`. */
 
 const executorRequest = (): SignRequest => ({
   requestId: randomUuid(),
@@ -28,11 +28,11 @@ const executorRequest = (): SignRequest => ({
   schemeId: C13_SCHEME_ID,
   expectedPk: hex(bytes(32, 6)),
   verifyingContract: hex(bytes(20, 8)),
-  origin: "LEAKED extension",
+  origin: "QueueBit extension",
   intent: { action: "send", recipient: hex(bytes(20, 9)), amount: 5n },
 });
 
-describe("tx-type 3 (LeakedRoleExecutor role call)", () => {
+describe("tx-type 3 (QueueBitRoleExecutor role call)", () => {
   it("round-trips, with key 14 lower-cased", () => {
     const r = executorRequest();
     expect(decodeSignRequest(encodeSignRequest(r))).toEqual(r);
@@ -68,7 +68,7 @@ describe("tx-type 3 (LeakedRoleExecutor role call)", () => {
   });
 });
 
-describe("leaked-recovery-challenge", () => {
+describe("queuebit-recovery-challenge", () => {
   const c = { requestId: randomUuid(), recoveryPk: hex(bytes(32, 4)) };
 
   it("round-trips and decodes by type", () => {
@@ -79,7 +79,7 @@ describe("leaked-recovery-challenge", () => {
 
   it("travels as a single-part UR", () => {
     const text = singlePartUr(UR_TYPES.recoveryChallenge, encodeRecoveryChallenge(c));
-    expect(text.toLowerCase().startsWith("ur:leaked-recovery-challenge/")).toBe(true);
+    expect(text.toLowerCase().startsWith("ur:queuebit-recovery-challenge/")).toBe(true);
     const r = new UrReceiver([UR_TYPES.recoveryChallenge]).receive(text);
     expect(r.status).toBe("complete");
     if (r.status === "complete") expect(r.decoded.value).toEqual(c);

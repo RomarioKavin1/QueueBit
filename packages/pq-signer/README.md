@@ -1,6 +1,6 @@
-# @leaked/pq-signer
+# @queuebit/pq-signer
 
-Post-quantum signers for the LEAKED vault and recovery keys. Two schemes, one API shape:
+Post-quantum signers for the QueueBit vault and recovery keys. Two schemes, one API shape:
 
 | Scheme | Status | Sig | VERIFY frame (Path A) | Fits stock 100k mempool | Formal proof |
 |---|---|---|---|---|---|
@@ -28,7 +28,7 @@ post's "C13" (3,704 B), which upstream now calls C7 (plan §1.1).
 
 | Path | What |
 |---|---|
-| `rust/` | crate `leaked-pq`: keygen / sign / verify, derivation, WASM exports (`--features wasm`), CLI `leaked-pq` |
+| `rust/` | crate `queuebit-pq`: keygen / sign / verify, derivation, WASM exports (`--features wasm`), CLI `queuebit-pq` |
 | `src/index.ts` | TS API over the WASM build (WASM inlined as base64, sync init) |
 | `vectors/c13.json` | KAT set C: 32 positive vectors + negative recipes for the Solidity tests |
 | `rust/tests/fixtures/upstream_c13.json` | KAT set A: vectors produced by the upstream Rust and Python signers |
@@ -40,7 +40,7 @@ post's "C13" (3,704 B), which upstream now calls C7 (plan §1.1).
 ## API
 
 ```ts
-import { keygen, sign, verify, SIG_LENGTH, SCHEME_ID } from "@leaked/pq-signer";
+import { keygen, sign, verify, SIG_LENGTH, SCHEME_ID } from "@queuebit/pq-signer";
 
 // seed: the 64-byte BIP-39 seed (mnemonic + passphrase -> PBKDF2, done by the caller, e.g. @scure/bip39)
 const { publicKey, secretKey } = keygen(seed, { role: "vault" });   // role: "vault" | "recovery"
@@ -67,7 +67,7 @@ The top-level exports above are C13 and are unchanged (they are the same functio
 is a `PQScheme`:
 
 ```ts
-import { schemes, schemeById, type PQScheme } from "@leaked/pq-signer";
+import { schemes, schemeById, type PQScheme } from "@queuebit/pq-signer";
 
 const S: PQScheme = schemes.leanSphincsS;      // or schemes.c13
 if (S.experimental) showWarning(S.warning);    // "Experimental: no formal proof yet; enables quantum-safe approvals on any mempool"
@@ -98,7 +98,7 @@ splits it into two top-aligned words); `sk = skSeed(32) ‖ pk(32)`.
 ## Key derivation
 
 ```
-role_key = HMAC-SHA512(key = "leaked/v1/" ‖ schemeId(32 raw bytes) ‖ "/" ‖ role ‖ "/" ‖ chainScope,
+role_key = HMAC-SHA512(key = "queuebit/v1/" ‖ schemeId(32 raw bytes) ‖ "/" ‖ role ‖ "/" ‖ chainScope,
                        msg = BIP-39 seed)
 skSeed   = role_key[0:32]      pkSeed = role_key[32:48]      pkRoot = top XMSS subtree root
 ```
@@ -164,7 +164,7 @@ absorbs the 26 FORS tops), WOTS+C w=4 v=64 T=128, n=16, 4,164-byte signatures. P
 (leanSPHINCS) / sphincs.art; keccak port, verifier and reference signer `lssk` by N. Consigny. Rust code:
 `rust/src/lean_s/` (byte-compatible re-implementation of upstream `signers/leansphincs-s-keccak`).
 
-**Keys.** LEAKED keys are upstream's **Light tier** (spec §14): a kept subtree of height b = 13 under 13
+**Keys.** QueueBit keys are upstream's **Light tier** (spec §14): a kept subtree of height b = 13 under 13
 pseudorandom surrogate siblings, which the verifier cannot tell from a full key. `pk = P(16) ‖ root(16)` (the
 verifier's `(pkSeed, pkRoot)` order; upstream's own byte form is `root ‖ P`), `sk = S(32) ‖ pk`. Signing rebuilds
 the 2¹³-leaf subtree each time (upstream's "none" cache plan: no key file, no node cache, no state), so a signature
@@ -174,7 +174,7 @@ secret key is refused in one hash) and self-verifies every signature. Hedged by 
 `ρ = R_0 + i` until the leaf lands in the kept subtree; `{ deterministic: true }` is upstream's signer byte for byte.
 
 **Key derivation and no key reuse across schemes.** Both schemes derive through one function,
-`role_key(schemeId, master, role, chainScope) = HMAC-SHA512(key = "leaked/v1/" ‖ schemeId ‖ "/" ‖ role ‖ "/" ‖
+`role_key(schemeId, master, role, chainScope) = HMAC-SHA512(key = "queuebit/v1/" ‖ schemeId ‖ "/" ‖ role ‖ "/" ‖
 chainScope, msg = BIP-39 seed)`; leanSphincs-s takes `S = role_key[0:32]` with its own `schemeId`. Distinct scheme
 ids give distinct HMAC keys, hence independent outputs. This is what upstream requires ("one seed is one key of one
 variant", README; spec §9, §14 "Operational rules": nothing in a hash input names the parameter set, and two keys
@@ -275,7 +275,7 @@ pnpm build        # scripts/build-wasm.sh, then tsc -> dist/
 
 `dist/` is a build output. `wasm/` is committed (one WASM module with both schemes): CI rebuilds it from `rust/` and
 diffs it (`.github/workflows/ci.yml`, job `pq-signer-wasm`). `rust/rust-toolchain.toml` pins the rustc that, with
-wasm-bindgen-cli 0.2.117, reproduces `leaked_pq_bg.wasm` byte for byte (`WASM_HASH`); bump both together.
+wasm-bindgen-cli 0.2.117, reproduces `queuebit_pq_bg.wasm` byte for byte (`WASM_HASH`); bump both together.
 
 Runtime notes: the module initialises synchronously at import (`initSync`, 118 KB with both schemes; well under
 Chrome's 8 MB main-thread synchronous-compile limit), so there is no top-level `await` and it

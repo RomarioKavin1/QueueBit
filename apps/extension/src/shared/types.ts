@@ -24,7 +24,7 @@ export const DEFAULT_SETTINGS: Settings = {
   anonRpc: true,
 };
 
-/** A quantum-safe key a phone showed the browser (`ur:leaked-pq-key`). */
+/** A quantum-safe key a phone showed the browser (`ur:queuebit-pq-key`). */
 export interface PairedKeyRecord {
   schemeId: `0x${string}`;
   pk: `0x${string}`;
@@ -173,9 +173,9 @@ export interface Approval {
   /** Set when an approved transaction was sent (the dapp request returns it). */
   result?: { activityId: string; hash: `0x${string}`; batchId?: string; signature?: `0x${string}` };
   /** Set when the request ended without sending because it needs the Vault or is blocked (dapp gets 4100). */
-  denial?: { leakedRule: string; explanation: string; remedy?: string };
+  denial?: { queuebitRule: string; explanation: string; remedy?: string };
   /** The route the approval window showed, when it was not an everyday payment: closing it returns this denial. */
-  routeDenial?: { leakedRule: string; explanation: string; remedy?: string };
+  routeDenial?: { queuebitRule: string; explanation: string; remedy?: string };
 }
 
 export interface ApprovalTx {

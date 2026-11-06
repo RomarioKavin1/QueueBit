@@ -1,4 +1,4 @@
-// ---- LEAKED bench provenance ----
+// ---- QueueBit bench provenance ----
 // Vendored from https://github.com/ZKNoxHQ/ETHFALCON @ 43ac863e30281bb7821748178d39967367d54bc2, src/ZKNOX_falcon_utils.sol
 // License: MIT, Copyright (c) 2025 ZKNOX (full text: bench/contracts/src/vendor/LICENSE-ETHFALCON). Byte-identical below this header.
 // ---- end provenance; upstream file follows ----

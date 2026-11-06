@@ -1,6 +1,6 @@
 import type { Address } from "viem";
 import { describe, expect, it } from "vitest";
-import type { FrameTxReceipt } from "@leaked/frames";
+import type { FrameTxReceipt } from "@queuebit/frames";
 import {
   callsStatusCode,
   describeReceipt,

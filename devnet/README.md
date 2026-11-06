@@ -1,4 +1,4 @@
-# LEAKED local EIP-8141 devnet
+# QueueBit local EIP-8141 devnet
 
 A local, reproducible copy of the public alt-mempool devnet (`https://altmempool.forshtat.com`, chain 1337):
 **ethrex `eip8141-tracer`** (execution) + **Lighthouse** (consensus; 2 beacon nodes + 1 validator client) +
@@ -131,8 +131,8 @@ Changing it means a source build:
 git clone https://github.com/forshtat/mempool-workshop-sidecar && cd mempool-workshop-sidecar   # MIT
 sed -i.bak 's/export const MAX_VERIFY_GAS = BigInt(100_000);/export const MAX_VERIFY_GAS = BigInt(1_000_000);/' \
   packages/executor/src/services/UserOpValidation/utils/validationPrefix.ts
-docker build -t leaked/sidecar:budget .      # Dockerfile: bun 1.2.23-alpine, `bun run build:all`
-SKANDHA_IMAGE=leaked/sidecar:budget ./up.sh  # or: docker compose --profile sidecar up -d --no-deps skandha
+docker build -t queuebit/sidecar:budget .      # Dockerfile: bun 1.2.23-alpine, `bun run build:all`
+SKANDHA_IMAGE=queuebit/sidecar:budget ./up.sh  # or: docker compose --profile sidecar up -d --no-deps skandha
 ```
 
 ethrex's own mempool (`eth_sendRawTransaction`) applies the EIP-8141 canonical rules separately; the sidecar's

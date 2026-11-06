@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import {ILeakedAccountRoles} from "../../src/interfaces/ILeakedAccountRoles.sol";
+import {IQueueBitAccountRoles} from "../../src/interfaces/IQueueBitAccountRoles.sol";
 
-/// A stand-in for `LeakedAccountImpl`'s role entry points (the real account is built separately): it authorises by
+/// A stand-in for `QueueBitAccountImpl`'s role entry points (the real account is built separately): it authorises by
 /// msg.sender like the account does, executes vault calls, records freezes. Also deployed on the devnet as the
 /// mock target of the role-signer integration tests.
-contract MockLeakedAccount {
+contract MockQueueBitAccount {
     address public vaultSigner;
     address public recoverySigner;
     address public guardian;
@@ -33,12 +33,12 @@ contract MockLeakedAccount {
         guardian = guardian_;
     }
 
-    /// Same shape as `ILeakedAccountRoles.getRoles` (an unbound `PQRoleSigner` checks it).
+    /// Same shape as `IQueueBitAccountRoles.getRoles` (an unbound `PQRoleSigner` checks it).
     function getRoles() external view returns (address, address, address, uint48, uint32) {
         return (vaultSigner, recoverySigner, address(0), 0, 0);
     }
 
-    function vaultExecute(ILeakedAccountRoles.Call[] calldata calls, uint256 usdValue) external {
+    function vaultExecute(IQueueBitAccountRoles.Call[] calldata calls, uint256 usdValue) external {
         if (msg.sender != vaultSigner) revert NotVault();
         for (uint256 i; i < calls.length; i++) {
             (bool ok, bytes memory ret) = calls[i].target.call{value: calls[i].value}(calls[i].data);

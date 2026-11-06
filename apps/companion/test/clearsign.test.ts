@@ -1,5 +1,5 @@
-import { SCHEME_ID } from "@leaked/pq-signer";
-import { encodeSignRequest, toHex } from "@leaked/ur";
+import { SCHEME_ID } from "@queuebit/pq-signer";
+import { encodeSignRequest, toHex } from "@queuebit/ur";
 import { describe, expect, it } from "vitest";
 import {
   RequestRejected,
@@ -91,7 +91,7 @@ describe("clear signing: the two headline flows", () => {
 });
 
 describe("digest", () => {
-  it("is the @leaked/frames sig hash of the decoded payload, not anything the request says", () => {
+  it("is the @queuebit/frames sig hash of the decoded payload, not anything the request says", () => {
     const b = usdcWithdrawal();
     expect(reviewRequestBytes(b.cbor, ctx()).digest).toBe(b.digest);
     expect(reviewRequestBytes(b.cbor, ctx()).structure.fingerprint).toBe(b.digest);

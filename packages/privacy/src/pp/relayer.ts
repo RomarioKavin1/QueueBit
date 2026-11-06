@@ -7,7 +7,7 @@ import type { ProveResult } from "./prover.js";
 /**
  * The 0xbow relayer mode (plan §1.3 "mode: relayer"): a *third-party* relayer (0xbow's `packages/relayer`, routes
  * `/relayer/details`, `/relayer/quote`, `/relayer/request`) submits `Entrypoint.relay(...)` with
- * `processooor = Entrypoint` and keeps its signed BPS fee. LEAKED is only a client: it sets no fee, runs no relayer
+ * `processooor = Entrypoint` and keeps its signed BPS fee. QueueBit is only a client: it sets no fee, runs no relayer
  * (§7 rule 1) and talks to the relayer through the Host `network` (Anon-RPC).
  */
 

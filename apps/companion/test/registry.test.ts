@@ -43,15 +43,18 @@ function solidityFunctions(files: string[]): Map<string, string> {
   return out;
 }
 
-const ACCOUNT_SOURCES = ["contracts/src/account/LeakedAccountRoles.sol", "contracts/src/account/LeakedAccountImpl.sol"];
+const ACCOUNT_SOURCES = [
+  "contracts/src/account/QueueBitAccountRoles.sol",
+  "contracts/src/account/QueueBitAccountImpl.sol",
+];
 const SIGNER_SOURCES = ["contracts/src/roles/PQRoleSigner.sol"];
-const HOOK_SOURCES = ["contracts/src/modules/LeakedPolicyHook.sol"];
-const EXECUTOR_SOURCES = ["contracts/src/modules/LeakedRoleExecutor.sol"];
+const HOOK_SOURCES = ["contracts/src/modules/QueueBitPolicyHook.sol"];
+const EXECUTOR_SOURCES = ["contracts/src/modules/QueueBitRoleExecutor.sol"];
 
 describe("registry vs contract sources", () => {
   const account = solidityFunctions(ACCOUNT_SOURCES);
   const signer = solidityFunctions(SIGNER_SOURCES);
-  const iface = solidityFunctions(["contracts/src/interfaces/ILeakedAccountRoles.sol"]);
+  const iface = solidityFunctions(["contracts/src/interfaces/IQueueBitAccountRoles.sol"]);
   const hook = solidityFunctions(HOOK_SOURCES);
   const executor = solidityFunctions(EXECUTOR_SOURCES);
 
@@ -82,7 +85,7 @@ describe("registry vs contract sources", () => {
   it("every setter a compatible-account Vault batch may call (`_checkShape`) has a display format", () => {
     const src = readFileSync(repo(EXECUTOR_SOURCES[0]!), "utf8");
     const body = /function _checkShape[\s\S]*?\n {4}}/.exec(src)![0];
-    const ids = [...body.matchAll(/(this|LeakedPolicyHook)\.(\w+)\.selector/g)].map(
+    const ids = [...body.matchAll(/(this|QueueBitPolicyHook)\.(\w+)\.selector/g)].map(
       (m) => `${m[1] === "this" ? "roleExecutor" : "policyHook"}.${m[2]}`,
     );
     expect(ids.length).toBeGreaterThan(10);
@@ -118,7 +121,7 @@ describe("registry vs contract sources", () => {
 });
 
 describe.skipIf(!artifactsPresent())("registry vs forge artifacts (contracts/out)", () => {
-  it("generated ABIs and selectors are current (else: pnpm --filter @leaked/companion abi:sync)", () => {
+  it("generated ABIs and selectors are current (else: pnpm --filter @queuebit/companion abi:sync)", () => {
     const exp = expectedFromArtifacts(registry) as {
       abis: Record<string, string[]>;
       selectors: Record<string, string>;

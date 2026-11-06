@@ -3,12 +3,12 @@
 //
 //   cd contracts && forge build && cd devnet-tests/g1 && bun install && bun run test
 //
-// Deploys the real stack: LeakedAccountRoles + LeakedAccountImpl (ERC8421_WORKSHOP, per-gas MAX_FEE) behind an
+// Deploys the real stack: QueueBitAccountRoles + QueueBitAccountImpl (ERC8421_WORKSHOP, per-gas MAX_FEE) behind an
 // AccountFactory proxy, C13Verifier, RoleSignerFactory (clone implementation), and a GuardianSigner. The account is
 // created in bound mode: its InitConfig carries the vault's and the recovery's C13 public keys, and `initialize`
 // DERIVES both signers (`predictRoleSigner(salt, role, account, pk, C13Verifier, payerKey)`); the VaultSigner and
 // RecoverySigner clones, bound to the account, are deployed afterwards by an unrelated party (lazy, deterministic).
-// C13 keys and signatures from @leaked/pq-signer. Then:
+// C13 keys and signatures from @queuebit/pq-signer. Then:
 //   (a) an Open-mode hot payment to an arbitrary (never allowlisted) recipient, public mempool;
 //   (b) Path B vault actions through VaultSigner.executePQ: an instant tightening (lower daily cap) and a vault spend
 //       within the instant allowance, public mempool;
@@ -57,8 +57,8 @@ import {
   txHash,
   type FrameTx,
   type FrameTxReceipt,
-} from "@leaked/frames";
-import { SIG_LENGTH, keygen, sign } from "@leaked/pq-signer";
+} from "@queuebit/frames";
+import { SIG_LENGTH, keygen, sign } from "@queuebit/pq-signer";
 import {
   STAKING_REGISTRY,
   artifact,
@@ -98,8 +98,8 @@ const results: Record<string, unknown> = { startedAt: new Date().toISOString(), 
 const checklist: Record<string, string> = {};
 
 const verifierArt = artifact("C13Verifier.sol", "C13Verifier");
-const rolesArt = artifact("LeakedAccountRoles.sol", "LeakedAccountRoles");
-const implArt = artifact("LeakedAccountImpl.sol", "LeakedAccountImpl");
+const rolesArt = artifact("QueueBitAccountRoles.sol", "QueueBitAccountRoles");
+const implArt = artifact("QueueBitAccountImpl.sol", "QueueBitAccountImpl");
 const accFactoryArt = artifact("AccountFactory.sol", "AccountFactory");
 const rsFactoryArt = artifact("RoleSignerFactory.sol", "RoleSignerFactory");
 const signerArt = artifact("PQRoleSigner.sol", "PQRoleSigner");
@@ -120,7 +120,7 @@ results.fundDeployer = { deployer: deployer.address, anvil0Tx: await fundDeploye
 // Keys. PQ keys are deterministic test material (public seeds: never use for funds); ECDSA keys are fresh per run.
 const pqSeed = (tag: string) =>
   hexToBytes(
-    `${keccak256(stringToHex(`leaked/devnet-tests/g1/${tag}/0`))}${keccak256(stringToHex(`leaked/devnet-tests/g1/${tag}/1`)).slice(2)}` as Hex,
+    `${keccak256(stringToHex(`queuebit/devnet-tests/g1/${tag}/0`))}${keccak256(stringToHex(`queuebit/devnet-tests/g1/${tag}/1`)).slice(2)}` as Hex,
   );
 const vaultPQ = keygen(pqSeed("vault"), { role: "vault" });
 const recoveryPQ = keygen(pqSeed("recovery"), { role: "recovery" });
@@ -162,14 +162,14 @@ const signerImpl = (await pub.readContract({
 })) as Address;
 results.deployments = {
   C13Verifier: verifierD,
-  LeakedAccountRoles: rolesD,
-  LeakedAccountImpl: implD,
+  QueueBitAccountRoles: rolesD,
+  QueueBitAccountImpl: implD,
   AccountFactory: accFactoryD,
   RoleSignerFactory: { ...rsFactoryD, implementation: signerImpl },
 };
 log("deployments", results.deployments);
 
-const runSalt = keccak256(stringToHex(`leaked/devnet-tests/g1/${Date.now()}`));
+const runSalt = keccak256(stringToHex(`queuebit/devnet-tests/g1/${Date.now()}`));
 
 /** createRoleSigner via a legacy tx; returns the clone and the creating tx's gas (the < 300k target). */
 async function createClone(role: number, account: Address, pk: Hex, payer: Address, value: bigint) {
@@ -214,7 +214,7 @@ const initCfg = {
   tokens: [] as { token: Address; decimals: number; usdPerToken: bigint }[], // InitConfig.tokens (none here)
 };
 const initData = encodeFunctionData({ abi: implArt.abi, functionName: "initialize", args: [initCfg] });
-const accSalt = keccak256(stringToHex(`leaked/devnet-tests/g1/account/${runSalt}`));
+const accSalt = keccak256(stringToHex(`queuebit/devnet-tests/g1/account/${runSalt}`));
 const account = (await pub.readContract({
   address: accFactoryD.address,
   abi: accFactoryArt.abi,

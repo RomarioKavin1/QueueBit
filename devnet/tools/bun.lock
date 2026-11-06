@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "leaked-devnet-tools",
+      "name": "queuebit-devnet-tools",
       "dependencies": {
         "@forshtat/hegota-support": "file:./vendor/forshtat-hegota-support-0.0.1.tgz",
         "viem": "2.57.16",

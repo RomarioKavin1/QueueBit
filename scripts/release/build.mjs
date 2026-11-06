@@ -3,7 +3,7 @@
 //   node scripts/release/build.mjs [--out <dir>] [companion] [extension]     (default: both, into release/<tag>/)
 //
 // Output (release/ is git-ignored):
-//   release/<tag>/leaked-companion-<version>-<build>.tar   the companion's static bundle (deterministic ustar)
+//   release/<tag>/queuebit-companion-<version>-<build>.tar   the companion's static bundle (deterministic ustar)
 //   release/<tag>/companion/                               the same bundle, unpacked
 //   release/<tag>/extension/…                              whatever scripts/release/extension.sh produced
 //   release/<tag>/manifest.json                            { tag, commit, sourceDateEpoch, companion, extension }
@@ -27,7 +27,7 @@ export function buildExtension(outDir, epoch) {
     env: {
       ...process.env,
       SOURCE_DATE_EPOCH: String(epoch),
-      LEAKED_RELEASE_COMMIT: git("rev-parse", "HEAD"),
+      QUEUEBIT_RELEASE_COMMIT: git("rev-parse", "HEAD"),
       TZ: "UTC",
       LC_ALL: "C",
     },
@@ -40,7 +40,7 @@ export function buildExtension(outDir, epoch) {
   const mf = join(dir, "manifest.json");
   if (!existsSync(mf)) throw new Error("extension hook wrote no manifest.json");
   const manifest = JSON.parse(readFileSync(mf, "utf8"));
-  const zip = join(dir, `leaked-extension-${manifest.version}-chrome.zip`);
+  const zip = join(dir, `queuebit-extension-${manifest.version}-chrome.zip`);
   if (!existsSync(zip)) throw new Error(`extension hook wrote no ${zip}`);
   const zipSha256 = sha256(readFileSync(zip));
   if (manifest.zipSha256 !== zipSha256)
@@ -62,7 +62,7 @@ export function buildRelease(outDir, targets = TARGETS) {
   const manifest = { tag: releaseTag(), commit: git("rev-parse", "HEAD"), sourceDateEpoch: epoch };
   if (targets.includes("companion")) {
     const c = buildCompanion(outDir);
-    const tarName = `leaked-companion-${c.version}-${c.build}.tar`;
+    const tarName = `queuebit-companion-${c.version}-${c.build}.tar`;
     writeFileSync(join(outDir, tarName), deterministicTar(join(outDir, "companion"), epoch));
     manifest.companion = { ...c, tar: tarName, tarSha256: sha256(readFileSync(join(outDir, tarName))) };
   }

@@ -5,11 +5,11 @@ import {HegotaSupport, Devnet} from "@forshtat/hegota-support/contracts/HegotaSu
 import {Scope, TxParam, FrameParam, FrameMode, SigParam} from "@forshtat/hegota-support/contracts/Params.sol";
 import {IPQVerifier} from "../interfaces/IPQVerifier.sol";
 import {IStakingRegistry} from "../interfaces/IStakingRegistry.sol";
-import {ILeakedAccountRoles} from "../interfaces/ILeakedAccountRoles.sol";
+import {IQueueBitAccountRoles} from "../interfaces/IQueueBitAccountRoles.sol";
 import {FeeProfile} from "./FeeProfile.sol";
 
 /// @title PQRoleSigner
-/// @notice The only address that may call a LEAKED account's `vault*` / `recovery*` entry points: its own EIP-8141
+/// @notice The only address that may call a QueueBit account's `vault*` / `recovery*` entry points: its own EIP-8141
 ///         sender whose authority is a post-quantum key (plan `10-contracts.md` §10.3.6, §10.5.2, §10.6). Deployed
 ///         instances are the `VaultSigner` (role 1) and `RecoverySigner` (role 2) of sections 20/30/40.
 ///
@@ -134,7 +134,7 @@ contract PQRoleSigner is HegotaSupport {
 
     // ------------------------------------------------------------------------------------------ clone args ------
 
-    /// The LEAKED account this signer serves (the only external call target); address(0) = unbound (see header).
+    /// The QueueBit account this signer serves (the only external call target); address(0) = unbound (see header).
     function account() public view returns (address a) {
         (a,,,,) = _args();
     }
@@ -170,7 +170,7 @@ contract PQRoleSigner is HegotaSupport {
     // ------------------------------------------------------------------------------------------------ VERIFY -----
 
     /// VERIFY entry; frame data `abi.encodeCall(verifyFrame, (sigIndex))`. `sigIndex` names the PQ witness entry
-    /// (0 in LEAKED). One signature = Path A (PQ verified here), two = Path B (payer key checked here, PQ in
+    /// (0 in QueueBit). One signature = Path A (PQ verified here), two = Path B (payer key checked here, PQ in
     /// `executePQ`; the payer is the other entry). Approves EXECUTION_AND_PAYMENT: the signer pays for itself.
     function verifyFrame(uint256 sigIndex) external payable {
         _onlyClone();
@@ -349,7 +349,7 @@ contract PQRoleSigner is HegotaSupport {
     /// `recoverySigner` (role 2). Any failure (no code, revert, short return data) is "no".
     function _namesThis(address target, uint8 r) private view returns (bool) {
         if (target.code.length == 0) return false;
-        (bool ok, bytes memory ret) = target.staticcall(abi.encodeCall(ILeakedAccountRoles.getRoles, ()));
+        (bool ok, bytes memory ret) = target.staticcall(abi.encodeCall(IQueueBitAccountRoles.getRoles, ()));
         if (!ok || ret.length < 160) return false;
         (address vault, address recovery, address pendingVault,,) =
             abi.decode(ret, (address, address, address, uint48, uint32));

@@ -6,13 +6,13 @@ import {
   type ProveResult,
   type RagequitProveResult,
   type WithdrawCircuitInputs,
-} from "@leaked/privacy";
+} from "@queuebit/privacy";
 import { answerOffscreen, anonStatusFor, isOffscreenRequest, type OffscreenResponse } from "../shared/offscreen";
 import ProverWorker from "./prover.worker?worker";
 
 /**
  * The offscreen document (one per extension, plan §30 §2.1): answers the service worker's typed requests
- * (`shared/offscreen.ts`). Proving runs in a dedicated Worker (`prover.worker.ts`, `@leaked/groth16`), so a 2–3 s
+ * (`shared/offscreen.ts`). Proving runs in a dedicated Worker (`prover.worker.ts`, `@queuebit/groth16`), so a 2–3 s
  * proof never blocks this document's message loop. The Worker is created on the first proof and kept: its pinned
  * 17 MB proving key is loaded and hash-checked once.
  */

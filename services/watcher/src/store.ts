@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type * as Sqlite from "node:sqlite";
-import type { Alert, CoreState } from "@leaked/watcher-core";
+import type { Alert, CoreState } from "@queuebit/watcher-core";
 
 /** What the watcher checkpoints: cursor, recent block hashes (reorg detection), core state, alert history. */
 export interface Checkpoint {

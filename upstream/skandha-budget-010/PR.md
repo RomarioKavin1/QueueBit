@@ -155,7 +155,7 @@ code read rejects rather than grants, config defaults / env / validation, `skand
 
 End to end on a local fork of the public devnet (ethrex `v23.0.0-eip8141-tracer-9aa3645d`, NaiveStakingRegistry,
 `minStake` 0.01 ETH), image built from this series. Script and log: `devnet/patched-sidecar/tests/budget010.e2e.ts`,
-`last-run.json` in the LEAKED repo.
+`last-run.json` in the QueueBit repo.
 
 | Step | Patched sidecar | Stock sidecar / ethrex |
 |---|---|---|

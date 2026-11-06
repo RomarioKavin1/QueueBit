@@ -2,9 +2,9 @@
 pragma solidity 0.8.28;
 
 import {C13Verifier} from "../../src/pq/C13Verifier.sol";
-import {ILeakedAccount} from "../../src/account/ILeakedAccount.sol";
-import {LeakedAccountImpl} from "../../src/account/LeakedAccountImpl.sol";
-import {LeakedAccountRoles} from "../../src/account/LeakedAccountRoles.sol";
+import {IQueueBitAccount} from "../../src/account/IQueueBitAccount.sol";
+import {QueueBitAccountImpl} from "../../src/account/QueueBitAccountImpl.sol";
+import {QueueBitAccountRoles} from "../../src/account/QueueBitAccountRoles.sol";
 import {PQRoleSigner} from "../../src/roles/PQRoleSigner.sol";
 import {C13Kat} from "../pq/C13Kat.sol";
 import {AccountTestBase} from "./AccountTestBase.sol";
@@ -16,8 +16,8 @@ import {AccountTestBase} from "./AccountTestBase.sol";
 contract BoundRoleSignersTest is AccountTestBase {
     C13Verifier internal c13;
     C13Kat.Vector internal kat;
-    LeakedAccountImpl internal acct;
-    LeakedAccountRoles internal acctRoles;
+    QueueBitAccountImpl internal acct;
+    QueueBitAccountRoles internal acctRoles;
     address internal derived;
     address internal payer;
     uint256 internal payerPk;
@@ -31,14 +31,14 @@ contract BoundRoleSignersTest is AccountTestBase {
         (payer, payerPk) = makeAddrAndKey("vaultDevicePayer");
         simAttach(address(signerFactory.implementation()));
 
-        ILeakedAccount.InitConfig memory c = _defaultCfg();
-        c.vault = ILeakedAccount.RoleSignerParams(SALT, kat.pk, address(c13), payer);
+        IQueueBitAccount.InitConfig memory c = _defaultCfg();
+        c.vault = IQueueBitAccount.RoleSignerParams(SALT, kat.pk, address(c13), payer);
         delete c.recovery;
         bytes memory init = _initData(c);
         address predicted = factory.predictAccount(SALT, address(impl), init);
-        acct = LeakedAccountImpl(payable(factory.createAccount(SALT, address(impl), init)));
+        acct = QueueBitAccountImpl(payable(factory.createAccount(SALT, address(impl), init)));
         assertEq(address(acct), predicted);
-        acctRoles = LeakedAccountRoles(payable(address(acct)));
+        acctRoles = QueueBitAccountRoles(payable(address(acct)));
         (derived,,,,) = acctRoles.getRoles();
         vm.deal(address(acct), 1 ether);
     }
@@ -63,10 +63,10 @@ contract BoundRoleSignersTest is AccountTestBase {
     }
 
     function _vaultSpend(uint256 weiAmount) internal view returns (bytes memory) {
-        ILeakedAccount.Call[] memory calls = new ILeakedAccount.Call[](1);
-        calls[0] = ILeakedAccount.Call(recipient, weiAmount, "");
+        IQueueBitAccount.Call[] memory calls = new IQueueBitAccount.Call[](1);
+        calls[0] = IQueueBitAccount.Call(recipient, weiAmount, "");
         return abi.encodeCall(
-            PQRoleSigner.executePQ, (0, address(acct), abi.encodeCall(LeakedAccountRoles.vaultExecute, (calls, 0)))
+            PQRoleSigner.executePQ, (0, address(acct), abi.encodeCall(QueueBitAccountRoles.vaultExecute, (calls, 0)))
         );
     }
 
@@ -133,15 +133,15 @@ contract BoundRoleSignersTest is AccountTestBase {
             (
                 0,
                 address(acct),
-                abi.encodeCall(LeakedAccountRoles.vaultSetRecipientMode, (ILeakedAccount.RecipientMode.Strict))
+                abi.encodeCall(QueueBitAccountRoles.vaultSetRecipientMode, (IQueueBitAccount.RecipientMode.Strict))
             )
         );
         _pathB(address(s), body, kat.sig);
         SimResult memory r = simRunValid();
         assertEq(r.frames[1].status, STATUS_SUCCESS);
-        assertEq(uint256(acct.recipientMode()), uint256(ILeakedAccount.RecipientMode.Strict));
+        assertEq(uint256(acct.recipientMode()), uint256(IQueueBitAccount.RecipientMode.Strict));
         vm.prank(address(acct));
-        vm.expectRevert(abi.encodeWithSelector(ILeakedAccount.NotAllowed.selector, recipient, bytes4(0)));
+        vm.expectRevert(abi.encodeWithSelector(IQueueBitAccount.NotAllowed.selector, recipient, bytes4(0)));
         acct.hotExecute(3 * USD, _one(_ethSend(recipient, 0.001 ether)));
     }
 

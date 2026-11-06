@@ -3,8 +3,8 @@
 //   SIGNER=0x... MOCK=0x... bun run probe-patha.ts
 import { bytesToHex, encodeFunctionData, hexToBytes, keccak256, parseEther, stringToHex, type Address, type Hex } from "viem";
 import { privateKeyToAccount, generatePrivateKey } from "viem/accounts";
-import { encodeTx, getProfile, roleSignerPathATx, setSignature, sigHash, txHash, type FrameTx } from "@leaked/frames";
-import { SIG_LENGTH, keygen, sign } from "@leaked/pq-signer";
+import { encodeTx, getProfile, roleSignerPathATx, setSignature, sigHash, txHash, type FrameTx } from "@queuebit/frames";
+import { SIG_LENGTH, keygen, sign } from "@queuebit/pq-signer";
 import { artifact, ethrexRaw, log, rpc, waitReceipt } from "./lib.js";
 
 const profile = getProfile("ethrex-eip8141-tracer");
@@ -12,9 +12,9 @@ const signer = process.env.SIGNER as Address;
 const mock = process.env.MOCK as Address;
 const mode = process.env.MODE ?? "direct"; // direct | afterEthrexProbe | afterSidecarProbe
 const signerArt = artifact("PQRoleSigner.sol", "PQRoleSigner");
-const mockArt = artifact("RoleMocks.sol", "MockLeakedAccount");
+const mockArt = artifact("RoleMocks.sol", "MockQueueBitAccount");
 const seed = hexToBytes(
-  `${keccak256(stringToHex("leaked/devnet-tests/pq/seed/0"))}${keccak256(stringToHex("leaked/devnet-tests/pq/seed/1")).slice(2)}` as Hex,
+  `${keccak256(stringToHex("queuebit/devnet-tests/pq/seed/0"))}${keccak256(stringToHex("queuebit/devnet-tests/pq/seed/1")).slice(2)}` as Hex,
 );
 const { secretKey } = keygen(seed, { role: "vault" });
 const recipient = privateKeyToAccount(generatePrivateKey()).address;

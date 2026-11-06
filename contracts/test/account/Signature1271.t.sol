@@ -3,9 +3,9 @@ pragma solidity 0.8.28;
 
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {ERC7739Utils} from "@openzeppelin/contracts/utils/cryptography/draft-ERC7739Utils.sol";
-import {ILeakedAccount} from "../../src/account/ILeakedAccount.sol";
-import {LeakedAccountImpl} from "../../src/account/LeakedAccountImpl.sol";
-import {LeakedAccountRoles} from "../../src/account/LeakedAccountRoles.sol";
+import {IQueueBitAccount} from "../../src/account/IQueueBitAccount.sol";
+import {QueueBitAccountImpl} from "../../src/account/QueueBitAccountImpl.sol";
+import {QueueBitAccountRoles} from "../../src/account/QueueBitAccountRoles.sol";
 import {AccountTestBase} from "./AccountTestBase.sol";
 import {Verifier1271} from "./mocks/AccountMocks.sol";
 
@@ -28,7 +28,7 @@ contract Signature1271Test is AccountTestBase {
         return keccak256(
             abi.encode(
                 keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
-                keccak256("LEAKED"),
+                keccak256("QueueBit"),
                 keccak256("1"),
                 block.chainid,
                 address(account)
@@ -55,7 +55,7 @@ contract Signature1271Test is AccountTestBase {
     {
         string memory descr = "Login(address user,string nonce)";
         bytes memory domainBytes =
-            abi.encode(keccak256("LEAKED"), keccak256("1"), block.chainid, address(account), bytes32(0));
+            abi.encode(keccak256("QueueBit"), keccak256("1"), block.chainid, address(account), bytes32(0));
         bytes32 typeHash = keccak256(
             abi.encodePacked(
                 "TypedDataSign(Login contents,string name,string version,uint256 chainId,address verifyingContract,",
@@ -77,7 +77,9 @@ contract Signature1271Test is AccountTestBase {
 
     function _register(bytes32 h) internal {
         uint48 exp = uint48(vm.getBlockTimestamp() + 1 hours);
-        _hot(1 * USD, _one(_selfCall(abi.encodeCall(LeakedAccountImpl.registerHash, (h, address(usdc), 1 * USD, exp)))));
+        _hot(
+            1 * USD, _one(_selfCall(abi.encodeCall(QueueBitAccountImpl.registerHash, (h, address(usdc), 1 * USD, exp))))
+        );
     }
 
     // ------------------------------------------------------------------------------- registered hashes ------
@@ -188,7 +190,7 @@ contract Signature1271Test is AccountTestBase {
 
     function test_eip712Domain() public view {
         (, string memory name, string memory version, uint256 chainId, address vc,,) = account.eip712Domain();
-        assertEq(name, "LEAKED");
+        assertEq(name, "QueueBit");
         assertEq(version, "1");
         assertEq(chainId, block.chainid);
         assertEq(vc, address(account));

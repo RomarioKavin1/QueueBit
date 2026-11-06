@@ -1,4 +1,4 @@
-import { DEVNET_1337 } from "@leaked/rpc";
+import { DEVNET_1337 } from "@queuebit/rpc";
 import { local4337Deployment, localDeployment, type LocalToken } from "../generated/contracts";
 import { LOCAL_DEVNET } from "./build";
 
@@ -22,7 +22,7 @@ export interface AccountDeployment {
 
 /**
  * Where the compatible (ERC-4337 + ERC-7579) account lives on a chain: the reference MSA host with an EntryPoint v0.8
- * shim, its factory and bootstrap, and the three LEAKED modules (IMPLEMENTATION-NOTES "Extension M2").
+ * shim, its factory and bootstrap, and the three QueueBit modules (IMPLEMENTATION-NOTES "Extension M2").
  */
 export interface AaDeployment {
   entryPoint: `0x${string}`;
@@ -37,7 +37,7 @@ export interface AaDeployment {
   c13Verifier: `0x${string}`;
 }
 
-/** A token offered in onboarding's "Tokens you'll spend" step, with the static price LEAKED proposes. */
+/** A token offered in onboarding's "Tokens you'll spend" step, with the static price QueueBit proposes. */
 export interface TokenPreset {
   token: `0x${string}`;
   symbol: string;
@@ -65,18 +65,18 @@ export interface Network {
    */
   stakedSidecarUrl?: string;
   backend: Backend;
-  /** `@leaked/frames` codec profile (frame backend), chosen by chain id. */
+  /** `@queuebit/frames` codec profile (frame backend), chosen by chain id. */
   profileId?: string;
-  /** Frame backend: the account contracts on this chain, or undefined when LEAKED has none deployed there yet. */
+  /** Frame backend: the account contracts on this chain, or undefined when QueueBit has none deployed there yet. */
   deployment?: AccountDeployment;
   /** 4337 backend: an ERC-4337 bundler (`eth_sendUserOperation`, `eth_getUserOperationReceipt`, …). */
   bundlerUrl?: string;
-  /** 4337 backend: the module stack, or undefined when LEAKED has none deployed there yet. */
+  /** 4337 backend: the module stack, or undefined when QueueBit has none deployed there yet. */
   aa?: AaDeployment;
   /** Tokens offered at setup (InitConfig.tokens), with proposed prices. */
   tokenPresets: readonly TokenPreset[];
   /**
-   * Shown but not selectable until LEAKED's contracts exist there (the picker says why). Sepolia and mainnet stay
+   * Shown but not selectable until QueueBit's contracts exist there (the picker says why). Sepolia and mainnet stay
    * disabled until audited addresses are recorded.
    */
   enabled: boolean;
@@ -92,7 +92,7 @@ export interface Network {
 
 /**
  * Chain 1337 is the alt-mempool devnet. A `local-devnet` build (e2e, development) points it at the local fork in
- * devnet/ and the contracts devnet/deploy put there; a normal build uses the public devnet, where LEAKED has no
+ * devnet/ and the contracts devnet/deploy put there; a normal build uses the public devnet, where QueueBit has no
  * account contracts yet (activation is then unavailable and says so).
  */
 const localTokens = (t: { tokens?: LocalToken[] } | null): TokenPreset[] =>
@@ -146,14 +146,14 @@ const devnet: Network = LOCAL_DEVNET
       profileId: "ethrex-eip8141-tracer",
       accountKind: "Native account",
       currency: { symbol: "ETH", decimals: 18 },
-      note: "Test network for native LEAKED accounts. Test money only.",
+      note: "Test network for native QueueBit accounts. Test money only.",
       testnet: true,
       tokenPresets: [],
       enabled: true,
     };
 
 /**
- * Chain 31337: a local anvil with EntryPoint v0.8 at its canonical address, the LEAKED 7579 modules and a minimal
+ * Chain 31337: a local anvil with EntryPoint v0.8 at its canonical address, the QueueBit 7579 modules and a minimal
  * bundler (`devnet/deploy`: `bun run up:4337`). The compatible-account backend runs here exactly as on Sepolia.
  */
 const local4337: Network | undefined = LOCAL_DEVNET
@@ -180,7 +180,7 @@ const local4337: Network | undefined = LOCAL_DEVNET
         : {}),
       accountKind: "Compatible account",
       currency: { symbol: "ETH", decimals: 18 },
-      note: "A local chain without native accounts: your account is an ERC-4337 smart account with LEAKED's modules. Test money only.",
+      note: "A local chain without native accounts: your account is an ERC-4337 smart account with QueueBit's modules. Test money only.",
       testnet: true,
       tokenPresets: localTokens(local4337Deployment),
       enabled: local4337Deployment !== null,
@@ -188,8 +188,8 @@ const local4337: Network | undefined = LOCAL_DEVNET
     }
   : undefined;
 
-/** Not selectable until LEAKED's module stack has audited, recorded addresses there (plan §30 §8). */
-const NOT_YET = "LEAKED's account contracts aren't deployed on this network yet.";
+/** Not selectable until QueueBit's module stack has audited, recorded addresses there (plan §30 §8). */
+const NOT_YET = "QueueBit's account contracts aren't deployed on this network yet.";
 
 export const NETWORKS: readonly Network[] = [
   devnet,
@@ -249,7 +249,7 @@ export const NETWORKS: readonly Network[] = [
       },
     ],
     enabled: false,
-    disabledReason: "Not before the audit: LEAKED's account contracts aren't deployed on mainnet.",
+    disabledReason: "Not before the audit: QueueBit's account contracts aren't deployed on mainnet.",
   },
 ] as const;
 

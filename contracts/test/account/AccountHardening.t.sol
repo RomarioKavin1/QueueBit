@@ -2,9 +2,9 @@
 pragma solidity 0.8.28;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {ILeakedAccount} from "../../src/account/ILeakedAccount.sol";
-import {LeakedAccountImpl} from "../../src/account/LeakedAccountImpl.sol";
-import {LeakedAccountRoles} from "../../src/account/LeakedAccountRoles.sol";
+import {IQueueBitAccount} from "../../src/account/IQueueBitAccount.sol";
+import {QueueBitAccountImpl} from "../../src/account/QueueBitAccountImpl.sol";
+import {QueueBitAccountRoles} from "../../src/account/QueueBitAccountRoles.sol";
 import {AccountTestBase} from "./AccountTestBase.sol";
 
 /// Delta-review hardening (2026-11-06, after 9b918a3):
@@ -25,11 +25,11 @@ contract AccountHardeningTest is AccountTestBase {
         return signerFactory.createRoleSigner(bytes32(saltN++), role, address(0), pk, address(pqVerifier), address(0));
     }
 
-    function _create(ILeakedAccount.InitConfig memory c) internal returns (LeakedAccountRoles) {
-        return LeakedAccountRoles(payable(factory.createAccount(bytes32(saltN++), address(impl), _initData(c))));
+    function _create(IQueueBitAccount.InitConfig memory c) internal returns (QueueBitAccountRoles) {
+        return QueueBitAccountRoles(payable(factory.createAccount(bytes32(saltN++), address(impl), _initData(c))));
     }
 
-    function _createReverts(ILeakedAccount.InitConfig memory c, bytes memory err) internal {
+    function _createReverts(IQueueBitAccount.InitConfig memory c, bytes memory err) internal {
         bytes memory init = _initData(c);
         bytes32 salt = bytes32(saltN++);
         vm.expectRevert(err);
@@ -37,11 +37,11 @@ contract AccountHardeningTest is AccountTestBase {
     }
 
     function _badAddress(address a) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(ILeakedAccount.BadAddress.selector, a);
+        return abi.encodeWithSelector(IQueueBitAccount.BadAddress.selector, a);
     }
 
     function _forbidden(address a) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(ILeakedAccount.ForbiddenRecipient.selector, a);
+        return abi.encodeWithSelector(IQueueBitAccount.ForbiddenRecipient.selector, a);
     }
 
     /// The revert for a recipient refused only in Open mode (Strict refuses it as not allowlisted).
@@ -50,7 +50,7 @@ contract AccountHardeningTest is AccountTestBase {
         return _forbidden(to);
     }
 
-    function _hotReverts(ILeakedAccount.Call memory c, bytes memory err) internal {
+    function _hotReverts(IQueueBitAccount.Call memory c, bytes memory err) internal {
         uint256 avail = _bucketAvailable();
         vm.prank(address(account));
         vm.expectRevert(err);
@@ -58,8 +58,8 @@ contract AccountHardeningTest is AccountTestBase {
         assertEq(_bucketAvailable(), avail, "nothing debited");
     }
 
-    function _wethTransfer(address to, uint256 amount) internal view returns (ILeakedAccount.Call memory) {
-        return ILeakedAccount.Call(address(weth), 0, abi.encodeWithSelector(IERC20.transfer.selector, to, amount));
+    function _wethTransfer(address to, uint256 amount) internal view returns (IQueueBitAccount.Call memory) {
+        return IQueueBitAccount.Call(address(weth), 0, abi.encodeWithSelector(IERC20.transfer.selector, to, amount));
     }
 
     // ------------------------------------------------------------------------ 1. role independence ------
@@ -67,18 +67,18 @@ contract AccountHardeningTest is AccountTestBase {
     /// PoC: the same PQ key under both roles derives two DIFFERENT signer addresses (the role is in the clone's
     /// args), so the address-only check let it through; a recovery that is the vault's own key is no recovery.
     function test_init_bound_samePk_SameRoleKey() public {
-        ILeakedAccount.InitConfig memory c = _defaultCfg();
+        IQueueBitAccount.InitConfig memory c = _defaultCfg();
         c.recovery.pk = VAULT_PK;
         address predicted = factory.predictAccount(bytes32(saltN), address(impl), _initData(c));
         assertTrue(
             _derivedSigner(predicted, 1, VAULT_PK, vaultPayer) != _derivedSigner(predicted, 2, VAULT_PK, address(0)),
             "distinct addresses: the address check alone does not catch it"
         );
-        _createReverts(c, abi.encodeWithSelector(ILeakedAccount.SameRoleKey.selector));
+        _createReverts(c, abi.encodeWithSelector(IQueueBitAccount.SameRoleKey.selector));
         // different salt / payer / verifier change nothing: the key is the same
         c.recovery.salt = keccak256("other");
         c.recovery.payerKey = stranger;
-        _createReverts(c, abi.encodeWithSelector(ILeakedAccount.SameRoleKey.selector));
+        _createReverts(c, abi.encodeWithSelector(IQueueBitAccount.SameRoleKey.selector));
         // distinct keys: fine (the default setUp account)
         c.recovery.pk = RECOVERY_PK;
         _create(c);
@@ -89,14 +89,14 @@ contract AccountHardeningTest is AccountTestBase {
         address vA = _clone(1, PK_A);
         address rA = _clone(2, PK_A);
         address rB = _clone(2, PK_B);
-        _createReverts(_explicitCfg(vA, rA), abi.encodeWithSelector(ILeakedAccount.SameRoleKey.selector));
+        _createReverts(_explicitCfg(vA, rA), abi.encodeWithSelector(IQueueBitAccount.SameRoleKey.selector));
         _create(_explicitCfg(vA, rB));
         // bound vault (pk given), explicit recovery holding the same key
-        ILeakedAccount.InitConfig memory c = _defaultCfg();
+        IQueueBitAccount.InitConfig memory c = _defaultCfg();
         delete c.recovery;
         c.vault.pk = PK_A;
         c.recoverySigner = rA;
-        _createReverts(c, abi.encodeWithSelector(ILeakedAccount.SameRoleKey.selector));
+        _createReverts(c, abi.encodeWithSelector(IQueueBitAccount.SameRoleKey.selector));
         c.recoverySigner = rB;
         _create(c);
         // a code-less explicit signer reports no key: address checks only
@@ -107,7 +107,7 @@ contract AccountHardeningTest is AccountTestBase {
         _createReverts(_explicitCfg(hot, recovery), _badAddress(hot));
         _createReverts(_explicitCfg(vault, hot), _badAddress(hot));
         _createReverts(_explicitCfg(vault, vault), _badAddress(vault));
-        ILeakedAccount.InitConfig memory c = _explicitCfg(vault, recovery);
+        IQueueBitAccount.InitConfig memory c = _explicitCfg(vault, recovery);
         c.tank = vault;
         _createReverts(c, _badAddress(vault));
         c.tank = recovery;
@@ -117,10 +117,10 @@ contract AccountHardeningTest is AccountTestBase {
     /// First recovery install (instant) checks the deployed vault's key and the hot key / tank.
     function test_recoveryInstall_independent() public {
         address v = _clone(1, PK_A);
-        LeakedAccountRoles a = _create(_explicitCfg(v, address(0)));
+        QueueBitAccountRoles a = _create(_explicitCfg(v, address(0)));
         vm.startPrank(v);
         address same = _clone(2, PK_A);
-        vm.expectRevert(ILeakedAccount.SameRoleKey.selector);
+        vm.expectRevert(IQueueBitAccount.SameRoleKey.selector);
         a.vaultSetRecoverySigner(same);
         vm.expectRevert(_badAddress(hot));
         a.vaultSetRecoverySigner(hot);
@@ -139,10 +139,10 @@ contract AccountHardeningTest is AccountTestBase {
     function test_recoveryChange_queued_independent() public {
         address v = _clone(1, PK_A);
         address r = _clone(2, PK_B);
-        LeakedAccountRoles a = _create(_explicitCfg(v, r));
+        QueueBitAccountRoles a = _create(_explicitCfg(v, r));
         address same = _clone(2, PK_A);
-        ILeakedAccount.Call[] memory c = new ILeakedAccount.Call[](1);
-        c[0] = ILeakedAccount.Call(address(a), 0, abi.encodeCall(LeakedAccountRoles.vaultSetRecoverySigner, (same)));
+        IQueueBitAccount.Call[] memory c = new IQueueBitAccount.Call[](1);
+        c[0] = IQueueBitAccount.Call(address(a), 0, abi.encodeCall(QueueBitAccountRoles.vaultSetRecoverySigner, (same)));
         vm.prank(v);
         bytes32 opId = a.vaultQueue(c, 1);
         vm.warp(vm.getBlockTimestamp() + DELAY);
@@ -156,10 +156,10 @@ contract AccountHardeningTest is AccountTestBase {
     function test_vaultRotation_independent() public {
         address v = _clone(1, PK_A);
         address r = _clone(2, PK_B);
-        LeakedAccountRoles a = _create(_explicitCfg(v, r));
+        QueueBitAccountRoles a = _create(_explicitCfg(v, r));
         vm.startPrank(r);
         address recoveryKeyAsVault = _clone(1, PK_B);
-        vm.expectRevert(ILeakedAccount.SameRoleKey.selector);
+        vm.expectRevert(IQueueBitAccount.SameRoleKey.selector);
         a.recoveryStartVaultRotation(recoveryKeyAsVault);
         vm.expectRevert(_badAddress(hot));
         a.recoveryStartVaultRotation(hot);
@@ -210,7 +210,7 @@ contract AccountHardeningTest is AccountTestBase {
         _hotReverts(_usdcTransfer(address(account), 1 * USD), _forbidden(address(account)));
         _hotReverts(
             _ethSend(address(account), 1 ether),
-            abi.encodeWithSelector(ILeakedAccount.NotAllowed.selector, address(account), bytes4(0))
+            abi.encodeWithSelector(IQueueBitAccount.NotAllowed.selector, address(account), bytes4(0))
         );
     }
 
@@ -240,7 +240,7 @@ contract AccountHardeningTest is AccountTestBase {
         _hotReverts(_usdcTransfer(guardian, 1 * USD), _openOnly(guardian, IERC20.transfer.selector));
         _hotReverts(_ethSend(guardian, 0.001 ether), _openOnly(guardian, bytes4(0)));
         // the vault allowlisting a guardian (a friend who is also a payee) is an explicit decision: both modes
-        _queueLoosen(abi.encodeCall(LeakedAccountRoles.vaultSetTarget, (guardian, true)));
+        _queueLoosen(abi.encodeCall(QueueBitAccountRoles.vaultSetTarget, (guardian, true)));
         _hot(1 * USD, _one(_usdcTransfer(guardian, 1 * USD)));
         assertEq(usdc.balanceOf(guardian), 1 * USD);
     }
@@ -271,7 +271,7 @@ contract AccountHardeningTest is AccountTestBase {
         _hotReverts(_ethSend(newTank, 0.001 ether), _openOnly(newTank, bytes4(0)));
         _hotReverts(_usdcTransfer(newTank, 1 * USD), _openOnly(newTank, IERC20.transfer.selector));
         _hot(PER_TX, _one(_ethSend(tank, 0.001 ether))); // old tank: still allowlisted
-        _queueLoosen(abi.encodeCall(LeakedAccountRoles.vaultSetTarget, (newTank, true)));
+        _queueLoosen(abi.encodeCall(QueueBitAccountRoles.vaultSetTarget, (newTank, true)));
         _hot(PER_TX, _one(_ethSend(newTank, 0.001 ether)));
         assertEq(newTank.balance, 0.001 ether);
     }
@@ -279,17 +279,17 @@ contract AccountHardeningTest is AccountTestBase {
     function test_burn_stillNotAllowed() public {
         _hotReverts(
             _usdcTransfer(address(0), 1 * USD),
-            abi.encodeWithSelector(ILeakedAccount.NotAllowed.selector, address(0), IERC20.transfer.selector)
+            abi.encodeWithSelector(IQueueBitAccount.NotAllowed.selector, address(0), IERC20.transfer.selector)
         );
         _hotReverts(
             _ethSend(address(0), 0.001 ether),
-            abi.encodeWithSelector(ILeakedAccount.NotAllowed.selector, address(0), bytes4(0))
+            abi.encodeWithSelector(IQueueBitAccount.NotAllowed.selector, address(0), bytes4(0))
         );
     }
 
     /// One forbidden leg reverts the whole batch: an allowed payment before it is undone.
     function test_forbiddenLeg_revertsBatch() public {
-        ILeakedAccount.Call[] memory c = new ILeakedAccount.Call[](2);
+        IQueueBitAccount.Call[] memory c = new IQueueBitAccount.Call[](2);
         c[0] = _usdcTransfer(alice, 1 * USD);
         c[1] = _usdcTransfer(address(usdc), 1 * USD);
         vm.prank(address(account));
@@ -304,10 +304,10 @@ contract AccountHardeningStrictTest is AccountHardeningTest {
     function setUp() public override {
         super.setUp();
         _strict();
-        assertEq(uint256(account.recipientMode()), uint256(ILeakedAccount.RecipientMode.Strict));
+        assertEq(uint256(account.recipientMode()), uint256(IQueueBitAccount.RecipientMode.Strict));
     }
 
     function _openOnly(address to, bytes4 sel) internal pure override returns (bytes memory) {
-        return abi.encodeWithSelector(ILeakedAccount.NotAllowed.selector, to, sel);
+        return abi.encodeWithSelector(IQueueBitAccount.NotAllowed.selector, to, sel);
     }
 }

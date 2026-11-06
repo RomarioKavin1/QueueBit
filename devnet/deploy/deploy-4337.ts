@@ -10,7 +10,7 @@
 // writes a byte-identical file on every fresh anvil, so it can be committed. Steps:
 //   1. Arachnid proxy (anvil_setCode if absent);
 //   2. EntryPoint v0.8.0 at 0x4337084d… (release salt + deployments/ethereum/EntryPoint.json init code);
-//   3. C13Verifier, LeakedRoleExecutor, LeakedPolicyHook(executor), LeakedHotValidator(hook),
+//   3. C13Verifier, QueueBitRoleExecutor, QueueBitPolicyHook(executor), QueueBitHotValidator(hook),
 //      MSAAdvancedEP(entryPoint) (reference ERC-7579 MSA with a v0.8 EntryPoint), MSAFactory(msaImpl), Bootstrap,
 //      and the devnet test tokens USDC = PermitToken1271("USDC"), DAI = MockToken("DAI", 18).
 // Funding/deployer: anvil #7 (prefunded by anvil).
@@ -43,11 +43,11 @@ import {
 const RPC = ANVIL_URL;
 /** anvil #7: the extension e2e funding key (public test key, never real). */
 const FUNDER_KEY: Hex = "0x4bbbf85ce3377467afe5d46f804f221813b2bb87f24d81f60f1fcdbf7cbf4356";
-const SALT = keccak256(stringToHex("leaked.devnet.deploy.v1"));
+const SALT = keccak256(stringToHex("queuebit.devnet.deploy.v1"));
 
 const chain = {
   id: ANVIL_CHAIN_ID,
-  name: "leaked-anvil-4337",
+  name: "queuebit-anvil-4337",
   nativeCurrency: { name: "ETH", symbol: "ETH", decimals: 18 },
   rpcUrls: { default: { http: [RPC] } },
 } as const;
@@ -125,7 +125,7 @@ if (await hasCode(ENTRY_POINT)) {
   console.log(`+ EntryPoint v0.8 ${ENTRY_POINT} (${r.gasUsed} gas)`);
 }
 
-// 3. LEAKED modules, the MSA host and the tokens.
+// 3. QueueBit modules, the MSA host and the tokens.
 const contracts: Record<string, Entry> = {};
 
 async function deploy(name: string, file: string, args: unknown[]): Promise<Entry> {
@@ -148,9 +148,9 @@ async function deploy(name: string, file: string, args: unknown[]): Promise<Entr
 
 const add = async (name: string, file: string, args: unknown[] = []) => (contracts[name] = await deploy(name, file, args)).address;
 await add("C13Verifier", "C13Verifier.sol");
-const executor = await add("LeakedRoleExecutor", "LeakedRoleExecutor.sol");
-const hook = await add("LeakedPolicyHook", "LeakedPolicyHook.sol", [executor]);
-await add("LeakedHotValidator", "LeakedHotValidator.sol", [hook]);
+const executor = await add("QueueBitRoleExecutor", "QueueBitRoleExecutor.sol");
+const hook = await add("QueueBitPolicyHook", "QueueBitPolicyHook.sol", [executor]);
+await add("QueueBitHotValidator", "QueueBitHotValidator.sol", [hook]);
 const msaImpl = await add("MSAAdvancedEP", "HostArtifacts.sol", [ENTRY_POINT]);
 await add("MSAFactory", "MSAFactory.sol", [msaImpl]);
 await add("Bootstrap", "Bootstrap.sol");

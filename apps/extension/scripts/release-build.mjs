@@ -1,9 +1,9 @@
 // Reproducible production build of the extension: the Chrome Web Store zip and its manifest
 // (scripts/release/README.md "Extension hook"; plan 30-extension.md §9 item 5).
 //
-//   pnpm --filter @leaked/extension run release:build <out-dir>      (normally via scripts/release/extension.sh)
+//   pnpm --filter @queuebit/extension run release:build <out-dir>      (normally via scripts/release/extension.sh)
 //
-// Writes <out-dir>/leaked-extension-<version>-chrome.zip and <out-dir>/manifest.json
+// Writes <out-dir>/queuebit-extension-<version>-chrome.zip and <out-dir>/manifest.json
 // ({name, version, build, zipSha256, files: {path: sha256}}). The unpacked tree is built in a temporary directory
 // (never the shared .output/, which the e2e builds use), checked by `checkProductionBuild` (no design gallery, no
 // local-devnet code paths, no source maps, no absolute paths), and zipped with fixed metadata.
@@ -15,7 +15,7 @@ import { digests, deterministicZip, git, sha256, sourceDateEpoch } from "../../.
 import { checkProductionBuild } from "./release-check.mjs";
 
 const APP = fileURLToPath(new URL("..", import.meta.url));
-const FLAGS = ["VITE_LEAKED_LOCAL_DEVNET", "VITE_LEAKED_DESIGN"];
+const FLAGS = ["VITE_QUEUEBIT_LOCAL_DEVNET", "VITE_QUEUEBIT_DESIGN"];
 
 /** Builds the production extension into a fresh temporary directory; returns that directory's chrome-mv3 tree. */
 export async function buildProduction() {
@@ -23,7 +23,7 @@ export async function buildProduction() {
     if (process.env[f]) throw new Error(`${f} is set: a release build must not include the local-devnet/design code`);
   process.env.NODE_ENV = "production";
   process.env.TZ = "UTC";
-  const outDir = mkdtempSync(join(tmpdir(), "leaked-ext-release-"));
+  const outDir = mkdtempSync(join(tmpdir(), "queuebit-ext-release-"));
   const { build } = await import("wxt");
   await build({ root: APP, outDir, mode: "production" });
   const sub = readdirSync(outDir).filter((d) => d.startsWith("chrome-mv3"));
@@ -39,11 +39,11 @@ export async function releaseBuild(out) {
     checkProductionBuild(dir, files, { root: resolve(APP, "../..") });
     const mf = JSON.parse((await import("node:fs")).readFileSync(join(dir, "manifest.json"), "utf8"));
     const zip = deterministicZip(dir, sourceDateEpoch(), Object.keys(files));
-    const zipName = `leaked-extension-${mf.version}-chrome.zip`;
+    const zipName = `queuebit-extension-${mf.version}-chrome.zip`;
     writeFileSync(join(out, zipName), zip);
-    const commit = process.env.LEAKED_RELEASE_COMMIT || git("rev-parse", "HEAD");
+    const commit = process.env.QUEUEBIT_RELEASE_COMMIT || git("rev-parse", "HEAD");
     const manifest = {
-      name: "leaked-extension",
+      name: "queuebit-extension",
       version: mf.version,
       build: commit.slice(0, 7),
       zipSha256: sha256(zip),
@@ -61,6 +61,6 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1
   if (!out) throw new Error("usage: release-build.mjs <out-dir>");
   const m = await releaseBuild(resolve(out));
   console.log(
-    `leaked-extension ${m.version} (${m.build}): ${Object.keys(m.files).length} files, zip sha256 ${m.zipSha256}`,
+    `queuebit-extension ${m.version} (${m.build}): ${Object.keys(m.files).length} files, zip sha256 ${m.zipSha256}`,
   );
 }

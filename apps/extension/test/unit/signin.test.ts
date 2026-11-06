@@ -108,6 +108,6 @@ describe("sign-in (ERC-7739, M3)", () => {
     const { EIP712Domain: _drop, ...types } = permit.types;
     void _drop;
     expect(d).toBe(hashTypedData({ ...permit, types } as never));
-    expect(registeredMarker(d)).toBe(`0xdc6b87c9${d.slice(2)}`);
+    expect(registeredMarker(d)).toBe(`0x427a9529${d.slice(2)}`);
   });
 });

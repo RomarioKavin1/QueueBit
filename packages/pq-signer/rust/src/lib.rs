@@ -1,11 +1,11 @@
-//! `leaked-pq`: the LEAKED post-quantum signer.
+//! `queuebit-pq`: the QueueBit post-quantum signer.
 //!
 //! SPHINCS- **C13** (keccak256, FIPS 205 uncompressed ADRS, WOTS+C / FORS+C, h=22 d=2 a=19 k=7
 //! w=8 l=43, 3,688-byte signatures) exactly as verified on chain by `SphincsC13Asm`
 //! (`nconsigny/SPHINCS-` @ 4c76aaf, `src/keccak/SPHINCs-C13Asm.sol`). The signing algorithm is a
 //! re-implementation of upstream's `signers/signer-wasm` (MIT, Nicolas Consigny) with:
 //! streaming treehash (O(h) memory), hedged R, zeroization of secrets, post-sign self-check,
-//! and LEAKED's role-separated key derivation. Deterministic mode reproduces upstream signatures
+//! and QueueBit's role-separated key derivation. Deterministic mode reproduces upstream signatures
 //! byte for byte (KAT set A).
 //!
 //! Second, EXPERIMENTAL scheme: [`lean_s`] (leanSphincs-s, 4,164-byte signatures, fits Path A under the stock 100 K

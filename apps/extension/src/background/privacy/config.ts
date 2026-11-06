@@ -8,18 +8,18 @@ import {
   type AspSource,
   type HostProvider,
   type PoolState,
-} from "@leaked/privacy";
+} from "@queuebit/privacy";
 import { decodeFunctionResult, encodeFunctionData, parseAbi, toFunctionSelector } from "viem";
 import { LOCAL_DEVNET } from "../../shared/build";
 import { findNetwork } from "../../shared/chains";
 import type { KV } from "../../shared/kv";
 import type { PrivacyNetworkConfig } from "../../shared/privacy";
 
-export const PRIVACY_CONFIG_KEY = "leaked:privacy:config";
+export const PRIVACY_CONFIG_KEY = "queuebit:privacy:config";
 
 /**
- * The privacy network table. No network has a recorded 0xbow / PoolPayer deployment LEAKED ships with yet (mainnet
- * and Sepolia stay off until PoolPayer has an operator other than LEAKED, plan §40 §7 rule 3); the local devnet's
+ * The privacy network table. No network has a recorded 0xbow / PoolPayer deployment QueueBit ships with yet (mainnet
+ * and Sepolia stay off until PoolPayer has an operator other than QueueBit, plan §40 §7 rule 3); the local devnet's
  * pool is deployed per run (`contracts/devnet-tests/privacy`), so a local-devnet build lets Settings enter it.
  */
 export function privacyEditable(chainId: number, localDevnet: boolean): boolean {

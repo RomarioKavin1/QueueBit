@@ -1,13 +1,13 @@
 import type { Address, Hex } from "viem";
 import { privateKeyToAddress } from "viem/accounts";
-import { encodeTx, signTx, txHash, type FrameTx, type FrameTxReceipt, type Profile } from "@leaked/frames";
+import { encodeTx, signTx, txHash, type FrameTx, type FrameTxReceipt, type Profile } from "@queuebit/frames";
 import {
   createNodeClient,
   createSidecarClient,
   type FrameTxStatus,
   type NodeClient,
   type SidecarClient,
-} from "@leaked/rpc";
+} from "@queuebit/rpc";
 import { assertAtCostFee, rejectFeeOptions } from "../guardrails.js";
 import { anonNetwork, directNetwork, freshIsolationKey, networkTransport, type AnonFetch } from "../host/network.js";
 import type { Withdrawal } from "./crypto.js";

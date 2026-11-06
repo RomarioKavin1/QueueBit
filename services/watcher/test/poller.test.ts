@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { getAddress, type Address, type Hex } from "viem";
-import { WatcherCore, type CoreState, type MinedFrameReceipt } from "@leaked/watcher-core";
+import { WatcherCore, type CoreState, type MinedFrameReceipt } from "@queuebit/watcher-core";
 import type { ChainClient, RawTx } from "../src/chain.js";
 import { Hub, type HubEntry } from "../src/hub.js";
 import { Poller, type PollerOptions } from "../src/poller.js";
@@ -202,7 +202,7 @@ describe("poller", () => {
     ["file", (dir: string) => new FileStore(`${dir}/state.json`)],
     ["sqlite", (dir: string) => new SqliteStore(`${dir}/state.db`, process.getBuiltinModule("node:sqlite"))],
   ] as const)("checkpoints to %s and resumes without re-alerting", async (_name, open) => {
-    const dir = `${process.env.TMPDIR ?? "/tmp"}/leaked-watcher-test-${Math.random().toString(36).slice(2)}`;
+    const dir = `${process.env.TMPDIR ?? "/tmp"}/queuebit-watcher-test-${Math.random().toString(36).slice(2)}`;
     const chain = new MockChain();
     const store = open(dir);
     const a = setup({ confirmations: 0, store }, chain);

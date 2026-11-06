@@ -1,5 +1,5 @@
 {
-  "name": "@leaked/rpc",
+  "name": "@queuebit/rpc",
   "version": "0.0.0",
   "private": true,
   "description": "Typed JSON-RPC client for EIP-8141 frame transactions: ethrex node and Skandha alt-mempool sidecar",
@@ -23,7 +23,7 @@
     "test:live": "LIVE_DEVNET=1 vitest run"
   },
   "dependencies": {
-    "@leaked/frames": "workspace:*",
+    "@queuebit/frames": "workspace:*",
     "viem": "2.57.16"
   }
 }

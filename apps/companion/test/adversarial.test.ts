@@ -1,6 +1,6 @@
-import { encodeTx, getProfile, senderFrame, type FrameTx } from "@leaked/frames";
-import { SCHEME_ID } from "@leaked/pq-signer";
-import { encodeSignRequest, type AdvisoryPolicy, type SignRequest } from "@leaked/ur";
+import { encodeTx, getProfile, senderFrame, type FrameTx } from "@queuebit/frames";
+import { SCHEME_ID } from "@queuebit/pq-signer";
+import { encodeSignRequest, type AdvisoryPolicy, type SignRequest } from "@queuebit/ur";
 import { encodeFunctionData, getAddress, type AbiFunction, type AbiParameter, type Address, type Hex } from "viem";
 import { describe, expect, it } from "vitest";
 import {

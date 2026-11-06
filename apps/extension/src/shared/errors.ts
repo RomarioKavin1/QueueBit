@@ -64,5 +64,5 @@ export function serializeError(err: unknown): SerializedRpcError {
     };
   }
   // Never forward internal error text (it could carry local state); give a generic message.
-  return { code: RpcErrorCode.internal, message: "Internal error in LEAKED." };
+  return { code: RpcErrorCode.internal, message: "Internal error in QueueBit." };
 }

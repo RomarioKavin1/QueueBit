@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ProveResult, WithdrawCircuitInputs } from "@leaked/privacy";
+import type { ProveResult, WithdrawCircuitInputs } from "@queuebit/privacy";
 import { OffscreenClient, type OffscreenChrome } from "../../src/background/offscreen";
 import {
   OFFSCREEN_TARGET,
@@ -98,7 +98,7 @@ describe("messages", () => {
     expect(isOffscreenRequest(req)).toBe(true);
     expect(isOffscreenRequest({ ...req, kind: "eval" })).toBe(false);
     expect(isOffscreenRequest({ ...req, id: 1 })).toBe(false);
-    expect(isOffscreenRequest({ channel: "leaked-ui", type: "state:get" })).toBe(false);
+    expect(isOffscreenRequest({ channel: "queuebit-ui", type: "state:get" })).toBe(false);
     expect(isOffscreenRequest(null)).toBe(false);
   });
 

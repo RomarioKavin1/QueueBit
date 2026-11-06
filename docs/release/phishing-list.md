@@ -9,11 +9,11 @@ Plan [`30-extension.md` §9 item 2](../plan/sections/30-extension.md). Code: `ap
    Excluded: `eth-phishing-detect` / MetaMask's list (DBAD, not an OSI license), Ambire's `suspiciousHostingDomains.ts`
    (GPL-3.0; reference only, nothing copied), and any list without a clear data license. Adding a third-party list
    needs its license recorded here and a counsel check (release checklist §4).
-2. **Our list** (`leaked-list.ts`, MIT): hosts added from incidents reported through [`SECURITY.md`](../../SECURITY.md)
+2. **Our list** (`queuebit-list.ts`, MIT): hosts added from incidents reported through [`SECURITY.md`](../../SECURITY.md)
    and confirmed by a maintainer, in a reviewed commit. A host covers its subdomains. `.invalid` hosts are test fixtures.
 3. **Bundled, never remote.** Lists change only with an extension release (reproducible, hashed); the extension
    fetches no list at run time, so it leaks no browsing history to a list server.
 4. **Warn, never block silently.** A listed site (or the page embedding it) gets a red banner on the approval window;
    a punycode (internationalised) host gets a lookalike warning. The user can still decide; nothing is hidden.
-5. **Known sites** (first-visit warnings) are local only: `leaked:knownSites`, the sites this browser connected to,
+5. **Known sites** (first-visit warnings) are local only: `queuebit:knownSites`, the sites this browser connected to,
    never shared or synced.

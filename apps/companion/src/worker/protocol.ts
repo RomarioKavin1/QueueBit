@@ -62,7 +62,7 @@ export type WorkerRequest =
   | {
       op: "recoveryTest";
       /**
-       * The scanned `ur:leaked-recovery-challenge`: the worker signs over ITS request id (never one the UI picks, which
+       * The scanned `ur:queuebit-recovery-challenge`: the worker signs over ITS request id (never one the UI picks, which
        * browsers refuse anyway), and refuses a test for another key or after the code expired.
        */
       challenge: { requestId: string; recoveryPk: Hex; expiresAt: number };

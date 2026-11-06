@@ -31,7 +31,7 @@ describe("eta tracking", () => {
     core.ingest([ev("Queued", { opId, kind: 1, eta: T0 + H48 })]);
     expect(core.nextDeadline()).toBe(T0 + H48);
     expect(core.alarms()).toEqual([
-      { name: `leaked-watch:1337:${ACC.toLowerCase()}:op:${opId}`, when: (T0 + H48) * 1000 },
+      { name: `queuebit-watch:1337:${ACC.toLowerCase()}:op:${opId}`, when: (T0 + H48) * 1000 },
     ]);
   });
 

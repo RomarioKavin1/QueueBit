@@ -11,7 +11,7 @@ import { approvalId, reject, useArmed } from "./shared";
 /**
  * Transaction / batch approval (ux-spec §3.5.2) for `eth_sendTransaction` and `wallet_sendCalls`: the plain-language
  * effect, the network fee from the fee tank, and the route decided before the user commits. "Needs your phone"
- * replaces Approve with "Request Vault approval"; closing then tells the site why (4100 + leakedRule).
+ * replaces Approve with "Request Vault approval"; closing then tells the site why (4100 + queuebitRule).
  */
 export function TransactionBody({ view }: { view: ApprovalView }) {
   const tx = view.approval.tx!;

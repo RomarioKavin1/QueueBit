@@ -13,7 +13,7 @@ export default defineProject({
     include: ["test/**/*.test.ts"],
     // Proofs take seconds; the live e2e minutes.
     testTimeout: 60_000,
-    // @ngraveio/bc-ur (via @leaked/ur) imports the bare directory "buffer/", which Node's ESM loader refuses.
+    // @ngraveio/bc-ur (via @queuebit/ur) imports the bare directory "buffer/", which Node's ESM loader refuses.
     server: { deps: { inline: ["@ngraveio/bc-ur"] } },
   },
 });

@@ -2,7 +2,7 @@
 
 Where the build differs from, or settles, something in the plan. Newest last. Each note names its evidence.
 
-## Phase 0 foundations (contracts toolchain, `@leaked/frames`, `@leaked/rpc`)
+## Phase 0 foundations (contracts toolchain, `@queuebit/frames`, `@queuebit/rpc`)
 
 ### Toolchain
 
@@ -22,7 +22,7 @@ Where the build differs from, or settles, something in the plan. Newest last. Ea
   outside the model is reported as a static violation (EIP-8141: VERIFY executes as STATICCALL).
 - Not modelled (revert `FrameSimUnsupported`): P256 signatures, EIP-8250 keyed-nonce TXPARAMs 0x0D–0x10, EIP-7906
   opcodes. The sig hash in the simulator is opaque (set by the test or a stand-in hash); real hashes come from
-  `@leaked/frames`.
+  `@queuebit/frames`.
 - **What passes FrameSim but fails on the devnet (review 2026-11-06).** A LOG in VERIFY is now a static violation
   and BALANCE (of another account) or a CALL*/EXTCODE* to a code-less address are reported in
   `FrameOutcome.bannedAccesses`, but the simulator still cannot see: the other banned opcodes (SELFBALANCE, TIMESTAMP, NUMBER,
@@ -33,10 +33,10 @@ Where the build differs from, or settles, something in the plan. Newest last. Ea
   the devnet it is `maxFeePerGas`. Rule for implementers: VERIFY-reachable code must not emit events, read
   `block.*`, `tx.gasprice`, balances or `gasleft()`, or touch transient storage; `RollingCap` (TIMESTAMP) stays on
   the execution side. Conformance hook to add with M6: deploy the account on the local `devnet/`, build the same
-  shapes with `@leaked/frames` (`hotSpendTx`, `roleSignerPath*Tx`), and assert `ethrex_simulateFrameTransaction
+  shapes with `@queuebit/frames` (`hotSpendTx`, `roleSignerPath*Tx`), and assert `ethrex_simulateFrameTransaction
   {trace: true}` reports `canonicalMempoolValid` with per-frame `gasUsed` under the 80k VERIFY budget.
 
-### `@leaked/frames`
+### `@queuebit/frames`
 
 - **Devnet 1337 confirmed from a mined transaction.** `debug_getRawTransaction` of tx
   `0x38753a56…41e84` (block `0x4d25b`) decodes and re-encodes to the same bytes, its keccak is the node's hash, and its
@@ -64,7 +64,7 @@ Where the build differs from, or settles, something in the plan. Newest last. Ea
   `eth_getFrameTransactionReceipt` reports `gasUsed: {execution, state}` and status words (`"success"`). Both parse to
   one `FrameTxReceipt`; the transaction-level status is kept only as `reportedStatus`.
 
-### `@leaked/rpc`
+### `@queuebit/rpc`
 
 - **`ethrex_simulateFrameTransaction` field names differ from the sidecar docs.** The live node (2026-11-06) answers
   `canonicalMempoolValid` / `canonicalMempoolViolation`; `rpc-methods.md` (and plan §30.4.4) say `valid` /
@@ -83,11 +83,11 @@ Where the build differs from, or settles, something in the plan. Newest last. Ea
 - Live tests are opt-in (`LIVE_DEVNET=1 pnpm test`) and read-only: chain ids, the fixture tx's raw bytes and JSON,
   both receipts, a dry-run simulate, an estimate error, gas price, config, explorer info.
 
-## `@leaked/pq-signer` (section 20 §3, M2)
+## `@queuebit/pq-signer` (section 20 §3, M2)
 
 - **Not vendored, re-implemented.** Upstream `signers/signer-wasm` (crate `sphincs-c13-signer`) materialises whole
   trees (~32 MiB per 2¹⁹-leaf FORS tree), takes mnemonics across the JS boundary and has no zeroization, so
-  `packages/pq-signer/rust` (crate `leaked-pq`) is an adapted rewrite: streaming treehash (O(h) memory), single-block
+  `packages/pq-signer/rust` (crate `queuebit-pq`) is an adapted rewrite: streaming treehash (O(h) memory), single-block
   keccak fast path, hedged R, `ZeroizeOnDrop` secrets, zero-on-free WASM allocator, post-sign self-verification. Its
   deterministic mode reproduces upstream signatures **bit for bit** (KAT set A: 5 vectors from upstream `signer-c13`
   built at `4c76aaf`; the `deadbeef` one also from `script/signer.py`, byte-identical to the Rust output).
@@ -112,13 +112,13 @@ Where the build differs from, or settles, something in the plan. Newest last. Ea
   verifier and the Solidity verifier (exhaustive over every byte), consistent with upstream C13-mal-f3.
 - **Build:** `wasm-bindgen` crate pinned `=0.2.117` and `wasm-bindgen-cli 0.2.117` (installed with `cargo install`;
   no wasm-pack). The WASM (~86 KB) is inlined as base64 so one ESM module works in browsers, extension workers and
-  Node. `wasm/` and `dist/` are build outputs and not committed: consumers run `pnpm --filter @leaked/pq-signer build`
+  Node. `wasm/` and `dist/` are build outputs and not committed: consumers run `pnpm --filter @queuebit/pq-signer build`
   (needs Rust + `wasm32-unknown-unknown`).
 
 ## Contracts M4: PQ role signers and the C13 verifier adapter (§10.3.6–10.3.8, §10.5.2, §10.6)
 
 Code: `contracts/src/pq/C13Verifier.sol`, `contracts/src/roles/{PQRoleSigner,GuardianSigner,RoleSignerFactory}.sol`,
-`contracts/src/interfaces/{IPQVerifier,IStakingRegistry,ILeakedAccountRoles}.sol`; vendored upstream in
+`contracts/src/interfaces/{IPQVerifier,IStakingRegistry,IQueueBitAccountRoles}.sol`; vendored upstream in
 `contracts/src/pq/vendor/` (`SphincsC13Asm` and `SphincsFrameVerify.yul` @ `4c76aaf`, MIT, THIRD_PARTY.md). Tests:
 `contracts/test/{pq,roles}` (Foundry/FrameSim), `contracts/devnet-tests/pq` (bun; `bun run test`).
 
@@ -127,7 +127,7 @@ Code: `contracts/src/pq/C13Verifier.sol`, `contracts/src/roles/{PQRoleSigner,Gua
   Yul module) and adds `IPQVerifier.verify(pk,digest,sig)`: length check first (`false`, the case upstream reverts on),
   `pk` split into top-aligned `pkSeed`/`pkRoot` (so upstream's non-canonical-key revert is unreachable), upstream run
   through a warm self-STATICCALL (it clobbers memory and exits with `return`), any residual revert (OOG) → `false`.
-  `SCHEME_ID` = the `@leaked/pq-signer` constant (asserted against `vectors/c13.json`). Foundry gas over KAT C:
+  `SCHEME_ID` = the `@queuebit/pq-signer` constant (asserted against `vectors/c13.json`). Foundry gas over KAT C:
   min 109,752 / mean 109,830 / max 112,252 (≈ +2.1k over the raw verifier); `verifyGasEstimate()` = 120,000. On the
   devnet the adapter call measured 108,710 (callTracer). Tests: all 32 KAT C vectors (both ABIs), every negative
   recipe on every vector, every byte of one vector bit-flipped, wrong lengths 0..8000 fuzzed, OOG → false.
@@ -159,9 +159,9 @@ Code: `contracts/src/pq/C13Verifier.sol`, `contracts/src/roles/{PQRoleSigner,Gua
 
 ### Devnet results (local fork, 2026-11-06; funding key anvil #2; `contracts/devnet-tests/pq/run.ts`)
 
-Deployed: `C13Verifier` `0xe8bbb5f2…a9fc` (tx `0x907d9fdc…a511`), `MockLeakedAccount` `0x050499eb…ae74`,
+Deployed: `C13Verifier` `0xe8bbb5f2…a9fc` (tx `0x907d9fdc…a511`), `MockQueueBitAccount` `0x050499eb…ae74`,
 `RoleSignerFactory` `0x5f1e91d5…113a` (tx `0xebe59ad1…4e79`), VaultSigner `0x4dA67f61F1d54111030F4aA62760e3445Fa9726f`
-(tx `0xb7290045…db9c`). Real C13 signatures from `@leaked/pq-signer` over the codec sig hash (signing 3.7 s in bun).
+(tx `0xb7290045…db9c`). Real C13 signatures from `@queuebit/pq-signer` over the codec sig hash (signing 3.7 s in bun).
 
 | Tx | Hash | Result | Frame gas (execution / state) |
 |---|---|---|---|
@@ -213,7 +213,7 @@ devnet/builder-only, which skips ethrex's combined `MAX_VERIFY_GAS`. ethrex's `e
 still apply it. Simulate still returns `erc7562Trace` when the budget is exceeded, so admission works with no ethrex
 change. `PR.md` describes the alt-mempool admission mode ethrex would need upstream.
 
-**Running it.** `devnet/patched-sidecar/up-patched.sh` builds `leaked/sidecar:budget-010` (native arch) and starts it
+**Running it.** `devnet/patched-sidecar/up-patched.sh` builds `queuebit/sidecar:budget-010` (native arch) and starts it
 via `compose.override.yml`:
 - endpoint **`http://localhost:14340/rpc`**, container IP `172.28.0.40`, in-network `skandha-budget:14337`;
 - next to the stock sidecar on `:14337`;
@@ -377,14 +377,14 @@ Reputation after: `seen 10 / included 0`, `status ok` — the predicted delta (+
 0 + 10, so not throttled; throttling needs ≥ 110 such txs from a clean slate, §2.8). No cancellation-specific penalty
 beyond the unreturned `seen`.
 
-## `@leaked/ur` and the vault companion PWA (section 20 §4, M4-A)
+## `@queuebit/ur` and the vault companion PWA (section 20 §4, M4-A)
 
 ### UR vocabulary (`packages/ur`)
 
 - **Strict CBOR.** Every payload is CBOR Core Deterministic Encoding (cbor2 `cde`), integer-keyed maps; decoders
   reject unknown keys, wrong types/sizes, non-canonical bytes (checked twice: decoder options and a byte-exact
   re-encode), and text with control or bidi characters. `request-id` is tag 37 (16-byte UUID).
-- **`ur:leaked-sign-request` key 4** is the frame tx in `@leaked/frames` wire form (`encodeTx`) with every empty-`msg`
+- **`ur:queuebit-sign-request` key 4** is the frame tx in `@queuebit/frames` wire form (`encodeTx`) with every empty-`msg`
   entry holding its placeholder (PQ entry: `sigLength` zero bytes). §20 §4.2's "the preimage of compute_sig_hash" is
   ambiguous on length-committing profiles; the wire form is unambiguous and `sigHash(decodeTx(...))` gives the digest.
   The companion requires the PQ slot to be all-zero and 3,688 bytes (or empty on `empty`-elision profiles).
@@ -392,11 +392,11 @@ beyond the unreturned `seen`.
   check can name *what* differs; **key 12 `policy`** (advisory: account, cap, per-tx max, timelock delay/threshold,
   pinned token prices, max fee, max hot frames) is how the browser reports the Vault-pinned prices and current limits
   the phone cannot read; **key 13 `payer`** for **tx-type 2** (EIP-712 typed data in key 4 as UTF-8 JSON: the Privacy
-  Pools `PrivacyPoolNote` envelope). `ur:leaked-signature` gained key 5 `typed-sig` (`r‖s‖v`, v 27/28); key 4
-  `payer-sig` is in `@leaked/frames` entry form `v‖r‖s` (v 0/1) so it drops into entry 1 with `setSignature`.
-- **`ur:leaked-pq-key`** (the pairing UR §30 noted as undefined): `{1 scheme-id, 2 pk, 3 role, 4 payer?}`.
-- **`ur:leaked-recovery-test`** (ux-spec PLAN CHANGE 9.3): `{1 request-id, 2 scheme-id, 3 recovery-pk, 4 witness,
-  5 ok=true}`; the witness signs `keccak256("LEAKED recovery test v1" ‖ schemeId ‖ pk ‖ requestId)`
+  Pools `PrivacyPoolNote` envelope). `ur:queuebit-signature` gained key 5 `typed-sig` (`r‖s‖v`, v 27/28); key 4
+  `payer-sig` is in `@queuebit/frames` entry form `v‖r‖s` (v 0/1) so it drops into entry 1 with `setSignature`.
+- **`ur:queuebit-pq-key`** (the pairing UR §30 noted as undefined): `{1 scheme-id, 2 pk, 3 role, 4 payer?}`.
+- **`ur:queuebit-recovery-test`** (ux-spec PLAN CHANGE 9.3): `{1 request-id, 2 scheme-id, 3 recovery-pk, 4 witness,
+  5 ok=true}`; the witness signs `keccak256("QueueBit recovery test v1" ‖ schemeId ‖ pk ‖ requestId)`
   (`recoveryTestChallenge`, pinned and cross-checked with `cast keccak`). It is a full C13 signature, so the
   "small QR" of the spec is ~10 animated parts.
 - **bc-ur:** `@ngraveio/bc-ur` 2.0.0-beta.9 (MIT, the plan's pin; npm `latest` 1.1.13 lacks the fountain API).
@@ -405,7 +405,7 @@ beyond the unreturned `seen`.
   pulls ~190 react-native packages through an auto-installed peer; `pnpm-workspace.yaml` removes it via `overrides`.
   The receiver checks part headers (≤ 1,024 parts, ≤ 128 KiB) before the library allocates; parts longer than a v40
   QR (4,400 chars) are refused at both ends.
-- Measured: a C13 `ur:leaked-signature` at 400-byte fragments is 10 parts; with 30% random loss the median receiver
+- Measured: a C13 `ur:queuebit-signature` at 400-byte fragments is 10 parts; with 30% random loss the median receiver
   completes after < 2.2 displayed frames per part, p95 < 3.5 (100 trials per fragment size, `transport.test.ts`).
 
 ### Companion (`apps/companion`)
@@ -416,8 +416,8 @@ beyond the unreturned `seen`.
   showing a signature. `sw.js` gets its own policy (`connect-src 'self'`) because it must fetch the build once at
   install; with one combined policy it cannot install. At runtime it answers only from its precache
   (`ignoreVary`: `vite preview` sends `Vary: Origin`).
-- **Clear signing** is data-driven from `src/registry/leaked.descriptors.json`. Its `abis`/`selectors` sections are
-  **generated from `contracts/out`** (`pnpm --filter @leaked/companion abi:sync`, `--check` for CI);
+- **Clear signing** is data-driven from `src/registry/queuebit.descriptors.json`. Its `abis`/`selectors` sections are
+  **generated from `contracts/out`** (`pnpm --filter @queuebit/companion abi:sync`, `--check` for CI);
   `test/registry.test.ts` checks every selector against the Solidity sources (no forge needed), that every
   `vault*`/`recovery*` entry point has a display format, and (when built) against the artifacts. Now synced to the
   landed account: no `vaultSetDomain`; `vaultSetFeePolicy`, `vaultSetValueVerifier`, `vaultSetTrustedVerifier`,
@@ -442,12 +442,12 @@ beyond the unreturned `seen`.
 - **Not covered / open:** camera scanning is exercised only with Chromium's fake device (the paste fallback is what
   e2e drives); the recovery ceremony's middle step (Vault approval of `vaultSetRecoverySigner`) happens after the
   test-ok QR, as ux-spec §4.6 orders it; 4337 requests (tx-type 1) are refused (E-76). The root `vitest` config only
-  lists `packages/*`, so the companion's unit tests run via `pnpm --filter @leaked/companion test`.
+  lists `packages/*`, so the companion's unit tests run via `pnpm --filter @queuebit/companion test`.
 
 ## Contracts M7: ERC-4337 / ERC-7579 backend (§10.4, §10.9 M7)
 
-Code: `contracts/src/modules/{LeakedHotValidator,LeakedPolicyHook,LeakedRoleExecutor}.sol`, `interfaces/`, `lib/
-LeakedExecDecoder.sol`. Tests: `contracts/test/modules` (130 tests: 40-41 per host on the reference MSA, Safe7579 and
+Code: `contracts/src/modules/{QueueBitHotValidator,QueueBitPolicyHook,QueueBitRoleExecutor}.sol`, `interfaces/`, `lib/
+QueueBitExecDecoder.sol`. Tests: `contracts/test/modules` (130 tests: 40-41 per host on the reference MSA, Safe7579 and
 Kernel v3.3; real-C13 test; ERC-7562 storage test; invariants). E2e: `contracts/devnet-tests/4337` (`bun run e2e.ts`,
 anvil). Pins and licenses: THIRD_PARTY.md.
 
@@ -459,9 +459,9 @@ immutables. The v0.7 address (`0x0000000071727De2…a032`, plan [UNVERIFIED]) ha
 deploy that exact initcode through the CREATE2 deployer, so they run the mainnet bytecode at the canonical address.
 
 **Design as built.**
-- `LeakedPolicyHook` is the policy store and the only stateful hot-side module: hot key, freeze/bunker, per-tx and fee
+- `QueueBitPolicyHook` is the policy store and the only stateful hot-side module: hot key, freeze/bunker, per-tx and fee
   bounds, rolling bucket (`src/lib/RollingCap`), prices, allowlist, sessions, registered hashes, trusted/denied 1271
-  verifiers. `LeakedHotValidator` is stateless and reads it. `LeakedRoleExecutor` holds the PQ roles (verifier, vault
+  verifiers. `QueueBitHotValidator` is stateless and reads it. `QueueBitRoleExecutor` holds the PQ roles (verifier, vault
   and recovery pk, separate nonce lanes, timelock queue, vault instant bucket, guardians, rotation) and is the **only**
   writer of hook policy (`onlyExecutor`; loosening needs the executor's transient queued context).
 - A vault batch (`vaultExec`/`vaultQueue`) mixes spends (through `executeFromExecutor`, single mode, per call) and config
@@ -542,9 +542,9 @@ pin, context-remapped) and a file-level remapping for its `src/lib/ModeLib.sol` 
 
 **For later (shared refactoring, not done: `src/account` and `src/lib` are under review).** The token config / price
 quote (`mulDiv` ceil), monitored-asset snapshot and outflow, I-6 approval check and tighten/loosen classification are
-duplicated between `LeakedAccountBase`/`LeakedAccountRoles` and `LeakedPolicyHook`/`LeakedRoleExecutor`. Proposal: a
-`src/lib/LeakedPolicyLib.sol` (pure/view helpers over a `TokenCfg` + balances interface) used by both, and the types in
-one `ILeakedPolicyTypes`.
+duplicated between `QueueBitAccountBase`/`QueueBitAccountRoles` and `QueueBitPolicyHook`/`QueueBitRoleExecutor`. Proposal: a
+`src/lib/QueueBitPolicyLib.sol` (pure/view helpers over a `TokenCfg` + balances interface) used by both, and the types in
+one `IQueueBitPolicyTypes`.
 
 ## Decision (2026-11-06): Path A scheme options after the M3 benchmark
 `bench/results/RESULTS.md` measured on the local devnet: **leanSphincs-s has a 43,529-gas VERIFY frame and fits the stock 100k budget**. That makes PQ-in-VERIFY (Path A, no payer ECDSA, no griefing) possible on today's public mempool, with no BUDGET-010. The cost is a 4,164 B sig, ~281k tx, and no formal proof (C13 is Lean-proof-pinned).
@@ -552,12 +552,12 @@ one `ILeakedPolicyTypes`.
 - C13 stays the default vault scheme, on Path B now and Path A on staked BUDGET-010 sidecars.
 - leanSphincs-s becomes a **second registered `IPQVerifier`** that users can choose as "Path A on any mempool", pending an independent review of its security argument.
 - The extension's router picks Path A whenever the vault signer's scheme VERIFY gas plus overhead fits the target mempool's budget.
-Follow-up: a leanSphincs-s adapter + signer in `@leaked/pq-signer`, behind a feature flag until reviewed.
+Follow-up: a leanSphincs-s adapter + signer in `@queuebit/pq-signer`, behind a feature flag until reviewed.
 
 ## Contracts follow-ups and gate G1 (2026-11-06)
 
 Code: `contracts/src/roles/{PQRoleSigner,RoleSignerFactory,FeeProfile,GuardianSigner}.sol`,
-`contracts/src/interfaces/ILeakedAccountRoles.sol`, `contracts/script/CheckFeeProfile.s.sol`; tests `contracts/test/roles`;
+`contracts/src/interfaces/IQueueBitAccountRoles.sol`, `contracts/script/CheckFeeProfile.s.sol`; tests `contracts/test/roles`;
 devnet run `contracts/devnet-tests/g1` (`bun run test`, funding anvil #0 → one derived deployer key; results in
 `last-run.json`). `src/account` untouched.
 
@@ -586,14 +586,14 @@ devnet run `contracts/devnet-tests/g1` (`bun run test`, funding anvil #0 → one
   factory fails to deploy. It also refuses any non-fee TXPARAM. `EIP7906_WORKSHOP` is unprobed, so both are accepted
   there. `script/CheckFeeProfile.s.sol` (read-only `forge script --rpc-url`) checks a deployed factory, its
   implementation and the given signers/guardians against the chain id. The G1 run passes it (5 contracts). It cannot
-  cover `LeakedAccountImpl`: `PER_GAS_MAX_FEE` has no getter.
+  cover `QueueBitAccountImpl`: `PER_GAS_MAX_FEE` has no getter.
 - **Lint on the clone path.** Clone runtime = the 45-byte Solady proxy (`CALLDATACOPY … GAS DELEGATECALL …`, GAS
   directly before DELEGATECALL) to the implementation, checked byte-for-byte on chain. Implementation bytecode pre-filter:
   only the 4 execution-side SSTOREs (`initialize` and 3 setters) and solc's trailing INVALID. Dynamic trace of every
   role-signer VERIFY: no banned opcode, no LOG, no transient storage, no writes, and SLOADs only on the clone. DELEGATECALL
   callees are the implementation and the APPROVE helper. That chain (clone → implementation → helper) is how **APPROVE
   acts on the clone (= tx.sender)**, as demonstrated by every mined role tx.
-- **Interfaces/docs.** `ILeakedAccountRoles` gains `vaultSetTrustedVerifier`, `executeQueued`/`executeUpgrade`/
+- **Interfaces/docs.** `IQueueBitAccountRoles` gains `vaultSetTrustedVerifier`, `executeQueued`/`executeUpgrade`/
   `executeMigrate` and the role views `getRoles`/`getVaultBucket`/`isQueued`/`isValueVerifier`/`isTrustedVerifier`, with
   selector parity tested. §10.3.1/§10.3.2/§10.3.6 of `10-contracts.md` were synced with the built account and the clones.
 
@@ -601,7 +601,7 @@ devnet run `contracts/devnet-tests/g1` (`bun run test`, funding anvil #0 → one
 
 Deployed: account `0x553d9CB1…7721` (AccountFactory, tx `0x4994bd22…21d5`), VaultSigner clone `0x7fcBC2B8…734f`
 (unbound), RecoverySigner clone `0x6C09aD55…94a9` (bound), GuardianSigner `0xd05e3236…eff9` (5,353,231 gas), C13 keys from
-`@leaked/pq-signer` (signing 3.7–5.2 s in bun, 12 signatures).
+`@queuebit/pq-signer` (signing 3.7–5.2 s in bun, 12 signatures).
 
 | Gate item | Tx | Result | Frame gas (VERIFY / SENDER exec / SENDER state) |
 |---|---|---|---|
@@ -632,7 +632,7 @@ Deployed: account `0x553d9CB1…7721` (AccountFactory, tx `0x4994bd22…21d5`), 
 ## PoolPayer after the security review (2026-11-06; supersedes the earlier P4 gas table)
 - Review fixes `a8ce107`, `b2cd1dd` cover unmetered charges (blobs, oversized data, witnesses, value frames), stranded refunds, and self-recipient. 45/45 Foundry tests pass.
 - Current devnet numbers (e2e-1793920665037, sidecar :14340): **VERIFY frame 306,006 gas** (was 298,460 before the extra introspection reads), refund frame 25,796, payer net −5,540 gas (the configured estimator slack).
-- **Decision (v1): no user tail frames.** A PoolPayer withdrawal is exactly `[pay(PoolPayer), DEFAULT(settle), DEFAULT(refund)]`. User calls after the withdrawal (and their EIP-3529 refund effects, which PoolPayer can't observe) are out of scope for v1. The wallet sends a separate tx from the recipient if needed. Follow-up: enforce it in `verify`, and update `@leaked/privacy`'s broadcaster.
+- **Decision (v1): no user tail frames.** A PoolPayer withdrawal is exactly `[pay(PoolPayer), DEFAULT(settle), DEFAULT(refund)]`. User calls after the withdrawal (and their EIP-3529 refund effects, which PoolPayer can't observe) are out of scope for v1. The wallet sends a separate tx from the recipient if needed. Follow-up: enforce it in `verify`, and update `@queuebit/privacy`'s broadcaster.
 - Operator calibration before mainnet: `MIN_SETTLE_GAS` for a depth-32 LeanIMT insert; `MAX_INTRINSIC_GAS` vs the EIP-text intrinsic; make `setOperator` two-step.
 
 ## Extension M1: native account, FrameEngine, routing, Send and dapp payments (2026-11-06)
@@ -647,7 +647,7 @@ Code: `apps/extension/src/background/{account,engine,routing,policy,payments,act
   once during this work (RoleSignerFactory rebuilt by the contracts workstream) and was fixed by re-running both.
 - **The Vault signer is a stand-in until M4.** `initialize` requires a non-zero `vaultSigner` and the account address
   is a CREATE2 function of the whole `InitConfig`, while a `PQRoleSigner` binds to its account (circular), and there
-  is no pairing yet. M1 therefore uses a public, deterministic devnet key (`keccak("leaked/devnet/test-vault-stand-in/v1")`,
+  is no pairing yet. M1 therefore uses a public, deterministic devnet key (`keccak("queuebit/devnet/test-vault-stand-in/v1")`,
   `testVault` in addresses.local.json) as `vaultSigner`, only in the local-devnet build, and the UI says so ("a shared
   test key stands in for the Vault"). Accounts created this way can never get a real Vault (no setter; recovery is
   unset): M4 must compute the address after pairing, i.e. change the onboarding order or the factory.
@@ -676,7 +676,7 @@ Code: `apps/extension/src/background/{account,engine,routing,policy,payments,act
   site (events to that origin only); the popup's network pill no longer moves connected sites.
 - **Signatures (account audit)**: `personal_sign`/SIWE and zero-value typed data → sign-in (7739, M3); ERC-2612
   `Permit` → `registerPermit(token, spender, value, deadline)` in a hot batch (M3; counts against the limit); Permit2 and
-  other value-bearing or unknown typed data → `4100` with `leakedRule` (`SIG-PERMIT2`, `SIG-VALUE-BEARING`,
+  other value-bearing or unknown typed data → `4100` with `queuebitRule` (`SIG-PERMIT2`, `SIG-VALUE-BEARING`,
   `SIG-UNKNOWN-SCHEMA`) now.
 - **Results** (local devnet): unit 89 pass; devnet contract-in-the-loop test pass (activate → hot top-up mined, all three
   frames `success` → per-payment and not-allowed classified, nothing sent); Playwright e2e 8/8 including the whole M1
@@ -685,14 +685,14 @@ Code: `apps/extension/src/background/{account,engine,routing,policy,payments,act
 
 ## Watcher / alerts (privacy-infra milestone P9, plan 40 §5, §8.1) (2026-11-06)
 
-- **Layout.** `packages/watcher-core` (`@leaked/watcher-core`, pure TS, no I/O: what the extension light mode will
-  import) and `services/watcher` (`@leaked/watcher`, Node service, Dockerfile, README). Funding key for the devnet
+- **Layout.** `packages/watcher-core` (`@queuebit/watcher-core`, pure TS, no I/O: what the extension light mode will
+  import) and `services/watcher` (`@queuebit/watcher`, Node service, Dockerfile, README). Funding key for the devnet
   test: anvil #9 only.
 - **Event ABI from the artifacts.** `packages/watcher-core/scripts/gen-abi.mjs` writes `src/generated/abi.ts` from
   `contracts/out` (account impl + roles module, policy hook + role executor, `IEntryPoint`'s two userOp events,
-  `PQRoleSigner`) plus the `KIND_*` values read from `LeakedAccountBase.sol`; `test/abi-drift.test.ts` fails when it is
-  stale (skips without `forge build`). Regenerate with `pnpm --filter @leaked/watcher-core gen:abi`.
-- **Things that leave no log** (ILeakedAccount "Paths that cannot log"): an over-limit hot batch reverts its SENDER
+  `PQRoleSigner`) plus the `KIND_*` values read from `QueueBitAccountBase.sol`; `test/abi-drift.test.ts` fails when it is
+  stale (skips without `forge build`). Regenerate with `pnpm --filter @queuebit/watcher-core gen:abi`.
+- **Things that leave no log** (IQueueBitAccount "Paths that cannot log"): an over-limit hot batch reverts its SENDER
   frame, so the service also reads each block's transactions whose `sender` is a watched frame account, and a
   `hotExecute` SENDER frame with receipt status `0x0` becomes `hotBlocked`. The reason is fixed with `getBucket()` at
   the parent block refilled to the block time: `hotExecute` debits at most the declared USD, so `declared > available`
@@ -712,9 +712,9 @@ Code: `apps/extension/src/background/{account,engine,routing,policy,payments,act
 - **Copy** follows ux-spec §1.2; a test checks every alert kind for amounts, addresses and the banned words. ntfy push
   carries title/body only; the SSE stream and webhook carry the structured `ref` to authenticated clients.
 - **HMAC** (WebCrypto, works in the MV3 worker; format as of `fc88238`, superseding the first version): webhook
-  `x-leaked-signature: t=…,n=…,v2=…` plus `x-leaked-delivery` (stable across retries, for dedupe; 5 min skew),
+  `x-queuebit-signature: t=…,n=…,v2=…` plus `x-queuebit-delivery` (stable across retries, for dedupe; 5 min skew),
   stream envelopes v2 `{v,t,type,seq,alert,sig}` with all of `t,type,seq,alert` signed by the caller's key (v1 refused:
-  `type`/`seq` were unsigned), request auth `LEAKED-HMAC id,t,n,sig` with a per-key nonce cache for the skew window;
+  `type`/`seq` were unsigned), request auth `QUEUEBIT-HMAC id,t,n,sig` with a per-key nonce cache for the skew window;
   EventSource uses a single-use 60 s token from a signed `POST /v1/stream-token` (no signature in the URL);
   `trustProxy` opt-in for rate-limit keys. Pairing QR:
   `{url, topic, keyId, hmacKey}` (`parsePairing`; ux-spec §3.10 lists `{url, topic, hmacKey}`; `keyId` added so one
@@ -727,7 +727,7 @@ Code: `apps/extension/src/background/{account,engine,routing,policy,payments,act
   EntryPoint / role-signer logs from the generated ABI, rules, eta, HMAC incl. RFC 4231, drift); service 21 tests
   (mock chain: confirmations, paging/halving, reorg retract/re-include, checkpoints in file and SQLite; HTTP 401 for
   missing/malformed/unknown/wrong/stale keys, SSE replay + live + retract, stream cap, 429; webhook verified by a
-  receiver; ntfy has no addresses); **live devnet** (`LIVE_DEVNET=1 pnpm --filter @leaked/watcher test`, ~67 s, reused
+  receiver; ntfy has no addresses); **live devnet** (`LIVE_DEVNET=1 pnpm --filter @queuebit/watcher test`, ~67 s, reused
   the `devnet/deploy` CREATE2 deployment): over-limit attempt (block 1298, SENDER `0x0`, no logs) → "Over the limit:
   payment blocked" with reason over-limit; Vault-queued loosening → urgent "Limit change scheduled"; Guardian pause →
   "Paused by your Guardian"; all within 6 blocks, every SSE envelope and webhook body verified. Docker image builds
@@ -748,11 +748,11 @@ Code: `apps/extension/src/background/{account,engine,routing,policy,payments,act
   - **MSA:** yes; needs a v0.8 EntryPoint build.
   - **Safe7579:** yes, single owner `0xdEaD`; emergency exit is vault-only.
   - **Kernel v3.3:** yes, hot 1271 off.
-- **To mirror the next account change** (Open recipient mode by default, vault bound in initialize): `LeakedPolicyHook` gains the same `RecipientMode`; `LeakedRoleExecutor` derives role signers the same way. Tracked as a follow-up once the account change is reviewed.
+- **To mirror the next account change** (Open recipient mode by default, vault bound in initialize): `QueueBitPolicyHook` gains the same `RecipientMode`; `QueueBitRoleExecutor` derives role signers the same way. Tracked as a follow-up once the account change is reviewed.
 
-## `@leaked/privacy` (privacy P1–P3 + P7 core, plan 40 §1, §2.12, §6, §7, §8.1; 2026-11-06)
+## `@queuebit/privacy` (privacy P1–P3 + P7 core, plan 40 §1, §2.12, §6, §7, §8.1; 2026-11-06)
 
-Code: `packages/privacy` (no UI). It has 70 unit tests (`pnpm --filter @leaked/privacy test`) and one local-devnet e2e
+Code: `packages/privacy` (no UI). It has 70 unit tests (`pnpm --filter @queuebit/privacy test`) and one local-devnet e2e
 (`LOCAL_DEVNET=1`, `test/e2e.devnet.test.ts`).
 
 - **License gate (plan §1 row 15): no Kohaku dependency.** `@kohaku-eth/privacy-pools` declares MIT but pulls in
@@ -769,7 +769,7 @@ Code: `packages/privacy` (no UI). It has 70 unit tests (`pnpm --filter @leaked/p
     `heliosVerifiedReads(heliosProvider)` wraps an injected `@a16z/helios` provider, which is not a dependency
     (WASM, beacon API, no beacon chain on the 8141 devnet). Logs always use raw RPC. `readsVerified` drives the badge.
 - **Vault EnvelopeSigner over QR.**
-  - `createNoteSignRequest` emits a `ur:leaked-sign-request` tx-type 2 in the companion's exact JSON shape (domain
+  - `createNoteSignRequest` emits a `ur:queuebit-sign-request` tx-type 2 in the companion's exact JSON shape (domain
     keys, decimal uint64s).
   - `acceptNoteSignature` checks the request id and that the signature recovers to the payer over the digest.
   - The secrets are `trunc31(keccak(tag ‖ r ‖ lowS(s)))`. Tests show that the software signer, vault-over-QR, high-s,
@@ -808,7 +808,7 @@ Code: `packages/privacy` (no UI). It has 70 unit tests (`pnpm --filter @leaked/p
 - **Guardrails (§7).** Modes are exactly `relayer | frame-paymaster` (`assertWithdrawMode`), and the package exports
   no server. `rejectFeeOptions` refuses `fee/feeBps/margin/markup/operatorFee/feeRecipient`. Tests cover all of these.
 - **Local devnet e2e (2026-11-06).**
-  - Funding: sub-account `0xFf8F0cfC…bf5B` (key `keccak("leaked/privacy-package-e2e/v1")`), topped up from anvil #5
+  - Funding: sub-account `0xFf8F0cfC…bf5B` (key `keccak("queuebit/privacy-package-e2e/v1")`), topped up from anvil #5
     (`0xb0316251…076a`), then its own nonce stream.
   - Fresh PP v1: Entrypoint `0x2386a554…e1b5`, pool `0xa5c0d741…ba60`, PoolPayer `0x0bc0b30d…3f93` (staked 0.012 ETH).
   - Vault-QR deposit `0xad18ebc2…70e5` (2 scans), then `updateRoot` `0x056ca60c…8800`.
@@ -820,11 +820,11 @@ Code: `packages/privacy` (no UI). It has 70 unit tests (`pnpm --filter @leaked/p
   - The ASP source is static (devnet). The 0xbow IPFS/API format is still to be implemented.
   - `externalSyncProvider` (saga CDN) is typed but not wired.
   - The extension must decide on GPL snarkjs vs another Groth16 engine.
-  - The LEAKED-account-as-sender case is still the §10 open item.
+  - The QueueBit-account-as-sender case is still the §10 open item.
   - No change is needed in `contracts/src/privacy`.
 
 ## Decision (2026-11-06): the Groth16 engine in the shipped extension
-`@leaked/privacy` takes the Groth16 engine as an injected interface. snarkjs is GPL-3.0, and bundling it would make the extension bundle GPL. **The extension stays MIT:**
+`@queuebit/privacy` takes the Groth16 engine as an injected interface. snarkjs is GPL-3.0, and bundling it would make the extension bundle GPL. **The extension stays MIT:**
 - The production prover is an **arkworks-based engine** (ark-groth16 + a circom witness loader, MIT/Apache) compiled to WASM, and runs in the offscreen document.
 - snarkjs stays a test-only dev dependency, used as the cross-check oracle: the same zkey and inputs must give a proof that verifies on-chain.
 - Before adopting a witness-generation component, check its license (circom's generated witness code and any wasm runtime).
@@ -832,8 +832,8 @@ Kohaku packages are not dependencies: `@kohaku-eth/plugins` has no license, and 
 
 ## Account: Open recipient mode and bound role signers (2026-11-06)
 
-Code: `contracts/src/account/{ILeakedAccount,LeakedAccountImpl,LeakedAccountRoles,LeakedAccountStorage}.sol`,
-`contracts/src/interfaces/{IRoleSignerFactory,ILeakedAccountRoles}.sol`; tests `contracts/test/account` (new
+Code: `contracts/src/account/{IQueueBitAccount,QueueBitAccountImpl,QueueBitAccountRoles,QueueBitAccountStorage}.sol`,
+`contracts/src/interfaces/{IRoleSignerFactory,IQueueBitAccountRoles}.sol`; tests `contracts/test/account` (new
 `BoundRoleSigners.t.sol`), `script/lint-verify.sh` step 4; devnet `devnet-tests/{account,g1}`, `devnet/deploy`. Spec:
 §10.3.2 of `10-contracts.md` (as-built bullets, I-1/I-2/I-8, access matrix). Supersedes, in the extension M1 section,
 **"The Vault signer is a stand-in until M4"** and **"Hot recipients are only what the Vault allowed"**, and in the G1
@@ -852,7 +852,7 @@ section the unbound-VaultSigner workaround of **"Account ↔ vault-signer CREATE
   mode. `bool recipientsOpen` is appended after `registeredFor` (inverted so a zero slot after an upgrade fails closed
   to Strict). I-2 proof: `Audit.t.sol` `test_I2_*` in Open and Strict (`AuditStrictTest` re-runs every C1/H1/M1/M2/L1
   PoC in Strict, `AuditTest` runs them in Open); `lint-verify.sh` adds a source rule (no `recipientsOpen` /
-  `RecipientMode` / `targets` / role signers in `LeakedVerify.sol`), a layout rule and that test. Invariants: I-1 now
+  `RecipientMode` / `targets` / role signers in `QueueBitVerify.sol`), a layout rule and that test. Invariants: I-1 now
   records the measured outflow of each batch (any recipient); new `invariant_recipientPolicy` (Open-mode abuse, Strict
   violations, an arbitrary contract's fallback never runs) and mode loosening by a non-queued path counts as a
   violation.
@@ -868,8 +868,8 @@ section the unbound-VaultSigner workaround of **"Account ↔ vault-signer CREATE
 - **Cost.** `initialize` with two derived signers: account creation 2,504,524 gas on the devnet (G1; 2,258,493 before:
   +246k for two `predictRoleSigner` calls, the `sigLength` probes, events and the mode slot). Implementation 19.5 KB
   (was 18.2), roles module 18.0 KB. VERIFY unchanged: hot 45,750, Path B 36,213, Path A 151,701.
-- **Devnet** (`devnet/deploy`, idempotent re-run checked): new `LeakedAccountRoles` `0x4B24758f…6b89`,
-  `LeakedAccountImpl` `0xa23d5438…C520`; AccountFactory, C13Verifier, RoleSignerFactory unchanged. `testVault` stays in
+- **Devnet** (`devnet/deploy`, idempotent re-run checked): new `QueueBitAccountRoles` `0x4B24758f…6b89`,
+  `QueueBitAccountImpl` `0xa23d5438…C520`; AccountFactory, C13Verifier, RoleSignerFactory unchanged. `testVault` stays in
   `addresses.local.json` (marked legacy; the generator reads it). Account devnet test: Open payment to a fresh address
   `0x8fdf8a78…6cff6` mined; after an instant Strict switch the same tx simulates VERIFY-valid with a failing SENDER
   (not sent); Strict → Open directly `MustQueue`; a bound account's stored vault equals `predictRoleSigner`.
@@ -890,7 +890,7 @@ section the unbound-VaultSigner workaround of **"Account ↔ vault-signer CREATE
   per-payment max is an everyday (hot) payment, not TARGET-NOT-ALLOWED; Strict keeps today's routing; everything else
   (approvals, other selectors, unallowlisted tokens) routes exactly as before; (4) "New recipient" stays a UI badge
   (ux-spec §3), not a policy result.
-- **What the 7579 modules must mirror** (`contracts/src/modules`, not touched here): `LeakedPolicyHook` needs the
+- **What the 7579 modules must mirror** (`contracts/src/modules`, not touched here): `QueueBitPolicyHook` needs the
   same `RecipientMode` (Open default; ETH send / allowlisted-token `transfer` to any non-zero recipient; zero-value
   empty calls, ETH with calldata and every non-transfer selector still need a session; Open → Strict instant, Strict →
   Open queued; vault only), its storage zero value failing closed, and the same I-8 tests; the role executor's vault
@@ -915,7 +915,7 @@ Follow-up of the decision "Path A scheme options after the M3 benchmark". Code: 
   upstream's independent Python verifier and the unmodified upstream Solidity verifier. Hedged `R_0` by default;
   `{deterministic: true}` = upstream. No node cache: the 64-byte secret key stays the C13 shape and every signature
   rebuilds the subtree (WASM sign 474 ms median vs C13 2.61 s; BENCH.md).
-- **No key reuse across schemes.** Derivation is one function for both schemes, `HMAC-SHA512(key = "leaked/v1/" ‖
+- **No key reuse across schemes.** Derivation is one function for both schemes, `HMAC-SHA512(key = "queuebit/v1/" ‖
   schemeId ‖ "/" ‖ role ‖ "/" ‖ scope, msg = seed)`; leanSphincs-s has `schemeId = keccak256("leanSphincs-s/keccak/v1")`
   = `0x5f6989ca…29daed` (tests: `rust/tests/lean_derive.rs`, `test/lean.test.ts`). b = 13 is fixed by that id.
 - **API / flag.** The C13 top-level exports are unchanged; `schemes.c13` / `schemes.leanSphincsS` share the
@@ -936,7 +936,7 @@ Follow-up of the decision "Path A scheme options after the M3 benchmark". Code: 
 ### Path A on the local devnet through the STOCK sidecar (no stake, no BUDGET-010)
 
 VaultSigner clone `0x26110757cc6C48Ac25dD94C4e7840BAbA48f7eb0` (PQRoleSigner implementation `0xE90a0a30…4a61`, factory
-`0x1c0aeba1…496c`, payer key none: Path A only) bound to a MockLeakedAccount `0xb225fe48…b806`, verifier
+`0x1c0aeba1…496c`, payer key none: Path A only) bound to a MockQueueBitAccount `0xb225fe48…b806`, verifier
 `LeanSphincsSVerifier` `0xfa9707fb…bf6f` (deploy 7,055,152 gas); funded from anvil #2. Tx `[VERIFY(self,
 verifyFrame(0)) limit 99,900, SENDER(self, relay(mock, vaultExecute(0.001 ETH)))]`, one ARBITRARY 4,164-B witness:
 
@@ -959,9 +959,9 @@ verifyFrame(0)) limit 99,900, SENDER(self, relay(mock, vaultExecute(0.001 ETH)))
   estimate, not proved) and of the verifier (no formal proof, unlike C13); the UI keeps the scheme behind its
   experimental flag.
 
-## @leaked/groth16: the arkworks Groth16 engine (2026-11-06)
-Implements the "Groth16 engine" decision above. `packages/groth16`, MIT; `@leaked/privacy` is unchanged.
-- **Shape.** Rust crate `leaked-groth16` (arkworks 0.6: ark-groth16, ark-bn254) → wasm-bindgen 0.2.117 → committed,
+## @queuebit/groth16: the arkworks Groth16 engine (2026-11-06)
+Implements the "Groth16 engine" decision above. `packages/groth16`, MIT; `@queuebit/privacy` is unchanged.
+- **Shape.** Rust crate `queuebit-groth16` (arkworks 0.6: ark-groth16, ark-bn254) → wasm-bindgen 0.2.117 → committed,
   reproducible `wasm/` (663 KB, inlined base64; CI job `groth16-wasm` rebuilds and diffs, as `pq-signer-wasm` does;
   panic paths are remapped so the bytes do not depend on the build machine). TS: `createArkworksGroth16()`
   implements `Groth16Backend` (`fullProve` **and** `verify`, so `createGroth16Prover`'s self-check always runs: the
@@ -991,7 +991,7 @@ Implements the "Groth16 engine" decision above. `packages/groth16`, MIT; `@leake
 - **Open.** `withdraw.wasm` is circom output with circom's runtime arithmetic embedded; whether circom's GPL reaches
   it is a legal question about the pinned artifact (not this engine). Not audited.
 
-## Decision (2026-11-06): license exceptions for `@leaked/groth16`
+## Decision (2026-11-06): license exceptions for `@queuebit/groth16`
 - **Accepted:** `subtle` (BSD-3-Clause; notice reproduced in THIRD_PARTY.md) and `foldhash` (Zlib). Both are permissive with no copyleft, and both are required by arkworks. The shipped extension stays MIT-compatible.
 - **Open (legal review, not engineering):** `withdraw.wasm` is circom compiler output embedding circom's field-arithmetic runtime, and circom itself is GPL-3.0. Whether the generated artifact is covered depends on the artifact's own license (see the circuits package license above) and on circom's position on generated code. Ask a lawyer or 0xbow before a store release.
 
@@ -1001,7 +1001,7 @@ Mirrors "Account: Open recipient mode and bound role signers" in `contracts/src/
 the security review" fixes (A1 to A5) and host matrix are unchanged. Commits `9dbb5a7` (modules + tests), `fd2573c`
 (anvil e2e), `d24cc3d` (watcher-core ABI regenerated).
 
-- **`LeakedPolicyHook` recipient mode.** `ILeakedModules.RecipientMode { Open, Strict }`. `HookInit.recipientMode`
+- **`QueueBitPolicyHook` recipient mode.** `IQueueBitModules.RecipientMode { Open, Strict }`. `HookInit.recipientMode`
   is appended, so a zero-filled install gets Open (the default). It is stored as `bool recipientsOpen` in policy
   slot 0, which the validator already reads, so ERC-7562 needs no new slot. The flag is inverted so that a slot that
   was never written, or was cleared by `onUninstall`, reads Strict: `recipientMode(account)` is Strict for an unknown
@@ -1014,7 +1014,7 @@ the security review" fixes (A1 to A5) and host matrix are unchanged. Commits `9d
   - `setRecipientMode(account, mode)` is executor-only. Open → Strict is instant. Strict → Open goes through
     `_authLoosen`, so it must be queued. The executor's `_checkShape` admits the selector in vault batches only, so
     guardians can still only freeze. Event: `RecipientModeSet(account, mode)`, emitted at install and on every change.
-- **`LeakedRoleExecutor` binding.** In 4337 the PQ check already runs in execution (`vaultExec` and the others), and
+- **`QueueBitRoleExecutor` binding.** In 4337 the PQ check already runs in execution (`vaultExec` and the others), and
   the role identity was already `(verifier, vaultPk/recoveryPk)` stored per account. There is no signer address to
   derive, so nothing like `predictRoleSigner` is needed. Minimal change:
   - `onInstall` probes `verifier.sigLength()` with `RoleSignerFactory`'s rule (1..65535) and refuses a
@@ -1023,7 +1023,7 @@ the security review" fixes (A1 to A5) and host matrix are unchanged. Commits `9d
   - `_verify` refuses a witness of any other length before it calls the verifier.
 - **Tests (323 module tests, all green; `6dc76dd` adds the Open-payee reentry PoC of the account review).**
   - Every host suite (MSA, Safe7579, Kernel) runs in Open, plus a `*StrictTest` re-run of each.
-  - The audit PoCs A1 to A7 run in both modes (`LeakedModulesAudit*StrictTest`).
+  - The audit PoCs A1 to A7 run in both modes (`QueueBitModulesAudit*StrictTest`).
   - New recipient-mode tests: `test_recipientMode_*` and `test_executor_bindsVaultPkVerifierSigLength`. The ERC-7562
     test validates an Open payment to a never-allowlisted recipient.
   - Invariants run in Open and Strict and add `invariant_recipientPolicy`: no Strict payment to a non-allowlisted
@@ -1047,7 +1047,7 @@ the security review" fixes (A1 to A5) and host matrix are unchanged. Commits `9d
 
 ## Account hardening: independent role keys and self-defeating hot recipients (2026-11-06)
 
-Follow-up of the delta review (`9b918a3`). Execution side only: `LeakedVerify` is unchanged, `script/lint-verify.sh`
+Follow-up of the delta review (`9b918a3`). Execution side only: `QueueBitVerify` is unchanged, `script/lint-verify.sh`
 passes, and the G1 re-run (all 7 items pass) records the same VERIFY gas as the previous run for every tx (for
 example hot 45,750, Path B 36,213, Path A 151,701).
 
@@ -1081,9 +1081,9 @@ example hot 45,750, Path B 36,213, Path A 151,701).
 - **Extension ABI.** The two new errors were added to `apps/extension/src/generated/contracts.ts` by running
   `scripts/gen-contracts.mjs`. No `InitConfig` change.
 - **Modules: what they should copy** (`src/modules`, not touched here):
-  - `LeakedRoleExecutor.onInstall` should refuse `recoveryPk == vaultPk` (same verifier or not), and so should any
+  - `QueueBitRoleExecutor.onInstall` should refuse `recoveryPk == vaultPk` (same verifier or not), and so should any
     later recovery-key or vault-key rotation.
-  - `LeakedPolicyHook._checkCalls` in Open should refuse a payment `to` the account, the hook, the executor, the
+  - `QueueBitPolicyHook._checkCalls` in Open should refuse a payment `to` the account, the hook, the executor, the
     token itself (`to == token`), an enabled guardian, the tank, or an allowlisted token, unless it is allowlisted.
     The account, the hook, the executor and `to == token` should be refused in both modes.
 
@@ -1095,8 +1095,8 @@ pages `src/pages/app/{Onboarding,VaultHandoff,Pending,Limits,Security}.tsx`, `sr
 with the simulated phone `e2e/support/companion-sim.ts`. Local devnet, funding key anvil #7.
 
 - **Onboarding order** (task brief; ux-spec §3.1 differs only in putting the limit before Recovery): create →
-  pair the Vault (`ur:leaked-pq-key`, camera or paste, the 8-character check, "This matches") → Recovery ceremony
-  (scan the Recovery key's pq-key code, then its `ur:leaked-recovery-test` code, verified in the service worker
+  pair the Vault (`ur:queuebit-pq-key`, camera or paste, the 8-character check, "This matches") → Recovery ceremony
+  (scan the Recovery key's pq-key code, then its `ur:queuebit-recovery-test` code, verified in the service worker
   against `recoveryTestChallenge`; E-23 on a different key) or "Set up later" with the risk sheet → optional Guardian
   (stored; added with one Vault approval after activation, `InitConfig` has no guardian field) → daily limit and
   "who can you pay" (Open default, Strict explained) → network → the address is computed (`account:computePlan`)
@@ -1104,7 +1104,7 @@ with the simulated phone `e2e/support/companion-sim.ts`. Local devnet, funding k
   path (`testVault` stays in addresses.local.json for explicit-mode tests of other workstreams only).
 - **InitConfig** is the bound shape: `vault = {salt, pk, C13Verifier, payerKey}` from pairing, `recovery = {salt,
   pk, C13Verifier, payerKey: 0}` when the ceremony finished (the companion pairs no payer for Recovery), Open
-  recipients. Account salt = `keccak(hotKey, vaultPk, recoveryPk, "leaked.account.2", chainId)`; the role salt is
+  recipients. Account salt = `keccak(hotKey, vaultPk, recoveryPk, "queuebit.account.2", chainId)`; the role salt is
   derived from it. Signer addresses come from `RoleSignerFactory.predictRoleSigner` (eth_call) and are checked
   against `getRoles()` in the e2e.
 - **Plan-frozen mismatch fixed**: `Payments.plan()` no longer computes anything; the plan is built only by
@@ -1116,13 +1116,13 @@ with the simulated phone `e2e/support/companion-sim.ts`. Local devnet, funding k
 - **Vault requests** (`VaultFlow.create`): action → account calldata (`vaultActions.ts`: tighten = direct setter,
   loosen = `vaultQueue([setter], KIND_LOOSEN)`, sends above the Vault's instant allowance = `vaultQueue(calls,
   KIND_SPEND)` with the calls kept for `executeQueued`) → path (`lanes.ts`) → `roleSignerPathBTx` / `PathATx`
-  (Path B VERIFY 90k; body 700k execution / 400k state; fees 2 × base + 1 gwei) → `ur:leaked-sign-request` keys
+  (Path B VERIFY 90k; body 700k execution / 400k state; fees 2 × base + 1 gwei) → `ur:queuebit-sign-request` keys
   1–12 (11 intent with action/recipient/amount/token, 12 the current limits and pinned prices; role 1 or 2).
   `vault-interop.test.ts` decodes every action with `apps/companion`'s `reviewRequestBytes` and signs with its
   worker `handle()`: same digest, no mismatch, clear-signed, except `vaultSetRecipientMode`, which the companion's
   registry does not know yet (shown as an unknown step: BACKLOG).
 - **Pre-verification before anything is sent** (`VaultFlow.submit`): request id (E-61), expiry (E-60, 10 min), scheme
-  id, the witness against the signer's on-chain `pk()` with `@leaked/pq-signer` (`schemeById`), on Path B the payer
+  id, the witness against the signer's on-chain `pk()` with `@queuebit/pq-signer` (`schemeById`), on Path B the payer
   signature recovered against `payerKey()`, then `ethrex_simulateFrameTransaction` of the exact bytes (valid, SENDER
   frame ok, MAX_COST ≤ the signer's `maxFee`, signer balance), then submit (ethrex, or the staked sidecar). A failed
   check leaves the request waiting (scan again). The WASM verifier runs in the MV3 service worker: CSP
@@ -1146,17 +1146,17 @@ with the simulated phone `e2e/support/companion-sim.ts`. Local devnet, funding k
   20k), state 300k. `parseSimFrames`: a frame without any outcome now counts as failed (BACKLOG decision: fail closed).
 - **M3**: `personal_sign` / zero-value typed data → approval window "Sign in" (SIWE fields, domain must equal the
   origin host or E-50 blocks it, first-sign-in warning with an in-extension "always allow" list = ux-spec §9.1
-  option a) → ERC-7739 PersonalSign / TypedDataSign by the everyday key in the account's domain ("LEAKED", "1").
+  option a) → ERC-7739 PersonalSign / TypedDataSign by the everyday key in the account's domain ("QueueBit", "1").
   The e2e checks the SIWE signature with an `isValidSignature` eth_call (code-less caller) → `0x1626ba7e`. ERC-2612
   `Permit` → "Pre-approve": a hot batch `registerPermit(token, spender, value, deadline)` (routed and priced like a
   token payment, counts against the limit), waits for it to be mined, checks `registeredHashExpiry(digest)` and
   returns `REGISTERED_MARKER ‖ digest`. Permit2 / Seaport / orders / unknown value-bearing → `4100` with
-  `leakedRule` and a plain remedy (the Vault can't help: its PQ key never signs for sites). The e2e's permit stops
+  `queuebitRule` and a plain remedy (the Vault can't help: its PQ key never signs for sites). The e2e's permit stops
   at the honest "token isn't on your allowed list" (a fresh account has no allowed tokens: `InitConfig` has no token
   list and adding one waits ≥ 1 h), with nothing sent.
 - **Dapp payments over the limit** stay pending while the phone approves (`approval:toVault`); the site gets the
   Vault transaction's hash when it is sent.
-- **Privacy of capabilities**: `wallet_getCapabilities` now returns `leaked: {backend, activated}` only (no limit or
+- **Privacy of capabilities**: `wallet_getCapabilities` now returns `queuebit: {backend, activated}` only (no limit or
   remaining amount). **Embedded frames**: the content script sends `location.ancestorOrigins`' top entry; the
   approval window names the page the frame is in.
 - **Not done / open**: guardian freeze deep link; Vault-signer top-up UI; hot-key rotation is wired (keyring index,
@@ -1166,7 +1166,7 @@ with the simulated phone `e2e/support/companion-sim.ts`. Local devnet, funding k
 ## Account: initial tokens, recovery payer key, module mirrors (2026-11-06)
 
 Commits `0f7a63b` (account), `d160c2d` (modules), `c4a03b3` (G1), `2bba64d` (deploy + generated ABIs). Execution side
-only: `LeakedVerify` untouched, `lint-verify.sh` OK (step 4 now also runs the init-token I-2 test), VERIFY gas unchanged
+only: `QueueBitVerify` untouched, `lint-verify.sh` OK (step 4 now also runs the init-token I-2 test), VERIFY gas unchanged
 on the devnet (hot 45,750, Path B 36,213, Path A 151,701). Forge: 884 pass, 3 skip.
 
 - **New `InitConfig` field (appended, last): `tokens: TokenInit[]`, `TokenInit {address token; uint8 decimals;
@@ -1194,31 +1194,31 @@ on the devnet (hot 45,750, Path B 36,213, Path A 151,701). Forge: 884 pass, 3 sk
   signed over the same sig hash as the vault's), exported with the recovery pq-key so the extension can put it in
   `InitConfig.recovery.payerKey`; recovery mode must accept the 2-signature Path B shape (E-78 refuses it today).
   `abi:sync --check` reports no drift (no registry function changed).
-- **7579 modules (mirrors).** `LeakedRoleExecutor`: `SameRoleKey()` (new error) at install, on `setRecoveryKey` (vault
+- **7579 modules (mirrors).** `QueueBitRoleExecutor`: `SameRoleKey()` (new error) at install, on `setRecoveryKey` (vault
   or pending vault key) and on a rotation to the recovery's key (was `BadConfig`); `isGuardian(account, who)`.
-  `LeakedPolicyHook`: the hot key is never the account, the hook or the executor; in Open a recipient that is not
+  `QueueBitPolicyHook`: the hot key is never the account, the hook or the executor; in Open a recipient that is not
   allowlisted is never an allowlisted token (validation) or an enabled guardian (execution only: the guardian set is
   not an account-associated slot, so the userOp passes validation and reverts in `preCheck`), as `NotAllowed`;
-  `HookInit.tokens`: ≤ 16, `DuplicateToken`, a contract other than the hot key. Tests `LeakedModulesMirrors.t.sol`
+  `HookInit.tokens`: ≤ 16, `DuplicateToken`, a contract other than the hot key. Tests `QueueBitModulesMirrors.t.sol`
   (3 hosts × 2 modes), invariants `rolesIndependent` and forbidden recipients; anvil 4337 e2e green.
 - **Watcher**: `packages/watcher-core/src/generated/abi.ts` regenerated (new errors only; no event changed).
   `services/watcher/test/devnet.live.test.ts` encodes `InitConfig` and must add `tokens: []`.
 
 ## Companion follow-ups: Recovery fee key, leanSphincs-s guard, updates, log, navigation (2026-11-06)
 
-Commits `538f22a` (registry), `5cd9faf` (`@leaked/ur`), `16a8c71` (companion). Unit 161, e2e 14 (the 7 earlier ones
+Commits `538f22a` (registry), `5cd9faf` (`@queuebit/ur`), `16a8c71` (companion). Unit 161, e2e 14 (the 7 earlier ones
 plus `e2e/followups.e2e.ts`) on the built PWA; screenshots `apps/companion/docs/screenshots/` retaken (new: 02b, 02c,
 13b, 17–21).
 
 - **Registry.** `vaultSetRecipientMode` is clear-signed: Open = "Let your everyday key pay any address" (loosening;
   queued, else the direct-loosening warning), Strict = "Only pay approved addresses" (instant). `looserWhen`/`derived`
-  accept an enum value. The drift test now also scans `LeakedAccountRoles.sol` (the function was in the roles module but
-  not in `ILeakedAccountRoles`, so the old check missed it). **Extension:** `test/unit/vault-interop.test.ts` still
+  accept an enum value. The drift test now also scans `QueueBitAccountRoles.sol` (the function was in the roles module but
+  not in `IQueueBitAccountRoles`, so the old check missed it). **Extension:** `test/unit/vault-interop.test.ts` still
   expects `phoneKnows: false` (unknown step) for "Strict recipients" and now fails on `review.unknown`; flip it.
   `InitConfig.tokens`: the phone never signs `initialize` (the tank sends `createAccount`), so there is nothing to
   decode there; no `initialize` descriptor was added on purpose (it would make an unsignable call look signable).
-- **`@leaked/ur` (backward compatible).** A pq-key may carry key 4 `payer` for role 2. `ur:leaked-recovery-test` gains
-  optional key 6 `payer`; with it the witness signs `keccak256("LEAKED recovery test v2" ‖ schemeId ‖ pk ‖ requestId ‖
+- **`@queuebit/ur` (backward compatible).** A pq-key may carry key 4 `payer` for role 2. `ur:queuebit-recovery-test` gains
+  optional key 6 `payer`; with it the witness signs `keccak256("QueueBit recovery test v2" ‖ schemeId ‖ pk ‖ requestId ‖
   payer)` (cross-checked with `cast keccak`); without it v1 is unchanged. Verify with `recoveryTestChallengeOf(test)`
   (the extension did so in `0f2caf5`). `KNOWN_SIG_LENGTHS` gains leanSphincs-s (4,164).
 - **Recovery fee key.** BIP-32 `m/44'/60'/8141'/1'/0'` of the Recovery words (hardened, apart from the Vault's
@@ -1229,7 +1229,7 @@ plus `e2e/followups.e2e.ts`) on the built PWA; screenshots `apps/companion/docs/
   `roleSignerPathBTx` (the G1 (e) shape) and checks the answer the way the extension pre-verifies it.
 - **leanSphincs-s** (Settings › Experimental, off by default; the choice and the pq-signer warning text with an
   "I understand" box at create and restore). Counter per key (per pk) in `VaultRecord.usage`: sealed with the seed's
-  AES key (AAD `leaked-companion/usage/v1/<pk>`) plus a plaintext hint for the screens; the worker enforces
+  AES key (AAD `queuebit-companion/usage/v1/<pk>`) plus a plaintext hint for the screens; the worker enforces
   `max(sealed, hint)`, refuses an unopenable counter, increments on every signature it returns (retries count; a
   failed self-check returns nothing and is not counted), and the UI stores the new count before it shows the QR.
   Restored = unknown = exceeded. Levels from `budgetStatus`: warn ≥ 50 % (Home banner, approve-sheet note), ≥ 90 %
@@ -1270,9 +1270,9 @@ bundler,up-4337,smoke-4337}.ts` (`c96eb23`); UR additions `d0ae1b2`.
   `Bootstrap.initMSA(validator, executor, hook)`.** Against Safe7579: no keyless `0xdEaD` owner to get right (A5),
   module reverts bubble (the route copy and the activity name `OverCap`, `NotAllowed`), ~29k less gas per hot op
   (388k vs 417k, M7); against Kernel v3.3: hot ERC-1271 must be off there (A3), so no sign-in and no permits. Cost:
-  Rhinestone publishes no v0.8 MSA build, so LEAKED deploys its own shim on every chain (CREATE2, deterministic).
+  Rhinestone publishes no v0.8 MSA build, so QueueBit deploys its own shim on every chain (CREATE2, deterministic).
 - **Account = CREATE2 of the whole init code** (`MSAFactory.getAddress(salt, initCode)` by eth_call), salt
-  `keccak(hotKey, vaultPk, recoveryPk, "leaked.account.4337.1", chainId)`. `HookInit`: limits, `maxFeeWei` 0.01 ETH
+  `keccak(hotKey, vaultPk, recoveryPk, "queuebit.account.4337.1", chainId)`. `HookInit`: limits, `maxFeeWei` 0.01 ETH
   (the per-op prefund bound, the tank's `maxFeeWeiPerTx` on the native account), the chosen tokens, the fee tank as the
   one allowlisted target, Open. `ExecutorInit`: C13Verifier, Vault pk, Recovery pk (when tested), 48 h, $1,000.
   Activation is a plain `createAccount` tx from the tank (826,665 gas; ERC-7562 [STO-022] rules out initCode in a
@@ -1289,18 +1289,18 @@ bundler,up-4337,smoke-4337}.ts` (`c96eb23`); UR additions `d0ae1b2`.
 - **Provider mapping** (plan §30 §3.2 U): `eth_sendTransaction` → userOpHash; `eth_getTransactionReceipt(userOpHash)`
   → the bundle tx receipt with `transactionHash` = the userOpHash; `wallet_sendCalls` → one batch userOp, id = the
   app's or the userOpHash; `wallet_getCallsStatus` → status from `eth_getUserOperationReceipt`, `receipts` = the
-  bundle tx receipt; `wallet_getCapabilities` → `atomic: supported`, `leaked: {backend: "4337", activated}`. SIWE /
-  zero-value typed data: ERC-7739 in LeakedHotValidator's domain (`"LeakedHotValidator"`, `"1"`, no salt for
+  bundle tx receipt; `wallet_getCapabilities` → `atomic: supported`, `queuebit: {backend: "4337", activated}`. SIWE /
+  zero-value typed data: ERC-7739 in QueueBitHotValidator's domain (`"QueueBitHotValidator"`, `"1"`, no salt for
   PersonalSign, `salt = 0` in the nested TypedDataSign), prefixed with the validator address (the MSA routes 1271 by
-  it). ERC-2612: `hook.registerPermit` in a userOp; the marker is `validator ‖ 0xdc6b87c9 ‖ digest`.
-- **Vault on 4337** = `LeakedRoleExecutor` calls relayed by the fee tank as plain transactions (the PQ check runs in
+  it). ERC-2612: `hook.registerPermit` in a userOp; the marker is `validator ‖ 0x427a9529 ‖ digest`.
+- **Vault on 4337** = `QueueBitRoleExecutor` calls relayed by the fee tank as plain transactions (the PQ check runs in
   execution; no payer key, no lanes). `buildAaVaultAction` reuses the native account's tighten/loosen and
   instant/queued framing and emits `vaultExec(account, calls, usdValue, nonce, "")` (hook / executor setters with the
   account first, or spends), `vaultQueue(…, KIND_SPEND|KIND_LOOSEN, …)`, `vaultCancel` / `recoveryCancel`; Recovery
-  linking is `executor.setRecoveryKey(pk)`. The request is `ur:leaked-sign-request` **tx-type 3** (new, `d0ae1b2`):
+  linking is `executor.setRecoveryKey(pk)`. The request is `ur:queuebit-sign-request` **tx-type 3** (new, `d0ae1b2`):
   key 4 = that calldata with an empty `pqSig`, key 14 = the executor. The extension recomputes the EIP-712 digest
   from the calldata and refuses unless it equals the executor's own `hash*` view; at scan-back it verifies the
-  witness against `getRoles(account).vaultPk/recoveryPk` with `@leaked/pq-signer`, `eth_estimateGas`es the signed call
+  witness against `getRoles(account).vaultPk/recoveryPk` with `@queuebit/pq-signer`, `eth_estimateGas`es the signed call
   from the tank (a revert = SIM-REJECTED), then sends it. **The companion does not sign tx-type 3 yet (E-76): the
   e2e's phone is a stand-in that implements the spec (`executorRequestDigest`), BACKLOG "Companion".**
 - **Network selector**: devnet 1337 (native) and "Local 4337 test chain" 31337 (anvil :8546 + bundler :4337, local
@@ -1309,7 +1309,7 @@ bundler,up-4337,smoke-4337}.ts` (`c96eb23`); UR additions `d0ae1b2`.
   chains not in the table).
 - **Tokens at creation** ("Tokens you'll spend", after the network): presets per network (the devnet/deploy USDC =
   `PermitToken1271("USDC")`, DAI = `MockToken`, both 18 decimals, on 1337 and 31337 at the same CREATE2 addresses);
-  each ticked token shows "LEAKED counts USDC as $1.00 toward your daily limit" with an editable price; the SW checks
+  each ticked token shows "QueueBit counts USDC as $1.00 toward your daily limit" with an editable price; the SW checks
   `decimals()` on-chain before storing and again when the address is computed. The e2e proves the ERC-2612 pre-approval
   on both backends: mined, `registeredHashExpiry > 0`, and then `USDC.permit(…, marker)` sent by a third party sets the
   allowance (the token's ERC-1271 call is the one consumer).
@@ -1317,7 +1317,7 @@ bundler,up-4337,smoke-4337}.ts` (`c96eb23`); UR additions `d0ae1b2`.
   `InitConfig.recovery.payerKey` (and `vaultSetRecoverySigner`'s clone params); checked ≠ hot key, ≠ tank, ≠ Vault payer
   before an address is shown (`payerConflict`). The 1337 e2e now cancels with the Recovery key on **Path B** from the
   public mempool: no stake, no `ethrex_submitPrivilegedFrameTransaction` (the devnet stand-in is gone from the test).
-- **Recovery test request id**: extension-chosen (`ur:leaked-recovery-challenge`, single use, 30 min, serialized
+- **Recovery test request id**: extension-chosen (`ur:queuebit-recovery-challenge`, single use, 30 min, serialized
   issuance; reused while unused so a double page request cannot split it). A test with any other id is E-61. The
   companion's `Recovery.tsx` still picks its own id: BACKLOG.
 - **hash-mismatch after broadcast**: the request goes to `sending` tracked by the hash of the bytes we sent, with
@@ -1337,7 +1337,7 @@ Commits `6324659` (account + modules), `00199c0` (PoolPayer), `848567e` (deploy 
 
 - **Typed registrations.** `registerPermit2` (Permit2 `PermitSingle`), `registerPermit2Transfer` (`PermitTransferFrom`),
   `registerTransferAuthorization` (EIP-3009, `receiveAuth` selects `ReceiveWithAuthorization`), in the account and
-  mirrored in `LeakedPolicyHook`. Shared `src/lib/TypedPermits.sol`; `registerPermit` now uses it too. The Permit2
+  mirrored in `QueueBitPolicyHook`. Shared `src/lib/TypedPermits.sol`; `registerPermit` now uses it too. The Permit2
   domain is computed (name "Permit2", no version, canonical address), not read; the type hashes equal the published
   `PermitHash.sol` constants (checked against the canonical source on `main` and pinned as hex in
   `TypedPermits.t.sol`). The nonce comes from Permit2 (`allowance(...).nonce`) or must be unspent (`nonceBitmap`,
@@ -1353,12 +1353,12 @@ Commits `6324659` (account + modules), `00199c0` (PoolPayer), `848567e` (deploy 
   - **7579:** the validation-time debit reads (token, amount) per selector: registerHash (1, 2; 132 B),
     registerPermit (0, 2; 132 B), Permit2 ×2 (0, 1; 196 B), 3009 (0, 1; 228 B). The hook's transfer-recipient check
     moved to `_checkTransferRecipient`, shared with 3009.
-  - **Sizes:** LeakedAccountImpl 23,662 B (914 B margin), LeakedPolicyHook 23,690 B (886 B). The next account feature
-    will need code moved to `LeakedAccountRoles` or a library.
+  - **Sizes:** QueueBitAccountImpl 23,662 B (914 B margin), QueueBitPolicyHook 23,690 B (886 B). The next account feature
+    will need code moved to `QueueBitAccountRoles` or a library.
   - VERIFY unchanged: `lint-verify.sh` OK, plus a new I-2 test that the three registrations write no VERIFY slot.
   - Tests: `test/account/TypedPermits.t.sol` (13 × Open/Strict) with a Permit2 mock transcribed from the canonical
     source and etched at the canonical address, a USDC-style 3009 token (`bytes signature`, SignatureChecker);
-    `LeakedModulesHosts.t.sol` +6 per host × MSA/Safe7579/Kernel × Open/Strict. `forge test`: 940 passed, 0 failed,
+    `QueueBitModulesHosts.t.sol` +6 per host × MSA/Safe7579/Kernel × Open/Strict. `forge test`: 940 passed, 0 failed,
     3 skipped.
 - **PoolPayer.** `verify` now requires `FRAME_COUNT == i + 3` and MODE VERIFY for every frame before the pay frame.
   The tail-call branch and `TailCallsNeedRecipientSender` are removed. `setOperator` is replaced by
@@ -1368,7 +1368,7 @@ Commits `6324659` (account + modules), `00199c0` (PoolPayer), `848567e` (deploy 
   (`OnChain`, blk 3053; 14340 now lists the precompiles). **VERIFY frame 306,754 gas** (+748 for the VERIFY-mode
   loop), refund frame 25,818; payer net −5,528 / −5,552 gas (calibrated B). A top-up of a fresh account needs more
   than 21,000 gas on this devnet (state gas): the first run's transfer reverted at 21k.
-- **Deploy.** LeakedAccountImpl `0x4306F6A3…e8fb` (local devnet); the 7579 modules re-deployed on anvil :8546. The
+- **Deploy.** QueueBitAccountImpl `0x4306F6A3…e8fb` (local devnet); the 7579 modules re-deployed on anvil :8546. The
   watcher ABI was regenerated (NonceUsed). The companion registry matches the artifacts (`abi:sync --check`). It has
   per-function formats (`account.registerPermit`, role "any") but no hot-path section, so the new functions are a
   companion backlog item. The extension's `src/generated/contracts.ts` is regenerated in the working tree; the
@@ -1376,16 +1376,16 @@ Commits `6324659` (account + modules), `00199c0` (PoolPayer), `848567e` (deploy 
 
 ## Extension M6: the private balance, the offscreen prover and the watcher light mode (2026-11-06)
 
-Commits `9ccfd58` (`@leaked/privacy`), `d74b8d8` (extension). Plan §30 §10 M6, §40 §1, §5, §6; ux-spec §3.10, §3.11,
+Commits `9ccfd58` (`@queuebit/privacy`), `d74b8d8` (extension). Plan §30 §10 M6, §40 §1, §5, §6; ux-spec §3.10, §3.11,
 §3.13. E2E `apps/extension/e2e/privacy.e2e.ts` (local devnet); screenshots `app-privacy-*`, `app-alerts`,
 `app-settings-privacy`.
 
 - **Offscreen document** (`src/entrypoints/offscreen/`, `src/offscreen/`): the extension's one `offscreen.html`
   (reason `WORKERS`), created on demand by the service worker (`background/offscreen.ts`, one `createDocument` for
-  concurrent first calls). It hosts the withdraw prover in a module Worker: `@leaked/groth16`'s
+  concurrent first calls). It hosts the withdraw prover in a module Worker: `@queuebit/groth16`'s
   `serveDefaultProver` (arkworks WASM inlined, `initSync` from bytes) with the circuit artifacts packaged in the CRX
   under `pp-circuits/` (copied from `@fatsolutions/privacy-pools-core-circuits@1.0.5` by a `build:publicAssets` hook,
-  sha256-pinned, 20.4 MB of the 23.75 MB package). Protocol `shared/offscreen.ts`: `{target: "leaked-offscreen", id,
+  sha256-pinned, 20.4 MB of the 23.75 MB package). Protocol `shared/offscreen.ts`: `{target: "queuebit-offscreen", id,
   kind, payload}`, kinds `ping | prove | anon:status`, bigints tagged `{"$n"}` on the wire, errors keep their name.
   CSP: still `script-src 'self' 'wasm-unsafe-eval'`; `connect-src` gained `'self'` (the Worker fetches the packaged
   artifacts). Permissions gained `offscreen`, `notifications`, and an optional host permission requested only when
@@ -1401,7 +1401,7 @@ Commits `9ccfd58` (`@leaked/privacy`), `d74b8d8` (extension). Plan §30 §10 M6,
   the chain, so a service-worker restart resumes (a sent withdrawal is polled by its hash; a restart while proving
   proves again).
   - **The phone signs note keys without holding the SW open**: `phoneSigner` throws `NeedsPhoneError`; the op stores
-    the `ur:leaked-sign-request` (tx-type 2, the companion's typed-data flow, payer = the paired Vault's fee key); the
+    the `ur:queuebit-sign-request` (tx-type 2, the companion's typed-data flow, payer = the paired Vault's fee key); the
     page shows the QR and scans the answer; `acceptPhoneAnswer` checks request id + payer recovery. **Corrected by
     `5c006bf` (review, critical):** a note signature _is_ the note's spend key, so answers live only in
     `chrome.storage.session` (`NoteAnswers`, memory, never on disk) while the operation that needs them runs, and are
@@ -1432,7 +1432,7 @@ Commits `9ccfd58` (`@leaked/privacy`), `d74b8d8` (extension). Plan §30 §10 M6,
     devnet pool be entered, checked on chain before it is saved).
   - Honest proving estimate: none before the first measured proof on this computer, then the median of the last five
     (`proofMs`).
-- **Watcher light mode** (`background/watcher/`): `chrome.alarms` `leaked:watcher` every 60 s (plus a `when` alarm at
+- **Watcher light mode** (`background/watcher/`): `chrome.alarms` `queuebit:watcher` every 60 s (plus a `when` alarm at
   the next deadline from `WatcherCore.nextDeadline()`), `eth_getLogs` over `TargetIndex.logAddresses()` from the
   account's deployment block (`deployBlock.ts`: the activation receipt, else a binary search over `eth_getCode` at a
   block; cached), then a persisted cursor, 1 confirmation. `initiated()` = this browser's Vault requests (opId, hash)
@@ -1443,18 +1443,18 @@ Commits `9ccfd58` (`@leaked/privacy`), `d74b8d8` (extension). Plan §30 §10 M6,
   Not in light mode: blocked everyday payments (no log; the self-hosted watcher reads blocks for that) and reorgs
   deeper than the confirmation.
 - **Pairing** (Security › Alerts › Pair a watcher): the code `{url, topic, keyId, hmacKey}` (`parsePairing`), Chrome's
-  permission for that one origin, then `GET /v1/alerts?since=<seq>` with `LEAKED-HMAC` request auth on each poll;
+  permission for that one origin, then `GET /v1/alerts?since=<seq>` with `QUEUEBIT-HMAC` request auth on each poll;
   only envelopes whose HMAC verifies are kept (a forged "all clear" is counted and ignored), retractions marked.
-- **`@leaked/privacy` changes (integration-driven, with tests)**: `EncryptedStorage.onLock`, and the secret manager
+- **`@queuebit/privacy` changes (integration-driven, with tests)**: `EncryptedStorage.onLock`, and the secret manager
   subscribes so `lock()` forgets the in-memory signatures; `FramePaymasterQuote` no longer holds `senderKey` (a
   `FrameSenderSigner` handle signs, `localFrameSigner(key)` keeps the key in a closure; `quote({senderKey})` is
   refused); `FramePaymasterOptions.circuit` is required and `accountIsolationKeys` refuses a withdrawal circuit on an
   account's key (`withdrawalClients` builds node + sidecar on one fresh key); `createGroth16Prover` throws when the
   engine has no `verify` unless `selfVerify: false`; `client.notes({maxDeposits})`; `withdrawViaPoolPayer({sender,
   onBuilt})`.
-- **Results (local devnet, 2026-11-06).** Pool (cached in `node_modules/.cache/leaked-extension-e2e/privacy-pool.json`,
+- **Results (local devnet, 2026-11-06).** Pool (cached in `node_modules/.cache/queuebit-extension-e2e/privacy-pool.json`,
   reused while on chain): Entrypoint `0x03b483f6…95a9`, pool `0xd3b99068…287f` (block 3574), PoolPayer
-  `0xe28556e8…7886` (staked 0.012 ETH), deployed by the sub-account `keccak("leaked/extension-e2e-privacy/v1")` of
+  `0xe28556e8…7886` (staked 0.012 ETH), deployed by the sub-account `keccak("queuebit/extension-e2e-privacy/v1")` of
   anvil #5, which is also the reviewer. Withdrawal `0xea89e94b…14ba` via :14340 `OnChain`: 0.05 ETH out, 0.0488286 ETH
   arrived at the fresh `0x27887Afd…40d0` (fee bound 0.0158 ETH at 2× gas price, refunded down to ~0.0012 ETH actually paid),
   proof 2.53 s in the offscreen Worker (single-threaded WASM). The change note (0.05 ETH) is rediscovered from the

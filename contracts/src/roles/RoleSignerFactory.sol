@@ -45,7 +45,7 @@ contract RoleSignerFactory {
     }
 
     /// Deploys (or returns the existing) signer for these parameters. Payable: `msg.value` funds the signer.
-    /// @param account the LEAKED account the signer serves, or address(0) for an unbound signer (it then serves any
+    /// @param account the QueueBit account the signer serves, or address(0) for an unbound signer (it then serves any
     ///        account whose `getRoles()` names it in its role; needed for a vault signer whose account's address
     ///        commits to it, see `PQRoleSigner`).
     function createRoleSigner(

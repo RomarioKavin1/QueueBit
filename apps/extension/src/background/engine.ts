@@ -10,7 +10,7 @@ import {
   type FrameTxReceipt,
   type Profile,
   type WireFrameTx,
-} from "@leaked/frames";
+} from "@queuebit/frames";
 import { accountAbi } from "../generated/contracts";
 import type { Call, SimulationVerdict } from "./routing";
 

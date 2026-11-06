@@ -44,7 +44,7 @@ export function checkStorePackage(
 ) {
   const dir = existsSync(join(releaseDir, "extension", "manifest.json")) ? join(releaseDir, "extension") : releaseDir;
   const rel = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8"));
-  const zipName = `leaked-extension-${rel.version}-chrome.zip`;
+  const zipName = `queuebit-extension-${rel.version}-chrome.zip`;
   const zipPath = join(dir, zipName);
   const zip = readFileSync(zipPath);
   const errors = [];

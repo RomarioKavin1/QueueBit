@@ -1,18 +1,18 @@
 [package]
-name = "leaked-pq"
+name = "queuebit-pq"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.80"
 license = "MIT"
-description = "LEAKED post-quantum signer: SPHINCS- C13 (keccak, FIPS 205 ADRS) keygen/sign/verify, byte-compatible with nconsigny/SPHINCS- SPHINCs-C13Asm.sol"
+description = "QueueBit post-quantum signer: SPHINCS- C13 (keccak, FIPS 205 ADRS) keygen/sign/verify, byte-compatible with nconsigny/SPHINCS- SPHINCs-C13Asm.sol"
 publish = false
 
 [lib]
 crate-type = ["cdylib", "rlib"]
 
 [[bin]]
-name = "leaked-pq"
-path = "src/bin/leaked_pq.rs"
+name = "queuebit-pq"
+path = "src/bin/queuebit_pq.rs"
 
 [features]
 default = []

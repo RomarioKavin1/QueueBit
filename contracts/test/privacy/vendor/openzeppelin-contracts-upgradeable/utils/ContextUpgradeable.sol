@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Vendored for LEAKED tests from npm @openzeppelin/contracts-upgradeable@5.0.2 (utils/ContextUpgradeable.sol; MIT), unmodified below this line. See THIRD_PARTY.md.
+// Vendored for QueueBit tests from npm @openzeppelin/contracts-upgradeable@5.0.2 (utils/ContextUpgradeable.sol; MIT), unmodified below this line. See THIRD_PARTY.md.
 // OpenZeppelin Contracts (last updated v5.0.1) (utils/Context.sol)
 
 pragma solidity ^0.8.20;

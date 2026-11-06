@@ -1,12 +1,12 @@
-// Shared helpers for the LeakedAccount devnet tests. Local devnet only by default (devnet/README.md); legacy txs are
+// Shared helpers for the QueueBitAccount devnet tests. Local devnet only by default (devnet/README.md); legacy txs are
 // sent from anvil #0 only (README "Funding-key allocation"). Contracts come from the forge artifacts in contracts/out
 // (run `forge build` in contracts/ first).
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createPublicClient, encodeDeployData, http, type Abi, type Address, type Hex } from "viem";
 import { privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
-import type { FrameTxReceipt } from "@leaked/frames";
-import { createFrameRpc } from "@leaked/rpc";
+import type { FrameTxReceipt } from "@queuebit/frames";
+import { createFrameRpc } from "@queuebit/rpc";
 
 export const ETHREX = process.env.ETHREX_URL ?? "http://localhost:8545";
 export const SIDECAR = process.env.SIDECAR_URL ?? "http://localhost:14337/rpc";
@@ -19,7 +19,7 @@ export const rpc = createFrameRpc(ETHREX, { sidecarUrl: SIDECAR });
 
 const chain = {
   id: CHAIN_ID,
-  name: "leaked-devnet",
+  name: "queuebit-devnet",
   nativeCurrency: { name: "ETH", symbol: "ETH", decimals: 18 },
   rpcUrls: { default: { http: [ETHREX] } },
 } as const;

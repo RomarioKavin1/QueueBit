@@ -1,4 +1,4 @@
-//! LEAKED Groth16 prover: snarkjs-compatible Groth16 (BN254) proofs from a circom `.zkey` and witness, on
+//! QueueBit Groth16 prover: snarkjs-compatible Groth16 (BN254) proofs from a circom `.zkey` and witness, on
 //! arkworks (MIT/Apache-2.0). No snarkjs/circom code is used: the zkey reader, the circom R1CS-to-QAP reduction and
 //! the witness-calculator glue are written here from the file formats and the witness module's export interface.
 

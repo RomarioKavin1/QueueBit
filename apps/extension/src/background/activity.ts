@@ -1,5 +1,5 @@
 import { formatEther, type Address, type Hex } from "viem";
-import type { FrameStatus, FrameTxReceipt, WireFrameTx } from "@leaked/frames";
+import type { FrameStatus, FrameTxReceipt, WireFrameTx } from "@queuebit/frames";
 import { StorageKeys, type KV } from "../shared/kv";
 import type { SerializedOp } from "./aa/userop";
 import type { RuleId } from "./routing";

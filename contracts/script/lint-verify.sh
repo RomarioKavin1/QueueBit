@@ -3,9 +3,9 @@
 # docs/plan/50-devnet-review.md rules 1-4). Fails on banned opcodes, halting introspection reads and the other
 # constructs that are fatal in VERIFY on the devnet but invisible to FrameSim.
 #
-#   1. bytecode: every opcode of VerifyLintTarget (LeakedVerify alone) and of the ERC1967 proxy;
+#   1. bytecode: every opcode of VerifyLintTarget (QueueBitVerify alone) and of the ERC1967 proxy;
 #      self-test: VerifyLintBadTarget must fail;
-#   2. source: LeakedVerify.sol must not use time/block/gas/balance/transient/log constructs, SIGDATACOPY,
+#   2. source: QueueBitVerify.sol must not use time/block/gas/balance/transient/log constructs, SIGDATACOPY,
 #      FRAMEPARAM STATUS/*_GAS_USED, or SIGPARAM RESOLVED_SIGNER before the entry's SCHEME check;
 #   3. dynamic: VerifyOpcodesTest (opcodes actually executed in every VERIFY branch) must pass, not skip;
 #   4. I-2 (slot disjointness): the walker never reads the recipient policy (`recipientsOpen` / `RecipientMode` /
@@ -34,7 +34,7 @@ else
 fi
 
 echo "== 2. source"
-src=src/account/LeakedVerify.sol
+src=src/account/QueueBitVerify.sol
 # strip comments before matching
 code=$(sed -e 's://.*$::' "$src" | perl -0pe 's:/\*.*?\*/::gs')
 check() { # regex description
@@ -62,13 +62,13 @@ for line in $rs; do
 done
 # The role surface runs by DELEGATECALL from the implementation's fallback, so it executes in the account's context
 # with the VERIFY frame's data chosen by the hot key: it must hold no APPROVE helper (no HegotaSupport) so that no
-# selector routed to it can approve a frame (the lint then only needs LeakedVerify's own reachable code).
-roles=src/account/LeakedAccountRoles.sol
-if grep -nE 'HegotaSupport|\bapprove\(Scope|LeakedVerify' "$roles" >/dev/null; then
+# selector routed to it can approve a frame (the lint then only needs QueueBitVerify's own reachable code).
+roles=src/account/QueueBitAccountRoles.sol
+if grep -nE 'HegotaSupport|\bapprove\(Scope|QueueBitVerify' "$roles" >/dev/null; then
   echo "lint-verify: $roles: the roles module must not inherit HegotaSupport / reach APPROVE"
   fail=1
 fi
-[ $fail -eq 0 ] && echo "lint-verify: source OK (LeakedVerify.sol; roles module holds no APPROVE helper)"
+[ $fail -eq 0 ] && echo "lint-verify: source OK (QueueBitVerify.sol; roles module holds no APPROVE helper)"
 
 echo "== 3. executed opcodes (forge test -vvv)"
 out=$(forge test --match-contract VerifyOpcodesTest -vvv 2>&1 || true)
@@ -81,7 +81,7 @@ else
 fi
 
 echo "== 4. I-2: recipient mode outside the VERIFY slots"
-layout=src/account/LeakedAccountStorage.sol
+layout=src/account/QueueBitAccountStorage.sol
 # `recipientsOpen` must be declared after the last pre-existing field (append-only, never in slots 0-2).
 lr=$(grep -nE '^\s*bool recipientsOpen;' "$layout" | cut -d: -f1 || true)
 lf=$(grep -nE 'mapping\(bytes32 hash => address consumer\) registeredFor;' "$layout" | cut -d: -f1 || true)

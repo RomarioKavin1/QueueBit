@@ -201,7 +201,7 @@ describe("provider router", () => {
     expect(d.readRpc).toHaveBeenCalledWith(1337, method, params);
   });
 
-  it("signatures: sign-in and ERC-2612 go to the approval window; Permit2 and orders are refused (4100 + leakedRule)", async () => {
+  it("signatures: sign-in and ERC-2612 go to the approval window; Permit2 and orders are refused (4100 + queuebitRule)", async () => {
     const d = deps();
     expect((await rpcError(call(d, "personal_sign", ["0x68656c6c6f", ACCOUNT]))).code).toBe(4100); // not connected
     await d.permissions.grant(ORIGIN, [ACCOUNT], 1337);
@@ -251,7 +251,7 @@ describe("provider router", () => {
     };
     const e = await rpcError(call(d, "eth_signTypedData_v4", [ACCOUNT, JSON.stringify(p2)]));
     expect(e.code).toBe(4100);
-    expect(e.data).toMatchObject({ leakedRule: "SIG-PERMIT2" });
+    expect(e.data).toMatchObject({ queuebitRule: "SIG-PERMIT2" });
     expect(e.message).toMatch(/Permit2/u);
   });
 
@@ -262,15 +262,15 @@ describe("provider router", () => {
     expect(e.data).toEqual({ method });
   });
 
-  it("explains methods LEAKED will never offer", async () => {
+  it("explains methods QueueBit will never offer", async () => {
     const e = await rpcError(call(deps(), "wallet_addEthereumChain", [{}]));
     expect(e.code).toBe(4200);
     expect(e.message).toMatch(/fixed list/u);
     expect((await rpcError(call(deps(), "eth_sign", []))).message).toMatch(/never signs raw hashes/u);
   });
 
-  it("never serves internal leaked_* methods to pages", async () => {
-    expect((await rpcError(call(deps(), "leaked_unlock", []))).code).toBe(-32601);
+  it("never serves internal queuebit_* methods to pages", async () => {
+    expect((await rpcError(call(deps(), "queuebit_unlock", []))).code).toBe(-32601);
   });
 
   it("rejects malformed requests", async () => {

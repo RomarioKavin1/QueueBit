@@ -1,4 +1,4 @@
-import { INVALIDATION_TEXT, classifyInvalidation } from "@leaked/privacy";
+import { INVALIDATION_TEXT, classifyInvalidation } from "@queuebit/privacy";
 import type { PhoneAsk, PrivacyOp, PrivacyStep } from "../../shared/privacy";
 
 /**
@@ -212,7 +212,7 @@ export function proofEstimate(measuredMs: readonly number[]): number | undefined
 
 export function proofEstimateText(ms: number | undefined): string {
   if (ms === undefined)
-    return "First time on this computer: it loads the 17 MB proving key, then proves. LEAKED measures it and shows an estimate next time.";
+    return "First time on this computer: it loads the 17 MB proving key, then proves. QueueBit measures it and shows an estimate next time.";
   const s = Math.max(1, Math.round(ms / 1000));
   return `About ${s} second${s === 1 ? "" : "s"} on this computer (measured on your last withdrawals).`;
 }
@@ -260,7 +260,7 @@ export function failureFor(err: unknown): NonNullable<PrivacyOp["error"]> {
     case "ArtifactHashMismatchError":
       return {
         code: "artifacts",
-        message: "The proving files in this extension don't match their pinned fingerprints. Reinstall LEAKED.",
+        message: "The proving files in this extension don't match their pinned fingerprints. Reinstall QueueBit.",
         retry: false,
       };
     case "EnvelopeSignatureError":
@@ -284,7 +284,7 @@ export function failureFor(err: unknown): NonNullable<PrivacyOp["error"]> {
         retry: true,
       };
     case "StorageLockedError":
-      return { code: "locked", message: "LEAKED locked. Unlock and try again.", retry: true };
+      return { code: "locked", message: "QueueBit locked. Unlock and try again.", retry: true };
     case "CircuitError":
       return { code: "circuit", message: shortReason(msg), retry: false };
     default:
@@ -311,7 +311,7 @@ export function stepCopy(op: PrivacyOp, estimateMs?: number): { title: string; b
         title: "Waiting for your phone",
         body:
           op.phone?.purpose === "check"
-            ? "One more scan of the same request, once: LEAKED checks that your phone signs note keys the same way every time."
+            ? "One more scan of the same request, once: QueueBit checks that your phone signs note keys the same way every time."
             : shield
               ? "Your phone signs the key of this deposit's private note. Nothing is sent to the network and no money moves."
               : op.phone?.purpose === "note-key"

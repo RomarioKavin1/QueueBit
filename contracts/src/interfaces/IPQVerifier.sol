@@ -19,7 +19,7 @@ interface IPQVerifier {
     function verifyGasEstimate() external pure returns (uint256);
 
     /// @param pk     32-byte public key commitment (SPHINCS- C13: pkSeed(16) ‖ pkRoot(16)).
-    /// @param digest the 32-byte message (always TXPARAM_SIG_HASH in LEAKED).
+    /// @param digest the 32-byte message (always TXPARAM_SIG_HASH in QueueBit).
     /// @param sig    raw witness bytes as copied by SIGDATACOPY (no ABI wrapper, no type tag).
     function verify(bytes32 pk, bytes32 digest, bytes calldata sig) external view returns (bool);
 }

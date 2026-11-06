@@ -26,7 +26,7 @@ export function Gallery() {
   ];
   return (
     <div className="mx-auto flex max-w-[760px] flex-col gap-8 p-8">
-      <h1 className="t-title">LEAKED components</h1>
+      <h1 className="t-title">QueueBit components</h1>
       <Section title="Buttons">
         <div className="flex flex-wrap gap-2">
           <Button>Primary</Button>

@@ -6,7 +6,7 @@ import {
   type FrameRpc,
   type NodeClient,
   type SidecarClient,
-} from "@leaked/rpc";
+} from "@queuebit/rpc";
 import { getNetwork } from "../shared/chains";
 
 /**

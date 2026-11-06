@@ -6,7 +6,7 @@ replace or touch.
 
 | | Endpoint |
 |---|---|
-| **patched sidecar (BUDGET-010)** | **`http://localhost:14340/rpc`** (container `leaked-devnet-skandha-budget-1`, `172.28.0.40`, in-network `http://skandha-budget:14337/rpc`) |
+| **patched sidecar (BUDGET-010)** | **`http://localhost:14340/rpc`** (container `queuebit-devnet-skandha-budget-1`, `172.28.0.40`, in-network `http://skandha-budget:14337/rpc`) |
 | stock sidecar (flat `MAX_VERIFY_GAS` 100k) | `http://localhost:14337/rpc` (unchanged) |
 | ethrex | `http://localhost:8545` (shared) |
 
@@ -20,7 +20,7 @@ BUDGET-010 semantics.
 
 ```sh
 cd devnet && ./up.sh                  # the devnet itself (once)
-./patched-sidecar/up-patched.sh        # builds leaked/sidecar:budget-010 if missing, starts it, prints skandha_config.budgets
+./patched-sidecar/up-patched.sh        # builds queuebit/sidecar:budget-010 if missing, starts it, prints skandha_config.budgets
 REBUILD=1 ./patched-sidecar/up-patched.sh
 ./patched-sidecar/up-patched.sh down   # remove only the patched sidecar
 ```
@@ -32,11 +32,11 @@ docker compose -f devnet/docker-compose.yml -f devnet/patched-sidecar/compose.ov
 ```
 
 `./up.sh`, `./down.sh` and `./status.sh` are unaffected. The new service is in a profile that only this override
-defines. Knobs: `SKANDHA_BUDGET_PORT` (14340), `SKANDHA_BUDGET_IMAGE` (`leaked/sidecar:budget-010`),
+defines. Knobs: `SKANDHA_BUDGET_PORT` (14340), `SKANDHA_BUDGET_IMAGE` (`queuebit/sidecar:budget-010`),
 `MAX_VERIFY_GAS_PER_ENTITY` / `MAX_VERIFY_GAS_STAKED_ENTITY` (100000 / 1000000; e.g. `250000`/`2500000` to try the
 landing page's values), `PLATFORM=linux/amd64 ./build.sh` (the default builds for the host; the sidecar is plain JS
 on Bun, so arm64 is fine). To run the patched build *as* the stock sidecar on 14337 instead:
-`SKANDHA_IMAGE=leaked/sidecar:budget-010 ./up.sh` (devnet/README.md).
+`SKANDHA_IMAGE=queuebit/sidecar:budget-010 ./up.sh` (devnet/README.md).
 
 Read the advertised budgets:
 
@@ -78,7 +78,7 @@ with the upstream `Dockerfile`.
 cd devnet/patched-sidecar/tests && bun install && bun run test    # funding key anvil #9; ~2 min
 ```
 
-`budget010.e2e.ts` (via `@leaked/frames` + `@leaked/rpc`) deploys a fresh wallet and runs these steps:
+`budget010.e2e.ts` (via `@queuebit/frames` + `@queuebit/rpc`) deploys a fresh wallet and runs these steps:
 
 1. An unstaked 150k VERIFY is rejected with BUDGET-010 (the stock sidecar and ethrex reject it with `MAX_VERIFY_GAS`).
 2. The wallet stakes 0.012 ETH.

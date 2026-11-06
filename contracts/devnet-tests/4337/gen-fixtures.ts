@@ -1,16 +1,16 @@
-// Generates contracts/test/modules/fixtures/c13-executor.json: real SPHINCS- C13 signatures (@leaked/pq-signer,
-// deterministic mode, fixed test seeds) over LeakedRoleExecutor EIP-712 digests computed here with viem.
+// Generates contracts/test/modules/fixtures/c13-executor.json: real SPHINCS- C13 signatures (@queuebit/pq-signer,
+// deterministic mode, fixed test seeds) over QueueBitRoleExecutor EIP-712 digests computed here with viem.
 //
 //   bun run gen-fixtures.ts keys                       # step 1: writes the public keys only
-//   forge test --match-contract LeakedModulesC13       # fails in setUp with the executor/account addresses
+//   forge test --match-contract QueueBitModulesC13       # fails in setUp with the executor/account addresses
 //   bun run gen-fixtures.ts sign <executor> <account>  # step 2: digests + signatures for those addresses
 //
 // The account address depends on the keys (they are in the CREATE2 init code), hence two steps. Foundry deploys
-// deterministically, so the fixture stays valid until LeakedModulesBase.setUp changes.
+// deterministically, so the fixture stays valid until QueueBitModulesBase.setUp changes.
 import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { keccak256, parseEther, toHex, type Address, type Hex } from "viem";
-import { sign, verify } from "@leaked/pq-signer";
+import { sign, verify } from "@queuebit/pq-signer";
 import { hex, makeAddr, recoveryRotateDigest, testKeys, vaultExecDigest, type Call } from "./lib.ts";
 
 const FIXTURE = fileURLToPath(new URL("../../test/modules/fixtures/c13-executor.json", import.meta.url));
@@ -30,10 +30,10 @@ if (mode === "keys") {
   writeFileSync(FIXTURE, JSON.stringify({ ...base, executor: "0x0000000000000000000000000000000000000000", account: "0x0000000000000000000000000000000000000000" }, null, 2) + "\n");
   console.log("wrote keys; now run the Foundry C13 test to learn the addresses");
 } else if (mode === "sign" && executor && account) {
-  // Must match LeakedModulesC13Test: vaultExec(account, [Call(makeAddr("stranger"), 0.5 ether, "")], 0, nonce 0).
+  // Must match QueueBitModulesC13Test: vaultExec(account, [Call(makeAddr("stranger"), 0.5 ether, "")], 0, nonce 0).
   const calls: Call[] = [{ target: makeAddr("stranger"), value: parseEther("0.5"), data: "0x" }];
   const d1 = vaultExecDigest(CHAIN_ID, executor as Address, account as Address, 0n, calls, 0n);
-  const newVaultPk = keccak256(toHex("leaked-m7-new-vault"));
+  const newVaultPk = keccak256(toHex("queuebit-m7-new-vault"));
   const d2 = recoveryRotateDigest(CHAIN_ID, executor as Address, account as Address, 0n, newVaultPk);
   const t0 = Date.now();
   const s1 = sign(vault.secretKey, Buffer.from(d1.slice(2), "hex"), { deterministic: true });

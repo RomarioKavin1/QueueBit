@@ -20,7 +20,7 @@ contract C13VerifierTest is Test {
     // ------------------------------------------------------------------------------------------- metadata ------
 
     function test_metadata_matchesVectorsFile() public view {
-        assertEq(v.schemeId(), vm.parseJsonBytes32(j, ".schemeId"), "schemeId == @leaked/pq-signer SCHEME_ID");
+        assertEq(v.schemeId(), vm.parseJsonBytes32(j, ".schemeId"), "schemeId == @queuebit/pq-signer SCHEME_ID");
         assertEq(v.schemeId(), keccak256(bytes(vm.parseJsonString(j, ".schemeIdPreimage"))));
         assertEq(v.schemeId(), keccak256("SPHINCS-C13/keccak/fips-adrs/v1"));
         assertEq(v.sigLength(), vm.parseJsonUint(j, ".sigLength"));

@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
-import {ILeakedAccount} from "./ILeakedAccount.sol";
+import {IQueueBitAccount} from "./IQueueBitAccount.sol";
 import {RollingCap} from "../lib/RollingCap.sol";
 
-/// @title LeakedAccountStorage
-/// @notice The account's ERC-7201 namespaced storage (`@custom:storage-location erc7201:leaked.account.v1`).
-/// @dev Slot = keccak256(abi.encode(uint256(keccak256("leaked.account.v1")) - 1)) & ~bytes32(uint256(0xff)).
+/// @title QueueBitAccountStorage
+/// @notice The account's ERC-7201 namespaced storage (`@custom:storage-location erc7201:queuebit.account.v1`).
+/// @dev Slot = keccak256(abi.encode(uint256(keccak256("queuebit.account.v1")) - 1)) & ~bytes32(uint256(0xff)).
 ///      The first three slots are everything the VERIFY walker reads (§10.5.1); they are written only by role paths
 ///      (vault, recovery, guardian, `clearExpiredFreeze`, `initialize`), never by `hotExecute` (I-2, C4).
 ///      Append-only: an upgrade may add fields at the end of `Layout`, never reorder or retype.
-library LeakedAccountStorage {
-    /// @custom:storage-location erc7201:leaked.account.v1
+library QueueBitAccountStorage {
+    /// @custom:storage-location erc7201:queuebit.account.v1
     struct Layout {
         // ---- slot 0: read in VERIFY ----
         address hotKey;
@@ -28,11 +28,11 @@ library LeakedAccountStorage {
         // ---- execution-only state ----
         uint48 frozenUntil;
         RollingCap.Bucket hotBucket;
-        mapping(address token => ILeakedAccount.TokenCfg) tokens;
+        mapping(address token => IQueueBitAccount.TokenCfg) tokens;
         /// Allowlisted ERC-20s (not ETH), the assets the balance-delta accounting monitors. Bounded by MAX_TOKENS.
         address[] tokenList;
         mapping(address target => bool) targets;
-        mapping(bytes32 sessionId => ILeakedAccount.Session) sessions;
+        mapping(bytes32 sessionId => IQueueBitAccount.Session) sessions;
         mapping(bytes32 hash => uint48 expiry) registeredHashes;
         /// Contracts that may never get a hot-key 7739 signature accepted (token permits, Permit2).
         mapping(address verifier => bool) valueVerifiers;
@@ -40,12 +40,12 @@ library LeakedAccountStorage {
         address vaultSigner;
         uint32 vaultEpoch;
         address recoverySigner;
-        mapping(address guardian => ILeakedAccount.GuardianCfg) guardians;
+        mapping(address guardian => IQueueBitAccount.GuardianCfg) guardians;
         // ---- timelock ----
         uint48 timelockDelay;
         /// Instant vault spends: a rolling daily bucket whose cap is the timelock threshold.
         RollingCap.Bucket vaultBucket;
-        mapping(bytes32 opId => ILeakedAccount.QueuedOp) queue;
+        mapping(bytes32 opId => IQueueBitAccount.QueuedOp) queue;
         uint256 opNonce;
         // ---- recovery ----
         address pendingVaultSigner;
@@ -67,7 +67,7 @@ library LeakedAccountStorage {
         bool recipientsOpen;
     }
 
-    bytes32 internal constant SLOT = 0x9eadb468a7841dcf4c48ba06e49dbfab6d1eb75065d9b194aac64cacb775e800;
+    bytes32 internal constant SLOT = 0xaaa3a40665f3919275337b30482a6844d30bf6a88669b7017e78138704481500;
 
     function layout() internal pure returns (Layout storage $) {
         assembly ("memory-safe") {

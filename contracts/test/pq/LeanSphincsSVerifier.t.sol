@@ -8,7 +8,7 @@ import {IPQVerifier} from "../../src/interfaces/IPQVerifier.sol";
 import {LeanSphincsSKat} from "./LeanSphincsSKat.sol";
 import {C13Kat} from "./C13Kat.sol";
 
-/// leanSphincs-s through the IPQVerifier adapter: KAT set A (upstream fixture) and set C (LEAKED) verify, every negative
+/// leanSphincs-s through the IPQVerifier adapter: KAT set A (upstream fixture) and set C (QueueBit) verify, every negative
 /// recipe of the vectors file returns false without reverting, malformed lengths return false (the raw upstream
 /// verifier reverts there), and C13 material is rejected.
 contract LeanSphincsSVerifierTest is Test {

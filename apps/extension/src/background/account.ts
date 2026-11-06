@@ -34,16 +34,16 @@ export const ACCOUNT_DEFAULTS = {
   timelockDelay: 0,
 } as const;
 
-export const ACCOUNT_VERSION = "leaked.account.2";
+export const ACCOUNT_VERSION = "queuebit.account.2";
 
-/** `RecipientMode` (ILeakedAccount): Open = everyday payments to anyone within the limit; Strict = allowlist only. */
+/** `RecipientMode` (IQueueBitAccount): Open = everyday payments to anyone within the limit; Strict = allowlist only. */
 export const RECIPIENT_MODE = { open: 0, strict: 1 } as const;
 export type RecipientModeName = keyof typeof RECIPIENT_MODE;
 
 /** Role ids of `RoleSignerFactory` / `PQRoleSigner`. */
 export const ROLE_ID = { vault: 1, recovery: 2 } as const;
 
-/** `ILeakedAccount.RoleSignerParams`: the `createRoleSigner` arguments of a bound role signer, minus role/account. */
+/** `IQueueBitAccount.RoleSignerParams`: the `createRoleSigner` arguments of a bound role signer, minus role/account. */
 export interface RoleSignerParams {
   salt: Hex;
   pk: Hex;
@@ -51,7 +51,7 @@ export interface RoleSignerParams {
   payerKey: Address;
 }
 
-/** `ILeakedAccount.InitConfig` (field order = the Solidity struct). */
+/** `IQueueBitAccount.InitConfig` (field order = the Solidity struct). */
 export interface InitConfig {
   hotKey: Address;
   roleSignerFactory: Address;
@@ -74,7 +74,7 @@ export interface InitConfig {
   tokens: TokenInit[];
 }
 
-/** `ILeakedAccount.TokenInit` / `ILeakedModules.TokenInit`: USD-6 per whole token, as `vaultSetToken`. */
+/** `IQueueBitAccount.TokenInit` / `IQueueBitModules.TokenInit`: USD-6 per whole token, as `vaultSetToken`. */
 export interface TokenInit {
   token: Address;
   decimals: number;
@@ -120,7 +120,7 @@ export function initTokens(
   return out;
 }
 
-/** A quantum-safe key a phone announced (`ur:leaked-pq-key`), as the extension stores it. */
+/** A quantum-safe key a phone announced (`ur:queuebit-pq-key`), as the extension stores it. */
 export interface PairedKey {
   schemeId: Hex;
   pk: Hex;
@@ -169,7 +169,7 @@ export function accountSalt(hotKey: Address, vaultPk: Hex, recoveryPk: Hex | und
 
 /** The role signers' CREATE2 salt input (any bytes32; one per account so two accounts never share a clone). */
 export function roleSalt(accountSalt: Hex): Hex {
-  return keccak256(encodeAbiParameters([{ type: "string" }, { type: "bytes32" }], ["leaked.roles.1", accountSalt]));
+  return keccak256(encodeAbiParameters([{ type: "string" }, { type: "bytes32" }], ["queuebit.roles.1", accountSalt]));
 }
 
 export function encodeInitialize(c: InitConfig): Hex {

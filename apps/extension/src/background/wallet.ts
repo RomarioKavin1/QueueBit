@@ -1,5 +1,5 @@
 import { concatHex, erc20Abi, hexToBytes, isAddress, type Address, type Hex } from "viem";
-import { schemeById } from "@leaked/pq-signer";
+import { schemeById } from "@queuebit/pq-signer";
 import {
   UR_TYPES,
   UrReceiver,
@@ -7,7 +7,7 @@ import {
   randomUuid,
   recoveryTestChallenge,
   singlePartUr,
-} from "@leaked/ur";
+} from "@queuebit/ur";
 import { findNetwork, getNetwork, toHexChainId } from "../shared/chains";
 import type { KV } from "../shared/kv";
 import type { ApprovalView, SendRequest, UiApi, UiType } from "../shared/messages";
@@ -19,7 +19,7 @@ import { ApprovalBroker, ApprovalStore, TooManyPendingError, type ApprovalWindow
 import { bucketFromStatus } from "./bucket";
 import { KeyringController, KeyringError, type KeyringOptions } from "./keyring";
 import { Payments, PaymentsError, RouteError, type ChainIo } from "./payments";
-import type { SidecarClient } from "@leaked/rpc";
+import type { SidecarClient } from "@queuebit/rpc";
 import { accountAbi, policyHookAbi, roleSignerFactoryAbi } from "../generated/contracts";
 import { ROLE_ID, type AccountPlan } from "./account";
 import { choosePath } from "./lanes";
@@ -283,7 +283,7 @@ export class Wallet {
     return this.payments;
   }
 
-  /** The address a site sees on `chainId`: the native account where LEAKED has one, else the everyday key. */
+  /** The address a site sees on `chainId`: the native account where QueueBit has one, else the everyday key. */
   async accountFor(chainId: number): Promise<Address | undefined> {
     const plan = this.payments ? await this.payments.plan(chainId).catch(() => undefined) : undefined;
     return plan?.address ?? (await this.keyring.accounts())?.everyday;
@@ -439,8 +439,8 @@ export class Wallet {
     if (!net || (net.backend === "4337" && !aaNetwork(chainId))) {
       throw new ProviderRpcError(
         RpcErrorCode.unsupportedMethod,
-        `LEAKED's account contracts aren't on ${net?.name ?? "this network"} yet.`,
-        { leakedRule: "BACKEND-NOT-READY" },
+        `QueueBit's account contracts aren't on ${net?.name ?? "this network"} yet.`,
+        { queuebitRule: "BACKEND-NOT-READY" },
       );
     }
     let record: Approval;
@@ -501,16 +501,16 @@ export class Wallet {
     const net = getNetwork(chainId);
     if ((net.backend === "4337" && !aaNetwork(chainId)) || !this.payments) return { atomic: { status: "unsupported" } };
     // Both backends batch atomically: one hotExecute frame, or one 7579 batch `execute`.
-    const leaked: Record<string, unknown> = { backend: net.backend };
+    const queuebit: Record<string, unknown> = { backend: net.backend };
     try {
       const s = await this.payments.status(chainId);
       // Only what a site needs to choose a flow. The limit and what is left of it today are not exposed: they are a
       // cross-site signal (any connected site could watch another site's spending), M1 review.
-      leaked.activated = s.deployed;
+      queuebit.activated = s.deployed;
     } catch {
       // capabilities stay minimal when the network is unreachable
     }
-    return { atomic: { status: "supported" }, leaked };
+    return { atomic: { status: "supported" }, queuebit };
   }
 
   /** The approval window's route + fee for a transaction request (records why, if it can't be instant). */
@@ -519,10 +519,10 @@ export class Wallet {
     if (!a || a.kind !== "transaction" || !a.tx) throw new Error("No such request.");
     const preview = await this.pay().preview(a.chainId, toCalls(a.tx.calls));
     if (preview.route.route !== "hot") {
-      const leakedRule = preview.route.rules[0] ?? "ROUTE-NEEDS-VAULT";
+      const queuebitRule = preview.route.rules[0] ?? "ROUTE-NEEDS-VAULT";
       await this.approvals.store.update(id, {
         routeDenial: {
-          leakedRule,
+          queuebitRule,
           explanation: `${preview.route.copy.headline}. ${preview.route.copy.detail}`,
           ...(preview.route.copy.remedy ? { remedy: preview.route.copy.remedy } : {}),
         },
@@ -564,7 +564,7 @@ export class Wallet {
     if (!net || (net.backend === "4337" && !aaNetwork(chainId))) {
       throw new ProviderRpcError(
         RpcErrorCode.unsupportedMethod,
-        `LEAKED's account contracts aren't on ${net?.name ?? "this network"} yet.`,
+        `QueueBit's account contracts aren't on ${net?.name ?? "this network"} yet.`,
       );
     }
     const account = await this.accountFor(chainId);
@@ -589,8 +589,8 @@ export class Wallet {
         if (!sig.domainOk) {
           // ux-spec E-50: the screen only offers Cancel, and the site learns the rule whichever way it is closed.
           routeDenial = {
-            leakedRule: "SIG-DOMAIN-NOT-ALLOWED",
-            explanation: `This sign-in message says it's for ${siwe.domain}, but the request came from ${ctx.origin}. LEAKED didn't sign it.`,
+            queuebitRule: "SIG-DOMAIN-NOT-ALLOWED",
+            explanation: `This sign-in message says it's for ${siwe.domain}, but the request came from ${ctx.origin}. QueueBit didn't sign it.`,
           };
         }
       }
@@ -617,7 +617,7 @@ export class Wallet {
             : await this.permit2Check(chainId, account, cls, td.domain?.chainId);
         if (why) {
           throw new ProviderRpcError(RpcErrorCode.unauthorized, why, {
-            leakedRule: "SIG-PERMIT-MISMATCH",
+            queuebitRule: "SIG-PERMIT-MISMATCH",
             explanation: why,
             remedy: "Ask the site for a permit for the connected account on this network.",
           });
@@ -737,7 +737,7 @@ export class Wallet {
   }
 
   private async signInSites(): Promise<string[]> {
-    return (await this.env.local.get<string[]>("leaked:signInSites")) ?? [];
+    return (await this.env.local.get<string[]>("queuebit:signInSites")) ?? [];
   }
 
   private async resolveSignature(
@@ -753,7 +753,7 @@ export class Wallet {
       );
       return;
     }
-    if (!(await this.keyring.isUnlocked())) throw new KeyringError("locked", "Unlock LEAKED before signing.");
+    if (!(await this.keyring.isUnlocked())) throw new KeyringError("locked", "Unlock QueueBit before signing.");
     const sig = approval.sig!;
     const account = await this.accountFor(approval.chainId);
     if (!account) throw new KeyringError("missing", "No account yet.");
@@ -762,8 +762,8 @@ export class Wallet {
         // Enforced here, not only by the screen: a message naming another site is never signed (plan §30 §9.1).
         await this.approvals.resolve(approval.id, "rejected", {
           denial: approval.routeDenial ?? {
-            leakedRule: "SIG-DOMAIN-NOT-ALLOWED",
-            explanation: `This sign-in message says it's for ${sig.siwe.domain}, but the request came from ${approval.origin}. LEAKED didn't sign it.`,
+            queuebitRule: "SIG-DOMAIN-NOT-ALLOWED",
+            explanation: `This sign-in message says it's for ${sig.siwe.domain}, but the request came from ${approval.origin}. QueueBit didn't sign it.`,
           },
         });
         return;
@@ -791,7 +791,7 @@ export class Wallet {
       if (opts.alwaysAllow) {
         const sites = await this.signInSites();
         if (!sites.includes(approval.origin))
-          await this.env.local.set("leaked:signInSites", [...sites, approval.origin]);
+          await this.env.local.set("queuebit:signInSites", [...sites, approval.origin]);
       }
       await this.approvals.resolve(approval.id, "approved", {
         result: { activityId: "", hash: "0x", signature },
@@ -848,7 +848,7 @@ export class Wallet {
       if (err instanceof RouteError) {
         await this.approvals.resolve(approval.id, "rejected", {
           denial: {
-            leakedRule: err.view.rules[0] ?? "ROUTE-NEEDS-VAULT",
+            queuebitRule: err.view.rules[0] ?? "ROUTE-NEEDS-VAULT",
             explanation: `${err.view.copy.headline}. ${err.view.copy.detail}`,
             ...(err.view.copy.remedy ? { remedy: err.view.copy.remedy } : {}),
           },
@@ -884,7 +884,7 @@ export class Wallet {
     if (entry.status !== "confirmed" || Number(expiry) === 0) {
       await this.approvals.resolve(approval.id, "rejected", {
         denial: {
-          leakedRule: "SIG-PERMIT-NOT-REGISTERED",
+          queuebitRule: "SIG-PERMIT-NOT-REGISTERED",
           explanation:
             entry.status !== "confirmed"
               ? "The pre-approval didn't go through, so nothing was signed."
@@ -917,7 +917,7 @@ export class Wallet {
       "E-24",
       last?.status === "progress"
         ? `That's only part of the code (${last.received} of ${last.total}). Paste every part.`
-        : "That isn't a LEAKED code. Show the code from the Vault app.",
+        : "That isn't a QueueBit code. Show the code from the Vault app.",
     );
   }
 
@@ -935,7 +935,7 @@ export class Wallet {
     }
     const scheme = schemeById(k.schemeId);
     if (!scheme)
-      throw new VaultError("E-22", "This Vault uses a key type this version doesn't support. Update LEAKED.");
+      throw new VaultError("E-22", "This Vault uses a key type this version doesn't support. Update QueueBit.");
     if (role === "vault" && !k.payer)
       throw new VaultError("E-22", "This pairing code has no fee-payment key. Update the Vault app.");
     const setup = await this.settings.getSetup();
@@ -1086,7 +1086,7 @@ export class Wallet {
       const preset = net.tokenPresets.find((p) => p.token.toLowerCase() === t.token.toLowerCase());
       if (preset && t.usd < preset.usd / MIN_PRESET_PRICE_RATIO) {
         throw new Error(
-          `$${t.usd} for ${t.symbol} is under 1% of the $${preset.usd} LEAKED suggests. At that price your daily limit would let ${Math.round(preset.usd / t.usd)}× more ${t.symbol} through. Use a price close to the real one.`,
+          `$${t.usd} for ${t.symbol} is under 1% of the $${preset.usd} QueueBit suggests. At that price your daily limit would let ${Math.round(preset.usd / t.usd)}× more ${t.symbol} through. Use a price close to the real one.`,
         );
       }
       if (this.env.io) {
@@ -1213,7 +1213,7 @@ export class Wallet {
     return out;
   }
 
-  /** 4337: the Vault and the Recovery key are PQ keys stored by LeakedRoleExecutor; the fee tank relays approvals. */
+  /** 4337: the Vault and the Recovery key are PQ keys stored by QueueBitRoleExecutor; the fee tank relays approvals. */
   private async aaSignerViews(chainId: number, plan: AccountPlan): Promise<SignerView[]> {
     const client = this.env.io!.publicClient(chainId);
     const code = await client.getCode({ address: plan.address });
@@ -1307,7 +1307,7 @@ export class Wallet {
     if (approved) {
       const account = await this.accountFor(approval.chainId);
       if (!account || !(await this.keyring.isUnlocked())) {
-        throw new KeyringError("locked", "Unlock LEAKED before connecting.");
+        throw new KeyringError("locked", "Unlock QueueBit before connecting.");
       }
       await this.permissions.grant(approval.origin, [account], approval.chainId);
       this.env.emit("accountsChanged", [account], approval.origin);
@@ -1317,7 +1317,7 @@ export class Wallet {
 
   private async resolveTransaction(approval: Approval, approved: boolean): Promise<void> {
     if (!approved) {
-      // Closing a "needs your Vault" screen is not the user saying no: the site learns why (4100 + leakedRule).
+      // Closing a "needs your Vault" screen is not the user saying no: the site learns why (4100 + queuebitRule).
       await this.approvals.resolve(
         approval.id,
         "rejected",
@@ -1325,7 +1325,7 @@ export class Wallet {
       );
       return;
     }
-    if (!(await this.keyring.isUnlocked())) throw new KeyringError("locked", "Unlock LEAKED before approving.");
+    if (!(await this.keyring.isUnlocked())) throw new KeyringError("locked", "Unlock QueueBit before approving.");
     try {
       const entry = await this.pay().send(approval.chainId, toCalls(approval.tx!.calls), {
         origin: approval.origin,
@@ -1339,7 +1339,7 @@ export class Wallet {
       if (err instanceof RouteError) {
         await this.approvals.resolve(approval.id, "rejected", {
           denial: {
-            leakedRule: err.view.rules[0] ?? "ROUTE-NEEDS-VAULT",
+            queuebitRule: err.view.rules[0] ?? "ROUTE-NEEDS-VAULT",
             explanation: `${err.view.copy.headline}. ${err.view.copy.detail}`,
             ...(err.view.copy.remedy ? { remedy: err.view.copy.remedy } : {}),
           },
@@ -1610,7 +1610,7 @@ export class Wallet {
       await this.approvals
         .resolve(r.approvalId, "rejected", {
           denial: {
-            leakedRule: "ROUTE-NEEDS-VAULT",
+            queuebitRule: "ROUTE-NEEDS-VAULT",
             explanation: "A newer Vault request replaced this one before the phone's approval was sent.",
           },
         })

@@ -13,18 +13,18 @@ import {RollingCap} from "../lib/RollingCap.sol";
 import {TypedPermits} from "../lib/TypedPermits.sol";
 import {IPQVerifier} from "../interfaces/IPQVerifier.sol";
 import {IRoleSignerFactory} from "../interfaces/IRoleSignerFactory.sol";
-import {LeakedVerify} from "./LeakedVerify.sol";
-import {LeakedAccountStorage} from "./LeakedAccountStorage.sol";
-import {LeakedAccountBase} from "./LeakedAccountBase.sol";
+import {QueueBitVerify} from "./QueueBitVerify.sol";
+import {QueueBitAccountStorage} from "./QueueBitAccountStorage.sol";
+import {QueueBitAccountBase} from "./QueueBitAccountBase.sol";
 
-/// @title LeakedAccountImpl
-/// @notice The LEAKED frame-native smart account (UUPS implementation behind an ERC1967 proxy). A capped hot key that
+/// @title QueueBitAccountImpl
+/// @notice The QueueBit frame-native smart account (UUPS implementation behind an ERC1967 proxy). A capped hot key that
 ///         is safe to leak, a post-quantum vault and recovery reached only through their own signer contracts
 ///         (authorised here by `msg.sender`), a guardian that can only pause.
 ///         Spec: `docs/plan/sections/10-contracts.md` §10.3.2-§10.3.5, §10.5.1, §10.7.
 ///
 ///         Tiers:
-///         - hot: `verifyFrame()` (VERIFY, `LeakedVerify`) then `hotExecute` (SENDER frame, msg.sender == this):
+///         - hot: `verifyFrame()` (VERIFY, `QueueBitVerify`) then `hotExecute` (SENDER frame, msg.sender == this):
 ///           allowlisted ERC-20 `transfer`s and ETH sends (to any recipient in `RecipientMode.Open`, the default;
 ///           to allowlisted recipients in `Strict`), vault-issued session calls with
 ///           balance-delta accounting, `registerHash` for value-bearing 1271 hashes; all debited at vault-set static
@@ -33,14 +33,14 @@ import {LeakedAccountBase} from "./LeakedAccountBase.sol";
 ///           and executable by anyone after the delay; small spends draw on a daily instant allowance;
 ///         - recovery: cancels any queued vault op and starts a 7-day vault rotation the vault cannot cancel;
 ///         - guardian: `guardianFreeze()`, once per 7 days each, 72 h, cleared by anyone after expiry.
-contract LeakedAccountImpl is LeakedVerify, LeakedAccountBase, Initializable, UUPSUpgradeable, ERC7739 {
+contract QueueBitAccountImpl is QueueBitVerify, QueueBitAccountBase, Initializable, UUPSUpgradeable, ERC7739 {
     using RollingCap for RollingCap.Bucket;
 
     // ------------------------------------------------------------------------------------------- constants ------
 
     /// ERC-1271 marker for a registered hash: `REGISTERED_MARKER ‖ hash` (36 bytes). Some dapp SDKs refuse an empty
     /// signature; they may pass this instead. Both are accepted for a live registered hash and nothing else.
-    bytes4 public constant REGISTERED_MARKER = 0xdc6b87c9; // bytes4(keccak256("leaked.account.registeredHash"))
+    bytes4 public constant REGISTERED_MARKER = 0x427a9529; // bytes4(keccak256("queuebit.account.registeredHash"))
 
     /// Permit2 (same address on every chain): a hot-key 7739 signature is never valid when Permit2 asks.
     address internal constant PERMIT2 = TypedPermits.PERMIT2;
@@ -53,17 +53,17 @@ contract LeakedAccountImpl is LeakedVerify, LeakedAccountBase, Initializable, UU
     bytes4 private constant SET_APPROVAL_FOR_ALL = 0xa22cb465;
     bytes32 private constant SENTINEL_7739 = 0x7739773977397739773977397739773977397739773977397739773977397739;
 
-    /// The role surface (`LeakedAccountRoles`), reached by DELEGATECALL from `fallback()`.
+    /// The role surface (`QueueBitAccountRoles`), reached by DELEGATECALL from `fallback()`.
     address public immutable ROLES_MODULE;
 
     // -------------------------------------------------------------------------------------------- setup ------
 
     /// @param devnet       which opcode helpers to deploy (HegotaSupport); pins the frame-opcode encoding.
-    /// @param perGasMaxFee TXPARAM(MAX_FEE) semantics of the target chain (see `LeakedVerify.PER_GAS_MAX_FEE`).
-    /// @param rolesModule  the `LeakedAccountRoles` deployment this implementation delegates role calls to.
+    /// @param perGasMaxFee TXPARAM(MAX_FEE) semantics of the target chain (see `QueueBitVerify.PER_GAS_MAX_FEE`).
+    /// @param rolesModule  the `QueueBitAccountRoles` deployment this implementation delegates role calls to.
     constructor(Devnet devnet, bool perGasMaxFee, address rolesModule)
-        LeakedVerify(devnet, perGasMaxFee)
-        EIP712("LEAKED", "1")
+        QueueBitVerify(devnet, perGasMaxFee)
+        EIP712("QueueBit", "1")
     {
         if (rolesModule.code.length == 0) revert BadAddress(rolesModule);
         ROLES_MODULE = rolesModule;
@@ -79,7 +79,7 @@ contract LeakedAccountImpl is LeakedVerify, LeakedAccountBase, Initializable, UU
     ///      (`createRoleSigner` with the same arguments; `RoleSignerDerived` logs them). Explicit mode (pk == 0):
     ///      the address in `c.vaultSigner` / `c.recoverySigner` (an unbound `PQRoleSigner`, a test signer).
     function initialize(InitConfig calldata c) external initializer {
-        LeakedAccountStorage.Layout storage $ = _s();
+        QueueBitAccountStorage.Layout storage $ = _s();
         if (c.hotKey == address(0) || c.hotKey == address(this)) revert BadAddress(c.hotKey);
         address vaultSigner = _roleSigner(c.roleSignerFactory, c.vault, c.vaultSigner, ROLE_VAULT);
         address recoverySigner = _roleSigner(c.roleSignerFactory, c.recovery, c.recoverySigner, ROLE_RECOVERY);
@@ -149,7 +149,7 @@ contract LeakedAccountImpl is LeakedVerify, LeakedAccountBase, Initializable, UU
     /// stores and emits, with the setter's price bounds, plus: at most `MAX_TOKENS`, no duplicates, and each token a
     /// contract that is not the account, a role signer, the hot key or the tank. Execution-only slots (I-2).
     function _initTokens(
-        LeakedAccountStorage.Layout storage $,
+        QueueBitAccountStorage.Layout storage $,
         InitConfig calldata c,
         address vaultSigner,
         address recoverySigner
@@ -205,7 +205,7 @@ contract LeakedAccountImpl is LeakedVerify, LeakedAccountBase, Initializable, UU
     receive() external payable {}
 
     /// Role entry points (`vault*`, `recovery*`, `guardianFreeze`, `execute*`, role views) live in
-    /// `LeakedAccountRoles`; every other selector reverts there. The module holds no APPROVE helper, so nothing it
+    /// `QueueBitAccountRoles`; every other selector reverts there. The module holds no APPROVE helper, so nothing it
     /// runs can approve a frame.
     fallback() external payable {
         address m = ROLES_MODULE;
@@ -227,7 +227,7 @@ contract LeakedAccountImpl is LeakedVerify, LeakedAccountBase, Initializable, UU
     function hotExecute(uint256 declaredUsd, Call[] calldata calls) external {
         if (msg.sender != address(this)) revert OnlySelf();
         _noActiveContext();
-        LeakedAccountStorage.Layout storage $ = _s();
+        QueueBitAccountStorage.Layout storage $ = _s();
         if ($.bunker) revert BunkerActive();
         if ($.hotFrozen) revert HotFrozen();
         uint256 n = calls.length;
@@ -261,7 +261,7 @@ contract LeakedAccountImpl is LeakedVerify, LeakedAccountBase, Initializable, UU
         if (_tload(T_HOT) == 0) revert NotInHotBatch();
         if (expiry <= block.timestamp || expiry > block.timestamp + MAX_REGISTERED_TTL) revert BadExpiry();
         uint256 usd = quoteUsd(token, amount);
-        LeakedAccountStorage.Layout storage $ = _s();
+        QueueBitAccountStorage.Layout storage $ = _s();
         $.registeredHashes[hash] = expiry;
         delete $.registeredFor[hash];
         _tstore(T_HOT_DEBIT, _tload(T_HOT_DEBIT) + usd);
@@ -345,7 +345,7 @@ contract LeakedAccountImpl is LeakedVerify, LeakedAccountBase, Initializable, UU
 
     /// @notice Clears an expired freeze. Permissionless; also the one SENDER call VERIFY admits while frozen.
     function clearExpiredFreeze() external {
-        LeakedAccountStorage.Layout storage $ = _s();
+        QueueBitAccountStorage.Layout storage $ = _s();
         if (!$.hotFrozen) revert NotFrozen();
         if ($.pendingVaultEta != 0) revert RotationPending();
         if (block.timestamp < $.frozenUntil) revert FreezeNotExpired($.frozenUntil);
@@ -369,7 +369,7 @@ contract LeakedAccountImpl is LeakedVerify, LeakedAccountBase, Initializable, UU
     ///         Nothing else is accepted while the hot tier is frozen or bunkered. A view: nothing is logged.
     function isValidSignature(bytes32 hash, bytes calldata signature) public view override returns (bytes4) {
         if (hash == SENTINEL_7739 && signature.length == 0) return super.isValidSignature(hash, signature);
-        LeakedAccountStorage.Layout storage $ = _s();
+        QueueBitAccountStorage.Layout storage $ = _s();
         if ($.bunker || $.hotFrozen || $.hotKey == address(0)) return bytes4(0xffffffff);
         bool callerOk = _hotVerifierAllowed($, msg.sender);
         uint48 exp = $.registeredHashes[hash];
@@ -382,7 +382,7 @@ contract LeakedAccountImpl is LeakedVerify, LeakedAccountBase, Initializable, UU
     }
 
     /// The hot verifier rule (see `isValidSignature`).
-    function _hotVerifierAllowed(LeakedAccountStorage.Layout storage $, address caller) private view returns (bool) {
+    function _hotVerifierAllowed(QueueBitAccountStorage.Layout storage $, address caller) private view returns (bool) {
         if ($.valueVerifiers[caller] || (caller != address(0) && $.tokens[caller].allowed)) return false;
         return caller.code.length == 0 || $.trustedVerifiers[caller];
     }
@@ -396,11 +396,11 @@ contract LeakedAccountImpl is LeakedVerify, LeakedAccountBase, Initializable, UU
     // ------------------------------------------------------------------------------------------- views ------
 
     function accountId() external pure returns (string memory) {
-        return "leaked.account.1.0.0";
+        return "queuebit.account.1.0.0";
     }
 
     function getHotConfig() external view returns (HotConfig memory c) {
-        LeakedAccountStorage.Layout storage $ = _s();
+        QueueBitAccountStorage.Layout storage $ = _s();
         c = HotConfig(
             $.hotKey,
             $.hotFrozen,
@@ -468,7 +468,7 @@ contract LeakedAccountImpl is LeakedVerify, LeakedAccountBase, Initializable, UU
     // ---------------------------------------------------------------------------------------- internals ------
 
     /// One hot call; returns its static USD debit (session calls: their measured outflow).
-    function _hotCall(LeakedAccountStorage.Layout storage $, Call calldata c, uint256 i) private returns (uint256) {
+    function _hotCall(QueueBitAccountStorage.Layout storage $, Call calldata c, uint256 i) private returns (uint256) {
         address t = c.target;
         bytes4 sel = _selector(c.data);
         if (t == address(this)) {
@@ -538,7 +538,7 @@ contract LeakedAccountImpl is LeakedVerify, LeakedAccountBase, Initializable, UU
     /// - otherwise Strict: `NotAllowed`; Open: anyone but the tank, a guardian or an allowlisted token contract
     ///   (`ForbiddenRecipient`): fees, a freeze-only role and a token's own balance are never paid by the hot key
     ///   without the vault allowlisting them.
-    function _checkRecipient(LeakedAccountStorage.Layout storage $, address to, address token, bytes4 sel)
+    function _checkRecipient(QueueBitAccountStorage.Layout storage $, address to, address token, bytes4 sel)
         private
         view
     {
@@ -580,7 +580,7 @@ contract LeakedAccountImpl is LeakedVerify, LeakedAccountBase, Initializable, UU
     /// A Permit2 spender: an allowlisted target, or the target of a live session `(spender, selector)`. Never the
     /// Open-mode "anyone": the spender decides where the tokens go.
     function _checkSpender(address spender, bytes4 selector) private view {
-        LeakedAccountStorage.Layout storage $ = _s();
+        QueueBitAccountStorage.Layout storage $ = _s();
         if ($.targets[spender]) return;
         Session storage s = $.sessions[sessionId(spender, selector)];
         if (s.expiry < block.timestamp || s.allowanceUsd == 0) revert NotAllowed(spender, selector);
@@ -597,7 +597,7 @@ contract LeakedAccountImpl is LeakedVerify, LeakedAccountBase, Initializable, UU
     ) private {
         if (deadline <= block.timestamp) revert BadExpiry();
         uint48 expiry = uint48(Math.min(deadline, block.timestamp + MAX_REGISTERED_TTL));
-        LeakedAccountStorage.Layout storage $ = _s();
+        QueueBitAccountStorage.Layout storage $ = _s();
         $.registeredHashes[digest] = expiry;
         $.registeredFor[digest] = consumer;
         _tstore(T_HOT_DEBIT, _tload(T_HOT_DEBIT) + _quote(t, amount));

@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // SPDX-FileCopyrightText: 2026 Nicolas Consigny <nicolas@ethereum.org>
 //
-// Vendored by LEAKED from https://github.com/nconsigny/SPHINCS- at commit
+// Vendored by QueueBit from https://github.com/nconsigny/SPHINCS- at commit
 // 4c76aaf113d326df9adede63d015f3b394ab84f4, file src/SphincsFrameVerify.yul.
 // Code below this comment is byte-identical to upstream (only this provenance block was added).
 // License: MIT, see ./LICENSE-SPHINCS-minus. Recorded in THIRD_PARTY.md.
-// NOTE (LEAKED): kept as the reference Path A module (plan §20 §2.1-2.2). It hard-codes the chain-1337 opcode
+// NOTE (QueueBit): kept as the reference Path A module (plan §20 §2.1-2.2). It hard-codes the chain-1337 opcode
 // bytes (SIGDATACOPY 0xb5) and is NOT used by PQRoleSigner, which reads the witness through the per-Devnet
 // hegota-support helpers instead (contracts/src/roles/PQRoleSigner.sol).
 

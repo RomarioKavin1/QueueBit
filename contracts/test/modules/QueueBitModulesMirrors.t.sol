@@ -4,22 +4,22 @@ pragma solidity 0.8.28;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {Execution, PackedUserOperation} from "../../src/modules/interfaces/IERC7579Modules.sol";
-import {LeakedPolicyHook} from "../../src/modules/LeakedPolicyHook.sol";
-import {LeakedRoleExecutor} from "../../src/modules/LeakedRoleExecutor.sol";
+import {QueueBitPolicyHook} from "../../src/modules/QueueBitPolicyHook.sol";
+import {QueueBitRoleExecutor} from "../../src/modules/QueueBitRoleExecutor.sol";
 import {MockToken} from "./mocks/ModuleMocks.sol";
-import {LeakedModulesBase} from "./LeakedModulesBase.sol";
+import {QueueBitModulesBase} from "./QueueBitModulesBase.sol";
 
 /// The account's 2026-11-06 rules, mirrored in the 7579 modules (BACKLOG "Contracts"):
 /// 1. `HookInit.tokens` as the account's `InitConfig.tokens`: bounded, duplicate-free, contracts only (not the
 ///    account, a module or the hot key), the setter's price bounds, one `TokenConfigured` each;
 /// 2. `SameRoleKey`: the recovery never holds the vault's (or a pending vault's) PQ key, at install, on a recovery
-///    key change and on a vault rotation; the hot key is never the account or a LEAKED module;
+///    key change and on a vault rotation; the hot key is never the account or a QueueBit module;
 /// 3. the account's `ForbiddenRecipient` set: in Open, a recipient the vault has not allowlisted is never an
 ///    allowlisted token contract (refused in validation) or an enabled guardian (refused in execution: the guardian
 ///    set is not an account-associated slot); the account, the token itself and the modules stay refused in both
 ///    modes (d38fa6f). Strict refuses all of them as not allowlisted.
 /// Runs on every host, in Open and Strict.
-abstract contract LeakedModulesMirrorsTest is LeakedModulesBase {
+abstract contract QueueBitModulesMirrorsTest is QueueBitModulesBase {
     MockToken internal dai;
 
     function setUp() public virtual override {
@@ -166,7 +166,7 @@ abstract contract LeakedModulesMirrorsTest is LeakedModulesBase {
         vm.prank(other);
         executor.onInstall(abi.encode(xi));
         Call[] memory c =
-            _calls1(address(executor), 0, abi.encodeCall(LeakedRoleExecutor.setRecoveryKey, (other, vaultPk)));
+            _calls1(address(executor), 0, abi.encodeCall(QueueBitRoleExecutor.setRecoveryKey, (other, vaultPk)));
         uint256 n;
         (,,,, n,,,,) = executor.getRoles(other);
         bytes memory sig = _pqSign(vaultPk, executor.hashVaultExec(other, n, c, 0));
@@ -175,7 +175,7 @@ abstract contract LeakedModulesMirrorsTest is LeakedModulesBase {
 
         // Queued change on the main account.
         Call[] memory q =
-            _calls1(address(executor), 0, abi.encodeCall(LeakedRoleExecutor.setRecoveryKey, (account, vaultPk)));
+            _calls1(address(executor), 0, abi.encodeCall(QueueBitRoleExecutor.setRecoveryKey, (account, vaultPk)));
         bytes32 opId = _vaultQueue(q, 1);
         vm.warp(block.timestamp + 48 hours);
         vm.expectRevert(abi.encodeWithSelector(CallFailed.selector, 0, abi.encodeWithSelector(SameRoleKey.selector)));
@@ -196,14 +196,14 @@ abstract contract LeakedModulesMirrorsTest is LeakedModulesBase {
         assertTrue(executor.rotationPending(account));
     }
 
-    /// Roles distinct from the hot key: the hot key is never the account or a LEAKED module (install and rotation).
+    /// Roles distinct from the hot key: the hot key is never the account or a QueueBit module (install and rotation).
     function test_hotKey_neverAModule() public {
         address[2] memory bad = [address(hook), address(executor)];
         for (uint256 i; i < 2; ++i) {
             HookInit memory c = _hookInit();
             c.hotKey = bad[i];
             _installHookReverts(c, abi.encodeWithSelector(BadAddress.selector, bad[i]));
-            Call[] memory r = _hookCall(abi.encodeCall(LeakedPolicyHook.setHotKey, (account, bad[i])));
+            Call[] memory r = _hookCall(abi.encodeCall(QueueBitPolicyHook.setHotKey, (account, bad[i])));
             uint256 n = _vaultNonce();
             bytes memory sig = _pqSign(vaultPk, executor.hashVaultExec(account, n, r, 0));
             vm.expectRevert(
@@ -251,7 +251,8 @@ abstract contract LeakedModulesMirrorsTest is LeakedModulesBase {
         assertEq(guardian.balance, e0, "guardian not paid ETH");
         // Removed as guardian: an ordinary recipient again (Open).
         _vaultExec(
-            _calls1(address(executor), 0, abi.encodeCall(LeakedRoleExecutor.setGuardian, (account, guardian, false))), 0
+            _calls1(address(executor), 0, abi.encodeCall(QueueBitRoleExecutor.setGuardian, (account, guardian, false))),
+            0
         );
         if (_open()) {
             _submitOk(_op(transferOp));
@@ -263,8 +264,8 @@ abstract contract LeakedModulesMirrorsTest is LeakedModulesBase {
     /// modes (except `to == token`, which stays refused).
     function test_forbidden_allowlistedRecipientAdmitted() public {
         Call[] memory c = new Call[](2);
-        c[0] = Call(address(hook), 0, abi.encodeCall(LeakedPolicyHook.setTarget, (account, guardian, true)));
-        c[1] = Call(address(hook), 0, abi.encodeCall(LeakedPolicyHook.setTarget, (account, address(dai), true)));
+        c[0] = Call(address(hook), 0, abi.encodeCall(QueueBitPolicyHook.setTarget, (account, guardian, true)));
+        c[1] = Call(address(hook), 0, abi.encodeCall(QueueBitPolicyHook.setTarget, (account, address(dai), true)));
         _queueAndRun(c, 1);
         _submitOk(_op(_single(address(usdc), 0, _usdcTo(guardian, 1e6))));
         _submitOk(_op(_single(address(usdc), 0, _usdcTo(address(dai), 1e6))));
@@ -295,37 +296,37 @@ abstract contract LeakedModulesMirrorsTest is LeakedModulesBase {
     }
 }
 
-contract LeakedModulesMirrorsMSATest is LeakedModulesMirrorsTest {
+contract QueueBitModulesMirrorsMSATest is QueueBitModulesMirrorsTest {
     function _host() internal pure override returns (Host) {
         return Host.MSA;
     }
 }
 
-contract LeakedModulesMirrorsSafe7579Test is LeakedModulesMirrorsTest {
+contract QueueBitModulesMirrorsSafe7579Test is QueueBitModulesMirrorsTest {
     function _host() internal pure override returns (Host) {
         return Host.SAFE7579;
     }
 }
 
-contract LeakedModulesMirrorsKernelTest is LeakedModulesMirrorsTest {
+contract QueueBitModulesMirrorsKernelTest is QueueBitModulesMirrorsTest {
     function _host() internal pure override returns (Host) {
         return Host.KERNEL;
     }
 }
 
-contract LeakedModulesMirrorsMSAStrictTest is LeakedModulesMirrorsMSATest {
+contract QueueBitModulesMirrorsMSAStrictTest is QueueBitModulesMirrorsMSATest {
     function _recipientMode() internal pure override returns (RecipientMode) {
         return RecipientMode.Strict;
     }
 }
 
-contract LeakedModulesMirrorsSafe7579StrictTest is LeakedModulesMirrorsSafe7579Test {
+contract QueueBitModulesMirrorsSafe7579StrictTest is QueueBitModulesMirrorsSafe7579Test {
     function _recipientMode() internal pure override returns (RecipientMode) {
         return RecipientMode.Strict;
     }
 }
 
-contract LeakedModulesMirrorsKernelStrictTest is LeakedModulesMirrorsKernelTest {
+contract QueueBitModulesMirrorsKernelStrictTest is QueueBitModulesMirrorsKernelTest {
     function _recipientMode() internal pure override returns (RecipientMode) {
         return RecipientMode.Strict;
     }

@@ -9,14 +9,14 @@ import {
 /**
  * Scoped ERC-1271 sign-in (plan §30 §3.2 / §3.4 path (a), M3): the everyday key signs an ERC-7739 envelope that the
  * account accepts only when the verifier has no code (an `eth_call` check: SIWE back ends, viem `verifyMessage`) or
- * is a Vault-trusted verifier (LeakedAccountImpl "hot verifier rule"). It can never move money: tokens, Permit2 and
+ * is a Vault-trusted verifier (QueueBitAccountImpl "hot verifier rule"). It can never move money: tokens, Permit2 and
  * any untrusted on-chain contract get "invalid". Pure except for the signing callback.
  */
 
-/** The account's own EIP-712 domain (`EIP712("LEAKED", "1")` in LeakedAccountImpl), the 7739 verifier domain. */
+/** The account's own EIP-712 domain (`EIP712("QueueBit", "1")` in QueueBitAccountImpl), the 7739 verifier domain. */
 export function accountDomain(account: Address, chainId: number) {
   return {
-    name: "LEAKED",
+    name: "QueueBit",
     version: "1",
     chainId: BigInt(chainId),
     verifyingContract: account,
@@ -25,7 +25,7 @@ export function accountDomain(account: Address, chainId: number) {
 }
 
 /**
- * The 7579 backend's 7739 domain: LeakedHotValidator's `EIP712Domain(name "LeakedHotValidator", version "1",
+ * The 7579 backend's 7739 domain: QueueBitHotValidator's `EIP712Domain(name "QueueBitHotValidator", version "1",
  * chainId, verifyingContract = account)` without a salt (its `accountDomainSeparator`); the nested TypedDataSign
  * carries `salt = 0` (its `domainBytes`). The host routes 1271 to the validator by a 20-byte prefix.
  */
@@ -33,7 +33,7 @@ export type VerifierDomain = { name: string; version: string; chainId: bigint; v
 
 export function validatorDomain(account: Address, chainId: number, withSalt: boolean): VerifierDomain {
   return {
-    name: "LeakedHotValidator",
+    name: "QueueBitHotValidator",
     version: "1",
     chainId: BigInt(chainId),
     verifyingContract: account,
@@ -97,8 +97,8 @@ export async function signTyped7739(
   return wrapTypedDataSignature({ domain, types: cleanTypes, primaryType, message, signature } as never);
 }
 
-/** `REGISTERED_MARKER ‖ hash` (LeakedAccountImpl): what the account accepts for a hash a hot batch registered. */
-export const REGISTERED_MARKER: Hex = "0xdc6b87c9";
+/** `REGISTERED_MARKER ‖ hash` (QueueBitAccountImpl): what the account accepts for a hash a hot batch registered. */
+export const REGISTERED_MARKER: Hex = "0x427a9529";
 export const registeredMarker = (digest: Hex): Hex => concatHex([REGISTERED_MARKER, digest]);
 
 /** The EIP-712 digest of a typed-data request (what a token's `permit` asks `isValidSignature` about). */

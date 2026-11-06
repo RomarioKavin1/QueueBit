@@ -1,5 +1,5 @@
 /**
- * A real Privacy Pools withdrawal, built with @leaked/privacy's own input builder over its test pool simulator
+ * A real Privacy Pools withdrawal, built with @queuebit/privacy's own input builder over its test pool simulator
  * (`packages/privacy/test/helpers.ts`, read-only reuse). Deterministic: RFC 6979 signer, fixed deposits.
  */
 import { readFile } from "node:fs/promises";
@@ -13,7 +13,7 @@ import {
   syncPool,
   type ArtifactLoader,
   type WithdrawCircuitInputs,
-} from "@leaked/privacy";
+} from "@queuebit/privacy";
 import {
   CHAIN,
   ENTRYPOINT,

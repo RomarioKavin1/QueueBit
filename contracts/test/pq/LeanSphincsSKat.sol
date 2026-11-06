@@ -3,7 +3,7 @@ pragma solidity 0.8.28;
 
 import {Vm} from "forge-std/Vm.sol";
 
-/// Reads the leanSphincs-s KAT sets of the leaked pq-signer package: set C (`vectors/leansphincs-s.json`, LEAKED derivation,
+/// Reads the leanSphincs-s KAT sets of the queuebit pq-signer package: set C (`vectors/leansphincs-s.json`, QueueBit derivation,
 /// Light-tier keys, hedged signatures) and set A (`vectors/leansphincs-s-upstream.json`, upstream's fixture verbatim).
 library LeanSphincsSKat {
     Vm private constant vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));

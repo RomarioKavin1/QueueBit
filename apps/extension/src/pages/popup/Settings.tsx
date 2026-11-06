@@ -41,14 +41,14 @@ export function SettingsScreen({ state, onBack }: { state: WalletState; onBack: 
               label: `${n.name} · ${n.accountKind}${n.enabled ? "" : " (not available yet)"}`,
             }))}
             onChange={(e) => void call("settings:update", { selectedChainId: Number(e.target.value) })}
-            description={`${net?.note ?? ""} LEAKED uses a fixed list so a site can't point you at a fake network.`}
+            description={`${net?.note ?? ""} QueueBit uses a fixed list so a site can't point you at a fake network.`}
           />
           <SelectField
             label="Lock automatically after"
             value={String(s.autoLockMinutes)}
             options={AUTO_LOCK_CHOICES.map((m) => ({ value: String(m), label: formatMinutes(m) }))}
             onChange={(e) => void call("settings:update", { autoLockMinutes: Number(e.target.value) })}
-            description="LEAKED also locks when you close the browser."
+            description="QueueBit also locks when you close the browser."
           />
           <SelectField
             label="Theme"
@@ -103,7 +103,7 @@ export function SettingsScreen({ state, onBack }: { state: WalletState; onBack: 
             Reset this browser
           </Button>
         </section>
-        <p className="t-small text-center text-muted">LEAKED preview build · test money only</p>
+        <p className="t-small text-center text-muted">QueueBit preview build · test money only</p>
       </div>
       <ResetSheet open={resetOpen} onClose={() => setResetOpen(false)} />
     </div>

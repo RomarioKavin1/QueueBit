@@ -2,8 +2,8 @@
 pragma solidity 0.8.28;
 
 import {Vm} from "forge-std/Vm.sol";
-import {LeakedAccountImpl} from "../../src/account/LeakedAccountImpl.sol";
-import {LeakedAccountRoles} from "../../src/account/LeakedAccountRoles.sol";
+import {QueueBitAccountImpl} from "../../src/account/QueueBitAccountImpl.sol";
+import {QueueBitAccountRoles} from "../../src/account/QueueBitAccountRoles.sol";
 import {AccountTestBase} from "./AccountTestBase.sol";
 
 /// Dynamic opcode lint of the hot VERIFY path: records every opcode the proxy + implementation execute in
@@ -65,7 +65,7 @@ contract VerifyOpcodesTest is AccountTestBase {
     }
 
     function test_opcodes_selfPayPath() public {
-        _queueLoosen(abi.encodeCall(LeakedAccountRoles.vaultSetFeePolicy, (MAX_PRIO, true, tank)));
+        _queueLoosen(abi.encodeCall(QueueBitAccountRoles.vaultSetFeePolicy, (MAX_PRIO, true, tank)));
         simBegin(address(account));
         simSetFees(1 gwei, 1 gwei, 0.001 ether);
         simVerify(SELF_VERIFY, address(0), 80_000, _verifyData());
@@ -78,7 +78,7 @@ contract VerifyOpcodesTest is AccountTestBase {
     function test_opcodes_frozenPath() public {
         vm.prank(guardian);
         roles.guardianFreeze();
-        _beginHotTx(abi.encodeCall(LeakedAccountImpl.clearExpiredFreeze, ()));
+        _beginHotTx(abi.encodeCall(QueueBitAccountImpl.clearExpiredFreeze, ()));
         _signHotTx();
         _assertVerifyOpcodesClean();
     }

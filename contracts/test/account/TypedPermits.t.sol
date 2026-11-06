@@ -3,10 +3,10 @@ pragma solidity 0.8.28;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
-import {ILeakedAccount} from "../../src/account/ILeakedAccount.sol";
-import {LeakedAccountImpl} from "../../src/account/LeakedAccountImpl.sol";
-import {LeakedAccountRoles} from "../../src/account/LeakedAccountRoles.sol";
-import {LeakedAccountStorage} from "../../src/account/LeakedAccountStorage.sol";
+import {IQueueBitAccount} from "../../src/account/IQueueBitAccount.sol";
+import {QueueBitAccountImpl} from "../../src/account/QueueBitAccountImpl.sol";
+import {QueueBitAccountRoles} from "../../src/account/QueueBitAccountRoles.sol";
+import {QueueBitAccountStorage} from "../../src/account/QueueBitAccountStorage.sol";
 import {TypedPermits} from "../../src/lib/TypedPermits.sol";
 import {AccountTestBase} from "./AccountTestBase.sol";
 import {Permit2Mock, Auth3009Token, Permit2Spender} from "./mocks/TypedPermitMocks.sol";
@@ -33,10 +33,10 @@ contract TypedPermitsTest is AccountTestBase {
         vm.etch(PERMIT2, address(new Permit2Mock()).code);
         p2 = Permit2Mock(PERMIT2);
         spender = new Permit2Spender();
-        _queueLoosen(abi.encodeCall(LeakedAccountRoles.vaultSetToken, (address(tok), true, 18, 1 * USD)));
+        _queueLoosen(abi.encodeCall(QueueBitAccountRoles.vaultSetToken, (address(tok), true, 18, 1 * USD)));
         _queueLoosen(
             abi.encodeCall(
-                LeakedAccountRoles.vaultSetSession,
+                QueueBitAccountRoles.vaultSetSession,
                 (address(spender), Permit2Spender.execute.selector, 100 * USD, uint48(vm.getBlockTimestamp() + 30 days))
             )
         );
@@ -53,13 +53,13 @@ contract TypedPermitsTest is AccountTestBase {
     }
 
     function _callFailed(bytes memory reason) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(ILeakedAccount.CallFailed.selector, 0, reason);
+        return abi.encodeWithSelector(IQueueBitAccount.CallFailed.selector, 0, reason);
     }
 
-    function _regSingle(uint160 amount, address who) internal view returns (ILeakedAccount.Call memory) {
+    function _regSingle(uint160 amount, address who) internal view returns (IQueueBitAccount.Call memory) {
         return _selfCall(
             abi.encodeCall(
-                LeakedAccountImpl.registerPermit2,
+                QueueBitAccountImpl.registerPermit2,
                 (address(tok), amount, expiration, who, deadline, Permit2Spender.execute.selector)
             )
         );
@@ -68,11 +68,11 @@ contract TypedPermitsTest is AccountTestBase {
     function _regTransfer(uint256 amount, address who, uint256 nonce)
         internal
         view
-        returns (ILeakedAccount.Call memory)
+        returns (IQueueBitAccount.Call memory)
     {
         return _selfCall(
             abi.encodeCall(
-                LeakedAccountImpl.registerPermit2Transfer,
+                QueueBitAccountImpl.registerPermit2Transfer,
                 (address(tok), amount, who, nonce, deadline, Permit2Spender.execute.selector)
             )
         );
@@ -81,11 +81,11 @@ contract TypedPermitsTest is AccountTestBase {
     function _reg3009(uint256 value, address to, bytes32 nonce, bool receiveAuth)
         internal
         view
-        returns (ILeakedAccount.Call memory)
+        returns (IQueueBitAccount.Call memory)
     {
         return _selfCall(
             abi.encodeCall(
-                LeakedAccountImpl.registerTransferAuthorization,
+                QueueBitAccountImpl.registerTransferAuthorization,
                 (address(tok), value, to, 0, deadline, nonce, receiveAuth)
             )
         );
@@ -137,7 +137,7 @@ contract TypedPermitsTest is AccountTestBase {
     function test_permit2Single_bindsAmountSpenderAndPermit2() public {
         bytes32 digest = p2.hashPermitSingle(_single(40 ether, 0));
         vm.expectEmit(address(account));
-        emit ILeakedAccount.HashRegistered(digest, address(tok), 40 ether, uint48(deadline));
+        emit IQueueBitAccount.HashRegistered(digest, address(tok), 40 ether, uint48(deadline));
         _hot(40 * USD, _one(_regSingle(40 ether, address(spender))));
         assertEq(_bucketAvailable(), CAP - 40 * USD, "debited at the permit's amount");
         assertEq(account.registeredHashConsumer(digest), PERMIT2);
@@ -172,7 +172,7 @@ contract TypedPermitsTest is AccountTestBase {
         vm.expectRevert(Permit2Mock.InvalidContractSignature.selector);
         p2.permit(address(account), other, "");
         // the declared USD of the batch cannot under-state the typed amount either
-        vm.expectRevert(abi.encodeWithSelector(ILeakedAccount.DeclaredUsdExceeded.selector, 50 * USD, 1 * USD));
+        vm.expectRevert(abi.encodeWithSelector(IQueueBitAccount.DeclaredUsdExceeded.selector, 50 * USD, 1 * USD));
         _hot(1 * USD, _one(_regSingle(50 ether, address(spender))));
         (uint160 amt,,) = p2.allowance(address(account), address(tok), attacker);
         assertEq(amt, 0);
@@ -196,28 +196,28 @@ contract TypedPermitsTest is AccountTestBase {
 
     function test_permit2Single_reverts() public {
         // not a self-call of an open hot batch
-        vm.expectRevert(ILeakedAccount.OnlySelf.selector);
+        vm.expectRevert(IQueueBitAccount.OnlySelf.selector);
         account.registerPermit2(address(tok), 1, expiration, address(spender), deadline, bytes4(0));
         vm.prank(address(account));
-        vm.expectRevert(ILeakedAccount.NotInHotBatch.selector);
+        vm.expectRevert(IQueueBitAccount.NotInHotBatch.selector);
         account.registerPermit2(address(tok), 1, expiration, address(spender), deadline, bytes4(0));
         // a spender that is neither allowlisted nor session-bound (Open mode does not widen spenders)
         vm.expectRevert(
             _callFailed(
-                abi.encodeWithSelector(ILeakedAccount.NotAllowed.selector, attacker, Permit2Spender.execute.selector)
+                abi.encodeWithSelector(IQueueBitAccount.NotAllowed.selector, attacker, Permit2Spender.execute.selector)
             )
         );
         _hot(1 * USD, _one(_regSingle(1 ether, attacker)));
         // the session must be the one named
-        ILeakedAccount.Call memory c = _selfCall(
+        IQueueBitAccount.Call memory c = _selfCall(
             abi.encodeCall(
-                LeakedAccountImpl.registerPermit2,
+                QueueBitAccountImpl.registerPermit2,
                 (address(tok), 1 ether, expiration, address(spender), deadline, bytes4(0xdeadbeef))
             )
         );
         vm.expectRevert(
             _callFailed(
-                abi.encodeWithSelector(ILeakedAccount.NotAllowed.selector, address(spender), bytes4(0xdeadbeef))
+                abi.encodeWithSelector(IQueueBitAccount.NotAllowed.selector, address(spender), bytes4(0xdeadbeef))
             )
         );
         _hot(1 * USD, _one(c));
@@ -225,13 +225,13 @@ contract TypedPermitsTest is AccountTestBase {
         uint48[3] memory bad = [uint48(0), uint48(vm.getBlockTimestamp()), uint48(vm.getBlockTimestamp() + 31 days)];
         for (uint256 i; i < 3; ++i) {
             expiration = bad[i];
-            vm.expectRevert(_callFailed(abi.encodeWithSelector(ILeakedAccount.BadExpiry.selector)));
+            vm.expectRevert(_callFailed(abi.encodeWithSelector(IQueueBitAccount.BadExpiry.selector)));
             _hot(1 * USD, _one(_regSingle(1 ether, address(spender))));
         }
         expiration = uint48(vm.getBlockTimestamp() + 1 days);
         // past signature deadline
         deadline = vm.getBlockTimestamp();
-        vm.expectRevert(_callFailed(abi.encodeWithSelector(ILeakedAccount.BadExpiry.selector)));
+        vm.expectRevert(_callFailed(abi.encodeWithSelector(IQueueBitAccount.BadExpiry.selector)));
         _hot(1 * USD, _one(_regSingle(1 ether, address(spender))));
         deadline = vm.getBlockTimestamp() + 1 hours;
         // an "infinite" allowance cannot be registered (its debit exceeds the per-tx bound)
@@ -240,10 +240,10 @@ contract TypedPermitsTest is AccountTestBase {
         // unpriced token
         c = _selfCall(
             abi.encodeCall(
-                LeakedAccountImpl.registerPermit2, (attacker, 1, expiration, address(spender), deadline, bytes4(0))
+                QueueBitAccountImpl.registerPermit2, (attacker, 1, expiration, address(spender), deadline, bytes4(0))
             )
         );
-        vm.expectRevert(_callFailed(abi.encodeWithSelector(ILeakedAccount.TokenNotAllowed.selector, attacker)));
+        vm.expectRevert(_callFailed(abi.encodeWithSelector(IQueueBitAccount.TokenNotAllowed.selector, attacker)));
         _hot(1 * USD, _one(c));
         // a removed session no longer binds the spender
         vm.prank(vault);
@@ -251,7 +251,7 @@ contract TypedPermitsTest is AccountTestBase {
         vm.expectRevert(
             _callFailed(
                 abi.encodeWithSelector(
-                    ILeakedAccount.NotAllowed.selector, address(spender), Permit2Spender.execute.selector
+                    IQueueBitAccount.NotAllowed.selector, address(spender), Permit2Spender.execute.selector
                 )
             )
         );
@@ -307,7 +307,9 @@ contract TypedPermitsTest is AccountTestBase {
             // C1 replay: an opaque registration of the digest at 1 wei of declared value
             _hot(
                 1,
-                _one(_selfCall(abi.encodeCall(LeakedAccountImpl.registerHash, (d, address(tok), 1, uint48(deadline)))))
+                _one(
+                    _selfCall(abi.encodeCall(QueueBitAccountImpl.registerHash, (d, address(tok), 1, uint48(deadline))))
+                )
             );
             vm.prank(PERMIT2);
             assertEq(account.isValidSignature(d, ""), BAD, "an opaque hash is never honoured for Permit2");
@@ -318,7 +320,7 @@ contract TypedPermitsTest is AccountTestBase {
     }
 
     /// Cross-account replay: a `PermitSingle` digest carries no owner (Permit2 asks the owner it is given), so a
-    /// second LEAKED account with the same (token, spender, nonce) has the same digest. Only the account that
+    /// second QueueBit account with the same (token, spender, nonce) has the same digest. Only the account that
     /// registered it answers for it.
     function test_permit2Single_crossAccountReplayRefused() public {
         address b = factory.createAccount(bytes32(uint256(2)), address(impl), _initData(_defaultCfg()));
@@ -333,7 +335,7 @@ contract TypedPermitsTest is AccountTestBase {
         );
         _hot(40 * USD, _one(_regSingle(40 ether, address(spender))));
         vm.prank(PERMIT2);
-        assertEq(LeakedAccountImpl(payable(b)).isValidSignature(digest, ""), BAD, "B never registered it");
+        assertEq(QueueBitAccountImpl(payable(b)).isValidSignature(digest, ""), BAD, "B never registered it");
         vm.expectRevert(Permit2Mock.InvalidContractSignature.selector);
         spender.permitAndPull(p2, b, _single(40 ether, 0), attacker, 40 ether);
         assertEq(tok.balanceOf(b), 90_000 ether);
@@ -382,7 +384,7 @@ contract TypedPermitsTest is AccountTestBase {
         bytes32 ds = keccak256(
             abi.encode(
                 keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
-                keccak256("LEAKED"),
+                keccak256("QueueBit"),
                 keccak256("1"),
                 block.chainid,
                 address(account)
@@ -395,7 +397,7 @@ contract TypedPermitsTest is AccountTestBase {
 
     /// An allowlisted target is a valid spender without a session.
     function test_permit2Single_allowlistedSpender() public {
-        _queueLoosen(abi.encodeCall(LeakedAccountRoles.vaultSetTarget, (alice, true)));
+        _queueLoosen(abi.encodeCall(QueueBitAccountRoles.vaultSetTarget, (alice, true)));
         _resetTimes();
         _hot(2 * USD, _one(_regSingle(2 ether, alice)));
         Permit2Mock.PermitSingle memory ps = _single(2 ether, 0);
@@ -431,7 +433,7 @@ contract TypedPermitsTest is AccountTestBase {
         vm.expectRevert(Permit2Mock.InvalidNonce.selector);
         spender.pullSigned(p2, address(account), _xfer(30 ether, nonce), alice, 30 ether);
         // a spent nonce cannot be registered again
-        vm.expectRevert(_callFailed(abi.encodeWithSelector(ILeakedAccount.NonceUsed.selector)));
+        vm.expectRevert(_callFailed(abi.encodeWithSelector(IQueueBitAccount.NonceUsed.selector)));
         _hot(30 * USD, _one(_regTransfer(30 ether, address(spender), nonce)));
         assertEq(tok.balanceOf(attacker), 0);
     }
@@ -439,7 +441,7 @@ contract TypedPermitsTest is AccountTestBase {
     function test_permit2Transfer_spenderRule() public {
         vm.expectRevert(
             _callFailed(
-                abi.encodeWithSelector(ILeakedAccount.NotAllowed.selector, attacker, Permit2Spender.execute.selector)
+                abi.encodeWithSelector(IQueueBitAccount.NotAllowed.selector, attacker, Permit2Spender.execute.selector)
             )
         );
         _hot(1 * USD, _one(_regTransfer(1 ether, attacker, 1)));
@@ -474,7 +476,7 @@ contract TypedPermitsTest is AccountTestBase {
         // replay
         vm.expectRevert(bytes("used"));
         tok.transferWithAuthorization(address(account), alice, 25 ether, 0, deadline, nonce, "");
-        vm.expectRevert(_callFailed(abi.encodeWithSelector(ILeakedAccount.NonceUsed.selector)));
+        vm.expectRevert(_callFailed(abi.encodeWithSelector(IQueueBitAccount.NonceUsed.selector)));
         _hot(25 * USD, _one(_reg3009(25 ether, alice, nonce, false)));
     }
 
@@ -490,26 +492,26 @@ contract TypedPermitsTest is AccountTestBase {
 
     function test_3009_recipientRule() public {
         // never the token itself, the account, or (Open) an allowlisted token / the tank
-        vm.expectRevert(_callFailed(abi.encodeWithSelector(ILeakedAccount.ForbiddenRecipient.selector, address(tok))));
+        vm.expectRevert(_callFailed(abi.encodeWithSelector(IQueueBitAccount.ForbiddenRecipient.selector, address(tok))));
         _hot(1 * USD, _one(_reg3009(1 ether, address(tok), keccak256("x"), false)));
         vm.expectRevert(
-            _callFailed(abi.encodeWithSelector(ILeakedAccount.ForbiddenRecipient.selector, address(account)))
+            _callFailed(abi.encodeWithSelector(IQueueBitAccount.ForbiddenRecipient.selector, address(account)))
         );
         _hot(1 * USD, _one(_reg3009(1 ether, address(account), keccak256("x"), false)));
         vm.expectRevert(
             _callFailed(
-                abi.encodeWithSelector(ILeakedAccount.NotAllowed.selector, address(0), IERC20.transfer.selector)
+                abi.encodeWithSelector(IQueueBitAccount.NotAllowed.selector, address(0), IERC20.transfer.selector)
             )
         );
         _hot(1 * USD, _one(_reg3009(1 ether, address(0), keccak256("x"), false)));
         // validAfter >= validBefore
-        ILeakedAccount.Call memory c = _selfCall(
+        IQueueBitAccount.Call memory c = _selfCall(
             abi.encodeCall(
-                LeakedAccountImpl.registerTransferAuthorization,
+                QueueBitAccountImpl.registerTransferAuthorization,
                 (address(tok), 1 ether, alice, deadline, deadline, keccak256("x"), false)
             )
         );
-        vm.expectRevert(_callFailed(abi.encodeWithSelector(ILeakedAccount.BadExpiry.selector)));
+        vm.expectRevert(_callFailed(abi.encodeWithSelector(IQueueBitAccount.BadExpiry.selector)));
         _hot(1 * USD, _one(c));
     }
 
@@ -524,14 +526,14 @@ contract TypedPermitsTest is AccountTestBase {
 
     /// The typed registrations write no slot VERIFY reads (slots 0-2 of the layout).
     function test_I2_typedRegistrationsWriteNoVerifySlot() public {
-        ILeakedAccount.Call[] memory c = new ILeakedAccount.Call[](3);
+        IQueueBitAccount.Call[] memory c = new IQueueBitAccount.Call[](3);
         c[0] = _regSingle(1 ether, address(spender));
         c[1] = _regTransfer(1 ether, address(spender), 9);
         c[2] = _reg3009(1 ether, alice, keccak256("i2"), false);
         vm.record();
         _hot(3 * USD, c);
         (, bytes32[] memory w) = vm.accesses(address(account));
-        uint256 base = uint256(LeakedAccountStorage.SLOT);
+        uint256 base = uint256(QueueBitAccountStorage.SLOT);
         for (uint256 i; i < w.length; ++i) {
             uint256 s = uint256(w[i]);
             assertTrue(s != base && s != base + 1 && s != base + 2, "wrote a VERIFY-read slot");
@@ -544,13 +546,15 @@ contract TypedPermitsStrictTest is TypedPermitsTest {
     function setUp() public override {
         super.setUp();
         _strict();
-        _queueLoosen(abi.encodeCall(LeakedAccountRoles.vaultSetTarget, (alice, true)));
+        _queueLoosen(abi.encodeCall(QueueBitAccountRoles.vaultSetTarget, (alice, true)));
         _resetTimes();
     }
 
     function test_3009_openModeArbitraryRecipient() public override {
         vm.expectRevert(
-            _callFailed(abi.encodeWithSelector(ILeakedAccount.NotAllowed.selector, stranger, IERC20.transfer.selector))
+            _callFailed(
+                abi.encodeWithSelector(IQueueBitAccount.NotAllowed.selector, stranger, IERC20.transfer.selector)
+            )
         );
         _hot(1 * USD, _one(_reg3009(1 ether, stranger, keccak256("o"), false)));
     }

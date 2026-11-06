@@ -7,7 +7,7 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 DEVNET="$(cd "$HERE/.." && pwd)"
-IMAGE="${SKANDHA_BUDGET_IMAGE:-leaked/sidecar:budget-010}"
+IMAGE="${SKANDHA_BUDGET_IMAGE:-queuebit/sidecar:budget-010}"
 PORT="${SKANDHA_BUDGET_PORT:-14340}"
 compose() { docker compose -f "$DEVNET/docker-compose.yml" -f "$HERE/compose.override.yml" --profile budget "$@"; }
 

@@ -10,7 +10,7 @@ import { classifyPersonalSign, classifyTypedData, type SignatureClass } from "./
 /**
  * The dapp-facing JSON-RPC method table (plan §30 §3.2), M1 subset: accounts, chains (per origin), reads, and on the
  * frame backend `eth_sendTransaction` and the EIP-5792 methods for everyday payments. Everything else answers
- * EIP-1193 `4200 unsupported method` with a message saying which milestone brings it; `leaked_*` is internal and
+ * EIP-1193 `4200 unsupported method` with a message saying which milestone brings it; `queuebit_*` is internal and
  * never served to pages (`-32601`).
  */
 export interface ProviderRequest {
@@ -46,10 +46,10 @@ export interface RouterDeps {
   setOriginChain(origin: string, chainId: number): Promise<void>;
   hasKeyring(): Promise<boolean>;
   isUnlocked(): Promise<boolean>;
-  /** The account a site sees on `chainId`: the smart account where LEAKED has one, else the everyday key. */
+  /** The account a site sees on `chainId`: the smart account where QueueBit has one, else the everyday key. */
   getAccount(chainId: number): Promise<Address | undefined>;
   requestConnect(ctx: RequestContext, chainId: number): Promise<ApprovalOutcome>;
-  /** Opens the transaction approval; resolves once sent, or throws 4001 / 4100 (+ leakedRule). */
+  /** Opens the transaction approval; resolves once sent, or throws 4001 / 4100 (+ queuebitRule). */
   requestTransaction(
     ctx: RequestContext,
     chainId: number,
@@ -99,22 +99,22 @@ const LATER: Record<string, string> = {
   wallet_watchAsset: "a later milestone",
 };
 
-/** Methods LEAKED will never offer (plan §30 §3.2, ux-spec E-41/E-53). */
+/** Methods QueueBit will never offer (plan §30 §3.2, ux-spec E-41/E-53). */
 const NEVER: Record<string, string> = {
-  eth_sign: "LEAKED never signs raw hashes.",
+  eth_sign: "QueueBit never signs raw hashes.",
   eth_signTransaction: "A smart account has no raw transaction to hand back.",
   eth_signTypedData: "Use eth_signTypedData_v4.",
   eth_signTypedData_v1: "Use eth_signTypedData_v4.",
   eth_signTypedData_v3: "Use eth_signTypedData_v4.",
-  wallet_addEthereumChain: "LEAKED uses a fixed list of networks so a site can't point it at a fake one.",
-  wallet_prepareCalls: "LEAKED never hands signing digests to pages.",
-  wallet_sendPreparedCalls: "LEAKED never hands signing digests to pages.",
+  wallet_addEthereumChain: "QueueBit uses a fixed list of networks so a site can't point it at a fake one.",
+  wallet_prepareCalls: "QueueBit never hands signing digests to pages.",
+  wallet_sendPreparedCalls: "QueueBit never hands signing digests to pages.",
 };
 
 export function unsupported(method: string): ProviderRpcError {
   const never = NEVER[method];
   if (never) {
-    return new ProviderRpcError(RpcErrorCode.unsupportedMethod, `LEAKED does not support ${method}. ${never}`, {
+    return new ProviderRpcError(RpcErrorCode.unsupportedMethod, `QueueBit does not support ${method}. ${never}`, {
       method,
     });
   }
@@ -122,8 +122,8 @@ export function unsupported(method: string): ProviderRpcError {
   return new ProviderRpcError(
     RpcErrorCode.unsupportedMethod,
     when
-      ? `LEAKED does not support ${method} yet; it arrives in ${when}.`
-      : `LEAKED does not support ${method} in this version.`,
+      ? `QueueBit does not support ${method} yet; it arrives in ${when}.`
+      : `QueueBit does not support ${method} in this version.`,
     { method },
   );
 }
@@ -174,7 +174,7 @@ function parseQuantity(v: unknown, what: string): bigint {
 function parseCall(c: unknown, i: number): ApprovalTx["calls"][number] {
   const o = (c ?? {}) as { to?: unknown; value?: unknown; data?: unknown; input?: unknown };
   if (o.to === undefined || o.to === null) {
-    throw invalid(`Call ${i}: LEAKED doesn't deploy contracts from the everyday key (missing "to").`);
+    throw invalid(`Call ${i}: QueueBit doesn't deploy contracts from the everyday key (missing "to").`);
   }
   if (typeof o.to !== "string" || !isAddress(o.to, { strict: false }))
     throw invalid(`Call ${i}: "to" is not an address.`);
@@ -190,7 +190,7 @@ function parseCall(c: unknown, i: number): ApprovalTx["calls"][number] {
 
 async function requireConnected(ctx: RequestContext, deps: RouterDeps): Promise<Address> {
   const [account] = await accountsForDapp(ctx.origin, deps);
-  if (!account) throw unauthorized("Connect to LEAKED (eth_requestAccounts) first.");
+  if (!account) throw unauthorized("Connect to QueueBit (eth_requestAccounts) first.");
   return account;
 }
 
@@ -210,7 +210,7 @@ export async function routeProviderRequest(
   if (typeof method !== "string" || method.length === 0) {
     throw new ProviderRpcError(RpcErrorCode.invalidParams, "Missing method.");
   }
-  if (method.startsWith("leaked_")) {
+  if (method.startsWith("queuebit_")) {
     throw new ProviderRpcError(RpcErrorCode.methodNotFound, `The method ${method} does not exist / is not available.`);
   }
   const params = paramsArray(req.params);
@@ -232,7 +232,7 @@ export async function routeProviderRequest(
       if (outcome !== "approved") throw userRejected("The user rejected the connection request.");
       const accounts = await accountsForDapp(ctx.origin, deps);
       // Approval requires an unlocked wallet; if it auto-locked in between, the request is not fulfilled.
-      if (accounts.length === 0) throw userRejected("LEAKED is locked.");
+      if (accounts.length === 0) throw userRejected("QueueBit is locked.");
       return accounts;
     }
 
@@ -241,12 +241,12 @@ export async function routeProviderRequest(
       if (!findNetwork(chainId)) {
         throw new ProviderRpcError(
           RpcErrorCode.unrecognizedChain,
-          `LEAKED doesn't support chain ${toHexChainId(chainId)}. It uses a fixed list of networks.`,
+          `QueueBit doesn't support chain ${toHexChainId(chainId)}. It uses a fixed list of networks.`,
           { chainId: toHexChainId(chainId) },
         );
       }
       if (!(await deps.permissions.isPermitted(ctx.origin))) {
-        throw unauthorized("Connect to LEAKED (eth_requestAccounts) before switching networks.");
+        throw unauthorized("Connect to QueueBit (eth_requestAccounts) before switching networks.");
       }
       if (chainId !== (await chainFor(ctx.origin, deps))) await deps.setOriginChain(ctx.origin, chainId);
       return null;
@@ -292,7 +292,7 @@ export async function routeProviderRequest(
         if (!cap?.optional) {
           throw new ProviderRpcError(
             RpcErrorCode.unsupportedCapability,
-            `LEAKED doesn't support the "${name}" capability.`,
+            `QueueBit doesn't support the "${name}" capability.`,
           );
         }
       }
@@ -347,7 +347,7 @@ export async function routeProviderRequest(
       const account = await requireConnected(ctx, deps);
       const addr = params[0];
       if (addr !== undefined && (typeof addr !== "string" || addr.toLowerCase() !== account.toLowerCase())) {
-        throw unauthorized("LEAKED only answers for the connected account.");
+        throw unauthorized("QueueBit only answers for the connected account.");
       }
       const wanted = params[1];
       const chainId = await chainFor(ctx.origin, deps);
@@ -365,7 +365,7 @@ export async function routeProviderRequest(
       // personal_sign: [message, address]; eth_signTypedData_v4: [address, typedData].
       const [msgParam, addrParam] = method === "personal_sign" ? [params[0], params[1]] : [params[1], params[0]];
       if (typeof addrParam === "string" && addrParam.toLowerCase() !== account.toLowerCase()) {
-        throw unauthorized(`LEAKED only signs for the connected account ${account}.`);
+        throw unauthorized(`QueueBit only signs for the connected account ${account}.`);
       }
       if (method === "personal_sign" && typeof msgParam !== "string") throw invalid("Expected [message, address].");
       if (method === "eth_signTypedData_v4" && typeof msgParam !== "string" && typeof msgParam !== "object") {
@@ -398,15 +398,15 @@ function decodeMessage(hex: string): string {
 
 /**
  * Value-bearing typed data the everyday key may never sign (classifier per the 2026-11-06 account audit,
- * `signing.ts`): `4100` + leakedRule with the reason and what the user can do instead (ux-spec E-52).
+ * `signing.ts`): `4100` + queuebitRule with the reason and what the user can do instead (ux-spec E-52).
  */
 function signatureError(cls: Extract<SignatureClass, { kind: "needs-vault" }>): ProviderRpcError {
   const remedy =
     cls.rule === "SIG-PERMIT2"
-      ? "LEAKED can pre-approve a single Permit2 allowance or transfer for an app you allowed. Ask the site for one of those, or approve the token with a payment instead."
-      : "LEAKED never signs what can move money without a payment you approve. Ask the site for a regular transaction instead.";
+      ? "QueueBit can pre-approve a single Permit2 allowance or transfer for an app you allowed. Ask the site for one of those, or approve the token with a payment instead."
+      : "QueueBit never signs what can move money without a payment you approve. Ask the site for a regular transaction instead.";
   return new ProviderRpcError(RpcErrorCode.unauthorized, cls.reason, {
-    leakedRule: cls.rule,
+    queuebitRule: cls.rule,
     explanation: cls.reason,
     remedy,
   });

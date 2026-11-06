@@ -1,11 +1,11 @@
 /**
  * Plan 40 §7 legal rules, as code (engineering guidance, not legal advice):
- *  1. no LEAKED-operated pool, ASP, relayer or coordinator: the only withdrawal modes are a *third-party* 0xbow
+ *  1. no QueueBit-operated pool, ASP, relayer or coordinator: the only withdrawal modes are a *third-party* 0xbow
  *     relayer and the at-cost PoolPayer frame paymaster submitted to a public alt-mempool node. There is no
  *     "operated relayer" mode and no server code in this package;
  *  2. PoolPayer is at cost: the fee is exactly the transaction's own max cost (the contract refunds every wei not
  *     used); no fee, BPS, margin or markup parameter exists, and one passed anyway is rejected;
- *  5. no fee of any kind flows to LEAKED (there is no LEAKED fee recipient anywhere).
+ *  5. no fee of any kind flows to QueueBit (there is no QueueBit fee recipient anywhere).
  */
 
 export const WITHDRAW_MODES = Object.freeze(["relayer", "frame-paymaster"] as const);
@@ -63,7 +63,7 @@ export function assertAtCostFee(a: { fee: bigint; maxCost: bigint; maxCostUpperB
 }
 
 /**
- * Relayer mode: the fee is 0xbow's (the relayer signs a fee commitment); LEAKED sets none. It must not exceed the
+ * Relayer mode: the fee is 0xbow's (the relayer signs a fee commitment); QueueBit sets none. It must not exceed the
  * pool's on-chain `maxRelayFeeBPS` (the Entrypoint would revert anyway) or the BPS the user saw in the quote.
  */
 export function assertRelayFee(a: { relayFeeBPS: bigint; quotedBPS: bigint; maxRelayFeeBPS: bigint }): void {

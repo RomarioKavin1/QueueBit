@@ -71,7 +71,7 @@ interface Schema {
   logSealed: Uint8Array[];
 }
 
-const DB_NAME = "leaked-companion";
+const DB_NAME = "queuebit-companion";
 const STORE = "kv";
 
 let dbPromise: Promise<IDBDatabase> | undefined;

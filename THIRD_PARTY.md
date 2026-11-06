@@ -79,7 +79,7 @@ SOFTWARE.
 
 The full MIT license text of the leanSPHINCS candidates crate (`TomWambsgans/leanXMSS-leanSPHINCS-candidates`, as
 shipped in SPHINCS- `signers/leansphincs-s-keccak/LICENSE.upstream`; the crate is dual-licensed MIT OR Apache-2.0 and
-LEAKED uses it under MIT). leanVM's `crates/sphincs` is under the same MIT terms with the copyright line
+QueueBit uses it under MIT). leanVM's `crates/sphincs` is under the same MIT terms with the copyright line
 "Copyright (c) 2026 leanEthereum":
 
 ```
@@ -216,13 +216,13 @@ The PWA build redistributes these npm packages inside its JavaScript bundle (the
 No third-party source was copied into `packages/ur` or `apps/companion`. Data taken from other projects: the Privacy
 Pools `PrivacyPoolNote` EIP-712 domain and types and the 0xbow entrypoint addresses (from `kohaku`
 `privacy-pools/src/account/signature-keys.ts` and `config.ts`, as cited in plan §40 §1.3–1.4), used as constants in
-`apps/companion/src/registry/leaked.descriptors.json`. The companion's icons are original.
+`apps/companion/src/registry/queuebit.descriptors.json`. The companion's icons are original.
 
 ### Contracts M7 (ERC-4337 / ERC-7579 backend)
 
 No third-party source was copied into `contracts/src/modules`. The minimal ERC-4337/7579 interfaces in
 `src/modules/interfaces/IERC7579Modules.sol` are written from the ERC texts (struct and selector layouts are
-standard-defined); `LeakedHotValidator` uses OpenZeppelin's `ERC7739Utils` from the existing `lib/openzeppelin-contracts`.
+standard-defined); `QueueBitHotValidator` uses OpenZeppelin's `ERC7739Utils` from the existing `lib/openzeppelin-contracts`.
 ModuleKit (`rhinestonewtf/modulekit`, AGPL/GPL, unmaintained since 2026-09) is **not** used: the test harness in
 `contracts/test/modules` re-implements the ModuleKit pattern without its code.
 
@@ -243,7 +243,7 @@ Foundry submodules added for the tests only (test hosts and the EntryPoint; neve
 Test-only shims in `contracts/test/modules/hosts/HostArtifacts.sol` subclass `MSAAdvanced` and `Safe7579` to override
 `entryPoint()` (both hard-code the v0.7 address); no upstream file is modified.
 
-## `@leaked/privacy` (privacy milestones P1–P3, P7 core)
+## `@queuebit/privacy` (privacy milestones P1–P3, P7 core)
 
 **Kohaku license gate (checked 2026-11-06 with `npm view <pkg>@<ver> license`).** `@kohaku-eth/privacy-pools@0.1.0-alpha.38`
 declares `MIT`, but it hard-depends on `@kohaku-eth/plugins@0.0.1-alpha.20` (**no license field**, and the Kohaku repo
@@ -255,7 +255,7 @@ same vault key yields the same notes. **Gate:** do not add any `@kohaku-eth/*` p
 written license confirmation (plan §1 row 15).
 
 The package's dependencies, all bundled into the extension later: `viem` 2.57.16 (MIT), `poseidon-lite` 0.3.0 (MIT),
-`@zk-kit/lean-imt` 2.2.2 (MIT; `@zk-kit/utils` MIT), and the workspace packages `@leaked/frames`, `@leaked/rpc` and `@leaked/ur`.
+`@zk-kit/lean-imt` 2.2.2 (MIT; `@zk-kit/utils` MIT), and the workspace packages `@queuebit/frames`, `@queuebit/rpc` and `@queuebit/ur`.
 Test-only, never imported by `src/` and never distributed: `snarkjs@0.7.5` (**GPL-3.0**). The Groth16 engine is
 injected through the `Groth16Backend` interface, so shipping the prover is the extension's decision: bundling snarkjs makes
 that bundle GPL-3.0 combined work. `@fatsolutions/privacy-pools-core-circuits@1.0.5` (Apache-2.0) is test-only too. Its
@@ -263,14 +263,14 @@ withdraw artifacts are pinned by sha256 in `src/pp/prover.ts` (wasm `36cda227…
 `666bd098…d21e`). Formulas in `src/pp/crypto.ts` are adapted from this repo's `contracts/devnet-tests/privacy/src/pp.ts`.
 The Privacy Pools v1 ABI fragments in `src/pp/abi.ts` are written from the deployed ABI.
 
-## `@leaked/groth16` (the shipped Groth16 engine)
+## `@queuebit/groth16` (the shipped Groth16 engine)
 
 **No code copied.** The zkey reader, the circom R1CS-to-QAP reduction and both witness-calculator glues
 (`src/witness.ts`, `rust/src/witness.rs`) are written here from the file formats and the circom witness module's
 import/export interface. circom's generated `witness_calculator.js` (`iden3/circom`, `code_producers/src/wasm_elements/common/`)
 is **GPL-3.0** (the repo's `COPYING`; the file has no header of its own), so it is not used, copied or bundled.
 
-**Rust crates compiled into `wasm/leaked_groth16_bg.wasm`** (checked 2026-11-06 with `cargo tree -e normal --features
+**Rust crates compiled into `wasm/queuebit_groth16_bg.wasm`** (checked 2026-11-06 with `cargo tree -e normal --features
 wasm --target wasm32-unknown-unknown --format "{p} {l}"`, against each crate's Cargo metadata and LICENSE file):
 the arkworks crates `ark-groth16`, `ark-bn254`, `ark-ec`, `ark-ff`, `ark-poly`, `ark-relations`, `ark-serialize`,
 `ark-std`, `ark-snark`, `ark-crypto-primitives` 0.6.0 (all MIT OR Apache-2.0), `wasm-bindgen` 0.2.117, and their
@@ -290,7 +290,7 @@ crates (`ark-ff-asm`, `ark-ff-macros`, `educe`, `syn`, `unicode-ident` (MIT OR A
 **Native-only** (CLI, Rust tests, benchmark; never shipped): `wasmi` 2.0.0 (MIT OR Apache-2.0, the witness-module
 interpreter), `serde_json`, `num-bigint`, `rand`, `rayon` (all MIT OR Apache-2.0).
 
-**npm.** Runtime: `@leaked/privacy` (workspace). Test-only, never imported by `src/`: `snarkjs@0.7.5` (**GPL-3.0**,
+**npm.** Runtime: `@queuebit/privacy` (workspace). Test-only, never imported by `src/`: `snarkjs@0.7.5` (**GPL-3.0**,
 the cross-check oracle) and `@fatsolutions/privacy-pools-core-circuits@1.0.5` (Apache-2.0, the pinned artifacts).
 The on-chain check compiles a temp copy of this repo's `contracts/test/privacy/WithdrawalGroth16Verifier.sol` (MIT).
 

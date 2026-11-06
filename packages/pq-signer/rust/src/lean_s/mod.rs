@@ -11,8 +11,8 @@
 //! "is not proved" (spec §14 "Lifetime"); C13's verifier has a Lean refinement proof, this one has none. See the
 //! package README's security note.
 //!
-//! Keys: `pk = P(16) || root(16)`; `sk = S(32) || pk`. LEAKED derivation (`derive_secret_key`):
-//! `S = HMAC-SHA512(key = "leaked/v1/" || SCHEME_ID || "/" || role || "/" || chainScope, msg = master)[0:32]`,
+//! Keys: `pk = P(16) || root(16)`; `sk = S(32) || pk`. QueueBit derivation (`derive_secret_key`):
+//! `S = HMAC-SHA512(key = "queuebit/v1/" || SCHEME_ID || "/" || role || "/" || chainScope, msg = master)[0:32]`,
 //! the same function as C13 with this scheme's id, so the two schemes never share a seed (upstream: "one seed is
 //! one scheme", spec §9/§14). `P` and the root follow from `S` as upstream defines them.
 
@@ -25,7 +25,7 @@ pub use scheme::{SecretKey, SignError};
 
 use crate::derive::{role_key, DeriveError, Role};
 
-/// LEAKED role key: `S = role_key(SCHEME_ID, master, role, chainScope)[0:32]`, then keygen at `b = 13`.
+/// QueueBit role key: `S = role_key(SCHEME_ID, master, role, chainScope)[0:32]`, then keygen at `b = 13`.
 pub fn derive_secret_key(master: &[u8], role: Role, chain_scope: &str) -> Result<SecretKey, DeriveError> {
     Ok(SecretKey::from_seed(&*derive_seed(master, role, chain_scope)?))
 }

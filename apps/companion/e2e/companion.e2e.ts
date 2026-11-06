@@ -2,7 +2,7 @@ import { expect, h, netMonitor, pasteRequest, readQr, restoreVault, shot, test }
 
 /**
  * The built PWA end to end, playing the extension with the Node helpers: pairing, the paste fallback, clear signing of
- * a limit change and a Vault withdrawal, real C13 signatures checked with @leaked/pq-signer, offline mode and the CSP.
+ * a limit change and a Vault withdrawal, real C13 signatures checked with @queuebit/pq-signer, offline mode and the CSP.
  */
 
 test.describe.configure({ mode: "serial" });
@@ -10,7 +10,7 @@ test.describe.configure({ mode: "serial" });
 test("pairing: create a Vault, show its key as a QR, back up and check the words", async ({ page }) => {
   const H = await h();
   await page.goto("./");
-  await expect(page.getByRole("heading", { name: "LEAKED Vault" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "QueueBit Vault" })).toBeVisible();
   await shot(page, "01-welcome");
 
   await page.getByTestId("create-vault").click();
@@ -26,7 +26,7 @@ test("pairing: create a Vault, show its key as a QR, back up and check the words
 
   // The extension's side: scan the QR (decoded from the rendered image) and check the 8 characters match.
   const ur = await readQr(page, "[data-testid=static-qr]");
-  expect(ur).toMatch(/^UR:LEAKED-PQ-KEY\//);
+  expect(ur).toMatch(/^UR:QUEUEBIT-PQ-KEY\//);
   const key = H.checkPairing(ur);
   expect(key.role).toBe(1);
   expect(key.payer).toMatch(/^0x[0-9a-f]{40}$/);
@@ -122,7 +122,7 @@ test("clear signing + signing: a Vault withdrawal to an address-book contact pro
 
   // The browser's side: read the animated QR (first frame) and the full text, then verify like the extension does.
   const frame = await readQr(page, "[data-testid=animated-qr]");
-  expect(frame).toMatch(/^UR:LEAKED-SIGNATURE\/\d+-\d+\//);
+  expect(frame).toMatch(/^UR:QUEUEBIT-SIGNATURE\/\d+-\d+\//);
   const text = await page.getByTestId("ur-text").inputValue();
   const r = await H.checkSignature(text, built, H.vault.pk, H.vault.payer);
   expect(r).toEqual({
@@ -240,7 +240,7 @@ test("compatible account (tx-type 3): clear-signed hook settings, a payment, unk
   );
   await page.getByTestId("structure").click();
   await expect(page.getByTestId("structure")).toContainText("Compatible account");
-  await expect(page.getByTestId("structure")).toContainText("LEAKED module");
+  await expect(page.getByTestId("structure")).toContainText("QueueBit module");
   await expect(page.getByTestId("structure")).toContainText("#5");
   await shot(page, "22-review-4337-setting");
   await page.getByTestId("approve").click();
@@ -280,7 +280,7 @@ test("offline: once loaded, the app installs, reloads and signs with the network
 
   await context.setOffline(true);
   await page.reload();
-  await expect(page.getByRole("heading", { name: "LEAKED Vault" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "QueueBit Vault" })).toBeVisible();
   await restoreVault(page, H.VAULT_WORDS, H.PASSPHRASE);
   await expect(page.getByTestId("online-state")).toHaveText("Offline");
   const built = H.usdcWithdrawal();

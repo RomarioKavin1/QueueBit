@@ -4,7 +4,7 @@ pragma solidity 0.8.28;
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 /// @title AccountFactory
-/// @notice Deterministic CREATE2 deployment of LEAKED account proxies (`ERC1967Proxy` -> `LeakedAccountImpl`), usable
+/// @notice Deterministic CREATE2 deployment of QueueBit account proxies (`ERC1967Proxy` -> `QueueBitAccountImpl`), usable
 ///         as the target of an EIP-8141 deploy frame. Spec: `docs/plan/sections/10-contracts.md` §10.3.1.
 /// @dev Stateless by design: a deploy frame "must not read mutable state outside tx.sender or maintain per-deploy
 ///      factory storage". The init data is part of the CREATE2 init code hash, so a front-runner who submits the
@@ -17,7 +17,7 @@ contract AccountFactory {
     error EmptyInitData();
 
     /// @notice Deploys (or returns, when already deployed) the proxy for `(salt, implementation, initData)`.
-    /// @param initData `abi.encodeCall(LeakedAccountImpl.initialize, (cfg))`; must not be empty.
+    /// @param initData `abi.encodeCall(QueueBitAccountImpl.initialize, (cfg))`; must not be empty.
     function createAccount(bytes32 salt, address implementation, bytes calldata initData)
         external
         returns (address account)

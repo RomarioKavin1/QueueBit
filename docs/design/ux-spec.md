@@ -1,7 +1,7 @@
-# LEAKED: UX specification (extension + vault companion)
+# QueueBit: UX specification (extension + vault companion)
 
 **Date:** 2026-11-06. **Status:** v1 draft for build. **Scope:** the Chromium MV3 extension (`popup.html`, `approve.html`, `app.html`) and the vault companion (PWA now, native shell later).
-**Grounding:** every technical behaviour below cites the plan: `docs/plan/00-v4-design-decisions.md` (design), `docs/plan/LEAKED-implementation-plan.md` (master), `sections/30-extension.md` (§3 provider, §4 engine, §5 routing, §6 vault flow, §7 screens, §9 hardening), `sections/20-pq-crypto-vault.md` (§4 companion, §5 recovery), `sections/40-privacy-infra.md` (§1 privacy states, §5 watcher, §6 Anon-RPC), `sections/10-contracts.md` (§10.3 role surface). Where the UX needs something the plan does not provide, it is marked **[PLAN CHANGE]** and collected in §9.
+**Grounding:** every technical behaviour below cites the plan: `docs/plan/00-v4-design-decisions.md` (design), `docs/plan/QueueBit-implementation-plan.md` (master), `sections/30-extension.md` (§3 provider, §4 engine, §5 routing, §6 vault flow, §7 screens, §9 hardening), `sections/20-pq-crypto-vault.md` (§4 companion, §5 recovery), `sections/40-privacy-infra.md` (§1 privacy states, §5 watcher, §6 Anon-RPC), `sections/10-contracts.md` (§10.3 role surface). Where the UX needs something the plan does not provide, it is marked **[PLAN CHANGE]** and collected in §9.
 
 The product promise, in the user's words: *"If someone steals my browser, they get at most one day's pocket money. Everything else needs my phone. If I lose my phone, my recovery card gets me back in."*
 
@@ -75,13 +75,13 @@ Banned words in user-facing copy: mempool, frame, nonce, gas (use "network fee")
 | **Approval window** `approve.html` | 360 × 600 notification window, keyed by request id, persisted in `storage.session` (plan §30 §3.6) | any dapp write request | Connect, Transaction, Sign-in, Pre-approve order, App allowance |
 | **Full app** `app.html` (tab) | responsive, min 720 wide, content column 640 | anything with a QR or a camera, onboarding, Lockdown, Privacy, Pending, Security, Settings | everything |
 
-Rule: **any flow that needs the Vault lives in `app.html`**, because the popup closes on focus loss and the camera needs a visible surface (plan §30 §6.2). The popup and approval window hand off with one button, *Continue in LEAKED*, which opens or focuses the tab at a deep link (`app.html#approve/<id>`), and the popup shows "Continuing in the LEAKED tab" until closed.
+Rule: **any flow that needs the Vault lives in `app.html`**, because the popup closes on focus loss and the camera needs a visible surface (plan §30 §6.2). The popup and approval window hand off with one button, *Continue in QueueBit*, which opens or focuses the tab at a deep link (`app.html#approve/<id>`), and the popup shows "Continuing in the QueueBit tab" until closed.
 
 ### 2.2 Popup navigation (360 × 600)
 
 ```
 ┌──────────────────────────────────────────┐
-│ ● LEAKED   Mainnet ▾     [alerts 2] [⋯]  │  48px top bar: network switcher, alerts badge, menu
+│ ● QueueBit   Mainnet ▾     [alerts 2] [⋯]  │  48px top bar: network switcher, alerts badge, menu
 ├──────────────────────────────────────────┤
 │                                          │
 │              screen content              │  504px scrollable
@@ -137,7 +137,7 @@ A single linear flow with a progress rail. Steps 1–3 are the **core** (target 
 
 ```
 ┌────────────────────────────────────────────────────────┐
-│  LEAKED                                     step 1 of 5 │
+│  QueueBit                                     step 1 of 5 │
 │                                                         │
 │  Money you can lose a little of,                        │
 │  and a Vault for the rest.                              │
@@ -170,7 +170,7 @@ A single linear flow with a progress rail. Steps 1–3 are the **core** (target 
 ┌────────────────────────────────────────────────────────┐
 │  Pair your Vault                            step 2 of 5 │
 │                                                         │
-│  1. On your phone, open LEAKED Vault and choose         │
+│  1. On your phone, open QueueBit Vault and choose         │
 │     "Pair with a browser".                              │
 │  2. Point your phone's QR at this camera.               │
 │                                                         │
@@ -283,7 +283,7 @@ A single linear flow with a progress rail. Steps 1–3 are the **core** (target 
 
 ```
 ┌──────────────────────────────────────────┐
-│ ● LEAKED    Mainnet ▾        [🔔2] [⋯]   │
+│ ● QueueBit    Mainnet ▾        [🔔2] [⋯]   │
 ├──────────────────────────────────────────┤
 │ [purple] 1 change scheduled · in 31 h  ▸ │  pending-vault-actions banner
 ├──────────────────────────────────────────┤
@@ -441,7 +441,7 @@ All five share the header: site origin (from the port sender, never the page, pl
 - Raw-only decoding (no descriptor, no ABI) shows the amber note: "We couldn't read what this does. Only approve if you trust the site." The Vault device will show the same thing in its own words (plan §20 §4.3 item 1).
 
 **States.** `idle` · `simulating` (fee + route estimate; button disabled ≤ 3 s, then enabled with "Fee unknown") · `instant` · `needs-vault` · `blocked` (`ROUTE-FROZEN`, `ROUTE-BUNKER`, E-41 unsupported chain: [Reject] only + one recovery action) · `expired` (dapp withdrew the request).
-**Returned error:** rejection → `4001`; policy denial → `4100` with `leakedRule`, `explanation`, `remedy` (plan §30 §3.1). The explanation text is the second line of the card, so dapps that surface `error.message` show the same words the user saw.
+**Returned error:** rejection → `4001`; policy denial → `4100` with `queuebitRule`, `explanation`, `remedy` (plan §30 §3.1). The explanation text is the second line of the card, so dapps that surface `error.message` show the same words the user saw.
 
 #### 3.5.3 Sign in (`personal_sign` SIWE / zero-value typed data)
 
@@ -494,7 +494,7 @@ All five share the header: site origin (from the port sender, never the page, pl
 └──────────────────────────────────────────┘
 ```
 
-**States.** `instant` · `needs-vault` · `unknown-schema` (E-52: "We don't recognise this kind of signature. To protect you, LEAKED never signs what it can't read. Ask your Vault to allow {contract}." → [Allow {contract} with Vault] [Reject]) · `unsupported-method` (E-53 for `eth_sign`, `eth_signTypedData` v1/v3, `eth_signTransaction`: a plain screen, not an approval).
+**States.** `instant` · `needs-vault` · `unknown-schema` (E-52: "We don't recognise this kind of signature. To protect you, QueueBit never signs what it can't read. Ask your Vault to allow {contract}." → [Allow {contract} with Vault] [Reject]) · `unsupported-method` (E-53 for `eth_sign`, `eth_signTypedData` v1/v3, `eth_signTransaction`: a plain screen, not an approval).
 **Honesty line (always):** "Some sites can't use pre-approvals from smart accounts. If the site shows an error after this, it's on their side." (plan §30 §3.4 compatibility risk).
 
 #### 3.5.5 App allowance request (ERC-7715 → session policy)
@@ -537,7 +537,7 @@ Granting is a Vault approval (plan §30 §3.7); the dapp request stays pending d
 │                                                            └──────────┘  │
 │   ① Scan  ──────  ② Check & approve on phone  ──────  ③ Scan back        │
 │   ●───────────────○──────────────────────────────────────○               │
-│   "Open LEAKED Vault, tap Scan, point it at this code."                   │
+│   "Open QueueBit Vault, tap Scan, point it at this code."                   │
 │                                                                           │
 │   [ Phone has signed: scan it back ]                                      │
 │   Expires in 9:40                                                         │
@@ -708,7 +708,7 @@ Per-step words from frame status (plan §30 §4.6): `0x1` "done", `0x0` "failed"
 ### 3.13 Settings (`#settings`)
 
 - **General**: auto-lock (default 15 min, plan §30 §2.4), currency, theme (system/light/dark).
-- **Networks**: fixed table (Mainnet, Sepolia, Hegotá devnet, alt-mempool devnet; plan §30 §8) with the account-type badge; no "add network" (plan: `wallet_addEthereumChain` refused) with explanation "LEAKED uses a fixed list so a site can't point you at a fake network."
+- **Networks**: fixed table (Mainnet, Sepolia, Hegotá devnet, alt-mempool devnet; plan §30 §8) with the account-type badge; no "add network" (plan: `wallet_addEthereumChain` refused) with explanation "QueueBit uses a fixed list so a site can't point you at a fake network."
 - **Private connection (Anon-RPC)**: toggle (default on), worker choice (Tor / Nym / Nox on Sepolia / passthrough-test), status, and the honesty line "Hides your IP from the network provider. The provider still sees what you ask. About 1.5 s slower per request." On the devnet: "No private connection available on this network; requests go direct." Turning it off asks for explicit consent (plan §30 §5.4). Fallback to direct on worker failure also asks (E-31).
 - **Alerts**: in-browser on; watcher pairing.
 - **Legacy compatibility**: "Also appear as `window.ethereum` for old sites" (default off, plan §30 §3.1).
@@ -729,7 +729,7 @@ The companion has **no network, no balances, no dapp browser** (plan §20 §4.1)
 
 ```
 ┌────────────────────────────┐
-│  LEAKED Vault              │
+│  QueueBit Vault              │
 │  This phone approves the   │
 │  big things. Keep it       │
 │  offline when you can.     │
@@ -813,7 +813,7 @@ Camera full-screen with a reticle; progress "Reading… 2 of 3 parts". States: `
 ```
 
 **Rendering rules (plan §20 §4.3):**
-1. **Intent pane** from bundled ERC-7730-style descriptors: LEAKED account ABI, allowed ERC-20 `transfer`/`approve`, Privacy Pools withdrawal. Interpolation uses constants only.
+1. **Intent pane** from bundled ERC-7730-style descriptors: QueueBit account ABI, allowed ERC-20 `transfer`/`approve`, Privacy Pools withdrawal. Interpolation uses constants only.
 2. **Amount in USD**: computed from the token price the Vault last pinned on-chain (`TokenConfigured(..., usdPer1e18)`, plan §10 §10.3.2 events) and kept in the local policy snapshot. Label it "at your pinned price (set {date})"; if the token has no pinned price, show "no USD estimate" rather than a guess. The companion has no network, so it must never pretend to show a live price.
 3. **Recipient**: address-book match shown with a check; unknown → full checksummed address, first/last 4 characters highlighted, badge "NEW RECIPIENT" (text + icon).
 4. **Admin banner**: shown for every admin selector (`vaultSetCap`, `vaultSetToken`, `vaultSetTarget`, `vaultSetSession`, `vaultSetDomain`, `vaultSetHotKey`, `vaultEnableBunker`, `vaultQueueUpgrade`, `vaultQueueMigrate`, `vaultQueue`, `vaultCancel`, `vaultSetRecoverySigner`, `vaultSetGuardian`, `vaultSetTimelock`) with the one-sentence consequence; loosening vs tightening computed on-device against the local snapshot. A snapshot mismatch (the chain state the browser claims differs from what this phone last signed) is itself an amber warning: "Your account's settings changed since this phone last signed. Check them in the browser before approving."
@@ -844,7 +844,7 @@ Camera full-screen with a reticle; progress "Reading… 2 of 3 parts". States: `
 └────────────────────────────┘
 ```
 
-Fountain-coded `ur:leaked-signature` at ~400-byte fragments, ~10 original parts, loops (plan §20 §4.2). "Slow" halves the frame rate for older webcams. Screenshots disabled on native. "Done" returns Home; the signature stays available under "Show again" for 10 minutes (same expiry as the browser request) then is discarded, so two valid signatures for one nonce are never kept (plan §30 §6.3).
+Fountain-coded `ur:queuebit-signature` at ~400-byte fragments, ~10 original parts, loops (plan §20 §4.2). "Slow" halves the frame rate for older webcams. Screenshots disabled on native. "Done" returns Home; the signature stays available under "Show again" for 10 minutes (same expiry as the browser request) then is discarded, so two valid signatures for one nonce are never kept (plan §30 §6.3).
 
 ### 4.6 Recovery mode (ceremony + use)
 
@@ -1036,19 +1036,19 @@ Each entry: code, trigger (plan source), user copy (title / body), primary recov
 | E-10 | stuck Vault tx | "Still waiting on the network. Vault approvals can't be sped up automatically." | [Re-approve on phone] (new request, same nonce) |
 | E-20 | camera denied / unavailable (plan §30 §6.2) | "Camera not available. You can paste the code as text or upload a photo of it." | [Paste code] [Upload photo] [Try camera again] |
 | E-21 | RPC unreachable (`RPC_UNREACHABLE`) | "Can't reach the network right now. Showing the last known state." | auto-retry next endpoint; [Retry] |
-| E-22 | pairing: scheme unsupported | "This Vault uses a key type this version doesn't support. Update LEAKED." | [Check for update] |
+| E-22 | pairing: scheme unsupported | "This Vault uses a key type this version doesn't support. Update QueueBit." | [Check for update] |
 | E-23 | recovery pk mismatch | "The Recovery key on the phone doesn't match the one scanned. Start the recovery setup again." | [Start over] |
 | E-30 | offline (no network at all) | banner "You're offline. Balances may be out of date." | – |
 | E-31 | private connection worker failed (`ready` rejects, plan §30 §5.4) | "Private connection failed to start. Continue without it? Your IP will be visible to the network provider." | [Continue without] [Retry] (explicit consent required) |
 | E-32 | private connection slow (> 10 s) | inline "Private connection is slow (Tor). Still loading…" | [Use direct connection this time] (consent) |
-| E-40 | connect on unsupported chain (`4902`/`4901`, plan §30 §3.2) | "LEAKED doesn't support {chain} yet. Your account exists on: Mainnet, Sepolia, Hegotá devnet." | [Switch to {supported}] ; dapp gets `4902`/`4901` |
-| E-41 | `wallet_addEthereumChain` | "This site wants to add a network. LEAKED uses a fixed list so a site can't point you at a fake one." | [OK]; dapp gets `4200` |
+| E-40 | connect on unsupported chain (`4902`/`4901`, plan §30 §3.2) | "QueueBit doesn't support {chain} yet. Your account exists on: Mainnet, Sepolia, Hegotá devnet." | [Switch to {supported}] ; dapp gets `4902`/`4901` |
+| E-41 | `wallet_addEthereumChain` | "This site wants to add a network. QueueBit uses a fixed list so a site can't point you at a fake one." | [OK]; dapp gets `4200` |
 | E-42 | batch too large (`5740`) | "This request has too many steps for one payment ({n} > {max})." | [Reject]; dapp gets `5740` |
 | E-43 | atomic batch on a not-yet-activated account (`5760`) | "Your account activates with its first payment, which can't be a multi-step batch. Make one simple payment first." | [Reject] |
 | E-50 | SIWE domain ≠ origin (plan §30 §9.1) | "This sign-in message says it's for {domain}, but you're on {origin}. Don't sign it." | [Cancel] only; dapp gets `4100 SIG-DOMAIN-NOT-ALLOWED` |
 | E-51 | site not on allowed sign-in list | "First sign-in on this site. Allow sign-ins from {origin}?" | [Allow with Vault] (see 9.1) |
-| E-52 | unknown typed-data schema (`SIG-UNKNOWN-SCHEMA`) | "We don't recognise this kind of signature, so LEAKED won't sign it blind. To use this site, ask your Vault to allow {contract}." | [Allow {contract} with Vault] [Reject] |
-| E-53 | unsupported method (`eth_sign`, `eth_signTransaction`, typed data v1/v3, `eth_subscribe`, 7836; `4200`) | "{site} asked for a kind of signature LEAKED doesn't offer ({method}). Nothing was signed. Many sites have a newer method; try again or contact the site." | [OK]; dapp gets `4200` |
+| E-52 | unknown typed-data schema (`SIG-UNKNOWN-SCHEMA`) | "We don't recognise this kind of signature, so QueueBit won't sign it blind. To use this site, ask your Vault to allow {contract}." | [Allow {contract} with Vault] [Reject] |
+| E-53 | unsupported method (`eth_sign`, `eth_signTransaction`, typed data v1/v3, `eth_subscribe`, 7836; `4200`) | "{site} asked for a kind of signature QueueBit doesn't offer ({method}). Nothing was signed. Many sites have a newer method; try again or contact the site." | [OK]; dapp gets `4200` |
 | E-54 | dapp rejects empty registration signature (plan §30 §3.4 risk) | shown in Activity: "Pre-approval recorded, but {site} may not accept it. If the site shows an error, it's on their side." | [Revoke pre-approval] |
 | E-60 | vault request expired (10 min) | "This request expired. Nothing was sent. Start again for a fresh code." | [Start again] |
 | E-61 | response id mismatch | "That signature is for a different request. Scan the code for this request." | [Scan again] |
@@ -1080,7 +1080,7 @@ Each entry: code, trigger (plan source), user copy (title / body), primary recov
 
 | # | Task (what we say) | Success criteria | Measures |
 |---|---|---|---|
-| T1 | "Set up LEAKED so that you could spend some money today and your phone protects the rest. Stop when it tells you you're done." | Completes J1 with the Vault paired; can state in their own words what the daily limit is for; ≤ 3 min 30 s; no help | time, taps, errors, retrospective: "What happens if someone steals this laptop?" (correct ≥ 7/8) |
+| T1 | "Set up QueueBit so that you could spend some money today and your phone protects the rest. Stop when it tells you you're done." | Completes J1 with the Vault paired; can state in their own words what the daily limit is for; ≤ 3 min 30 s; no help | time, taps, errors, retrospective: "What happens if someone steals this laptop?" (correct ≥ 7/8) |
 | T2 | "Send $50 to this address." then "Now send $900 to it." | First is instant; for the second the participant predicts, before tapping, that the phone will be involved (asked: "What do you expect to happen?"); completes J4 ≤ 45 s on first attempt, ≤ 30 s on a second attempt | prediction accuracy, time, whether they compare amount/recipient on the phone unprompted (observed) |
 | T3 | "On the phone, this payment looks different from what the browser said. What do you do?" (we inject a mismatch) | Participant rejects on the phone; can say which value differed | reject rate (target 8/8), time to notice |
 | T4 | "Raise your daily limit to $2,000." then "Change your mind and stop it." | Finds Limits; understands from the effect line that it waits 48 h; finds Pending and cancels; can explain why raising waits but lowering doesn't | task success, SEQ ≥ 5/7, correct explanation ≥ 6/8 |
@@ -1094,10 +1094,10 @@ Exit interview: card-sort the vocabulary (Everyday / Vault / Recovery / Guardian
 
 1. **Allowed sign-in sites are vault-set.** `vaultSetDomain` (plan §10 §10.3.2, §30 §3.4 path (a)) means the first sign-in on every new site is a Vault round-trip, which makes "Sign in with Ethereum" slower than a payment. Options: (a) keep an in-extension allowed-domain list for zero-value 7739 signatures only (the on-chain list stays for the contract's own check, if any); (b) a vault-issued "any domain, zero-value only" policy; (c) accept the round-trip and nag less. The UX assumes (a) or (b). Decision needed from §10/§30 owners.
 2. **Advisory intent used for a mismatch warning.** §20 §4.3 item 4 says the device accepts no labels from the request; §30 §6.1 key 11 is "advisory only; the device MUST ignore it for display". The companion screen (§4.4) uses key 11 only to compute a diff and show "the browser described this differently". Make that explicit in §20 §4.3 (display from own decoding only; the claim may be compared, never rendered as truth).
-3. **Recovery test-ok QR.** The ceremony (§20 §5) ends with a test restore on the phone; the browser conductor (§3.1.4) wants a tiny `ur:leaked-recovery-test` ({request-id, recoveryPk, ok}) so step 5 ticks itself. Add to `packages/ur`.
+3. **Recovery test-ok QR.** The ceremony (§20 §5) ends with a test restore on the phone; the browser conductor (§3.1.4) wants a tiny `ur:queuebit-recovery-test` ({request-id, recoveryPk, ok}) so step 5 ticks itself. Add to `packages/ur`.
 4. **Fee-tank top-up from the hot path.** §10 says the tank is "funded by the vault". A top-up is just an ETH transfer to the tank EOA; the UX wants it to be an everyday payment (the tank address allowlisted by default at account creation) so a low tank does not need the phone. Confirm with §10 (allowlisting the tank at `initialize`) and §30 (the "Top up" action).
-5. **Pending-queue snapshot in the request.** §40 §5 says the vault device "shows the same pending-action list when it scans the next request"; keys 1–11 of `ur:leaked-sign-request` carry no such list. Add an advisory key (e.g. 12: `pending[] {opId, kind, eta}`) or drop the claim from §40.
+5. **Pending-queue snapshot in the request.** §40 §5 says the vault device "shows the same pending-action list when it scans the next request"; keys 1–11 of `ur:queuebit-sign-request` carry no such list. Add an advisory key (e.g. 12: `pending[] {opId, kind, eta}`) or drop the claim from §40.
 6. **Popup size.** §30 §6.2 mentions a "600×800 popup"; this spec designs the popup at 360 × 600 (Chrome caps popups at 800 × 600 anyway) and moves everything that needs room to `app.html`. Align the text.
 7. **Refill time on the LimitMeter.** "Frees up at" is derived from `HotExecuted` events + block timestamps (§30 §6.5). If `getBucket()` could return the oldest entry's expiry, the meter would not need log scans on a cold start; nice-to-have for §10.
 8. **Vault signing-time budget.** J4's 30 s target assumes ≤ 5 s phone signing and ≤ 6 s scan-back. Both are [UNVERIFIED] in §20; if measurements exceed them, the companion should start signing immediately on Approve (before biometric completes is not acceptable) and the browser should auto-enter scan mode, which this spec already allows.
-9. **Policy-denial error data.** §30 §3.1 returns `{leakedRule, explanation, remedy}`; the UX reuses `explanation` as the card's second line. Keep those strings in one shared copy table (`packages/…/copy.ts`) so dapps and the UI show the same words.
+9. **Policy-denial error data.** §30 §3.1 returns `{queuebitRule, explanation, remedy}`; the UX reuses `explanation` as the card's second line. Keep those strings in one shared copy table (`packages/…/copy.ts`) so dapps and the UI show the same words.

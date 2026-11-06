@@ -126,7 +126,7 @@ export class DeadlineTracker {
   alarms(): { name: string; when: number }[] {
     return this.list()
       .filter((d) => !d.fired)
-      .map((d) => ({ name: `leaked-watch:${id(d.chainId, d.account, d.key)}`, when: d.at * 1000 }));
+      .map((d) => ({ name: `queuebit-watch:${id(d.chainId, d.account, d.key)}`, when: d.at * 1000 }));
   }
 
   snapshot(): Deadline[] {

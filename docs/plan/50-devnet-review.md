@@ -19,7 +19,7 @@ What changed (all applied in place in the sections, logged in §4 below):
    `SIGDATACOPY` of a SECP256K1 entry, `SIGPARAM(RESOLVED_SIGNER)` of an ARBITRARY entry with empty `signer`,
    and `FRAMEPARAM(STATUS | *_GAS_USED)` of the still-running frame. The plan's VERIFY logic avoids all three, but
    the §10 lint rules did not say so. They do now.
-2. **`eth_estimateFrameTransactionGas` cannot estimate LEAKED-shaped transactions** (signed + body frames). The
+2. **`eth_estimateFrameTransactionGas` cannot estimate QueueBit-shaped transactions** (signed + body frames). The
    extension's gas oracle is `ethrex_simulateFrameTransaction` (§30 amended; §30 §5 path-A probe too).
 3. **`ethrex_simulateFrameTransaction` returns `canonicalMempoolValid`/`canonicalMempoolViolation`**, not
    `valid`/`violation` as the sidecar's own `devnet-readme.md` says (§10, §30 amended).
@@ -118,12 +118,12 @@ Each is in the section file under "Devnet review amendments (2026-11-06)" or inl
 | `10-contracts.md` §10.2.2 | EIP-7997 `[UNVERIFIED]` → `[VERIFIED]` (F21) |
 | `10-contracts.md` appendix | 7 rules: no `SIGDATACOPY` on secp entries, no `RESOLVED_SIGNER` on ARBITRARY, no `STATUS/*_GAS_USED` for `i ≥ cur`, `MAX_FEE` per-gas bound, explicit `signer`, `verifyFrame()` selector, M1/M6 use `devnet/` |
 | `20-pq-crypto-vault.md` appendix | `SIGDATACOPY` live for ARBITRARY entries (R3 narrowed to chain 3151908); M0 largely done; Path A cap wording |
-| `30-extension.md` §4.3 | estimator unusable for LEAKED shapes → `ethrex_simulateFrameTransaction` oracle (F15); simulate field names (F14) |
+| `30-extension.md` §4.3 | estimator unusable for QueueBit shapes → `ethrex_simulateFrameTransaction` oracle (F15); simulate field names (F14) |
 | `30-extension.md` §8 | chain-1337 row gains the local endpoints |
 | `30-extension.md` appendix | codec profile confirmed, `signer` rule, `MAX_FEE` per-gas, error strings for `explainRejection`, `debug_bundler_getStakeStatus` unsupported, gas facts, M1 target |
 | `40-privacy-infra.md` R9 | local `EXPIRY_VERIFIER` preload (F18) |
 | `40-privacy-infra.md` appendix | `MAX_VERIFY_GAS` not configurable + privileged bypass (F16); local registry/stake (F17); chain reset (F2); unused chain-config knobs |
-| `LEAKED-implementation-plan.md` §5.2 Phase 0 item 1 | marked done for chain 1337, pointer here |
+| `QueueBit-implementation-plan.md` §5.2 Phase 0 item 1 | marked done for chain 1337, pointer here |
 
 Not changed (still open, correctly tagged in the sections): Hegotá devnet 3151908 RPC and its `0xBA` SIGDATACOPY;
 C13 signing time; BC-UR fragment sizing; Kohaku licences; ERC-8286 TBDs; BUDGET-010 upstream acceptance.
@@ -136,7 +136,7 @@ Week 1 (everyone on the local devnet from day 1; `devnet/up.sh` once per machine
    commit; `FrameSim` etched mocks; the banned-opcode lint **extended with the three halting reads above**; a
    `forge script` that deploys the implementation + proxy on the local devnet and runs `ethrex_simulateFrameTransaction
    {trace:true}` as a test oracle (copy the pattern from `devnet/tools/src/bisect.ts`).
-2. **Extension M1 / `@leaked/frames`**: port the `ethrex-eip8141-tracer` profile and pin the vectors from
+2. **Extension M1 / `@queuebit/frames`**: port the `ethrex-eip8141-tracer` profile and pin the vectors from
    `devnet/tools` (the `probe-opcodes.ts` tx is a ready fixture: tx bytes, `sigHash`, `txHash`). FrameEngine submit
    paths = sidecar JSON + ethrex raw; status via `skandha_frameTransactionStatus` + receipts. Gas via simulate.
 3. **Crypto M1**: vendor the C13 verifier; the frame module copies only the ARBITRARY entry; run it through
@@ -147,7 +147,7 @@ Week 1 (everyone on the local devnet from day 1; `devnet/up.sh` once per machine
 
 Week 2:
 
-5. Contracts M2 (`LeakedAccount` core) against `FrameSim`; the first hot tx shape `[only_verify, pay(tank), SENDER]`
+5. Contracts M2 (`QueueBitAccount` core) against `FrameSim`; the first hot tx shape `[only_verify, pay(tank), SENDER]`
    mined on the local devnet, measured VERIFY gas recorded (target < 80k; anchors in F27).
 6. Extension M0 shell in parallel; M1 hot send against the deployed M2 account.
 7. Contracts M4 skeleton (`PQRoleSigner` Path B) with the C13 adapter stub, so the crypto workstream has a target.

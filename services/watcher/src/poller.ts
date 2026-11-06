@@ -10,7 +10,7 @@ import {
   type RpcLog,
   type WatchedEvent,
   type WatcherCore,
-} from "@leaked/watcher-core";
+} from "@queuebit/watcher-core";
 import { readBucket, type BlockInfo, type ChainClient } from "./chain.js";
 import type { Hub } from "./hub.js";
 import type { Checkpoint, CheckpointStore } from "./store.js";

@@ -161,8 +161,13 @@ describe("user operations", () => {
   });
 });
 
-describe("LeakedRoleExecutor requests (tx-type 3)", () => {
-  const domain = { name: "LeakedRoleExecutor", version: "1", chainId: 31337, verifyingContract: DEP.executor } as const;
+describe("QueueBitRoleExecutor requests (tx-type 3)", () => {
+  const domain = {
+    name: "QueueBitRoleExecutor",
+    version: "1",
+    chainId: 31337,
+    verifyingContract: DEP.executor,
+  } as const;
 
   it("a send within the Vault's instant allowance is vaultExec; the digest is VaultExec over callsHash", () => {
     const b = buildAaVaultAction(

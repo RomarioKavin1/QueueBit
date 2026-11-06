@@ -98,7 +98,7 @@ export const MAX_PENDING_APPROVALS = 3;
 
 export class TooManyPendingError extends Error {
   constructor() {
-    super("LEAKED already has open requests waiting for you. Answer or close them first.");
+    super("QueueBit already has open requests waiting for you. Answer or close them first.");
     this.name = "TooManyPendingError";
   }
 }

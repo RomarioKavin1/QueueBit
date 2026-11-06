@@ -1,5 +1,5 @@
-import { PK_LENGTH, SIGNATURE_BUDGET, WASM_HASH, schemes } from "@leaked/pq-signer";
-import { randomUuid } from "@leaked/ur";
+import { PK_LENGTH, SIGNATURE_BUDGET, WASM_HASH, schemes } from "@queuebit/pq-signer";
+import { randomUuid } from "@queuebit/ur";
 import { useEffect, useState } from "react";
 import { getAddress, isAddress, type Address } from "viem";
 import { useNav, useStore } from "../app/state.js";
@@ -391,7 +391,7 @@ export function Settings() {
       <section>
         <h2 className="mb-1 t-strong">About</h2>
         <dl className="divide-y divide-line rounded-md border border-line px-3" data-testid="about">
-          <Row label="App" value={`LEAKED Vault ${__APP_VERSION__}`} />
+          <Row label="App" value={`QueueBit Vault ${__APP_VERSION__}`} />
           <Row label="Network access" value="none: the app's security policy blocks every connection" />
           <Row label="Leaving the app" value="links and pages that would open another site are blocked" />
           <Row label="Offline" value={sw} />

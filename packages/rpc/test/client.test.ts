@@ -1,5 +1,5 @@
 import fixture from "../../frames/test/fixtures/devnet-1337/tx-0x38753a56.json" with { type: "json" };
-import { encodeTx, getProfile, newTx, secp256k1Entry, selfVerify, senderFrame, toWire, txHash } from "@leaked/frames";
+import { encodeTx, getProfile, newTx, secp256k1Entry, selfVerify, senderFrame, toWire, txHash } from "@queuebit/frames";
 import type { Hex } from "viem";
 import { describe, expect, it } from "vitest";
 import {

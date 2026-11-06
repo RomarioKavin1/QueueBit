@@ -4,7 +4,7 @@ pragma solidity 0.8.28;
 import {WithdrawVkey as K} from "./WithdrawVkey.sol";
 
 /// @title WithdrawalGroth16Verifier
-/// @notice A Groth16 (BN254) verifier for the Privacy Pools withdraw circuit, written for LEAKED's tests and devnet
+/// @notice A Groth16 (BN254) verifier for the Privacy Pools withdraw circuit, written for QueueBit's tests and devnet
 ///         deployment. Same ABI and the same verification key as 0xbow's `WithdrawalVerifier`, which is a snarkjs
 ///         template (GPL-3.0) and therefore not vendored here; this file is MIT and written from the Groth16 check
 ///         e(-A, B) · e(alpha, beta) · e(vk_x, gamma) · e(C, delta) == 1 with vk_x = IC0 + Σ pub_i · IC_{i+1}.

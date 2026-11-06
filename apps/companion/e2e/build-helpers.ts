@@ -7,7 +7,7 @@ import { build, defaultServerConditions } from "vite";
  * process can import. Vite resolves what Node's ESM loader can't.
  */
 // Under node_modules/.cache: ignored by git, eslint and prettier.
-export const HELPERS_OUT = fileURLToPath(new URL("../node_modules/.cache/leaked-e2e-helpers/", import.meta.url));
+export const HELPERS_OUT = fileURLToPath(new URL("../node_modules/.cache/queuebit-e2e-helpers/", import.meta.url));
 
 export default async function globalSetup(): Promise<void> {
   const conditions = ["source", ...defaultServerConditions];

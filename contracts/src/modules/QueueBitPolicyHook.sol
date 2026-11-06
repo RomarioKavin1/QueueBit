@@ -6,10 +6,10 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {RollingCap} from "../lib/RollingCap.sol";
 import {TypedPermits} from "../lib/TypedPermits.sol";
 import {IERC7579Hook, Execution, MODULE_TYPE_HOOK} from "./interfaces/IERC7579Modules.sol";
-import {ILeakedModules, HOST_GENERIC, HOST_KERNEL, HOST_SAFE} from "./interfaces/ILeakedModules.sol";
-import {LeakedExecDecoder} from "./lib/LeakedExecDecoder.sol";
+import {IQueueBitModules, HOST_GENERIC, HOST_KERNEL, HOST_SAFE} from "./interfaces/IQueueBitModules.sol";
+import {QueueBitExecDecoder} from "./lib/QueueBitExecDecoder.sol";
 
-/// Host introspection used once, at install (`LeakedPolicyHook.onInstall`).
+/// Host introspection used once, at install (`QueueBitPolicyHook.onInstall`).
 interface IHostProbe {
     /// Safe: the owners whose `execTransaction` path bypasses every ERC-7579 hook.
     function getOwners() external view returns (address[] memory);
@@ -18,7 +18,7 @@ interface IHostProbe {
 }
 
 /// What the hook asks the role executor (its only writer) about the current role context.
-interface ILeakedRoleContext {
+interface IQueueBitRoleContext {
     /// True while the executor runs a queued (timelocked) op for `account`: loosening config is allowed.
     function isQueuedContext(address account) external view returns (bool);
     /// True while a recovery-initiated vault rotation is pending for `account`.
@@ -29,10 +29,10 @@ interface ILeakedRoleContext {
     function isGuardian(address account, address who) external view returns (bool);
 }
 
-/// @title LeakedPolicyHook
-/// @notice ERC-7579 hook (type 4) and the policy store of the LEAKED 4337 backend (plan `10-contracts.md` §10.4.2).
+/// @title QueueBitPolicyHook
+/// @notice ERC-7579 hook (type 4) and the policy store of the QueueBit 4337 backend (plan `10-contracts.md` §10.4.2).
 ///         Holds, per account, everything the hot tier is judged by: the hot key, freeze/bunker flags, the static
-///         per-tx bound and fee bounds (read by `LeakedHotValidator` during ERC-4337 validation), the rolling USD
+///         per-tx bound and fee bounds (read by `QueueBitHotValidator` during ERC-4337 validation), the rolling USD
 ///         bucket, token prices, recipient allowlist, sessions, registered 1271 hashes and the hot verifier rule
 ///         (read here in execution). Semantics mirror the frame-native account (`src/account`, §10.3.2-§10.3.5):
 ///         - `preCheck`/`postCheck` wrap every execution the host routes through the hook. Anything not coming
@@ -51,7 +51,7 @@ interface ILeakedRoleContext {
 /// @dev Storage is keyed so that every slot the validator reads during ERC-4337 validation is associated with the
 ///      account in the ERC-7562 sense (`keccak256(account ‖ x) + n`, [STO-021]): `_policies[account]` fields sit at
 ///      offsets 0..5, and the nested mappings put the account last (`map[key][account]`).
-contract LeakedPolicyHook is IERC7579Hook, ILeakedModules {
+contract QueueBitPolicyHook is IERC7579Hook, IQueueBitModules {
     using RollingCap for RollingCap.Bucket;
 
     uint256 public constant MAX_HOT_CALLS = 8;
@@ -75,11 +75,11 @@ contract LeakedPolicyHook is IERC7579Hook, ILeakedModules {
     uint256 private constant KIND_NESTED = 3;
 
     // Transient slots (EIP-1153), keyed per account; never touched in validation.
-    bytes32 private constant T_HOT = keccak256("leaked.hook.t.hot");
-    bytes32 private constant T_HOT_DEBIT = keccak256("leaked.hook.t.hotDebit");
-    bytes32 private constant T_EXEC = keccak256("leaked.hook.t.exec");
+    bytes32 private constant T_HOT = keccak256("queuebit.hook.t.hot");
+    bytes32 private constant T_HOT_DEBIT = keccak256("queuebit.hook.t.hotDebit");
+    bytes32 private constant T_EXEC = keccak256("queuebit.hook.t.exec");
 
-    /// The `LeakedRoleExecutor` this hook trusts: the only policy writer and the only exempt caller.
+    /// The `QueueBitRoleExecutor` this hook trusts: the only policy writer and the only exempt caller.
     address public immutable EXECUTOR;
 
     struct Policy {
@@ -90,7 +90,7 @@ contract LeakedPolicyHook is IERC7579Hook, ILeakedModules {
         bool bunker;
         /// Set by `onUninstall`; a retired account cannot reinstall this hook (its old allowlist would revive).
         bool retired;
-        /// `HOST_*` (ILeakedModules), detected at install; read by the validator in validation and 1271.
+        /// `HOST_*` (IQueueBitModules), detected at install; read by the validator in validation and 1271.
         uint8 host;
         /// `RecipientMode.Open` when true. Stored inverted (false = Strict) so that an account whose slot was never
         /// written (or was retired) fails closed to Strict, as the account's `recipientsOpen`.
@@ -182,7 +182,7 @@ contract LeakedPolicyHook is IERC7579Hook, ILeakedModules {
     /// Only as part of a queued (timelocked) vault op: uninstalling the hook removes every hot limit.
     function onUninstall(bytes calldata) external {
         address account = msg.sender;
-        if (_tload(T_EXEC, account) == 0 || !ILeakedRoleContext(EXECUTOR).isQueuedContext(account)) {
+        if (_tload(T_EXEC, account) == 0 || !IQueueBitRoleContext(EXECUTOR).isQueuedContext(account)) {
             revert Unauthorized();
         }
         Policy storage p = _policies[account];
@@ -218,7 +218,7 @@ contract LeakedPolicyHook is IERC7579Hook, ILeakedModules {
         }
 
         if (p.bunker || p.hotKey == address(0)) revert BunkerActive();
-        Execution[] memory execs = LeakedExecDecoder.decodeExecute(msgData, true);
+        Execution[] memory execs = QueueBitExecDecoder.decodeExecute(msgData, true);
         if (p.frozen) {
             _requireClearOnly(account, execs);
             return abi.encode(KIND_PASS);
@@ -359,7 +359,7 @@ contract LeakedPolicyHook is IERC7579Hook, ILeakedModules {
     function clearExpiredFreeze(address account) external {
         Policy storage p = _policies[account];
         if (!p.frozen) revert NotFrozen();
-        if (ILeakedRoleContext(EXECUTOR).rotationPending(account)) revert RotationPending();
+        if (IQueueBitRoleContext(EXECUTOR).rotationPending(account)) revert RotationPending();
         if (block.timestamp < p.frozenUntil) revert FreezeNotExpired(p.frozenUntil);
         p.frozen = false;
         p.frozenUntil = 0;
@@ -504,7 +504,7 @@ contract LeakedPolicyHook is IERC7579Hook, ILeakedModules {
     /// Bunker: hot tier off (hot key cleared) until a new hot key is installed. Needs a recovery key (H6, I-7).
     function enableBunker(address account) external onlyExecutor {
         Policy storage p = _initialized(account);
-        if (!ILeakedRoleContext(EXECUTOR).hasRecovery(account)) revert BunkerNeedsRecovery();
+        if (!IQueueBitRoleContext(EXECUTOR).hasRecovery(account)) revert BunkerNeedsRecovery();
         address old = p.hotKey;
         p.bunker = true;
         p.hotKey = address(0);
@@ -652,7 +652,7 @@ contract LeakedPolicyHook is IERC7579Hook, ILeakedModules {
             address t = execs[i].target;
             uint256 value = execs[i].value;
             bytes memory d = execs[i].callData;
-            bytes4 sel = LeakedExecDecoder.selectorOf(d);
+            bytes4 sel = QueueBitExecDecoder.selectorOf(d);
             if (t == address(this)) {
                 // The hook calls a hot batch may make (clearExpiredFreeze runs only in the frozen batch), with
                 // (token, amount) argument positions and calldata length: registerHash(hash, token, amount, expiry)
@@ -672,10 +672,10 @@ contract LeakedPolicyHook is IERC7579Hook, ILeakedModules {
                     revert NotAllowed(t, sel);
                 }
                 if (value != 0 || d.length != len) revert NotAllowed(t, sel);
-                bytes32 tokenWord = LeakedExecDecoder.argWord(d, tokenArg);
+                bytes32 tokenWord = QueueBitExecDecoder.argWord(d, tokenArg);
                 if (uint256(tokenWord) >> 160 != 0) revert NotAllowed(t, sel);
                 registerDebit += _quoteStrict(
-                    account, address(uint160(uint256(tokenWord))), uint256(LeakedExecDecoder.argWord(d, amountArg))
+                    account, address(uint160(uint256(tokenWord))), uint256(QueueBitExecDecoder.argWord(d, amountArg))
                 );
                 continue;
             }
@@ -694,14 +694,14 @@ contract LeakedPolicyHook is IERC7579Hook, ILeakedModules {
             if (tc.allowed && sel == ERC20_TRANSFER) {
                 // ERC-20 transfer of an allowlisted (priced) token to an allowlisted recipient, or (Open) to any
                 // non-zero recipient (H2: nothing else on a token: approve / permit / transferFrom need a session).
-                // Never to the account itself, the token or a LEAKED module, in either mode (the account's
+                // Never to the account itself, the token or a QueueBit module, in either mode (the account's
                 // `ForbiddenRecipient`): such a transfer moves nothing (or strands it), and a self-transfer's static
                 // debit would absorb the measured residual a session in the same batch is charged.
                 if (value != 0 || d.length != 68) revert NotAllowed(t, sel);
-                bytes32 toWord = LeakedExecDecoder.argWord(d, 0);
+                bytes32 toWord = QueueBitExecDecoder.argWord(d, 0);
                 if (uint256(toWord) >> 160 != 0) revert NotAllowed(address(uint160(uint256(toWord))), sel);
                 _checkTransferRecipient(account, t, address(uint160(uint256(toWord))), validation);
-                staticDebit += _quote(tc, uint256(LeakedExecDecoder.argWord(d, 1)));
+                staticDebit += _quote(tc, uint256(QueueBitExecDecoder.argWord(d, 1)));
                 continue;
             }
             // Session call: vault-issued (target, selector) policy, debited by measured balance delta (H4).
@@ -725,7 +725,7 @@ contract LeakedPolicyHook is IERC7579Hook, ILeakedModules {
     }
 
     /// A hot `transfer` (or EIP-3009) recipient of `token`: an allowlisted recipient, or (Open) any non-zero one;
-    /// never the account itself, the token or a LEAKED module, in either mode (the account's `ForbiddenRecipient`):
+    /// never the account itself, the token or a QueueBit module, in either mode (the account's `ForbiddenRecipient`):
     /// such a transfer moves nothing (or strands it), and a self-transfer's static debit would absorb the measured
     /// residual a session in the same batch is charged.
     function _checkTransferRecipient(address account, address token, address to, bool validation) internal view {
@@ -775,10 +775,10 @@ contract LeakedPolicyHook is IERC7579Hook, ILeakedModules {
     /// read [STO-021], so it is checked in execution (`preCheck`) only; the userOp then reverts in execution.
     function _checkOpenRecipient(address account, address to, bytes4 sel, bool validation) internal view {
         if (_tokens[to][account].allowed) revert NotAllowed(to, sel);
-        if (!validation && ILeakedRoleContext(EXECUTOR).isGuardian(account, to)) revert NotAllowed(to, sel);
+        if (!validation && IQueueBitRoleContext(EXECUTOR).isGuardian(account, to)) revert NotAllowed(to, sel);
     }
 
-    /// The hot key is never the account or a LEAKED module (roles distinct from the hot key, as the account's
+    /// The hot key is never the account or a QueueBit module (roles distinct from the hot key, as the account's
     /// `BadAddress` for a role signer).
     function _checkHotKey(address account, address hotKey) internal view {
         if (hotKey == address(0) || hotKey == account || hotKey == address(this) || hotKey == EXECUTOR) {
@@ -800,9 +800,9 @@ contract LeakedPolicyHook is IERC7579Hook, ILeakedModules {
         for (uint256 i; i < n; ++i) {
             bytes memory d = execs[i].callData;
             if (d.length < 36) continue;
-            bytes4 sel = LeakedExecDecoder.selectorOf(d);
+            bytes4 sel = QueueBitExecDecoder.selectorOf(d);
             if (sel == ERC20_APPROVE || sel == ERC20_INCREASE_ALLOWANCE || sel == SET_APPROVAL_FOR_ALL) {
-                address spender = address(uint160(uint256(LeakedExecDecoder.argWord(d, 0))));
+                address spender = address(uint160(uint256(QueueBitExecDecoder.argWord(d, 0))));
                 list[k++] = Approval(execs[i].target, spender, sel == SET_APPROVAL_FOR_ALL);
             }
         }
@@ -905,7 +905,7 @@ contract LeakedPolicyHook is IERC7579Hook, ILeakedModules {
         }
     }
 
-    /// H2: policy targets are never address(0), the account itself or a LEAKED module.
+    /// H2: policy targets are never address(0), the account itself or a QueueBit module.
     function _checkPolicyTarget(address account, address target) internal view {
         if (target == address(0) || target == account || target == address(this) || target == EXECUTOR) {
             revert BadAddress(target);
@@ -948,7 +948,7 @@ contract LeakedPolicyHook is IERC7579Hook, ILeakedModules {
     }
 
     function _authLoosen(address account, bool loosening) internal view {
-        if (loosening && !ILeakedRoleContext(EXECUTOR).isQueuedContext(account)) revert MustQueue();
+        if (loosening && !IQueueBitRoleContext(EXECUTOR).isQueuedContext(account)) revert MustQueue();
     }
 
     function _initialized(address account) internal view returns (Policy storage p) {

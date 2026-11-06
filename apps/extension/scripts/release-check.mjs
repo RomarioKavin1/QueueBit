@@ -14,7 +14,7 @@ export const FORBIDDEN = [
   { what: "local devnet RPC", re: /localhost:(8545|8546|4337|14337|14340)/u },
   { what: "local devnet network", re: /Local devnet|Local 4337 test chain/u },
   // The e2e-only service-worker probe (entrypoints/background.ts).
-  { what: "e2e probe", re: /__leakedPq/u },
+  { what: "e2e probe", re: /__queuebitPq/u },
   // Source maps (they embed absolute paths and the sources).
   { what: "source map", re: /sourceMappingURL=/u },
 ];

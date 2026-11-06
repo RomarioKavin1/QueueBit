@@ -1,4 +1,4 @@
-import type { UrType } from "@leaked/ur";
+import type { UrType } from "@queuebit/ur";
 
 /** Something to show the browser as a QR code. */
 export interface Built {

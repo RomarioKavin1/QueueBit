@@ -2,13 +2,13 @@
 pragma solidity 0.8.28;
 
 import {FrameTxModel} from "../frame/FrameTxModel.sol";
-import {ILeakedAccount} from "../../src/account/ILeakedAccount.sol";
-import {LeakedAccountImpl} from "../../src/account/LeakedAccountImpl.sol";
-import {LeakedAccountRoles} from "../../src/account/LeakedAccountRoles.sol";
+import {IQueueBitAccount} from "../../src/account/IQueueBitAccount.sol";
+import {QueueBitAccountImpl} from "../../src/account/QueueBitAccountImpl.sol";
+import {QueueBitAccountRoles} from "../../src/account/QueueBitAccountRoles.sol";
 import {AccountTestBase} from "./AccountTestBase.sol";
 
 /// FrameSim tests of the hot VERIFY walker (§10.5.1): every accepted shape, and one test per rejection rule.
-contract LeakedVerifyTest is AccountTestBase {
+contract QueueBitVerifyTest is AccountTestBase {
     uint256 internal strangerPk = 0xBAD;
 
     function _pay(uint256 amount) internal view returns (bytes memory) {
@@ -77,7 +77,7 @@ contract LeakedVerifyTest is AccountTestBase {
     }
 
     function test_selfPayShape_validWhenEnabled() public {
-        _queueLoosen(abi.encodeCall(LeakedAccountRoles.vaultSetFeePolicy, (MAX_PRIO, true, tank)));
+        _queueLoosen(abi.encodeCall(QueueBitAccountRoles.vaultSetFeePolicy, (MAX_PRIO, true, tank)));
         simBegin(address(account));
         simSetFees(1 gwei, 1 gwei, 0.001 ether);
         simVerify(SELF_VERIFY, address(0), 80_000, _verifyData());
@@ -123,7 +123,7 @@ contract LeakedVerifyTest is AccountTestBase {
         vm.prank(guardian);
         roles.guardianFreeze();
         vm.warp(vm.getBlockTimestamp() + 72 hours);
-        _beginHotTx(abi.encodeCall(LeakedAccountImpl.clearExpiredFreeze, ()));
+        _beginHotTx(abi.encodeCall(QueueBitAccountImpl.clearExpiredFreeze, ()));
         _signHotTx();
         simRunValid();
         assertFalse(account.getHotConfig().hotFrozen);
@@ -143,7 +143,7 @@ contract LeakedVerifyTest is AccountTestBase {
         SimResult memory r = simRun();
         assertFalse(r.valid);
         assertEq(r.frames[0].status, STATUS_FAILED);
-        assertEq(bytes4(r.frames[0].returnData), ILeakedAccount.NotVerifyFrame.selector);
+        assertEq(bytes4(r.frames[0].returnData), IQueueBitAccount.NotVerifyFrame.selector);
     }
 
     function test_rule1_directCallFromEntryPointHalts() public {
@@ -158,7 +158,7 @@ contract LeakedVerifyTest is AccountTestBase {
         roles.vaultEnableBunker();
         _beginHotTx(_pay(5 * USD));
         _signHotTx();
-        _expectInvalidVerify(0, ILeakedAccount.HotDisabled.selector);
+        _expectInvalidVerify(0, IQueueBitAccount.HotDisabled.selector);
     }
 
     function test_rule3_wrongSigner() public {
@@ -171,7 +171,7 @@ contract LeakedVerifyTest is AccountTestBase {
         simAddSecp256k1(tank);
         simSignSecp256k1(0, strangerPk);
         simSignSecp256k1(1, tankPk);
-        _expectInvalidVerify(0, ILeakedAccount.BadHotSignature.selector);
+        _expectInvalidVerify(0, IQueueBitAccount.BadHotSignature.selector);
     }
 
     function test_rule3_arbitraryEntryRejectedWithoutHaltingRead() public {
@@ -184,7 +184,7 @@ contract LeakedVerifyTest is AccountTestBase {
         simAddSecp256k1(tank);
         simSignSecp256k1(1, tankPk);
         // BadHotSignature, not FrameSimHalt: SCHEME is read before RESOLVED_SIGNER.
-        _expectInvalidVerify(0, ILeakedAccount.BadHotSignature.selector);
+        _expectInvalidVerify(0, IQueueBitAccount.BadHotSignature.selector);
     }
 
     function test_rule3_explicitMsgDigestRejected() public {
@@ -196,7 +196,7 @@ contract LeakedVerifyTest is AccountTestBase {
         simAddSig(SCHEME_SECP256K1, hot, keccak256("some other digest"), "");
         simAddSecp256k1(tank);
         _signHotTx();
-        _expectInvalidVerify(0, ILeakedAccount.BadHotSignature.selector);
+        _expectInvalidVerify(0, IQueueBitAccount.BadHotSignature.selector);
     }
 
     function test_rule3_tooManySignatures() public {
@@ -204,7 +204,7 @@ contract LeakedVerifyTest is AccountTestBase {
         simAddSecp256k1(tank);
         _signHotTx();
         simSignSecp256k1(2, tankPk);
-        _expectInvalidVerify(0, ILeakedAccount.BadSignatureCount.selector);
+        _expectInvalidVerify(0, IQueueBitAccount.BadSignatureCount.selector);
     }
 
     function test_rule4_tankLayoutNeedsPayFrame() public {
@@ -215,7 +215,7 @@ contract LeakedVerifyTest is AccountTestBase {
         simAddSecp256k1(hot);
         simAddSecp256k1(tank);
         _signHotTx();
-        _expectInvalidVerify(0, ILeakedAccount.BadPayFrame.selector);
+        _expectInvalidVerify(0, IQueueBitAccount.BadPayFrame.selector);
     }
 
     function test_rule4_tankLayoutNeedsTwoSignatures() public {
@@ -226,7 +226,7 @@ contract LeakedVerifyTest is AccountTestBase {
         simSender(address(0), 300_000, 0, _pay(5 * USD));
         simAddSecp256k1(hot);
         simSignSecp256k1(0, hotPk);
-        _expectInvalidVerify(0, ILeakedAccount.BadPayFrame.selector);
+        _expectInvalidVerify(0, IQueueBitAccount.BadPayFrame.selector);
     }
 
     function test_rule4_payFrameMustBePinnedTank() public {
@@ -242,7 +242,7 @@ contract LeakedVerifyTest is AccountTestBase {
         simAddSecp256k1(other);
         simSignSecp256k1(0, hotPk);
         simSignSecp256k1(1, otherPk);
-        _expectInvalidVerify(0, ILeakedAccount.BadPayFrame.selector);
+        _expectInvalidVerify(0, IQueueBitAccount.BadPayFrame.selector);
     }
 
     function test_rule4_nextFrameMustBePayScope() public {
@@ -254,7 +254,7 @@ contract LeakedVerifyTest is AccountTestBase {
         simAddSecp256k1(hot);
         simAddSecp256k1(tank);
         _signHotTx();
-        _expectInvalidVerify(0, ILeakedAccount.BadPayFrame.selector);
+        _expectInvalidVerify(0, IQueueBitAccount.BadPayFrame.selector);
     }
 
     function test_rule4_selfPayRefusedUnlessEnabled() public {
@@ -264,7 +264,7 @@ contract LeakedVerifyTest is AccountTestBase {
         simSender(address(0), 300_000, 0, _pay(5 * USD));
         simAddSecp256k1(hot);
         simSignSecp256k1(0, hotPk);
-        _expectInvalidVerify(0, ILeakedAccount.SelfPayDisabled.selector);
+        _expectInvalidVerify(0, IQueueBitAccount.SelfPayDisabled.selector);
     }
 
     function test_rule4_scopePaymentOnlyRefused() public {
@@ -274,7 +274,7 @@ contract LeakedVerifyTest is AccountTestBase {
         simSender(address(0), 300_000, 0, _pay(5 * USD));
         simAddSecp256k1(hot);
         simSignSecp256k1(0, hotPk);
-        _expectInvalidVerify(0, ILeakedAccount.BadScope.selector);
+        _expectInvalidVerify(0, IQueueBitAccount.BadScope.selector);
     }
 
     function test_rule5_frameCountBound() public {
@@ -282,7 +282,7 @@ contract LeakedVerifyTest is AccountTestBase {
         simSender(address(0), 100_000, 0, _pay(1 * USD));
         simSender(address(0), 100_000, 0, _pay(1 * USD)); // 5 frames > maxHotFrames 4
         _signHotTx();
-        _expectInvalidVerify(0, ILeakedAccount.TooManyFrames.selector);
+        _expectInvalidVerify(0, IQueueBitAccount.TooManyFrames.selector);
     }
 
     function test_rule6_senderFrameToOtherTarget() public {
@@ -295,7 +295,7 @@ contract LeakedVerifyTest is AccountTestBase {
         simAddSecp256k1(hot);
         simAddSecp256k1(tank);
         _signHotTx();
-        _expectInvalidVerify(0, ILeakedAccount.BadSenderFrame.selector);
+        _expectInvalidVerify(0, IQueueBitAccount.BadSenderFrame.selector);
     }
 
     function test_rule6_senderFrameWithValue() public {
@@ -307,7 +307,7 @@ contract LeakedVerifyTest is AccountTestBase {
         simAddSecp256k1(hot);
         simAddSecp256k1(tank);
         _signHotTx();
-        _expectInvalidVerify(0, ILeakedAccount.BadSenderFrame.selector);
+        _expectInvalidVerify(0, IQueueBitAccount.BadSenderFrame.selector);
     }
 
     function test_rule6_senderFrameWithScopeFlags() public {
@@ -319,33 +319,33 @@ contract LeakedVerifyTest is AccountTestBase {
         simAddSecp256k1(hot);
         simAddSecp256k1(tank);
         _signHotTx();
-        _expectInvalidVerify(0, ILeakedAccount.BadSenderFrame.selector);
+        _expectInvalidVerify(0, IQueueBitAccount.BadSenderFrame.selector);
     }
 
     function test_rule6_defaultFrameAfterRefused() public {
         _beginHotTx(_pay(5 * USD));
         simDefault(address(account), 50_000, _verifyData());
         _signHotTx();
-        _expectInvalidVerify(0, ILeakedAccount.BadSenderFrame.selector);
+        _expectInvalidVerify(0, IQueueBitAccount.BadSenderFrame.selector);
     }
 
     function test_rule6_verifyFrameAfterRefused() public {
         _beginHotTx(_pay(5 * USD));
         simVerify(SCOPE_NONE, address(0), 50_000, _verifyData());
         _signHotTx();
-        _expectInvalidVerify(0, ILeakedAccount.BadSenderFrame.selector);
+        _expectInvalidVerify(0, IQueueBitAccount.BadSenderFrame.selector);
     }
 
     function test_rule6_otherSelectorRefused() public {
-        _beginHotTx(abi.encodeCall(LeakedAccountRoles.vaultFreeze, ()));
+        _beginHotTx(abi.encodeCall(QueueBitAccountRoles.vaultFreeze, ()));
         _signHotTx();
-        _expectInvalidVerify(0, ILeakedAccount.BadSenderFrame.selector);
+        _expectInvalidVerify(0, IQueueBitAccount.BadSenderFrame.selector);
     }
 
     function test_rule6_shortDataRefused() public {
-        _beginHotTx(abi.encodePacked(LeakedAccountImpl.hotExecute.selector, uint256(1)));
+        _beginHotTx(abi.encodePacked(QueueBitAccountImpl.hotExecute.selector, uint256(1)));
         _signHotTx();
-        _expectInvalidVerify(0, ILeakedAccount.BadSenderFrame.selector);
+        _expectInvalidVerify(0, IQueueBitAccount.BadSenderFrame.selector);
     }
 
     function test_rule6_noSenderFrame() public {
@@ -356,13 +356,13 @@ contract LeakedVerifyTest is AccountTestBase {
         simAddSecp256k1(hot);
         simAddSecp256k1(tank);
         _signHotTx();
-        _expectInvalidVerify(0, ILeakedAccount.NoSenderFrame.selector);
+        _expectInvalidVerify(0, IQueueBitAccount.NoSenderFrame.selector);
     }
 
     function test_rule6_declaredOverPerTxMax() public {
         _beginHotTx(_pay(PER_TX + 1));
         _signHotTx();
-        _expectInvalidVerify(0, ILeakedAccount.DeclaredOverPerTxMax.selector);
+        _expectInvalidVerify(0, IQueueBitAccount.DeclaredOverPerTxMax.selector);
     }
 
     function test_rule6_declaredSumOverPerTxMax() public {
@@ -375,7 +375,7 @@ contract LeakedVerifyTest is AccountTestBase {
         simAddSecp256k1(hot);
         simAddSecp256k1(tank);
         _signHotTx();
-        _expectInvalidVerify(0, ILeakedAccount.DeclaredOverPerTxMax.selector);
+        _expectInvalidVerify(0, IQueueBitAccount.DeclaredOverPerTxMax.selector);
     }
 
     function test_rule7_maxFeeExposure() public {
@@ -383,21 +383,21 @@ contract LeakedVerifyTest is AccountTestBase {
         // MAX_COST (what the payer is charged: maxFeePerGas x (intrinsic + 410k of limits)) = 0.082 ETH > 0.05 bound.
         simSetFees(1 gwei, 200 gwei, 0.082 ether);
         _signHotTx();
-        _expectInvalidVerify(0, ILeakedAccount.FeeTooHigh.selector);
+        _expectInvalidVerify(0, IQueueBitAccount.FeeTooHigh.selector);
     }
 
     function test_rule7_maxPriorityFee() public {
         _beginHotTx(_pay(5 * USD));
         simSetFees(MAX_PRIO + 1, MAX_PRIO + 1, 0.001 ether);
         _signHotTx();
-        _expectInvalidVerify(0, ILeakedAccount.FeeTooHigh.selector);
+        _expectInvalidVerify(0, IQueueBitAccount.FeeTooHigh.selector);
     }
 
     function test_rule7_blobsRefused() public {
         _beginHotTx(_pay(5 * USD));
         sim().setBlobCount(1);
         _signHotTx();
-        _expectInvalidVerify(0, ILeakedAccount.BlobsNotAllowed.selector);
+        _expectInvalidVerify(0, IQueueBitAccount.BlobsNotAllowed.selector);
     }
 
     function test_rule8_frozenRefusesHotExecute() public {
@@ -405,22 +405,22 @@ contract LeakedVerifyTest is AccountTestBase {
         roles.guardianFreeze();
         _beginHotTx(_pay(5 * USD));
         _signHotTx();
-        _expectInvalidVerify(0, ILeakedAccount.FrozenOnlyClear.selector);
+        _expectInvalidVerify(0, IQueueBitAccount.FrozenOnlyClear.selector);
     }
 
     function test_rule8_frozenAllowsOnlyOneClearFrame() public {
         vm.prank(guardian);
         roles.guardianFreeze();
-        _beginHotTx(abi.encodeCall(LeakedAccountImpl.clearExpiredFreeze, ()));
-        simSender(address(0), 100_000, 0, abi.encodeCall(LeakedAccountImpl.clearExpiredFreeze, ()));
+        _beginHotTx(abi.encodeCall(QueueBitAccountImpl.clearExpiredFreeze, ()));
+        simSender(address(0), 100_000, 0, abi.encodeCall(QueueBitAccountImpl.clearExpiredFreeze, ()));
         _signHotTx();
-        _expectInvalidVerify(0, ILeakedAccount.FrozenOnlyClear.selector);
+        _expectInvalidVerify(0, IQueueBitAccount.FrozenOnlyClear.selector);
     }
 
     function test_rule8_clearBeforeExpiryBurnsOnlyTheTank() public {
         vm.prank(guardian);
         roles.guardianFreeze();
-        _beginHotTx(abi.encodeCall(LeakedAccountImpl.clearExpiredFreeze, ()));
+        _beginHotTx(abi.encodeCall(QueueBitAccountImpl.clearExpiredFreeze, ()));
         _signHotTx();
         SimResult memory r = simRunValid(); // admitted, then the SENDER frame reverts
         assertEq(r.frames[2].status, STATUS_FAILED);
@@ -458,7 +458,7 @@ contract LeakedVerifyTest is AccountTestBase {
         (bool ok2, bytes memory ret) = address(account).call(_verifyData());
         simLeave(1, STATUS_FAILED);
         assertFalse(ok2);
-        assertEq(bytes4(ret), ILeakedAccount.BadFrameBefore.selector);
+        assertEq(bytes4(ret), IQueueBitAccount.BadFrameBefore.selector);
     }
 
     function test_overCapPassesVerify_revertsInExecution_tankPays() public {
@@ -504,8 +504,8 @@ contract LeakedVerifyTest is AccountTestBase {
         bytes memory data = selPick == 0
             ? _hotData(declared, _one(_usdcTransfer(alice, 1)))
             : selPick == 1
-                ? abi.encodeCall(LeakedAccountImpl.clearExpiredFreeze, ())
-                : abi.encodeCall(LeakedAccountRoles.vaultFreeze, ());
+                ? abi.encodeCall(QueueBitAccountImpl.clearExpiredFreeze, ())
+                : abi.encodeCall(QueueBitAccountRoles.vaultFreeze, ());
 
         uint256 gasSum = 80_000 + (includePay ? 30_000 : 0) + uint256(extraFrames) * 50_000 + 200_000;
         simBegin(address(account));

@@ -9,10 +9,10 @@ import {
   randomUuid,
   type SignRequest,
   type SignatureResponse,
-} from "@leaked/ur";
+} from "@queuebit/ur";
 import { noteEnvelopeDigest, type EnvelopeSigner, type NoteEnvelope } from "./envelope.js";
 
-/** A `ur:leaked-sign-request` (tx-type 2) for one note envelope, ready to show as an (animated) QR. */
+/** A `ur:queuebit-sign-request` (tx-type 2) for one note envelope, ready to show as an (animated) QR. */
 export interface NoteSignRequest {
   envelope: NoteEnvelope;
   request: SignRequest;
@@ -73,7 +73,7 @@ export class EnvelopeSignatureError extends Error {
 }
 
 /**
- * Checks a scanned `ur:leaked-signature` against its request: same request id, a typed-data signature (the UR
+ * Checks a scanned `ur:queuebit-signature` against its request: same request id, a typed-data signature (the UR
  * decoder already enforces 65 bytes `r‖s‖v`, v ∈ {27, 28}, low s), and it recovers to the expected payer over the
  * envelope digest. Returns the signature.
  */

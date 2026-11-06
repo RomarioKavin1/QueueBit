@@ -3,7 +3,7 @@ pragma solidity 0.8.28;
 
 import {HegotaSupport, Devnet, Scope, TxParam, FrameParam, SigParam, FrameMode} from "@forshtat/hegota-support/contracts/HegotaSupport.sol";
 
-/// Probe wallet for the LEAKED devnet review: VERIFY checks the protocol-verified secp256k1 signer and reads every
+/// Probe wallet for the QueueBit devnet review: VERIFY checks the protocol-verified secp256k1 signer and reads every
 /// introspection opcode (so a wrong opcode byte or id halts the validation frame); the SENDER frame re-reads them in
 /// execution and emits the values as events, so the receipt documents what THIS ethrex build answers.
 contract OpcodeProbe is HegotaSupport(Devnet.ERC8421_WORKSHOP) {

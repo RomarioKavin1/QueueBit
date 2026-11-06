@@ -1,9 +1,9 @@
-// M7 local e2e on a standard EVM (anvil, chain 31337): the ERC-4337 + ERC-7579 backend with the LEAKED modules.
+// M7 local e2e on a standard EVM (anvil, chain 31337): the ERC-4337 + ERC-7579 backend with the QueueBit modules.
 //
 //   1. starts anvil (or uses RPC_URL), deploys EntryPoint v0.8.0 at its canonical address by replaying the release
 //      CREATE2 (salt 0x0a59…e9 through 0x4e59b448…, initcode = deployments/ethereum/EntryPoint.json, which equals
 //      the input of the mainnet deploy tx 0xae4eafd1…);
-//   2. deploys C13Verifier, LeakedRoleExecutor, LeakedPolicyHook, LeakedHotValidator, the reference MSA (shim with
+//   2. deploys C13Verifier, QueueBitRoleExecutor, QueueBitPolicyHook, QueueBitHotValidator, the reference MSA (shim with
 //      a configurable EntryPoint) and creates an account with the three modules;
 //   3. runs a minimal bundler (eth_call simulation of handleOps, then a handleOps tx from a bundler EOA; no alt
 //      mempool, no ERC-7562 tracing: anvil has no bundler collector tracer):
@@ -11,7 +11,7 @@
 //      - an Open-mode (install default) hot userOp to an address the vault never allowlisted (mined, debited);
 //      - an over-perTx userOp, rejected in simulation (AA23 PerTxMaxExceeded): never submitted;
 //      - an over-cap userOp after the bucket is drained: included, execution reverts (OverCap), nothing moves;
-//      - a vault exec through LeakedRoleExecutor with a fresh C13 signature (@leaked/pq-signer), relayed by a
+//      - a vault exec through QueueBitRoleExecutor with a fresh C13 signature (@queuebit/pq-signer), relayed by a
 //        SimpleAccount userOp (ECDSA validation; the PQ check runs in execution).
 //   Writes last-run.json. Needs `forge build` in contracts/ first.
 import { spawn } from "node:child_process";
@@ -39,7 +39,7 @@ import {
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { foundry } from "viem/chains";
-import { sign as pqSign } from "@leaked/pq-signer";
+import { sign as pqSign } from "@queuebit/pq-signer";
 import { artifact, hex, testKeys, vaultExecDigest, type Call } from "./lib.ts";
 
 const PORT = Number(process.env.ANVIL_PORT ?? 8547);
@@ -209,9 +209,9 @@ async function main() {
 
     // 2. Modules and the host.
     const verifier = await deploy("C13Verifier.sol", "C13Verifier");
-    const executor = await deploy("LeakedRoleExecutor.sol", "LeakedRoleExecutor");
-    const hook = await deploy("LeakedPolicyHook.sol", "LeakedPolicyHook", [executor.address]);
-    const validator = await deploy("LeakedHotValidator.sol", "LeakedHotValidator", [hook.address]);
+    const executor = await deploy("QueueBitRoleExecutor.sol", "QueueBitRoleExecutor");
+    const hook = await deploy("QueueBitPolicyHook.sol", "QueueBitPolicyHook", [executor.address]);
+    const validator = await deploy("QueueBitHotValidator.sol", "QueueBitHotValidator", [hook.address]);
     const msaImpl = await deploy("HostArtifacts.sol", "MSAAdvancedEP", [EP]);
     const factory = await deploy("MSAFactory.sol", "MSAFactory", [msaImpl.address]);
     const bootstrap = await deploy("Bootstrap.sol", "Bootstrap");
@@ -243,7 +243,7 @@ async function main() {
       args: [[{ module: validator.address, data: "0x" }], [{ module: executor.address, data: execInit }], { module: hook.address, data: hookInit }, []],
     });
     const initCode = encodeAbiParameters([{ type: "address" }, { type: "bytes" }], [bootstrap.address, initCall]);
-    const salt = keccak256(toHex("leaked-e2e"));
+    const salt = keccak256(toHex("queuebit-e2e"));
     const account = (await pub.readContract({ address: factory.address, abi: factory.abi, functionName: "getAddress", args: [salt, initCode] })) as Address;
     const created = await send(factory.address, encodeFunctionData({ abi: factory.abi, functionName: "createAccount", args: [salt, initCode] }));
     await send(account, "0x", parseEther("5"));
@@ -281,7 +281,7 @@ async function main() {
     if (!r3.submitted || r3.success || after !== before) throw new Error("over-cap op did not fail in execution");
     out.overCapRejected = { ...r3, recipientUnchanged: after === before };
 
-    // 3d. Vault exec through LeakedRoleExecutor, C13-signed, relayed by a SimpleAccount userOp.
+    // 3d. Vault exec through QueueBitRoleExecutor, C13-signed, relayed by a SimpleAccount userOp.
     const saImpl = await deploy("SimpleAccount.sol", "SimpleAccount", [EP]);
     const proxy = await deploy("ERC1967Proxy.sol", "ERC1967Proxy", [
       saImpl.address,

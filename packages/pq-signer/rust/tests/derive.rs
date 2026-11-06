@@ -1,6 +1,6 @@
-//! LEAKED derivation: domain separation by role and chain scope, determinism, input checks.
-use leaked_pq::derive::{role_seeds, DeriveError};
-use leaked_pq::{derive_secret_key, Role, CHAIN_SCOPE_ANY};
+//! QueueBit derivation: domain separation by role and chain scope, determinism, input checks.
+use queuebit_pq::derive::{role_seeds, DeriveError};
+use queuebit_pq::{derive_secret_key, Role, CHAIN_SCOPE_ANY};
 
 fn bip39_seed(words: &str, pass: &str) -> [u8; 64] {
     let m: bip39::Mnemonic = words.parse().unwrap();
@@ -25,12 +25,12 @@ fn roles_and_scopes_are_independent() {
 
 #[test]
 fn derivation_known_answer() {
-    // HMAC-SHA512(key = "leaked/v1/" || SCHEME_ID || "/vault/any", msg = BIP-39 seed of
+    // HMAC-SHA512(key = "queuebit/v1/" || SCHEME_ID || "/vault/any", msg = BIP-39 seed of
     // "abandon x11 about" with empty passphrase), recomputed independently with `hmac`.
     use hmac::{Hmac, Mac};
     let master = bip39_seed(ABANDON, "");
-    let mut key = b"leaked/v1/".to_vec();
-    key.extend_from_slice(&leaked_pq::SCHEME_ID);
+    let mut key = b"queuebit/v1/".to_vec();
+    key.extend_from_slice(&queuebit_pq::SCHEME_ID);
     key.extend_from_slice(b"/vault/any");
     let mut mac = Hmac::<sha2::Sha512>::new_from_slice(&key).unwrap();
     mac.update(&master);
@@ -59,7 +59,7 @@ fn derived_key_signs_and_verifies() {
     let sk = derive_secret_key(&master, Role::Recovery, CHAIN_SCOPE_ANY).unwrap();
     let pk = sk.public_key().to_bytes();
     let msg = [0x42u8; 32];
-    let sig = leaked_pq::sign(&sk, &msg).unwrap();
-    assert!(leaked_pq::verify(&pk, &msg, &sig));
+    let sig = queuebit_pq::sign(&sk, &msg).unwrap();
+    assert!(queuebit_pq::verify(&pk, &msg, &sig));
     assert_eq!(format!("{sk:?}"), "SecretKey(<redacted>)");
 }

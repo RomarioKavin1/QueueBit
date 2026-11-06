@@ -2,9 +2,9 @@
 pragma solidity 0.8.28;
 
 import {Execution} from "../interfaces/IERC7579Modules.sol";
-import {ILeakedModules} from "../interfaces/ILeakedModules.sol";
+import {IQueueBitModules} from "../interfaces/IQueueBitModules.sol";
 
-/// @title LeakedExecDecoder
+/// @title QueueBitExecDecoder
 /// @notice Decodes the only call shape the hot tier may use, ERC-7579 `execute(bytes32 mode, bytes executionCalldata)`
 ///         with `mode` = single/default (`0x00..00`) or batch/default (`0x01 00..00`) [ERC-7579 §"Execution Behavior",
 ///         mode layout callType(1) | execType(1) | unused(4) | modeSelector(4) | modePayload(22)].
@@ -13,7 +13,7 @@ import {ILeakedModules} from "../interfaces/ILeakedModules.sol";
 ///         gap), the batch must re-encode to exactly the bytes given, and nothing may follow the encoding except the
 ///         20-byte ERC-2771 sender that Safe7579's fallback appends to `msg.data` (only where `allowSenderSuffix`).
 ///         TRY (`execType 0x01`), DELEGATECALL (`0xff`), STATIC (`0xfe`), mode selectors and payloads are rejected.
-library LeakedExecDecoder {
+library QueueBitExecDecoder {
     /// `execute(bytes32,bytes)` [ERC-7579].
     bytes4 internal constant EXECUTE = 0xe9ae5c53;
     /// `executeUserOp((address,uint256,bytes,bytes,bytes32,uint256,bytes32,bytes,bytes),bytes32)` [ERC-4337
@@ -36,28 +36,30 @@ library LeakedExecDecoder {
         pure
         returns (Execution[] memory execs)
     {
-        if (data.length < 100 || bytes4(data[0:4]) != EXECUTE) revert ILeakedModules.BadCallData();
+        if (data.length < 100 || bytes4(data[0:4]) != EXECUTE) revert IQueueBitModules.BadCallData();
         bytes32 mode = bytes32(data[4:36]);
-        if (uint256(bytes32(data[36:68])) != 0x40) revert ILeakedModules.BadCallData();
+        if (uint256(bytes32(data[36:68])) != 0x40) revert IQueueBitModules.BadCallData();
         uint256 len = uint256(bytes32(data[68:100]));
-        if (len > data.length - 100) revert ILeakedModules.BadCallData();
+        if (len > data.length - 100) revert IQueueBitModules.BadCallData();
         uint256 end = 100 + ((len + 31) & ~uint256(31));
-        if (data.length != end && !(allowSenderSuffix && data.length == end + 20)) revert ILeakedModules.BadCallData();
+        if (data.length != end && !(allowSenderSuffix && data.length == end + 20)) {
+            revert IQueueBitModules.BadCallData();
+        }
         bytes calldata ec = data[100:100 + len];
         // Zero padding after the bytes value (canonical ABI).
         for (uint256 i = 100 + len; i < end; ++i) {
-            if (data[i] != 0) revert ILeakedModules.BadCallData();
+            if (data[i] != 0) revert IQueueBitModules.BadCallData();
         }
 
         if (mode == MODE_SINGLE) {
-            if (ec.length < 52) revert ILeakedModules.BadCallData();
+            if (ec.length < 52) revert IQueueBitModules.BadCallData();
             execs = new Execution[](1);
             execs[0] = Execution(address(bytes20(ec[0:20])), uint256(bytes32(ec[20:52])), ec[52:]);
         } else if (mode == MODE_BATCH) {
             execs = abi.decode(ec, (Execution[]));
-            if (keccak256(abi.encode(execs)) != keccak256(ec)) revert ILeakedModules.BadCallData();
+            if (keccak256(abi.encode(execs)) != keccak256(ec)) revert IQueueBitModules.BadCallData();
         } else {
-            revert ILeakedModules.UnsupportedMode(mode);
+            revert IQueueBitModules.UnsupportedMode(mode);
         }
     }
 

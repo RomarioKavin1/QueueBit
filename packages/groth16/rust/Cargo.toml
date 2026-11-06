@@ -1,5 +1,5 @@
 [package]
-name = "leaked-groth16"
+name = "queuebit-groth16"
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
@@ -32,8 +32,8 @@ native = ["dep:wasmi", "dep:serde_json", "dep:num-bigint", "dep:rand"]
 parallel = ["ark-groth16/parallel", "ark-ff/parallel", "ark-ec/parallel", "ark-poly/parallel", "ark-std/parallel"]
 
 [[bin]]
-name = "leaked-groth16"
-path = "src/bin/leaked_groth16.rs"
+name = "queuebit-groth16"
+path = "src/bin/queuebit_groth16.rs"
 required-features = ["native"]
 
 [profile.test]

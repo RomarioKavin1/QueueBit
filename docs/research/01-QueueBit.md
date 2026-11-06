@@ -1,13 +1,13 @@
-# 01: LEAKED, a two-tier EIP-8141 account: capped hot key + post-quantum vault
+# 01: QueueBit, a two-tier EIP-8141 account: capped hot key + post-quantum vault
 
 **Status (2026-10-30):** strongest hackathon idea, with one external blocker. Every component works on the live devnet *except* PQ verification inside VERIFY (the alt mempool caps validation at a flat 100k gas, even when staked).
 **Sources consolidated here:**
 - `../FINAL-3-IDEAS.md` #1
-- `../LEAKED-full-analysis.md` (sections 0–10)
-- `../LEAKED-market-research.md`
-- `../LEAKED-market-need.md`
-- `../LEAKED-sponsor-stack.md`
-- `../critiques/leaked-council-{ef-protocol,redteam,market-gtm}.md`
+- `../QueueBit-full-analysis.md` (sections 0–10)
+- `../QueueBit-market-research.md`
+- `../QueueBit-market-need.md`
+- `../QueueBit-sponsor-stack.md`
+- `../critiques/queuebit-council-{ef-protocol,redteam,market-gtm}.md`
 - `../critiques/council-ef-judge.md` / `council-finalist-panel.md` / `council-redteam.md`
 - `../prototype/`
 
@@ -64,7 +64,7 @@
 ## 5. The blocker and the plan that wins either way
 - **Ask the Access Layer team (Alex Forshtat) now:** will the Mumbai devnet sidecar implement ERC-8421 BUDGET-010 per-entity budgets? The draft gives 100k unstaked / 1M staked; the landing page says 250k / 2.5M. **Any** of those fits our ~170k.
 - **If yes:** build path A as specified.
-- **If no:** the entry becomes **"LEAKED + the fix"**:
+- **If no:** the entry becomes **"QueueBit + the fix"**:
   1. the live two-tier account (path B);
   2. the on-chain proof of the 100k wall (already have the txs);
   3. a **sidecar PR implementing staked BUDGET-010** (the sidecar is TS on bun), with path A running on the patched node.
@@ -151,7 +151,7 @@
 | GTM / business | 3/10 |
 | P(finalist) | ~15–20% |
 
-**Verdict: BUILD**, framed as "LEAKED + the fix that makes it possible".
+**Verdict: BUILD**, framed as "QueueBit + the fix that makes it possible".
 
 ## 11. Pre-event checklist
 - [ ] Message the Access Layer team with the measured rejection; ask about BUDGET-010 for Mumbai.

@@ -1,18 +1,18 @@
-//! `leaked-pq` CLI: Forge-FFI compatible signer, verifier and native benchmark.
+//! `queuebit-pq` CLI: Forge-FFI compatible signer, verifier and native benchmark.
 //!
-//!   leaked-pq upstream-c13 <msg32>            upstream test-key derivation + deterministic sign;
+//!   queuebit-pq upstream-c13 <msg32>            upstream test-key derivation + deterministic sign;
 //!                                             ABI (bytes32 pkSeed, bytes32 pkRoot, bytes sig) hex,
 //!                                             drop-in for `signer-c13 c13 <msg>` in upstream tests
-//!   leaked-pq keygen-seeds <skSeed32> <pkSeed16>   -> JSON {"sk": 64 B hex, "pk": 32 B hex}
-//!   leaked-pq sign <sk64> <msg32> [entropy32]      hedged (OS RNG unless entropy given), raw sig hex
-//!   leaked-pq sign-det <sk64> <msg32>              deterministic, raw sig hex
-//!   leaked-pq verify <pk32> <msg32> <sig>          prints true/false
-//!   leaked-pq bench [n]                            keygen/sign/verify timings (median, p95, ms)
-//!   leaked-pq bench-lean [n]                       the same for leanSphincs-s (Light tier, b = 13)
+//!   queuebit-pq keygen-seeds <skSeed32> <pkSeed16>   -> JSON {"sk": 64 B hex, "pk": 32 B hex}
+//!   queuebit-pq sign <sk64> <msg32> [entropy32]      hedged (OS RNG unless entropy given), raw sig hex
+//!   queuebit-pq sign-det <sk64> <msg32>              deterministic, raw sig hex
+//!   queuebit-pq verify <pk32> <msg32> <sig>          prints true/false
+//!   queuebit-pq bench [n]                            keygen/sign/verify timings (median, p95, ms)
+//!   queuebit-pq bench-lean [n]                       the same for leanSphincs-s (Light tier, b = 13)
 //!
 //! Secrets on the command line are visible to other local users: test keys only.
 
-use leaked_pq::{hash, sign, verify, SecretKey};
+use queuebit_pq::{hash, sign, verify, SecretKey};
 use std::time::Instant;
 
 fn die(msg: &str) -> ! {
@@ -63,7 +63,7 @@ fn main() {
             let msg = arr32(&unhex(&a[2], 32, "msg"));
             let (sk_seed, pk_seed) = upstream_test_keys(&msg);
             let sk = SecretKey::from_seeds(&sk_seed, &pk_seed);
-            let sig = leaked_pq::sign_deterministic(&sk, &msg).unwrap_or_else(|e| die(&e.to_string()));
+            let sig = queuebit_pq::sign_deterministic(&sk, &msg).unwrap_or_else(|e| die(&e.to_string()));
             let pk = sk.public_key();
             let mut out = Vec::with_capacity(128 + sig.len() + 32);
             out.extend_from_slice(&hash::word(&pk.pk_seed));
@@ -88,9 +88,9 @@ fn main() {
             let sk = SecretKey::from_bytes(&unhex(&a[2], 64, "sk")).unwrap();
             let msg = arr32(&unhex(&a[3], 32, "msg"));
             let sig = match (cmd, a.get(4)) {
-                ("sign-det", _) => leaked_pq::sign_deterministic(&sk, &msg),
-                (_, Some(e)) => leaked_pq::sign_with_entropy(&sk, &msg, &arr32(&unhex(e, 32, "entropy"))),
-                _ => leaked_pq::sign(&sk, &msg),
+                ("sign-det", _) => queuebit_pq::sign_deterministic(&sk, &msg),
+                (_, Some(e)) => queuebit_pq::sign_with_entropy(&sk, &msg, &arr32(&unhex(e, 32, "entropy"))),
+                _ => queuebit_pq::sign(&sk, &msg),
             }
             .unwrap_or_else(|e| die(&e.to_string()));
             println!("{}", tohex(&sig));
@@ -126,7 +126,7 @@ fn main() {
             }
         }
         Some("bench-lean") => {
-            use leaked_pq::lean_s;
+            use queuebit_pq::lean_s;
             let n: usize = a.get(2).map(|s| s.parse().unwrap()).unwrap_or(10);
             let (mut kg, mut sg, mut vf) = (vec![], vec![], vec![]);
             for i in 0..n {
@@ -152,7 +152,7 @@ fn main() {
                 println!("{name:7} n={n} median={med:.2}ms p95={p95:.2}ms min={min:.2}ms");
             }
         }
-        _ => die("usage: leaked-pq upstream-c13|keygen-seeds|sign|sign-det|verify|bench|bench-lean (see source header)"),
+        _ => die("usage: queuebit-pq upstream-c13|keygen-seeds|sign|sign-det|verify|bench|bench-lean (see source header)"),
     }
 }
 

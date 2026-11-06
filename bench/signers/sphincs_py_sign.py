@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
-"""LEAKED bench driver for the SPHINCS- reference Python signer (nconsigny/SPHINCS- `script/signer.py`, MIT).
+"""QueueBit bench driver for the SPHINCS- reference Python signer (nconsigny/SPHINCS- `script/signer.py`, MIT).
 
 The upstream CLI derives the key from the message (a test convenience). This driver imports the upstream module
 from a checkout given on the command line and calls its `sign_variant` with a fixed key instead, so every signature

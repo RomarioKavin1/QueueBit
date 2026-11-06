@@ -543,7 +543,7 @@ function Action({ name, note, button }: { name: string; note: string; button?: R
 
 /**
  * Pairing a self-hosted watcher (ux-spec §3.10): its pairing code `{url, topic, keyId, hmacKey}` (paste it, or the
- * text under its QR). LEAKED asks Chrome for access to that one site, then reads its alerts and checks each one's
+ * text under its QR). QueueBit asks Chrome for access to that one site, then reads its alerts and checks each one's
  * signature with the shared key, so a fake server can't send "all clear".
  */
 function WatcherPairing({ onDone }: { onDone: () => void | Promise<void> }) {
@@ -609,10 +609,10 @@ function WatcherPairing({ onDone }: { onDone: () => void | Promise<void> }) {
               setBusy(true);
               setError(null);
               try {
-                // Chrome asks the user to let LEAKED reach this one site (optional host permission).
+                // Chrome asks the user to let QueueBit reach this one site (optional host permission).
                 const origin = `${new URL(preview.url).origin}/*`;
                 const granted = await browser.permissions.request({ origins: [origin] }).catch(() => false);
-                if (!granted) throw new UiCallError("LEAKED needs permission to reach your watcher's site.");
+                if (!granted) throw new UiCallError("QueueBit needs permission to reach your watcher's site.");
                 await call("watcher:pair", { text, confirm: true });
                 await onDone();
               } catch (e) {

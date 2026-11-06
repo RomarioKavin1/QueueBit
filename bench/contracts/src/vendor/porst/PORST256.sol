@@ -1,4 +1,4 @@
-// ---- LEAKED bench provenance ----
+// ---- QueueBit bench provenance ----
 // Vendored from https://github.com/duncancmt/porst @ 82a5e8c45c2d17615bbe2d17ad20d3b47500bab8, src/PORST.sol
 // License: MIT, Copyright (c) 2026 Duncan Clarke McIntire Townsend (duncancmt) (full text: bench/contracts/src/vendor/LICENSE-porst). MODIFIED: TREE_HEIGHT 16->24, SUBSET_SIZE 38->23 (the r=256 row of the upstream table) and contract renamed PORST256; nothing else changed.
 // ---- end provenance; upstream file follows ----

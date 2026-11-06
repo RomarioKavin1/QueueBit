@@ -8,7 +8,7 @@ import {
   signTx,
   verifySecp256k1Entry,
   type FrameTxReceipt,
-} from "@leaked/frames";
+} from "@queuebit/frames";
 import { FrameEngine, VERIFY_GAS, bumpFees, parseSimFrames, type EngineRpc } from "../../src/background/engine";
 
 const profile = getProfile("ethrex-eip8141-tracer");
@@ -44,7 +44,7 @@ function mockRpc(over: Partial<EngineRpc> = {}, sim: Partial<Sim> = {}) {
     }),
     sendRawTransaction: vi.fn(async (raw: Hex) => {
       sent.push(raw);
-      const { txHash } = await import("@leaked/frames");
+      const { txHash } = await import("@queuebit/frames");
       return txHash(profile, decodeTx(profile, raw));
     }),
     getTransactionReceipt: vi.fn(async () => null as FrameTxReceipt | null),

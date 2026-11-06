@@ -7,12 +7,12 @@ import {FrameSim} from "../frame/FrameSim.sol";
 import {C13Verifier} from "../../src/pq/C13Verifier.sol";
 import {IPQVerifier} from "../../src/interfaces/IPQVerifier.sol";
 import {IStakingRegistry} from "../../src/interfaces/IStakingRegistry.sol";
-import {ILeakedAccountRoles} from "../../src/interfaces/ILeakedAccountRoles.sol";
+import {IQueueBitAccountRoles} from "../../src/interfaces/IQueueBitAccountRoles.sol";
 import {PQRoleSigner} from "../../src/roles/PQRoleSigner.sol";
 import {RoleSignerFactory} from "../../src/roles/RoleSignerFactory.sol";
 import {FeeProfile} from "../../src/roles/FeeProfile.sol";
 import {C13Kat} from "../pq/C13Kat.sol";
-import {MockLeakedAccount, MockStakingRegistry, MockOther} from "./RoleMocks.sol";
+import {MockQueueBitAccount, MockStakingRegistry, MockOther} from "./RoleMocks.sol";
 
 /// PQRoleSigner under FrameSim (EIP-8141 semantics, mocked opcodes) with real C13 signatures from KAT set C: the
 /// sig hash of each simulated tx is set to a vector's digest, so the vector's signature is a valid PQ signature over
@@ -22,7 +22,7 @@ import {MockLeakedAccount, MockStakingRegistry, MockOther} from "./RoleMocks.sol
 /// helper DELEGATECALLs.
 contract PQRoleSignerTest is FrameSim {
     C13Verifier internal verifier;
-    MockLeakedAccount internal account;
+    MockQueueBitAccount internal account;
     MockStakingRegistry internal registry;
     RoleSignerFactory internal factory;
     PQRoleSigner internal signer;
@@ -41,7 +41,7 @@ contract PQRoleSignerTest is FrameSim {
         kat = C13Kat.load(1); // non-zero digest, vault key
         verifier = new C13Verifier();
         registry = new MockStakingRegistry();
-        account = new MockLeakedAccount();
+        account = new MockQueueBitAccount();
         (payer, payerPk) = makeAddrAndKey("payer");
         factory = new RoleSignerFactory(
             Devnet.ERC8421_WORKSHOP, TxParam.MAX_COST, IStakingRegistry(address(registry)), MAX_FEE
@@ -58,9 +58,9 @@ contract PQRoleSignerTest is FrameSim {
     // ------------------------------------------------------------------------------------------- builders ------
 
     function _move(uint256 amount) internal view returns (bytes memory) {
-        ILeakedAccountRoles.Call[] memory calls = new ILeakedAccountRoles.Call[](1);
-        calls[0] = ILeakedAccountRoles.Call(recipient, amount, "");
-        return abi.encodeCall(ILeakedAccountRoles.vaultExecute, (calls, 0));
+        IQueueBitAccountRoles.Call[] memory calls = new IQueueBitAccountRoles.Call[](1);
+        calls[0] = IQueueBitAccountRoles.Call(recipient, amount, "");
+        return abi.encodeCall(IQueueBitAccountRoles.vaultExecute, (calls, 0));
     }
 
     function _execPQ(address target, bytes memory data) internal pure returns (bytes memory) {
@@ -457,10 +457,10 @@ contract PQRoleSignerTest is FrameSim {
         assertEq(r.frames[1].status, STATUS_SUCCESS);
         assertEq(address(account).balance, bal0);
         // the account's revert bubbles up unchanged
-        _pathB(_execPQ(address(account), abi.encodeCall(ILeakedAccountRoles.recoveryCancel, (bytes32(0)))));
+        _pathB(_execPQ(address(account), abi.encodeCall(IQueueBitAccountRoles.recoveryCancel, (bytes32(0)))));
         r = simRunValid();
         assertEq(r.frames[1].status, STATUS_FAILED);
-        assertEq(bytes4(r.frames[1].returnData), MockLeakedAccount.NotRecovery.selector);
+        assertEq(bytes4(r.frames[1].returnData), MockQueueBitAccount.NotRecovery.selector);
     }
 
     function testFuzz_target_onlyAccountOrSelf(address target, bytes memory data) public {
@@ -502,8 +502,8 @@ contract PQRoleSignerTest is FrameSim {
         vm.expectRevert(PQRoleSigner.OnlySelf.selector);
         signer.withdrawStake(payable(address(this)));
         // the account itself only listens to the signer
-        vm.expectRevert(MockLeakedAccount.NotVault.selector);
-        account.vaultExecute(new ILeakedAccountRoles.Call[](0), 0);
+        vm.expectRevert(MockQueueBitAccount.NotVault.selector);
+        account.vaultExecute(new IQueueBitAccountRoles.Call[](0), 0);
     }
 
     // ------------------------------------------------------------------------------------------ staking ------
@@ -683,7 +683,7 @@ contract PQRoleSignerTest is FrameSim {
 
     /// An unbound vault signer serves an account whose `getRoles()` names it as the vault.
     function test_unbound_servesAccountThatNamesIt() public {
-        MockLeakedAccount acct = new MockLeakedAccount();
+        MockQueueBitAccount acct = new MockQueueBitAccount();
         vm.deal(address(acct), 1 ether);
         PQRoleSigner s = _unbound(1);
         assertEq(s.account(), address(0));
@@ -699,7 +699,7 @@ contract PQRoleSignerTest is FrameSim {
     /// an EOA, not a contract without `getRoles`.
     function test_unbound_refusesOtherTargets() public {
         PQRoleSigner s = _unbound(1);
-        MockLeakedAccount stranger = new MockLeakedAccount();
+        MockQueueBitAccount stranger = new MockQueueBitAccount();
         stranger.setRoles(makeAddr("otherVault"), address(s), address(0)); // names it as recovery, not vault
         MockOther other = new MockOther();
         address[3] memory targets = [address(stranger), address(other), makeAddr("eoa")];
@@ -714,9 +714,11 @@ contract PQRoleSignerTest is FrameSim {
 
     function test_unbound_recoveryRole() public {
         PQRoleSigner s = _unbound(2);
-        MockLeakedAccount acct = new MockLeakedAccount();
+        MockQueueBitAccount acct = new MockQueueBitAccount();
         acct.setRoles(makeAddr("vault"), address(s), address(0));
-        _pathBFrom(s, _execPQ(address(acct), abi.encodeCall(ILeakedAccountRoles.recoveryCancel, (bytes32(uint256(9))))));
+        _pathBFrom(
+            s, _execPQ(address(acct), abi.encodeCall(IQueueBitAccountRoles.recoveryCancel, (bytes32(uint256(9)))))
+        );
         SimResult memory r = simRunValid();
         assertEq(r.frames[1].status, STATUS_SUCCESS);
         assertEq(acct.lastCancelled(), bytes32(uint256(9)));

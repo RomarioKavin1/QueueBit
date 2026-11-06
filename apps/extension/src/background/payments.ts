@@ -1,7 +1,7 @@
 import { erc20Abi, parseGwei, type Address, type Hex, type PublicClient } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { fromWire, signTx, type Profile } from "@leaked/frames";
-import type { NodeClient } from "@leaked/rpc";
+import { fromWire, signTx, type Profile } from "@queuebit/frames";
+import type { NodeClient } from "@queuebit/rpc";
 import { findNetwork, type Network } from "../shared/chains";
 import type { AccountStatus, RouteView, SendPreview } from "../shared/views";
 import type { AccountPlans } from "./account";
@@ -73,7 +73,7 @@ export async function checkedInitTokens(
     if (d === undefined || Number(d) !== t.decimals) {
       throw new PaymentsError(
         "bad-token",
-        `The token ${t.token.slice(0, 6)}…${t.token.slice(-4)} isn't what LEAKED expected on this network (its decimals don't match). Remove it from "Tokens you'll spend".`,
+        `The token ${t.token.slice(0, 6)}…${t.token.slice(-4)} isn't what QueueBit expected on this network (its decimals don't match). Remove it from "Tokens you'll spend".`,
       );
     }
   }
@@ -226,7 +226,7 @@ export class Payments {
     );
   }
 
-  /** The frame network with LEAKED account contracts, or an explanation. */
+  /** The frame network with QueueBit account contracts, or an explanation. */
   private network(chainId: number): Network & { deployment: NonNullable<Network["deployment"]> } {
     const net = findNetwork(chainId);
     if (!net || net.backend !== "frame" || !net.profileId) {
@@ -235,7 +235,7 @@ export class Payments {
     if (!net.deployment) {
       throw new PaymentsError(
         "unsupported",
-        `LEAKED's account contracts aren't on ${net.name} yet, so the account can't be activated there.`,
+        `QueueBit's account contracts aren't on ${net.name} yet, so the account can't be activated there.`,
       );
     }
     return net as Network & { deployment: NonNullable<Network["deployment"]> };
@@ -334,13 +334,13 @@ export class Payments {
       if (!aaNetwork(chainId)) {
         throw new PaymentsError(
           "unsupported",
-          `LEAKED's compatible-account contracts aren't on ${findNetwork(chainId)!.name} yet.`,
+          `QueueBit's compatible-account contracts aren't on ${findNetwork(chainId)!.name} yet.`,
         );
       }
     } else this.network(chainId);
     const plan = await this.plan(chainId);
     if (!plan)
-      throw new PaymentsError("no-plan", "Finish setting up LEAKED first: pair your Vault and choose your limits.");
+      throw new PaymentsError("no-plan", "Finish setting up QueueBit first: pair your Vault and choose your limits.");
     return plan;
   }
 
@@ -741,7 +741,7 @@ export class Payments {
         detail: ok
           ? signerOk
             ? "Your daily limit is now enforced by the network, and your Vault can approve."
-            : "The Vault signer wasn't deployed. LEAKED retries before your first Vault approval."
+            : "The Vault signer wasn't deployed. QueueBit retries before your first Vault approval."
           : "Your fee tank paid the network fee. Try again.",
         steps:
           e.backend === "4337"

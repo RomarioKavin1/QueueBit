@@ -59,7 +59,7 @@ impl core::fmt::Debug for SecretKey {
 }
 
 impl SecretKey {
-    /// Keygen at the LEAKED kept-subtree height [`B`] = 13 (2^13 WOTS+C leaves, ~1.85 M keccak calls).
+    /// Keygen at the QueueBit kept-subtree height [`B`] = 13 (2^13 WOTS+C leaves, ~1.85 M keccak calls).
     pub fn from_seed(seed: &[u8; 32]) -> Self {
         let (pp, root) = keygen(seed, B);
         Self { seed: *seed, pp, root }
@@ -219,7 +219,7 @@ fn fold_surrogates(pp: &Node, seed: &[u8; 32], b: usize, s: u32, top: Node) -> N
     node
 }
 
-/// `(P, root)` of the key keeping a subtree of height `b` (`b = 26` is a full key; LEAKED uses [`B`]).
+/// `(P, root)` of the key keeping a subtree of height `b` (`b = 26` is a full key; QueueBit uses [`B`]).
 pub fn keygen(seed: &[u8; 32], b: usize) -> (Node, Node) {
     assert!(b <= H);
     let pp = derive_public_param(seed);

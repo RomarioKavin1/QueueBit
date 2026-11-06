@@ -23,7 +23,7 @@ interface Fixtures {
 export const test = base.extend<Fixtures>({
   // eslint-disable-next-line no-empty-pattern
   context: async ({}, use) => {
-    const userDataDir = mkdtempSync(join(tmpdir(), "leaked-e2e-"));
+    const userDataDir = mkdtempSync(join(tmpdir(), "queuebit-e2e-"));
     const context = await chromium.launchPersistentContext(userDataDir, {
       channel: "chromium",
       headless: !process.env.HEADED,
@@ -142,7 +142,7 @@ export async function onboard(
     await expect(page.getByText(/Now the test/u)).toBeVisible();
     // The browser's single-use challenge: the phone signs over its request id.
     const challenge = page.getByTestId("recovery-challenge-text");
-    await expect(challenge).toHaveValue(/^UR:LEAKED-RECOVERY-CHALLENGE\//iu);
+    await expect(challenge).toHaveValue(/^UR:QUEUEBIT-RECOVERY-CHALLENGE\//iu);
     await shots?.("onboarding-4a-recovery-test", page);
     await pasteCode(page, await phone.recoveryTestText(await challenge.inputValue()));
     await expect(page.getByText("Recovery key is set. Store the paper away from your phone.")).toBeVisible({
@@ -198,8 +198,8 @@ export async function accountFromStorage(serviceWorker: Worker): Promise<string>
     const storage = (
       globalThis as unknown as { chrome: { storage: { local: { get(k: string): Promise<Record<string, unknown>> } } } }
     ).chrome.storage.local;
-    const r = await storage.get("leaked:keyring");
-    return (r["leaked:keyring"] as { accounts: { everyday: string } }).accounts.everyday;
+    const r = await storage.get("queuebit:keyring");
+    return (r["queuebit:keyring"] as { accounts: { everyday: string } }).accounts.everyday;
   });
 }
 
@@ -209,8 +209,8 @@ export async function keyringAccounts(serviceWorker: Worker): Promise<{ everyday
     const storage = (
       globalThis as unknown as { chrome: { storage: { local: { get(k: string): Promise<Record<string, unknown>> } } } }
     ).chrome.storage.local;
-    const r = await storage.get("leaked:keyring");
-    return (r["leaked:keyring"] as { accounts: { everyday: string; feeTank: string } }).accounts;
+    const r = await storage.get("queuebit:keyring");
+    return (r["queuebit:keyring"] as { accounts: { everyday: string; feeTank: string } }).accounts;
   });
 }
 
@@ -226,8 +226,8 @@ export async function smartAccount(serviceWorker: Worker, chainId = 1337): Promi
               chrome: { storage: { local: { get(k: string): Promise<Record<string, unknown>> } } };
             }
           ).chrome.storage.local;
-          const r = await storage.get("leaked:accountPlans");
-          const plans = r["leaked:accountPlans"] as Record<string, { address: string }> | undefined;
+          const r = await storage.get("queuebit:accountPlans");
+          const plans = r["queuebit:accountPlans"] as Record<string, { address: string }> | undefined;
           return plans?.[String(id)]?.address;
         }, chainId)),
       { timeout: 15_000 },
@@ -243,7 +243,7 @@ export async function smartAccount(serviceWorker: Worker, chainId = 1337): Promi
  */
 export async function killServiceWorker(context: BrowserContext, page: Page, serviceWorker: Worker): Promise<void> {
   await serviceWorker.evaluate(() => {
-    (globalThis as unknown as { __leakedE2eMarker?: number }).__leakedE2eMarker = 1;
+    (globalThis as unknown as { __queuebitE2eMarker?: number }).__queuebitE2eMarker = 1;
   });
   const cdp = await context.newCDPSession(page);
   await cdp.send("ServiceWorker.enable");
@@ -257,7 +257,7 @@ export async function isFreshServiceWorker(context: BrowserContext): Promise<boo
   if (!sw) return false;
   try {
     return await sw.evaluate(
-      () => (globalThis as unknown as { __leakedE2eMarker?: number }).__leakedE2eMarker === undefined,
+      () => (globalThis as unknown as { __queuebitE2eMarker?: number }).__queuebitE2eMarker === undefined,
     );
   } catch {
     return false;

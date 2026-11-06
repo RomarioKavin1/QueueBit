@@ -19,10 +19,10 @@ import type { PrivacyNetworkConfig, PrivacyOp, PrivacyView } from "./privacy";
  * 2. Content script ⇄ service worker: one `chrome.runtime.connect({name: PROVIDER_PORT})` per frame.
  * 3. Inpage ⇄ content script: `window.postMessage` tagged with `INPAGE_TARGET` / `CONTENT_TARGET`.
  */
-export const UI_CHANNEL = "leaked-ui";
-export const PROVIDER_PORT = "leaked-provider";
-export const INPAGE_TARGET = "leaked-inpage";
-export const CONTENT_TARGET = "leaked-content";
+export const UI_CHANNEL = "queuebit-ui";
+export const PROVIDER_PORT = "queuebit-provider";
+export const INPAGE_TARGET = "queuebit-inpage";
+export const CONTENT_TARGET = "queuebit-content";
 
 export interface ApprovalView {
   approval: Approval;
@@ -74,7 +74,7 @@ export interface UiApi {
   "pair:recovery": { req: { text: string; confirm: boolean }; res: PairPreview };
   /** The phone's recovery-test code: its signature must verify against the Recovery key scanned before (E-23). */
   "pair:recoveryTest": { req: { text: string }; res: { ok: true; last8: string; payer?: `0x${string}` } };
-  /** A fresh, single-use request id for the recovery test, as a `ur:leaked-recovery-challenge` code for the phone. */
+  /** A fresh, single-use request id for the recovery test, as a `ur:queuebit-recovery-challenge` code for the phone. */
   "pair:recoveryChallenge": { req: undefined; res: { text: string; requestId: string } };
   /** "Tokens you'll spend": validate (decimals on-chain) and store the choice for `chainId`. */
   "setup:setTokens": {
@@ -89,7 +89,7 @@ export interface UiApi {
   "vault:create": { req: { chainId?: number; action: VaultActionRequest }; res: VaultRequestRecord };
   "vault:get": { req: { id: string }; res: VaultRequestRecord | null };
   "vault:list": { req: undefined; res: VaultRequestRecord[] };
-  /** The scanned `ur:leaked-signature` CBOR (hex): verified, simulated and submitted, or an error with its E-code. */
+  /** The scanned `ur:queuebit-signature` CBOR (hex): verified, simulated and submitted, or an error with its E-code. */
   "vault:submit": { req: { id: string; signature: `0x${string}` }; res: VaultRequestRecord };
   "vault:cancel": { req: { id: string }; res: null };
   "vault:queue": { req: { chainId?: number }; res: QueuedView[] };
@@ -124,7 +124,7 @@ export interface UiApi {
     };
     res: PrivacyView;
   };
-  /** The phone's scanned `ur:leaked-signature` (CBOR hex) for the operation's note-key request. */
+  /** The phone's scanned `ur:queuebit-signature` (CBOR hex) for the operation's note-key request. */
   "privacy:answer": { req: { chainId?: number; opId: string; signature: `0x${string}` }; res: PrivacyView };
   "privacy:retry": { req: { chainId?: number; opId: string }; res: PrivacyView };
   "privacy:cancel": { req: { chainId?: number; opId: string }; res: PrivacyView };

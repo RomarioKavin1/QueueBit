@@ -1,4 +1,4 @@
-import type { Alert, Severity } from "@leaked/watcher-core";
+import type { Alert, Severity } from "@queuebit/watcher-core";
 import type { KV } from "../../shared/kv";
 
 /**
@@ -6,7 +6,7 @@ import type { KV } from "../../shared/kv";
  * paired self-hosted watcher raised, persisted so a service-worker restart loses nothing. The mapping to the OS
  * notification, the toolbar badge and the in-app list is pure (unit-tested).
  */
-export const ALERTS_KEY = "leaked:alerts";
+export const ALERTS_KEY = "queuebit:alerts";
 /** Kept, newest first. */
 export const MAX_ALERTS = 200;
 

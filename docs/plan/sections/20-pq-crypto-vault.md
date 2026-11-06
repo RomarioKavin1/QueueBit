@@ -1,6 +1,6 @@
 # 20. Post-quantum cryptography, the vault companion, and the PQ benchmark harness
 
-Date: 2026-11-06. Section of the LEAKED v4 implementation plan. Binding input: `../00-v4-design-decisions.md`. Companion sections: contracts (10-*), extension (30-*), privacy/infra (40-*).
+Date: 2026-11-06. Section of the QueueBit v4 implementation plan. Binding input: `../00-v4-design-decisions.md`. Companion sections: contracts (10-*), extension (30-*), privacy/infra (40-*).
 
 **Tagging.** Every external fact is tagged `[VERIFIED]` (read in a cloned repo at a pinned commit, or in a fetched primary page), `[SPEC-DRAFT]` (read in a Draft EIP/ERC text; may change), or `[UNVERIFIED]` (not confirmed; a verification step is given). Estimates made here are tagged `[EST]`. Clone root used for all `file:line` references: `/private/tmp/claude-501/-Users-romariokavin-Documents-RandomClaudeSessions/d426a882-c55f-4a32-9511-c5a43a5de11d/scratchpad/repos/`.
 
@@ -53,7 +53,7 @@ Gas columns: "VERIFY exec" is what counts against the mempool verify budget (the
 | leanSphincs-s (Wambsgans / sphincs.art params) | 4,164 | 32 | ~39 K pure; **46,899 in a VERIFY frame** `[VERIFIED deployments.md:57]` | 285,546 `[EST]` | **288,042** on ethrex privacy testnet `[VERIFIED]` | 159 K permutations with a cached key ("Light" 2¹³ subtree, 16 KiB cache); keygen 1.91 M perms | yes (stateless leaf choice; the cache is a performance tier, not signing state) | 2²⁶ full key (estimate, not proved); 20 K for the Light tier | No Lean proof; estimates "not proved" (README) | MIT (upstream crate MIT OR Apache-2.0) | Solidity verifier; Rust signer `lssk`; Python signer |
 | SLH-DSA-SHA2-128-24 (NIST SP 800-230 ipd set, FIPS 205 algorithm) | 3,856 | 32 | ~142 K pure (SHA-256 precompile) `[VERIFIED README:75 prose; docs/variants.md:16]` (the README "Schemes" table row at `:25` is the **Keccak** twin at ~94 K) | 265,834 `[EST]` | 177,910 standalone verify tx for the keccak twin on Sepolia `[VERIFIED deployments.md:106]` | ~1.07 B hashes zero-memory; ~201 M with a 128 MB XMSS cache (1.6 s / 0.39 s) `[VERIFIED README]` | yes | 2²⁴ usage cap (FORS-carried) | matches NIST/ACVP external KATs; Lean model; not audited | MIT | Solidity verifier `src/sha/`; C reference, patched noble JS, GPU signer |
 | **SLH-DSA-SHA2-128s (FIPS 205 final set)** | 7,856 `[VERIFIED noble README]` | 32 | **no Solidity verifier found** `[UNVERIFIED]`; Verification step: search GitHub for a FIPS-205 128s EVM verifier or port the SPHINCS- SHA2 verifier to h=63,d=7,a=12,k=14 | 521,834 `[EST]` | none | noble on Apple M4: keygen 140 ms, sign 1,068 ms, verify 1.1 ms `[VERIFIED README "Speed"]` | yes | 2⁶⁴ (FIPS 205) — `[VERIFIED secondary]` via `sphincs-minus/README.md` "NIST standardised a 2^64-signature budget"; primary FIPS 205 PDF not rendered (see §8) | standard | noble-post-quantum TS (`slh_dsa_sha2_128s`), many C impls; **no EVM verifier** |
-| **PORST r=16** (H=16, K=38) | avg 13,236; ground to 12,832 `[VERIFIED PORST.sol header; LEAKED-full-analysis §10]` | 32 (Merkle root) | 146,501 fuzz mean (`porst/.gas-snapshot`), 124.7–135.4 K in the earlier run `[VERIFIED]` | ~840 K `[EST]` | **847,082** on the Mumbai devnet (path B, execution frame 168,754, VERIFY 9,886) `[VERIFIED LEAKED-full-analysis §10 row 7]` | keygen 2¹⁶ leaves + tree (~131 K keccak); sign = subset + salt grind (48–149 tries measured) | **no** (few-time, r=16 per key) | 16 sigs / key (258-bit claimed by formula in header) | none; "unaudited hackathon code"; 3 stars (critical analysis) | MIT | Solidity `src/PORST.sol`; TS signer in `prototype/probe.mts:29-75` |
+| **PORST r=16** (H=16, K=38) | avg 13,236; ground to 12,832 `[VERIFIED PORST.sol header; QueueBit-full-analysis §10]` | 32 (Merkle root) | 146,501 fuzz mean (`porst/.gas-snapshot`), 124.7–135.4 K in the earlier run `[VERIFIED]` | ~840 K `[EST]` | **847,082** on the Mumbai devnet (path B, execution frame 168,754, VERIFY 9,886) `[VERIFIED QueueBit-full-analysis §10 row 7]` | keygen 2¹⁶ leaves + tree (~131 K keccak); sign = subset + salt grind (48–149 tries measured) | **no** (few-time, r=16 per key) | 16 sigs / key (258-bit claimed by formula in header) | none; "unaudited hackathon code"; 3 stars (critical analysis) | MIT | Solidity `src/PORST.sol`; TS signer in `prototype/probe.mts:29-75` |
 | PORST r=256 (H=24, K=23) | avg 14,439 `[VERIFIED header table]` | 32 | not measured; `[EST]` ~130–160 K (K=23 leaves × 24-level multiproof) | ~943 K `[EST]` | none | keygen 2²⁴ leaves (~33.5 M keccak + 16.7 M tree hashes) — desktop-class `[EST]` | no | 256 / key | none | MIT | verifier needs a recompile with `TREE_HEIGHT=24, SUBSET_SIZE=23`; signer: parameterise `probe.mts` |
 | **FORS+C (NiceTry)** K=26, A=5 | 2,448 `[VERIFIED nicetry/src/Verifiers/ForsVerifier.sol:86]` | 32 (pkSeed 16 + root 16) | ~35 K `[VERIFIED README:14]` | 175,722 `[EST]` | "~136k gas for an ERC20 transfer" for the earlier AA approach (ethresear.ch 24526) | ~2.4 K hashes / sig; tree cache ~25 KB | **no** (one key per op; chain rotation `nextOwner`; reuse degrades: 128 → 104 bits at q=2, 70 at q=5) | 1 (by policy) | unaudited; "parameters still in a tuning phase" (README) | **unknown** (no LICENSE) | Solidity `ForsVerifier.recover(bytes sig, bytes32 digest) → address`; Python reference signer `scripts/signing_reference.py` |
 | **ETHFALCON** (ZKNOX, Falcon-512 EVM-friendly) | 666 (Falcon-512 sig, noble) + 897 pk `[VERIFIED noble README]`; calldata 2,404 B incl. NTT key `[VERIFIED README]` | 897 (key in NTT form, can be stored on-chain) | `main`: ethfalcon 1.5 M, falcon 3.9 M, epervier 1.6 M; experimental branch `exp/pq-verifier-gas` `ZKNOX_falcon8` **447,047** `[VERIFIED README:95-97,112]` | 61,674 with a 666-B witness; **172,906** if the 897-B NTT key travels inside the witness as §2.6 assumes (2,404 B calldata `[VERIFIED README:126]`) `[EST]` | 4337 hybrid: 1.69 M (Kohaku README) | sign 749/s, keygen 14/s on M4 (noble Falcon512) | yes | unbounded | "experimental work, not audited: DO NOT USE IN PRODUCTION" `[VERIFIED README:10]`; FN-DSA (FIPS 206) not final | MIT | Solidity `src/ZKNOX_ethfalcon.sol`; Python signer; noble `falcon512` (Round 3, may not match ETHFALCON's hash-to-point) `[UNVERIFIED compatibility]` |
@@ -145,7 +145,7 @@ Honest label (must appear in the UI and README): on Path B a forged payer ECDSA 
 - The node performs no cryptographic check of ARBITRARY entries ("structurally checks", `:1149`); elided bytes can be mutated by any relayer without changing `TXPARAM(0x08)` → **transaction hash is malleable** even though the sig hash is not (`:1533-1535`). "Custom verifiers should enforce canonical encodings and reject unused bytes."
 - `SIGPARAM(0x03)` returns `len(signature)` only for ARBITRARY entries; for other schemes it halts (`:895-902`).
 
-Rules for LEAKED:
+Rules for QueueBit:
 1. **C13 is fixed-length (3,688)**: the signer never pads; the module requires `SIGPARAM(0x03) == 3688` and the verifier re-checks `sig.length == 3688`. No grinding to length is needed (unlike PORST, which the prototype had to grind 48–149 salts for).
 2. **Known C13 malleability**: finding `C13-mal-f1` (`docs/SECURITY-REVIEW-C13-SLHDSA.md` table): "Signature elements not canonicalized → byte-string malleability. Many distinct 3688-B strings verify identically" `[VERIFIED]`. Consequence under 8141: the tx hash of a vault tx may change in flight. Mitigations: (a) the extension and watcher track vault txs by `(sender, nonce)` and by sig hash, never by tx hash; (b) M1 adds, in our module (not in the proof-pinned verifier), the cheap canonicality checks the finding lists once we have read it in full (Verification step: read `C13-mal-f1` detail and the verifier's `N_MASK` reads at `SPHINCs-C13Asm.sol:75,122,136,154,221,252` plus the **unmasked** 4-byte counter read at `:196` (`shr(224, calldataload(...))`) to enumerate the ignored bits; at minimum assert the 4-byte counter's unused bits and any sub-word slack are zero).
 3. **PORST (benchmark only)**: pad to a fixed `L` chosen per parameter set at ≥ the 99.9th-percentile witness length (the probe used `32 + 32×400 = 12,832` for r=16); verifier must check `sig.length == L` and that every byte after the consumed witness is `0x00`; the salt is ground until the natural length ≤ L. (The upstream verifier only checks the exact witness; the padding check is an adapter responsibility.)
@@ -168,7 +168,7 @@ interface IPQVerifier {
     ///               PORST: Merkle root; FORS+C: pkSeed(16) ‖ root(16);
     ///               lattice schemes (Falcon/ML-DSA): keccak256(encodedPublicKey), the key
     ///               bytes travel inside `sig` or in a key contract named by the adapter.
-    /// @param digest the message: always compute_sig_hash(tx) (TXPARAM 0x08) in LEAKED.
+    /// @param digest the message: always compute_sig_hash(tx) (TXPARAM 0x08) in QueueBit.
     /// @param sig    raw witness bytes copied by SIGDATACOPY (no ABI wrapper, no type tag).
     function verify(bytes32 pk, bytes32 digest, bytes calldata sig) external view returns (bool);
     /// Canonical witness length in bytes, or 0 if the scheme is variable-length (then the
@@ -199,14 +199,14 @@ Adapter list for v1 and the benchmark: `C13Adapter` (product), `C7Adapter`, `Lea
 
 **Rust core → `wasm32-unknown-unknown` for the browser extension (hot-side verification only) and for the companion PWA; native via `uniffi` for a native companion (§4.1); TS bindings over `wasm-bindgen`.** Rationale: the only existing C13 signer with BIP-39 derivation is Rust (`signers/signer-wasm`, crate `sphincs-c13-signer`, `Cargo.toml`: `tiny-keccak`, `bip39`, `hmac`, `sha2`, `k256`, `wasm-bindgen`, `getrandom(js)`) `[VERIFIED]`; C13 signing is ~10 M keccak permutations, which is where WASM vs native matters most (noble's experimental `awasm` branch reports SLH-DSA-SHA256 2.3× faster with WASM keccak than pure JS, `noble-post-quantum/README.md:396-398` `[VERIFIED]`); one code base feeds the companion, the extension's local verification, the Foundry FFI tests and the benchmark.
 
-Package layout (new repo `leaked-pq`):
+Package layout (new repo `queuebit-pq`):
 
 ```
-crates/leaked-pq-core      — scheme traits + C13 (vendored from sphincs-c13-signer at 4c76aaf, licence header kept),
+crates/queuebit-pq-core      — scheme traits + C13 (vendored from sphincs-c13-signer at 4c76aaf, licence header kept),
                              later C7 / leanSphincs-s (vendor `lssk` crate) / PORST (port of probe.mts) for the bench
-crates/leaked-pq-wasm      — wasm-bindgen exports (see §3.5)
-crates/leaked-pq-uniffi    — native bindings for iOS/Android (companion, if native, §4.1)
-packages/pq-signer-ts      — @leaked/pq-signer: typed wrapper, scheme registry, frame-tx sig-hash helper
+crates/queuebit-pq-wasm      — wasm-bindgen exports (see §3.5)
+crates/queuebit-pq-uniffi    — native bindings for iOS/Android (companion, if native, §4.1)
+packages/pq-signer-ts      — @queuebit/pq-signer: typed wrapper, scheme registry, frame-tx sig-hash helper
 packages/pq-bench          — the harness (§6)
 ```
 
@@ -224,11 +224,11 @@ Verify (Rust, for the companion's self-check and the extension): byte-equivalent
 
 ### 3.3 Key derivation from a seed, and why stateless makes a seed backup safe
 
-Derivation (LEAKED-specific, **not** SPHINCS-'s `HMAC-SHA512("sphincs-c13-v1", seed)` — `signers/signer-wasm/src/keygen.rs:38` `[VERIFIED]`; `CLAUDE.md:290` still documents the older `"sphincs-c6-v1"` label, a doc/code mismatch to report upstream): the SPHINCS- repo warns "One seed is one key of one variant … never reuse a seed across variants or tiers" (`CLAUDE.md:22`) `[VERIFIED]`, and nothing in the hash inputs names the parameter set. So:
+Derivation (QueueBit-specific, **not** SPHINCS-'s `HMAC-SHA512("sphincs-c13-v1", seed)` — `signers/signer-wasm/src/keygen.rs:38` `[VERIFIED]`; `CLAUDE.md:290` still documents the older `"sphincs-c6-v1"` label, a doc/code mismatch to report upstream): the SPHINCS- repo warns "One seed is one key of one variant … never reuse a seed across variants or tiers" (`CLAUDE.md:22`) `[VERIFIED]`, and nothing in the hash inputs names the parameter set. So:
 
 ```
 master   = BIP-39 seed (24 words, optional passphrase)           — the only thing the user backs up
-role_key = HMAC-SHA512(key = "leaked/v1/" ‖ schemeId ‖ "/" ‖ role ‖ "/" ‖ chainScope, msg = master)
+role_key = HMAC-SHA512(key = "queuebit/v1/" ‖ schemeId ‖ "/" ‖ role ‖ "/" ‖ chainScope, msg = master)
            role ∈ {"vault", "recovery"}; chainScope = "any" (one key for all chains) in v1
 sk.seed  = role_key[0:16],  sk.prf = role_key[16:32],  pk.seed = role_key[32:48]
 payer    = BIP-32 m/44'/60'/8141'/0/0 from the same master (path B's pinned ECDSA payer; separate branch)
@@ -241,7 +241,7 @@ Why a stateless scheme makes the backup safe: in SPHINCS+/SPHINCS- the hypertree
 ### 3.4 Deterministic test vectors against the Solidity verifier
 
 - **KAT set A (upstream)**: `signers/c13-crosscheck/crosscheck.py` three-way Python ⟷ Rust ⟷ verifier byte-equality at full parameters `[VERIFIED signers/README.md]`, plus the forge FFI tests `test/SphincsC13Test.t.sol` / `C13CrosscheckPathTest.t.sol`. Re-run against our vendored crate at the pinned commit; these become our regression KATs.
-- **KAT set B (LEAKED)**: 32 vectors `{mnemonic, role, schemeId, pk, digest, R-entropy, sig}` generated by the Rust core with fixed `R` entropy, checked (i) by the Rust verifier, (ii) by the TS binding, (iii) by `C13Adapter.verify` in Foundry, (iv) by the frame emulator inside a full frame tx, (v) on the devnet by `eth_call` against the deployed adapter. Stored as JSON in `packages/pq-signer-ts/vectors/`.
+- **KAT set B (QueueBit)**: 32 vectors `{mnemonic, role, schemeId, pk, digest, R-entropy, sig}` generated by the Rust core with fixed `R` entropy, checked (i) by the Rust verifier, (ii) by the TS binding, (iii) by `C13Adapter.verify` in Foundry, (iv) by the frame emulator inside a full frame tx, (v) on the devnet by `eth_call` against the deployed adapter. Stored as JSON in `packages/pq-signer-ts/vectors/`.
 - **KAT set C (negative)**: for each positive vector, 48 single-byte flips, both message flips, length ±1, all-zero, all-`0xff`, wrong pk, swapped pkSeed/pkRoot, a sig with the FORS forced-zero violated, a sig with the WOTS target sum off by one (the review harness did exactly this per verifier: "two message flips and 48 byte flips", `SECURITY-REVIEW-2026-10.md` §2) `[VERIFIED]`.
 
 ### 3.5 Constant-time and memory hygiene
@@ -274,7 +274,7 @@ Decision: build the companion as **one TS front end** that runs as a PWA (M4-A) 
 Use **BC-UR** (`ur:` types, bytewords, CBOR payload, fountain-coded multipart) via `@ngraveio/bc-ur` 2.0.0-beta.9: `UrFountainEncoder(ur, maxFragmentLength=100 default, minFragmentLength=10, firstSeqNum=0, repeatAfterRatio=2)` emits the original parts first, then mixed fountain parts, so a missed frame is recovered without waiting for a full cycle (`bc-ur/README.md:846-852`, `src/classes/UrFountainEncoder.ts:26-32`) `[VERIFIED]`. ERC-4527 (Stagnant) defines `eth-sign-request` (`sign-data`, `data-type` ∈ {1 legacy tx, 2 EIP-712, 3 raw bytes, 4 EIP-2718 typed tx}, `chain-id`, `derivation-path`, `request-id`, `address`, `origin`) and `eth-signature` with `eth-signature-bytes = bytes .size 65` (`ercs/ERCS/erc-4527.md:134-200`) `[VERIFIED]`. The 65-byte constraint and the secp-centric key path make `eth-signature` unusable for a 3,688-byte PQ witness, and `data-type 4` would carry a *frame* tx only as opaque bytes. Keystone's SDK wraps the same registry (`@keystonehq/bc-ur-registry-eth`, `generateSignRequest`/`parseSignature`, `keystone-sdk-web/src/chains/ethereum.ts:24-56`) `[VERIFIED]`, so an existing hardware wallet could not consume our requests either; we define two new UR types, registered in the same style so a future vendor can adopt them:
 
 ```
-ur:leaked-sign-request  (CBOR map)
+ur:queuebit-sign-request  (CBOR map)
   1: request-id        uuid
   2: chain-id          uint
   3: tx-type           uint  (6 = EIP-8141 frame tx; 1 = ERC-4337 PackedUserOperation for the pre-Hegotá backend)
@@ -287,14 +287,14 @@ ur:leaked-sign-request  (CBOR map)
   8: expected-pk       bytes32 (the signer contract's immutable; the companion checks it equals its own key)
   9: origin            text
 
-ur:leaked-signature
+ur:queuebit-signature
   1: request-id  uuid
   2: scheme-id   bytes32
   3: witness     bytes (3,688 B for C13)
   4: payer-sig   bytes .size 65  (path B only: ECDSA by the pinned payer key over the same sig hash)
 ```
 
-The companion **recomputes `compute_sig_hash` itself** from field 4 (it never signs a hash the extension hands it); the frame-tx RLP encoder is therefore part of the shared TS lib (`@leaked/frames`, owned by the extension workstream) and is pinned by hash in the companion build.
+The companion **recomputes `compute_sig_hash` itself** from field 4 (it never signs a hash the extension hands it); the frame-tx RLP encoder is therefore part of the shared TS lib (`@queuebit/frames`, owned by the extension workstream) and is pinned by hash in the companion build.
 
 Size math `[EST]` (QR version 40, error-correction L: 4,296 alphanumeric chars or 2,953 bytes `[VERIFIED Wikipedia "QR code" capacity list]`; UR bytewords are alphanumeric-mode, 2 characters per byte, so ≈ 2,100 payload bytes per v40-L symbol in theory):
 - **In**: a vault `execute` with two calls is ~400–1,200 bytes of frame data, plus ~150 bytes of envelope → 1–3 fragments at 500 bytes each. One or two QR codes.
@@ -305,8 +305,8 @@ Size math `[EST]` (QR version 40, error-correction L: 4,296 alphanumeric chars o
 
 The companion decodes the full frame tx and renders it from **on-device** knowledge only:
 
-1. **Structure pane**: sender (which role signer), nonce lane, chain, `max_fee` → worst-case cost in ETH (`required_max_fee` semantics, `eip-8141.md:569-581`), frame count, and for each frame: mode, target (resolved through the on-device address book), value, selector. The VERIFY frame must target the role signer and carry the expected `verifyFrame(sigIndex)` selector; the SENDER frame must target the role signer with `relay`/`executePQ` whose inner `target` is the LEAKED account (or the signer itself for admin) and whose inner data carries one of the known selectors; **anything else is shown under a red "UNKNOWN FRAME" banner with raw hex and requires a long-press + typed confirmation** (the raw-hex path is the only escape hatch and is logged on-device).
-2. **Intent pane** from ERC-7730-style descriptors bundled with the app (not fetched): LEAKED's own account ABI gets a descriptor file with `context.contract.deployments[{chainId,address}]` binding (`erc-7730.md` "Context section", `:493-520`) and `display.formats` per selector using the standard field formats `tokenAmount` (with `tokenPath`/`nativeCurrencyAddress`), `addressName`, `date`/`duration` for timelock delays, `enum` for policy flags (`:1340-1420`; `addressName` at `:1476`) `[VERIFIED]`. The intent string is interpolated the way the spec's "Interpolated intent security" section requires (constants only, no external data). Descriptors for allowlisted tokens (ERC-20 `transfer`/`approve`) and for the Privacy Pools withdrawal call the privacy workstream exposes are bundled the same way; the bundle is hash-pinned at build and shown in "About".
+1. **Structure pane**: sender (which role signer), nonce lane, chain, `max_fee` → worst-case cost in ETH (`required_max_fee` semantics, `eip-8141.md:569-581`), frame count, and for each frame: mode, target (resolved through the on-device address book), value, selector. The VERIFY frame must target the role signer and carry the expected `verifyFrame(sigIndex)` selector; the SENDER frame must target the role signer with `relay`/`executePQ` whose inner `target` is the QueueBit account (or the signer itself for admin) and whose inner data carries one of the known selectors; **anything else is shown under a red "UNKNOWN FRAME" banner with raw hex and requires a long-press + typed confirmation** (the raw-hex path is the only escape hatch and is logged on-device).
+2. **Intent pane** from ERC-7730-style descriptors bundled with the app (not fetched): QueueBit's own account ABI gets a descriptor file with `context.contract.deployments[{chainId,address}]` binding (`erc-7730.md` "Context section", `:493-520`) and `display.formats` per selector using the standard field formats `tokenAmount` (with `tokenPath`/`nativeCurrencyAddress`), `addressName`, `date`/`duration` for timelock delays, `enum` for policy flags (`:1340-1420`; `addressName` at `:1476`) `[VERIFIED]`. The intent string is interpolated the way the spec's "Interpolated intent security" section requires (constants only, no external data). Descriptors for allowlisted tokens (ERC-20 `transfer`/`approve`) and for the Privacy Pools withdrawal call the privacy workstream exposes are bundled the same way; the bundle is hash-pinned at build and shown in "About".
 3. **Admin-action banner**: the account's admin selectors (section 10 §10.3.2 names: `vaultSetCap`, `vaultSetToken`, `vaultSetTarget`, `vaultSetSession`, `vaultSetDomain`, `vaultSetHotKey`, `vaultEnableBunker`, `vaultQueueUpgrade`, `vaultQueueMigrate`, `vaultQueue`, `vaultCancel`, `vaultSetRecoverySigner`, `vaultSetGuardian`, `vaultSetTimelock`) render with an orange ADMIN header stating the consequence in one sentence ("Raises the 24 h cap from 500 to 5,000 USD; takes effect after the 48 h timelock"). Loosening vs tightening is computed on-device by comparing with the *last values the companion signed* (it keeps a local policy snapshot; a mismatch with what the extension claims is itself a warning).
 4. **Address book**: recipient addresses are labelled only if the user added them on the companion (typed or scanned from a QR shown by a *different* channel); unknown recipients render as full checksummed hex with the first/last 4 chars highlighted and a "new recipient" badge. No address labels are accepted from the request.
 5. **Decoded ≡ signed**: the hash the companion signs is recomputed from the decoded structure, so what is displayed is what is signed by construction (no separate "display payload").
@@ -352,7 +352,7 @@ For each scheme row, one `BenchSigner` 8141 sender contract (the same Yul frame 
    - `VERIFY exec` = `frameReceipts[0].gasUsed.execution` from `eth_getTransactionReceipt` (receipt encoding `[status, gas_used=[execution,state], logs]`, `eip-8141.md:236-244`) and, before sending, from `ethrex_simulateFrameTransaction` / `eth_estimateFrameTransactionGas` (the prototype's `porst-estimate` phase) ;
    - `tx gasUsed` (total, floor-bound);
    - pure verifier gas by `gasleft()` around the STATICCALL in Foundry (the SPHINCS- method) for cross-check;
-   - **admission verdicts**: submit with declared `L_v` ∈ {actual need, 100 K, 250 K, 1 M, 2.5 M} to the canonical and the alt mempool, unstaked and staked (`stake` phase of `probe.mts`), and record the rule IDs returned (e.g. the sidecar's "validation prefix execution gas sum … exceeds MAX_VERIFY_GAS 100000" string, LEAKED-full-analysis §10 row 5) `[VERIFIED]`. This is the "measured gap vs BUDGET-010" artefact.
+   - **admission verdicts**: submit with declared `L_v` ∈ {actual need, 100 K, 250 K, 1 M, 2.5 M} to the canonical and the alt mempool, unstaked and staked (`stake` phase of `probe.mts`), and record the rule IDs returned (e.g. the sidecar's "validation prefix execution gas sum … exceeds MAX_VERIFY_GAS 100000" string, QueueBit-full-analysis §10 row 5) `[VERIFIED]`. This is the "measured gap vs BUDGET-010" artefact.
    - **Path B twin** of each row (ECDSA payer in VERIFY, PQ in execution): VERIFY gas, execution-frame gas, total; and the forged-witness case (execution reverts, gas still paid) to quantify the griefing cost.
    - Signer side: keygen and sign wall-clock on the reference laptop and phone (§3.6), signature bytes, pk bytes.
 3. **Repeat** each measurement 10× with fresh witnesses (hash-based verify gas varies with the digest; the SPHINCS- repo reports min/mean/max for exactly this reason) and report min / mean / max.
@@ -383,7 +383,7 @@ plus a USD column computed from a configurable base fee and ETH price (default 1
 
 ### 6.4 Publishing plan
 
-1. Repo `leaked-pq-bench` (MIT), reproducible with one `make bench CHAIN=mumbai` after `make deploy`; raw receipts committed.
+1. Repo `queuebit-pq-bench` (MIT), reproducible with one `make bench CHAIN=mumbai` after `make deploy`; raw receipts committed.
 2. An ethresear.ch post "Measured PQ signature cost inside EIP-8141 VERIFY frames vs the ERC-8421 budgets", crediting duncancmt (PORST), nconsigny (SPHINCS-), Riva Labs (FORS+C), ZKNOX (ETHFALCON), T. Wambsgans (leanSphincs); cross-posted to the EIP-8141 and ERC-8421 Magicians threads, with the "100 K wall" numbers as the motivation for the staked BUDGET-010 sidecar PR the design doc commits to.
 3. A PR to `nconsigny/SPHINCS-` `docs/deployments.md` adding the Mumbai devnet numbers (they already keep per-chain frame-tx tables) and to Kohaku docs if accepted.
 
@@ -396,7 +396,7 @@ plus a USD column computed from a configurable base fee and ETH price (default 1
 | Layer | Tests |
 |---|---|
 | Rust core | upstream C13 unit tests + fixed `cross_validate.rs`; KAT sets A/B/C (§3.4); proptest: `verify(pk, m, sign(sk, m)) == true` for random seeds/messages at reduced tree heights (full params for 32 vectors in CI nightly); zeroisation test (secret bytes absent from a heap dump after `sign`); WASM build runs the same KATs in Node and in headless Chrome |
-| TS binding | KAT B via WASM; sig-hash helper vs the extension's `@leaked/frames` on 100 random frame txs; UR encode/decode round-trips incl. fountain loss simulation (drop 30 % of parts) |
+| TS binding | KAT B via WASM; sig-hash helper vs the extension's `@queuebit/frames` on 100 random frame txs; UR encode/decode round-trips incl. fountain loss simulation (drop 30 % of parts) |
 | Solidity adapters | Foundry: KAT A/B positive; KAT C negative (must return `false`, never revert — property-fuzzed over `sig` bytes with `forge fuzz`); `sigLength()` enforcement; non-canonical pk; gas snapshot per adapter with a ±2 % regression gate |
 | Frame module | `frame8141_emu.py` scenarios: correct index, wrong index, non-ARBITRARY entry, `msg != 0`, truncated witness (zero-filled by SIGDATACOPY) must fail at the length check, scope mismatch, two role signers in one tx (sender + sponsor) each picking its own entry; bytecode assertion that the opcode byte matches the target chain |
 | Devnet e2e | nightly: deploy adapter + BenchSigner, Path A admission probe (expect rejection at 100 K with the rule ID, acceptance once a staked budget exists), Path B mined tx with a valid witness (funds move) and a forged witness (frame 1 reverts, delta 0), receipt gas recorded into the bench JSON |
@@ -419,9 +419,9 @@ plus a USD column computed from a configurable base fee and ETH price (default 1
 |---|---|---|---|---|
 | M0 | Re-obtain workshop libs (`@forshtat/hegota-support`, `mempool-workshop/src/lib/frameTx/*`), fix `prototype/probe.mts` imports, confirm opcode bytes on chain 1337 and the Hegotá devnet, re-run the PORST probe | 1 | devnet access | everyone |
 | M1 | Vendor C13 verifier + `IPQVerifier` + `C13Adapter`; fork the frame module with the opcode byte as a build arg; Foundry + emulator tests; devnet deploy; Path A admission probe and Path B mined tx with C13 | 3 | M0 | contracts (interface §2.6, module ABI §2.3) |
-| M2 | Rust core (vendor, fix parity oracle, LEAKED derivation, hedged R, zeroize), WASM + TS binding, KAT sets A/B/C, timing measurements laptop/phone | 4 | M1 (adapter for vectors) | extension (`@leaked/pq-signer`), companion |
+| M2 | Rust core (vendor, fix parity oracle, QueueBit derivation, hedged R, zeroize), WASM + TS binding, KAT sets A/B/C, timing measurements laptop/phone | 4 | M1 (adapter for vectors) | extension (`@queuebit/pq-signer`), companion |
 | M3 | Benchmark harness: all adapters (§6.2), devnet runs, JSON + table, ethresear.ch draft; the 128s verifier port time-boxed at 1 PW | 3 (+1) | M1, M2 | docs/standards workstream, sidecar PR |
-| M4-A | Companion PWA: UR codec, scanner, frame decoder, descriptors, clear-signing UI, key storage, backup flow, signature out | 5 | M2, extension's `@leaked/frames` and account ABI | demo |
+| M4-A | Companion PWA: UR codec, scanner, frame decoder, descriptors, clear-signing UI, key storage, backup flow, signature out | 5 | M2, extension's `@queuebit/frames` and account ABI | demo |
 | M4-B | Native shell (Expo + uniffi), Keystore/SE wrapping, no-network posture, device QR measurements | 3 | M4-A | v1 companion |
 | M5 | Recovery ceremony tool + flow; hardening from audits; optional SLH-DSA-128s recovery diversity | 3 | M4, contracts' `RecoverySigner` | product |
 | | **Total** | **22 (+1 optional)** | | ≈ 5.5 person-months of the critical analysis's 10–16 PM v4 envelope |
@@ -444,7 +444,7 @@ Cross-workstream dependencies: contracts expose `PQRoleSigner.verifyFrame(uint25
 | R8 | **NiceTry licence unknown** (no LICENSE file) | Low (bench only) | Ask Riva Labs before vendoring `ForsVerifier.sol`; results can be published without redistributing code. |
 | R9 | **Calldata floor repricing** (EIP-8131, CFI per the critical analysis) changes every PQ tx fee | Medium | Harness `FLOOR_PER_TOKEN` is a parameter; Verification step: read `eips/EIPS/eip-8131.md` and add its constant as a column. |
 | R10 | **Unaudited verifier and signer; AI-assisted reviews only** ("not audited, not production-safe") | High (before mainnet) | §7.3 engagements; no real funds on Path B until items 2–3 are done; the Lean proof reduces but does not remove the need. |
-| R11 | **Seed-reuse across variants** (SPHINCS- warns nothing in the hash input names the parameter set) | Medium | LEAKED derivation domain includes `schemeId` and role (§3.3); a test asserts that C13 and C7 keys from one mnemonic differ. |
+| R11 | **Seed-reuse across variants** (SPHINCS- warns nothing in the hash input names the parameter set) | Medium | QueueBit derivation domain includes `schemeId` and role (§3.3); a test asserts that C13 and C7 keys from one mnemonic differ. |
 | R12 | **`R` entropy / hedging and the public-grindable-R model** | Medium (crypto) | CSPRNG-hedged `R`; cryptanalysis item 1. |
 | R13 | **FIPS 205 Table 2 and the 2⁶⁴ budget were taken from secondary sources** (noble doc comments; SPHINCS- README) because the NIST PDF did not render locally | Low | Verification step: install poppler and read `tool-results/webfetch-1793907595118-4iu2vo.pdf` pages with Table 2, or fetch the CSRC HTML. |
 | R14 | **Kohaku integration path**: SPHINCS- is not a Kohaku package; the critical analysis's "SPHINCS- C13 (Kohaku)" overstated it | Low | Contribute the `IPQVerifier` adapter + frame module to Kohaku/`pq-account` as a PR once M1 is stable; ask whether a SPHINCS- package is planned. |

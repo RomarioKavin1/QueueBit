@@ -1,9 +1,9 @@
 {
-  "name": "leaked-devnet-patched-sidecar-tests",
+  "name": "queuebit-devnet-patched-sidecar-tests",
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "E2E for the BUDGET-010 patched sidecar on the local devnet (bun; standalone, not a pnpm workspace package). @leaked/* resolve to the workspace sources via tsconfig paths.",
+  "description": "E2E for the BUDGET-010 patched sidecar on the local devnet (bun; standalone, not a pnpm workspace package). @queuebit/* resolve to the workspace sources via tsconfig paths.",
   "scripts": {
     "test": "bun run budget010.e2e.ts",
     "typecheck": "tsc -p tsconfig.json"

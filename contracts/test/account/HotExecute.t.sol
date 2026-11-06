@@ -2,9 +2,9 @@
 pragma solidity 0.8.28;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {ILeakedAccount} from "../../src/account/ILeakedAccount.sol";
-import {LeakedAccountImpl} from "../../src/account/LeakedAccountImpl.sol";
-import {LeakedAccountRoles} from "../../src/account/LeakedAccountRoles.sol";
+import {IQueueBitAccount} from "../../src/account/IQueueBitAccount.sol";
+import {QueueBitAccountImpl} from "../../src/account/QueueBitAccountImpl.sol";
+import {QueueBitAccountRoles} from "../../src/account/QueueBitAccountRoles.sol";
 import {RollingCap} from "../../src/lib/RollingCap.sol";
 import {AccountTestBase} from "./AccountTestBase.sol";
 import {MockToken, NoReturnToken, FalseToken, ReentrantToken, RejectEth, MockRouter} from "./mocks/AccountMocks.sol";
@@ -13,12 +13,12 @@ import {MockToken, NoReturnToken, FalseToken, ReentrantToken, RejectEth, MockRou
 contract HotExecuteTest is AccountTestBase {
     bytes4 internal constant APPROVE = IERC20.approve.selector;
 
-    function _two(ILeakedAccount.Call memory a, ILeakedAccount.Call memory b)
+    function _two(IQueueBitAccount.Call memory a, IQueueBitAccount.Call memory b)
         internal
         pure
-        returns (ILeakedAccount.Call[] memory c)
+        returns (IQueueBitAccount.Call[] memory c)
     {
-        c = new ILeakedAccount.Call[](2);
+        c = new IQueueBitAccount.Call[](2);
         c[0] = a;
         c[1] = b;
     }
@@ -27,7 +27,7 @@ contract HotExecuteTest is AccountTestBase {
 
     function test_erc20Transfer_debitsBucket() public {
         vm.expectEmit(address(account));
-        emit ILeakedAccount.HotExecuted(100 * USD, CAP - 100 * USD, 1);
+        emit IQueueBitAccount.HotExecuted(100 * USD, CAP - 100 * USD, 1);
         _hot(100 * USD, _one(_usdcTransfer(alice, 100 * USD)));
         assertEq(usdc.balanceOf(alice), 100 * USD);
         assertEq(_bucketAvailable(), CAP - 100 * USD);
@@ -47,8 +47,8 @@ contract HotExecuteTest is AccountTestBase {
     }
 
     function test_weth18Decimals_roundsUp() public {
-        ILeakedAccount.Call memory c =
-            ILeakedAccount.Call(address(weth), 0, abi.encodeCall(IERC20.transfer, (alice, 1))); // 1 wei of WETH
+        IQueueBitAccount.Call memory c =
+            IQueueBitAccount.Call(address(weth), 0, abi.encodeCall(IERC20.transfer, (alice, 1))); // 1 wei of WETH
         _hot(1, _one(c));
         assertEq(_bucketAvailable(), CAP - 1, "1 wei costs the minimum unit, never zero");
     }
@@ -56,17 +56,17 @@ contract HotExecuteTest is AccountTestBase {
     function test_noReturnToken_supported() public {
         NoReturnToken t = new NoReturnToken();
         t.mint(address(account), 1000);
-        _queueLoosen(abi.encodeCall(LeakedAccountRoles.vaultSetToken, (address(t), true, 0, 1 * USD)));
-        _hot(5 * USD, _one(ILeakedAccount.Call(address(t), 0, abi.encodeCall(IERC20.transfer, (alice, 5)))));
+        _queueLoosen(abi.encodeCall(QueueBitAccountRoles.vaultSetToken, (address(t), true, 0, 1 * USD)));
+        _hot(5 * USD, _one(IQueueBitAccount.Call(address(t), 0, abi.encodeCall(IERC20.transfer, (alice, 5)))));
         assertEq(t.balanceOf(alice), 5);
     }
 
     function test_falseReturningToken_reverts() public {
         FalseToken t = new FalseToken();
         t.mint(address(account), 1000);
-        _queueLoosen(abi.encodeCall(LeakedAccountRoles.vaultSetToken, (address(t), true, 0, 1 * USD)));
-        vm.expectRevert(abi.encodeWithSelector(ILeakedAccount.TransferFailed.selector, address(t)));
-        _hot(5 * USD, _one(ILeakedAccount.Call(address(t), 0, abi.encodeCall(IERC20.transfer, (alice, 5)))));
+        _queueLoosen(abi.encodeCall(QueueBitAccountRoles.vaultSetToken, (address(t), true, 0, 1 * USD)));
+        vm.expectRevert(abi.encodeWithSelector(IQueueBitAccount.TransferFailed.selector, address(t)));
+        _hot(5 * USD, _one(IQueueBitAccount.Call(address(t), 0, abi.encodeCall(IERC20.transfer, (alice, 5)))));
     }
 
     function test_bucketRefillsContinuously_andFullAt() public {
@@ -95,43 +95,45 @@ contract HotExecuteTest is AccountTestBase {
     // ------------------------------------------------------------------------------------------ reverts ------
 
     function test_revert_notSelf() public {
-        vm.expectRevert(ILeakedAccount.OnlySelf.selector);
+        vm.expectRevert(IQueueBitAccount.OnlySelf.selector);
         account.hotExecute(1, _one(_usdcTransfer(alice, 1)));
         vm.prank(hot); // the hot key's EOA has no authority at all (C3)
-        vm.expectRevert(ILeakedAccount.OnlySelf.selector);
+        vm.expectRevert(IQueueBitAccount.OnlySelf.selector);
         account.hotExecute(1, _one(_usdcTransfer(alice, 1)));
     }
 
     function test_revert_frozen() public {
         vm.prank(guardian);
         roles.guardianFreeze();
-        vm.expectRevert(ILeakedAccount.HotFrozen.selector);
+        vm.expectRevert(IQueueBitAccount.HotFrozen.selector);
         _hot(1 * USD, _one(_usdcTransfer(alice, 1 * USD)));
     }
 
     function test_revert_bunker() public {
         vm.prank(vault);
         roles.vaultEnableBunker();
-        vm.expectRevert(ILeakedAccount.BunkerActive.selector);
+        vm.expectRevert(IQueueBitAccount.BunkerActive.selector);
         _hot(1 * USD, _one(_usdcTransfer(alice, 1 * USD)));
     }
 
     function test_revert_callCount() public {
-        vm.expectRevert(abi.encodeWithSelector(ILeakedAccount.BadCallCount.selector, 0));
-        _hot(0, new ILeakedAccount.Call[](0));
-        ILeakedAccount.Call[] memory c = new ILeakedAccount.Call[](9);
+        vm.expectRevert(abi.encodeWithSelector(IQueueBitAccount.BadCallCount.selector, 0));
+        _hot(0, new IQueueBitAccount.Call[](0));
+        IQueueBitAccount.Call[] memory c = new IQueueBitAccount.Call[](9);
         for (uint256 i; i < 9; ++i) {
             c[i] = _usdcTransfer(alice, 1);
         }
-        vm.expectRevert(abi.encodeWithSelector(ILeakedAccount.BadCallCount.selector, 9));
+        vm.expectRevert(abi.encodeWithSelector(IQueueBitAccount.BadCallCount.selector, 9));
         _hot(9, c);
     }
 
     function test_strict_revert_recipientNotAllowlisted() public {
         _strict();
-        vm.expectRevert(abi.encodeWithSelector(ILeakedAccount.NotAllowed.selector, stranger, IERC20.transfer.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(IQueueBitAccount.NotAllowed.selector, stranger, IERC20.transfer.selector)
+        );
         _hot(1 * USD, _one(_usdcTransfer(stranger, 1 * USD)));
-        vm.expectRevert(abi.encodeWithSelector(ILeakedAccount.NotAllowed.selector, stranger, bytes4(0)));
+        vm.expectRevert(abi.encodeWithSelector(IQueueBitAccount.NotAllowed.selector, stranger, bytes4(0)));
         _hot(1 * USD, _one(_ethSend(stranger, 1)));
         // allowlisted recipients (and the tank) still work
         _hot(1 * USD, _one(_usdcTransfer(alice, 1 * USD)));
@@ -141,10 +143,10 @@ contract HotExecuteTest is AccountTestBase {
     // --------------------------------------------------------------------------- Open recipient mode ------
 
     function test_open_isDefault_anyRecipient_ethAndToken() public {
-        assertEq(uint256(account.recipientMode()), uint256(ILeakedAccount.RecipientMode.Open));
+        assertEq(uint256(account.recipientMode()), uint256(IQueueBitAccount.RecipientMode.Open));
         assertFalse(account.isTarget(stranger));
         vm.expectEmit(address(account));
-        emit ILeakedAccount.HotExecuted(130 * USD, CAP - 130 * USD, 2);
+        emit IQueueBitAccount.HotExecuted(130 * USD, CAP - 130 * USD, 2);
         _hot(130 * USD, _two(_usdcTransfer(stranger, 100 * USD), _ethSend(stranger, 0.01 ether)));
         assertEq(usdc.balanceOf(stranger), 100 * USD);
         assertEq(stranger.balance, 0.01 ether);
@@ -152,9 +154,9 @@ contract HotExecuteTest is AccountTestBase {
     }
 
     function test_open_capPerTxAndDeclaredStillHold() public {
-        vm.expectRevert(abi.encodeWithSelector(ILeakedAccount.PerTxMaxExceeded.selector, PER_TX + 1, PER_TX));
+        vm.expectRevert(abi.encodeWithSelector(IQueueBitAccount.PerTxMaxExceeded.selector, PER_TX + 1, PER_TX));
         _hot(PER_TX + 1, _one(_usdcTransfer(stranger, PER_TX + 1)));
-        vm.expectRevert(abi.encodeWithSelector(ILeakedAccount.DeclaredUsdExceeded.selector, 2 * USD, 1 * USD));
+        vm.expectRevert(abi.encodeWithSelector(IQueueBitAccount.DeclaredUsdExceeded.selector, 2 * USD, 1 * USD));
         _hot(1 * USD, _one(_usdcTransfer(stranger, 2 * USD)));
         _hot(PER_TX, _one(_usdcTransfer(stranger, PER_TX)));
         _hot(PER_TX, _one(_usdcTransfer(makeAddr("carol"), PER_TX)));
@@ -166,7 +168,7 @@ contract HotExecuteTest is AccountTestBase {
     function test_open_ethUnpricedStillRefused() public {
         vm.prank(vault);
         roles.vaultSetToken(address(0), false, 0, 0);
-        vm.expectRevert(abi.encodeWithSelector(ILeakedAccount.TokenNotAllowed.selector, address(0)));
+        vm.expectRevert(abi.encodeWithSelector(IQueueBitAccount.TokenNotAllowed.selector, address(0)));
         _hot(1 * USD, _one(_ethSend(stranger, 1)));
     }
 
@@ -175,14 +177,14 @@ contract HotExecuteTest is AccountTestBase {
     /// session exactly as in Strict.
     function test_open_nonTransferCallsStillNeedPolicy() public {
         RejectEth sink = new RejectEth();
-        vm.expectRevert(abi.encodeWithSelector(ILeakedAccount.NotAllowed.selector, address(sink), bytes4(0)));
-        _hot(0, _one(ILeakedAccount.Call(address(sink), 0, "")));
-        vm.expectRevert(abi.encodeWithSelector(ILeakedAccount.NotAllowed.selector, stranger, bytes4(0xdeadbeef)));
-        _hot(1 * USD, _one(ILeakedAccount.Call(stranger, 1, hex"deadbeef")));
-        vm.expectRevert(abi.encodeWithSelector(ILeakedAccount.NotAllowed.selector, address(0), bytes4(0)));
+        vm.expectRevert(abi.encodeWithSelector(IQueueBitAccount.NotAllowed.selector, address(sink), bytes4(0)));
+        _hot(0, _one(IQueueBitAccount.Call(address(sink), 0, "")));
+        vm.expectRevert(abi.encodeWithSelector(IQueueBitAccount.NotAllowed.selector, stranger, bytes4(0xdeadbeef)));
+        _hot(1 * USD, _one(IQueueBitAccount.Call(stranger, 1, hex"deadbeef")));
+        vm.expectRevert(abi.encodeWithSelector(IQueueBitAccount.NotAllowed.selector, address(0), bytes4(0)));
         _hot(1 * USD, _one(_ethSend(address(0), 1)));
         vm.expectRevert(
-            abi.encodeWithSelector(ILeakedAccount.NotAllowed.selector, address(0), IERC20.transfer.selector)
+            abi.encodeWithSelector(IQueueBitAccount.NotAllowed.selector, address(0), IERC20.transfer.selector)
         );
         _hot(1 * USD, _one(_usdcTransfer(address(0), 1)));
         bytes[4] memory bad = [
@@ -192,8 +194,8 @@ contract HotExecuteTest is AccountTestBase {
             abi.encodeWithSelector(bytes4(0xd505accf), address(account), stranger, 1, 1, 27, 0, 0) // permit
         ];
         for (uint256 i; i < 4; ++i) {
-            vm.expectRevert(abi.encodeWithSelector(ILeakedAccount.NotAllowed.selector, address(usdc), bytes4(bad[i])));
-            _hot(1 * USD, _one(ILeakedAccount.Call(address(usdc), 0, bad[i])));
+            vm.expectRevert(abi.encodeWithSelector(IQueueBitAccount.NotAllowed.selector, address(usdc), bytes4(bad[i])));
+            _hot(1 * USD, _one(IQueueBitAccount.Call(address(usdc), 0, bad[i])));
         }
         assertEq(usdc.allowance(address(account), stranger), 0);
     }
@@ -214,56 +216,56 @@ contract HotExecuteTest is AccountTestBase {
         MockToken kitty = new MockToken("KITTY", 0);
         kitty.mint(address(account), 5);
         vm.expectRevert(
-            abi.encodeWithSelector(ILeakedAccount.NotAllowed.selector, address(kitty), IERC20.transfer.selector)
+            abi.encodeWithSelector(IQueueBitAccount.NotAllowed.selector, address(kitty), IERC20.transfer.selector)
         );
-        _hot(1, _one(ILeakedAccount.Call(address(kitty), 0, abi.encodeCall(IERC20.transfer, (alice, 1)))));
+        _hot(1, _one(IQueueBitAccount.Call(address(kitty), 0, abi.encodeCall(IERC20.transfer, (alice, 1)))));
     }
 
     function test_revert_otherSelectorOnToken() public {
-        vm.expectRevert(abi.encodeWithSelector(ILeakedAccount.NotAllowed.selector, address(usdc), APPROVE));
-        _hot(0, _one(ILeakedAccount.Call(address(usdc), 0, abi.encodeCall(IERC20.approve, (alice, 1)))));
+        vm.expectRevert(abi.encodeWithSelector(IQueueBitAccount.NotAllowed.selector, address(usdc), APPROVE));
+        _hot(0, _one(IQueueBitAccount.Call(address(usdc), 0, abi.encodeCall(IERC20.approve, (alice, 1)))));
     }
 
     function test_revert_tokenTransferWithValueOrBadLength() public {
-        ILeakedAccount.Call memory c = _usdcTransfer(alice, 1);
+        IQueueBitAccount.Call memory c = _usdcTransfer(alice, 1);
         c.value = 1;
         vm.expectRevert(
-            abi.encodeWithSelector(ILeakedAccount.NotAllowed.selector, address(usdc), IERC20.transfer.selector)
+            abi.encodeWithSelector(IQueueBitAccount.NotAllowed.selector, address(usdc), IERC20.transfer.selector)
         );
         _hot(1, _one(c));
         c.value = 0;
         c.data = abi.encodePacked(c.data, uint256(0));
         vm.expectRevert(
-            abi.encodeWithSelector(ILeakedAccount.NotAllowed.selector, address(usdc), IERC20.transfer.selector)
+            abi.encodeWithSelector(IQueueBitAccount.NotAllowed.selector, address(usdc), IERC20.transfer.selector)
         );
         _hot(1, _one(c));
     }
 
     function test_revert_selfCallOtherThanRegisterOrClear() public {
-        ILeakedAccount.Call memory c = _selfCall(abi.encodeCall(LeakedAccountRoles.vaultFreeze, ()));
+        IQueueBitAccount.Call memory c = _selfCall(abi.encodeCall(QueueBitAccountRoles.vaultFreeze, ()));
         vm.expectRevert(
             abi.encodeWithSelector(
-                ILeakedAccount.NotAllowed.selector, address(account), LeakedAccountRoles.vaultFreeze.selector
+                IQueueBitAccount.NotAllowed.selector, address(account), QueueBitAccountRoles.vaultFreeze.selector
             )
         );
         _hot(0, _one(c));
-        c = _selfCall(abi.encodeCall(LeakedAccountImpl.clearExpiredFreeze, ()));
+        c = _selfCall(abi.encodeCall(QueueBitAccountImpl.clearExpiredFreeze, ()));
         c.value = 1;
         vm.expectRevert(
             abi.encodeWithSelector(
-                ILeakedAccount.NotAllowed.selector, address(account), LeakedAccountImpl.clearExpiredFreeze.selector
+                IQueueBitAccount.NotAllowed.selector, address(account), QueueBitAccountImpl.clearExpiredFreeze.selector
             )
         );
         _hot(0, _one(c));
     }
 
     function test_revert_declaredTooLow() public {
-        vm.expectRevert(abi.encodeWithSelector(ILeakedAccount.DeclaredUsdExceeded.selector, 10 * USD, 9 * USD));
+        vm.expectRevert(abi.encodeWithSelector(IQueueBitAccount.DeclaredUsdExceeded.selector, 10 * USD, 9 * USD));
         _hot(9 * USD, _one(_usdcTransfer(alice, 10 * USD)));
     }
 
     function test_revert_perTxMax() public {
-        vm.expectRevert(abi.encodeWithSelector(ILeakedAccount.PerTxMaxExceeded.selector, PER_TX + 1, PER_TX));
+        vm.expectRevert(abi.encodeWithSelector(IQueueBitAccount.PerTxMaxExceeded.selector, PER_TX + 1, PER_TX));
         _hot(type(uint256).max, _one(_usdcTransfer(alice, PER_TX + 1)));
     }
 
@@ -277,16 +279,16 @@ contract HotExecuteTest is AccountTestBase {
     function test_revert_ethUnpriced() public {
         vm.prank(vault);
         roles.vaultSetToken(address(0), false, 0, 0); // removal is instant
-        vm.expectRevert(abi.encodeWithSelector(ILeakedAccount.TokenNotAllowed.selector, address(0)));
+        vm.expectRevert(abi.encodeWithSelector(IQueueBitAccount.TokenNotAllowed.selector, address(0)));
         _hot(1, _one(_ethSend(alice, 1)));
     }
 
     function test_revert_callFailedBubbles() public {
         RejectEth r = new RejectEth();
-        _queueLoosen(abi.encodeCall(LeakedAccountRoles.vaultSetTarget, (address(r), true)));
+        _queueLoosen(abi.encodeCall(QueueBitAccountRoles.vaultSetTarget, (address(r), true)));
         vm.expectRevert(
             abi.encodeWithSelector(
-                ILeakedAccount.CallFailed.selector, 0, abi.encodeWithSignature("Error(string)", "no eth")
+                IQueueBitAccount.CallFailed.selector, 0, abi.encodeWithSignature("Error(string)", "no eth")
             )
         );
         _hot(10 * USD, _one(_ethSend(address(r), 1)));
@@ -296,25 +298,25 @@ contract HotExecuteTest is AccountTestBase {
 
     function _routerSession(uint256 allowance) internal {
         uint48 exp = uint48(vm.getBlockTimestamp() + 30 days);
-        ILeakedAccount.Call[] memory c = new ILeakedAccount.Call[](3);
-        c[0] = _selfCall(abi.encodeCall(LeakedAccountRoles.vaultSetSession, (address(usdc), APPROVE, allowance, exp)));
+        IQueueBitAccount.Call[] memory c = new IQueueBitAccount.Call[](3);
+        c[0] = _selfCall(abi.encodeCall(QueueBitAccountRoles.vaultSetSession, (address(usdc), APPROVE, allowance, exp)));
         c[1] = _selfCall(
             abi.encodeCall(
-                LeakedAccountRoles.vaultSetSession, (address(router), MockRouter.pull.selector, allowance, exp)
+                QueueBitAccountRoles.vaultSetSession, (address(router), MockRouter.pull.selector, allowance, exp)
             )
         );
         c[2] = _selfCall(
             abi.encodeCall(
-                LeakedAccountRoles.vaultSetSession, (address(router), MockRouter.pullPartial.selector, allowance, exp)
+                QueueBitAccountRoles.vaultSetSession, (address(router), MockRouter.pullPartial.selector, allowance, exp)
             )
         );
         _queueAndExecute(c, 1);
     }
 
-    function _approveAndPull(uint256 amount, address to) internal view returns (ILeakedAccount.Call[] memory) {
+    function _approveAndPull(uint256 amount, address to) internal view returns (IQueueBitAccount.Call[] memory) {
         return _two(
-            ILeakedAccount.Call(address(usdc), 0, abi.encodeCall(IERC20.approve, (address(router), amount))),
-            ILeakedAccount.Call(address(router), 0, abi.encodeCall(MockRouter.pull, (usdc, amount, to)))
+            IQueueBitAccount.Call(address(usdc), 0, abi.encodeCall(IERC20.approve, (address(router), amount))),
+            IQueueBitAccount.Call(address(router), 0, abi.encodeCall(MockRouter.pull, (usdc, amount, to)))
         );
     }
 
@@ -332,7 +334,7 @@ contract HotExecuteTest is AccountTestBase {
         _routerSession(40 * USD);
         bytes32 sid = account.sessionId(address(router), MockRouter.pull.selector);
         vm.expectRevert(
-            abi.encodeWithSelector(ILeakedAccount.SessionAllowanceExceeded.selector, sid, 50 * USD, 40 * USD)
+            abi.encodeWithSelector(IQueueBitAccount.SessionAllowanceExceeded.selector, sid, 50 * USD, 40 * USD)
         );
         _hot(50 * USD, _approveAndPull(50 * USD, alice));
     }
@@ -340,18 +342,18 @@ contract HotExecuteTest is AccountTestBase {
     function test_session_expired() public {
         _routerSession(200 * USD);
         vm.warp(vm.getBlockTimestamp() + 31 days);
-        vm.expectRevert(abi.encodeWithSelector(ILeakedAccount.NotAllowed.selector, address(usdc), APPROVE));
+        vm.expectRevert(abi.encodeWithSelector(IQueueBitAccount.NotAllowed.selector, address(usdc), APPROVE));
         _hot(50 * USD, _approveAndPull(50 * USD, alice));
     }
 
     function test_session_standingApprovalReverts_I6() public {
         _routerSession(200 * USD);
-        ILeakedAccount.Call[] memory c = _two(
-            ILeakedAccount.Call(address(usdc), 0, abi.encodeCall(IERC20.approve, (address(router), 50 * USD))),
-            ILeakedAccount.Call(address(router), 0, abi.encodeCall(MockRouter.pullPartial, (usdc, 50 * USD, alice)))
+        IQueueBitAccount.Call[] memory c = _two(
+            IQueueBitAccount.Call(address(usdc), 0, abi.encodeCall(IERC20.approve, (address(router), 50 * USD))),
+            IQueueBitAccount.Call(address(router), 0, abi.encodeCall(MockRouter.pullPartial, (usdc, 50 * USD, alice)))
         );
         vm.expectRevert(
-            abi.encodeWithSelector(ILeakedAccount.StandingApproval.selector, address(usdc), address(router))
+            abi.encodeWithSelector(IQueueBitAccount.StandingApproval.selector, address(usdc), address(router))
         );
         _hot(50 * USD, c);
     }
@@ -359,32 +361,32 @@ contract HotExecuteTest is AccountTestBase {
     function test_session_ethValueMeasured() public {
         _queueLoosen(
             abi.encodeCall(
-                LeakedAccountRoles.vaultSetSession,
+                QueueBitAccountRoles.vaultSetSession,
                 (address(router), MockRouter.noop.selector, 100 * USD, uint48(vm.getBlockTimestamp() + 30 days))
             )
         );
-        _hot(30 * USD, _one(ILeakedAccount.Call(address(router), 0.01 ether, abi.encodeCall(MockRouter.noop, ()))));
+        _hot(30 * USD, _one(IQueueBitAccount.Call(address(router), 0.01 ether, abi.encodeCall(MockRouter.noop, ()))));
         assertEq(_bucketAvailable(), CAP - 30 * USD);
     }
 
     function test_session_unknownTargetRefused() public {
         vm.expectRevert(
-            abi.encodeWithSelector(ILeakedAccount.NotAllowed.selector, address(router), MockRouter.noop.selector)
+            abi.encodeWithSelector(IQueueBitAccount.NotAllowed.selector, address(router), MockRouter.noop.selector)
         );
-        _hot(0, _one(ILeakedAccount.Call(address(router), 0, abi.encodeCall(MockRouter.noop, ()))));
+        _hot(0, _one(IQueueBitAccount.Call(address(router), 0, abi.encodeCall(MockRouter.noop, ()))));
     }
 
     // ----------------------------------------------------------------------------------- registerHash ------
 
-    function _register(bytes32 h, uint256 amount, uint48 exp) internal view returns (ILeakedAccount.Call memory) {
-        return _selfCall(abi.encodeCall(LeakedAccountImpl.registerHash, (h, address(usdc), amount, exp)));
+    function _register(bytes32 h, uint256 amount, uint48 exp) internal view returns (IQueueBitAccount.Call memory) {
+        return _selfCall(abi.encodeCall(QueueBitAccountImpl.registerHash, (h, address(usdc), amount, exp)));
     }
 
     function test_registerHash_debitsAndRegisters() public {
         bytes32 h = keccak256("permit");
         uint48 exp = uint48(vm.getBlockTimestamp() + 1 hours);
         vm.expectEmit(address(account));
-        emit ILeakedAccount.HashRegistered(h, address(usdc), 25 * USD, exp);
+        emit IQueueBitAccount.HashRegistered(h, address(usdc), 25 * USD, exp);
         _hot(25 * USD, _one(_register(h, 25 * USD, exp)));
         assertEq(account.registeredHashExpiry(h), exp);
         assertEq(_bucketAvailable(), CAP - 25 * USD);
@@ -392,37 +394,37 @@ contract HotExecuteTest is AccountTestBase {
 
     function test_registerHash_declaredMustCoverIt() public {
         uint48 exp = uint48(vm.getBlockTimestamp() + 1 hours);
-        vm.expectRevert(abi.encodeWithSelector(ILeakedAccount.DeclaredUsdExceeded.selector, 25 * USD, 0));
+        vm.expectRevert(abi.encodeWithSelector(IQueueBitAccount.DeclaredUsdExceeded.selector, 25 * USD, 0));
         _hot(0, _one(_register(keccak256("p"), 25 * USD, exp)));
     }
 
     function test_registerHash_reverts() public {
         uint48 exp = uint48(vm.getBlockTimestamp() + 1 hours);
-        vm.expectRevert(ILeakedAccount.OnlySelf.selector);
+        vm.expectRevert(IQueueBitAccount.OnlySelf.selector);
         account.registerHash(bytes32(0), address(usdc), 1, exp);
         vm.prank(address(account));
-        vm.expectRevert(ILeakedAccount.NotInHotBatch.selector);
+        vm.expectRevert(IQueueBitAccount.NotInHotBatch.selector);
         account.registerHash(bytes32(0), address(usdc), 1, exp);
         // bad expiry (past, too far) and unpriced token, inside a batch
         vm.expectRevert(
             abi.encodeWithSelector(
-                ILeakedAccount.CallFailed.selector, 0, abi.encodeWithSelector(ILeakedAccount.BadExpiry.selector)
+                IQueueBitAccount.CallFailed.selector, 0, abi.encodeWithSelector(IQueueBitAccount.BadExpiry.selector)
             )
         );
         _hot(1 * USD, _one(_register(bytes32(0), 1, uint48(vm.getBlockTimestamp()))));
         vm.expectRevert(
             abi.encodeWithSelector(
-                ILeakedAccount.CallFailed.selector, 0, abi.encodeWithSelector(ILeakedAccount.BadExpiry.selector)
+                IQueueBitAccount.CallFailed.selector, 0, abi.encodeWithSelector(IQueueBitAccount.BadExpiry.selector)
             )
         );
         _hot(1 * USD, _one(_register(bytes32(0), 1, uint48(vm.getBlockTimestamp() + 31 days))));
-        ILeakedAccount.Call memory c =
-            _selfCall(abi.encodeCall(LeakedAccountImpl.registerHash, (bytes32(0), stranger, 1, exp)));
+        IQueueBitAccount.Call memory c =
+            _selfCall(abi.encodeCall(QueueBitAccountImpl.registerHash, (bytes32(0), stranger, 1, exp)));
         vm.expectRevert(
             abi.encodeWithSelector(
-                ILeakedAccount.CallFailed.selector,
+                IQueueBitAccount.CallFailed.selector,
                 0,
-                abi.encodeWithSelector(ILeakedAccount.TokenNotAllowed.selector, stranger)
+                abi.encodeWithSelector(IQueueBitAccount.TokenNotAllowed.selector, stranger)
             )
         );
         _hot(1 * USD, _one(c));
@@ -433,37 +435,37 @@ contract HotExecuteTest is AccountTestBase {
     function test_reentrantToken_cannotReenter() public {
         ReentrantToken t = new ReentrantToken();
         t.mint(address(account), 1000 ether);
-        _queueLoosen(abi.encodeCall(LeakedAccountRoles.vaultSetToken, (address(t), true, 18, 1 * USD)));
+        _queueLoosen(abi.encodeCall(QueueBitAccountRoles.vaultSetToken, (address(t), true, 18, 1 * USD)));
         // A ready queued op the token tries to execute mid-batch.
-        ILeakedAccount.Call[] memory q = _one(_usdcTransfer(stranger, 1));
+        IQueueBitAccount.Call[] memory q = _one(_usdcTransfer(stranger, 1));
         vm.prank(vault);
         bytes32 op = roles.vaultQueue(q, 0);
         vm.warp(vm.getBlockTimestamp() + DELAY);
 
-        t.setHook(address(account), abi.encodeCall(LeakedAccountRoles.executeQueued, (op, q)));
-        _hot(1 * USD, _one(ILeakedAccount.Call(address(t), 0, abi.encodeCall(IERC20.transfer, (alice, 1 ether)))));
+        t.setHook(address(account), abi.encodeCall(QueueBitAccountRoles.executeQueued, (op, q)));
+        _hot(1 * USD, _one(IQueueBitAccount.Call(address(t), 0, abi.encodeCall(IERC20.transfer, (alice, 1 ether)))));
         assertFalse(t.lastOk());
-        assertEq(bytes4(t.lastRet()), ILeakedAccount.Reentrancy.selector);
+        assertEq(bytes4(t.lastRet()), IQueueBitAccount.Reentrancy.selector);
 
-        t.setHook(address(account), abi.encodeCall(LeakedAccountImpl.registerHash, (bytes32(0), address(t), 0, 1)));
-        _hot(1 * USD, _one(ILeakedAccount.Call(address(t), 0, abi.encodeCall(IERC20.transfer, (alice, 1 ether)))));
+        t.setHook(address(account), abi.encodeCall(QueueBitAccountImpl.registerHash, (bytes32(0), address(t), 0, 1)));
+        _hot(1 * USD, _one(IQueueBitAccount.Call(address(t), 0, abi.encodeCall(IERC20.transfer, (alice, 1 ether)))));
         assertFalse(t.lastOk());
-        assertEq(bytes4(t.lastRet()), ILeakedAccount.OnlySelf.selector);
+        assertEq(bytes4(t.lastRet()), IQueueBitAccount.OnlySelf.selector);
     }
 
     // ------------------------------------------------------------------------------- clearExpiredFreeze ------
 
     function test_clearExpiredFreeze() public {
-        vm.expectRevert(ILeakedAccount.NotFrozen.selector);
+        vm.expectRevert(IQueueBitAccount.NotFrozen.selector);
         account.clearExpiredFreeze();
         vm.prank(guardian);
         roles.guardianFreeze();
         uint48 until = uint48(vm.getBlockTimestamp() + 72 hours);
-        vm.expectRevert(abi.encodeWithSelector(ILeakedAccount.FreezeNotExpired.selector, until));
+        vm.expectRevert(abi.encodeWithSelector(IQueueBitAccount.FreezeNotExpired.selector, until));
         account.clearExpiredFreeze();
         vm.warp(until);
         vm.expectEmit(address(account));
-        emit ILeakedAccount.Unfrozen(stranger);
+        emit IQueueBitAccount.Unfrozen(stranger);
         vm.prank(stranger); // permissionless
         account.clearExpiredFreeze();
         assertFalse(account.getHotConfig().hotFrozen);
@@ -473,7 +475,7 @@ contract HotExecuteTest is AccountTestBase {
         vm.prank(vault);
         roles.vaultFreeze();
         vm.warp(vm.getBlockTimestamp() + 3650 days);
-        vm.expectRevert(abi.encodeWithSelector(ILeakedAccount.FreezeNotExpired.selector, type(uint48).max));
+        vm.expectRevert(abi.encodeWithSelector(IQueueBitAccount.FreezeNotExpired.selector, type(uint48).max));
         account.clearExpiredFreeze();
     }
 
@@ -484,7 +486,7 @@ contract HotExecuteTest is AccountTestBase {
     }
 
     function test_quoteUsd_unknownToken() public {
-        vm.expectRevert(abi.encodeWithSelector(ILeakedAccount.TokenNotAllowed.selector, stranger));
+        vm.expectRevert(abi.encodeWithSelector(IQueueBitAccount.TokenNotAllowed.selector, stranger));
         account.quoteUsd(stranger, 1);
     }
 
@@ -495,7 +497,7 @@ contract HotExecuteTest is AccountTestBase {
         price = bound(price, 1, 1e15 * USD);
         amount = bound(amount, 0, 1e40);
         MockToken t = new MockToken("T", decimals);
-        _queueLoosen(abi.encodeCall(LeakedAccountRoles.vaultSetToken, (address(t), true, decimals, price)));
+        _queueLoosen(abi.encodeCall(QueueBitAccountRoles.vaultSetToken, (address(t), true, decimals, price)));
         uint256 q = account.quoteUsd(address(t), amount);
         // q >= exact value, and q - exact < 1 unit
         uint256 lhs = q * (10 ** decimals);

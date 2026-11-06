@@ -1,4 +1,4 @@
-//! wasm-bindgen exports for `@leaked/pq-signer`. Secrets cross the boundary as owned
+//! wasm-bindgen exports for `@queuebit/pq-signer`. Secrets cross the boundary as owned
 //! `Box<[u8]>` so this side can wipe them; on wasm32 the global allocator zeroes every block on
 //! free, which also covers the copies the generated JS glue makes (it frees through
 //! `__wbindgen_free` -> this allocator). WASM linear memory cannot shrink, so wiping is the only
@@ -163,7 +163,7 @@ pub fn lean_keygen_from_master(mut master: Box<[u8]>, role: u8, chain_scope: &st
     out
 }
 
-/// Keygen from an explicit 32-byte seed `S` at the LEAKED tier (b = 13): upstream `lssk keygen --tier light`.
+/// Keygen from an explicit 32-byte seed `S` at the QueueBit tier (b = 13): upstream `lssk keygen --tier light`.
 #[wasm_bindgen(js_name = leanKeygenFromSeed)]
 pub fn lean_keygen_from_seed(mut seed: Box<[u8]>) -> Result<Vec<u8>, JsError> {
     let out = match <[u8; 32]>::try_from(&seed[..]) {

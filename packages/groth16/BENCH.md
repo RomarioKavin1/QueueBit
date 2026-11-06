@@ -1,4 +1,4 @@
-# @leaked/groth16 benchmarks
+# @queuebit/groth16 benchmarks
 
 Privacy Pools v1 `withdraw` circuit (Withdraw(32); nVars 36,901, 8 public signals, domain 2^16), pinned artifacts of
 npm `@fatsolutions/privacy-pools-core-circuits@1.0.5` (zkey sha256 `2a893b42…de677`), input
@@ -22,5 +22,5 @@ Notes
   later. Native rayon shows the headroom (4×).
 - Witness generation is ~5× faster in the host WebAssembly engine (V8) than in the wasmi interpreter, which is why
   the browser path uses the host engine and wasmi is native-only (CLI, Rust tests).
-- Reproduce: `pnpm --filter "@leaked/groth16..." build && pnpm --filter @leaked/groth16 bench` and
-  `pnpm --filter @leaked/groth16 bench:native`.
+- Reproduce: `pnpm --filter "@queuebit/groth16..." build && pnpm --filter @queuebit/groth16 bench` and
+  `pnpm --filter @queuebit/groth16 bench:native`.

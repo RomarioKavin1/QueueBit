@@ -1,6 +1,6 @@
 import jsQR from "jsqr";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AnimatedUr, UrReceiver, type ReceiveResult, type UrType } from "@leaked/ur";
+import { AnimatedUr, UrReceiver, type ReceiveResult, type UrType } from "@queuebit/ur";
 import { Button } from "./Button";
 import { QrCode } from "./QrCode";
 import { RiskBanner } from "./RiskBanner";
@@ -260,7 +260,7 @@ export function UrScanner({
             value={pasted}
             onChange={(e) => setPasted(e.target.value)}
             data-testid="ur-paste"
-            placeholder="UR:LEAKED-…"
+            placeholder="UR:QUEUEBIT-…"
             className="t-mono rounded-md border border-line bg-bg p-2 text-[12px] focus:border-brand focus-visible:outline-none"
           />
           <div className="flex flex-wrap gap-2">

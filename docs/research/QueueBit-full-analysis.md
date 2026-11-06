@@ -1,13 +1,13 @@
-# LEAKED: full analysis (feasibility, market, go-to-market, usefulness, practicality)
+# QueueBit: full analysis (feasibility, market, go-to-market, usefulness, practicality)
 
 Written 2026-10-30. **The council verdict, errata and the v2 design are in section 8 at the end. Where section 8 and sections 1–7 disagree, section 8 wins.**
-Companion files: `LEAKED-market-research.md` (market numbers and sources), `LEAKED-sponsor-stack.md` (prize picks), `FINAL-3-IDEAS.md` (original pitch).
+Companion files: `QueueBit-market-research.md` (market numbers and sources), `QueueBit-sponsor-stack.md` (prize picks), `FINAL-3-IDEAS.md` (original pitch).
 Labels: **[SPEC]** is checked against the EIP-8141 master text. **[CODE]** is checked against source on GitHub (2026-10-30). **[LIVE]** is checked against the running devnet. **[EST]** is my estimate. **[UNVERIFIED]** has not been checked.
 
 ---
 
 ## 0. One-paragraph summary
-LEAKED is a two-key Ethereum account:
+QueueBit is a two-key Ethereum account:
 - A cheap **ECDSA hot key** may only move money up to a daily cap.
 - A **hash-based post-quantum (PORST) vault key** holds all other authority: large withdrawals, changing caps, rotating or killing the hot key, and "bunker mode" (ECDSA disabled for good).
 
@@ -101,7 +101,7 @@ Other properties:
 
 ---
 
-## 3. Market (summary; detail and sources in `LEAKED-market-research.md`)
+## 3. Market (summary; detail and sources in `QueueBit-market-research.md`)
 - **Today's pain:**
   - $713M stolen from personal wallets in 2025 (158k incidents, Chainalysis).
   - Ledger/CryptoBilis implants, ~$100M.
@@ -114,17 +114,17 @@ Other properties:
   - Hardware wallets: $0.7–0.9B/yr.
 
 ### Competitive reality (more honest than the market file)
-- **Capped hot keys are not new.** Argent shipped daily transfer limits plus guardians in 2018–19. Safe's Allowance module, Coinbase Spend Permissions, ERC-7715 and session keys all exist. LEAKED's cap is table stakes.
+- **Capped hot keys are not new.** Argent shipped daily transfer limits plus guardians in 2018–19. Safe's Allowance module, Coinbase Spend Permissions, ERC-7715 and session keys all exist. QueueBit's cap is table stakes.
 - **PQ accounts are not new.** Kohaku `pq-account` (Falcon/ML-DSA, 4337), Tectonic (Falcon), Freedom Factory (SPHINCS+ 4337), qLABS.
 - **The novel combination:**
   - a capped classical key + a hash-based PQ root, together;
   - frame-native (no 4337 bundler or EntryPoint);
   - **validation that blocks the hot key from signing permits** (M2).
-- **Biggest structural competitor: the protocol itself.** Vitalik's 2024 "quantum emergency" plan is a hard fork that rolls back, disables EOA ECDSA, and lets users prove seed knowledge with STARKs. If Ethereum does that, every EOA is rescued for free and the PQ half of LEAKED loses urgency. The cap half stays useful regardless.
+- **Biggest structural competitor: the protocol itself.** Vitalik's 2024 "quantum emergency" plan is a hard fork that rolls back, disables EOA ECDSA, and lets users prove seed knowledge with STARKs. If Ethereum does that, every EOA is rescued for free and the PQ half of QueueBit loses urgency. The cap half stays useful regardless.
 
 ## 4. Go-to-market
 1. **Hackathon (Nov 7):** EF Alt Mempool prize, finalist, open-source repo, an "EVM PORST → PQ wallet" story credited to duncancmt.
-2. **Live public bounty (Nov–Dec):** run "LEAKED Challenge" on a testnet, then a small mainnet 4337 version: hot key published, $X in the account, "steal more than the cap". The HN template is "Show HN: Steal My Bitcoin", 623 points (Oct 2026). Cheap, viral, and it doubles as an audit.
+2. **Live public bounty (Nov–Dec):** run "QueueBit Challenge" on a testnet, then a small mainnet 4337 version: hot key published, $X in the account, "steal more than the cap". The HN template is "Show HN: Steal My Bitcoin", 623 points (Oct 2026). Cheap, viral, and it doubles as an audit.
 3. **Grants (Q1 2027):** EF PQ team ($2M prize pool), Kohaku programme, ESP. Pitch it as *the reference frame-native PQ account for Hegotá testnets*.
 4. **Distribution through wallets, not direct to users (2027):** module and SDK for Kohaku/Ambire, Safe (as a module and guard: hot key = allowance, vault = PQ signer), Rabby. The first users are EF/Devcon power users and post-implant hardware-wallet refugees.
 5. **Hegotá mainnet (2027–28):** frame-native release. Business model: audited module licensing and support, a vault-key custody app (phone, secure-element card, animated-QR air gap for the 13 KB witness), monitoring and auto-freeze as SaaS.
@@ -132,7 +132,7 @@ Other properties:
 
 ## 5. Usefulness (who is actually safer, and against what)
 
-| Threat | Does LEAKED help? |
+| Threat | Does QueueBit help? |
 |---|---|
 | Approval/permit phishing (drainers) | **Yes, strongly** (M2/M3: the hot key can't approve or sign permits). Loss is bounded by the cap. |
 | Hot-key malware / leaked seed phrase of the hot key | **Yes**, bounded by cap × time to freeze. |
@@ -160,9 +160,9 @@ Other properties:
 ## 8. Council verdict (3 members, 2026-10-30)
 
 Full critiques:
-- `critiques/leaked-council-ef-protocol.md` (EF Access Layer judge and hash-based-signature cryptographer)
-- `critiques/leaked-council-redteam.md` (smart-account auditor)
-- `critiques/leaked-council-market-gtm.md` (VC, wallet product lead and finalist judge)
+- `critiques/queuebit-council-ef-protocol.md` (EF Access Layer judge and hash-based-signature cryptographer)
+- `critiques/queuebit-council-redteam.md` (smart-account auditor)
+- `critiques/queuebit-council-market-gtm.md` (VC, wallet product lead and finalist judge)
 
 ### 8.1 Scorecard
 
@@ -204,7 +204,7 @@ Full critiques:
 12. **Prior art missed:** RivaLabs **NiceTry / FrameTxRegistry** (ethresear.ch, Mar 2026, FORS+C hash-based since May 2026) already does PQ-flavoured key rotation on 8141 frames. **Drop "first 8141 PQ account".** Claim "first 8141 account with a capped classical tier and a hash-based root", and credit NiceTry. "Hot key can't approve or permit" is **parity** with a Safe AllowanceModule delegate, Zodiac Roles and MetaMask delegation caveats, not a differentiator.
 13. **Hegotá status confirmed:** EIP-8141 was moved to **Scheduled for Inclusion on Aug 27** and ranked must-ship on Sep 7 ([Crypto Briefing](https://cryptobriefing.com/ethereum-eip-8141-hegota-upgrade/), [CoinMarketCap](https://coinmarketcap.com/academy/article/ethereum-locks-eip-8141-into-2027-hegota-upgrade)). The April "not headliner" note is stale. But **EIP-8250 (keyed nonces) is only Considered for Inclusion**, so don't call it scheduled.
 
-### 8.3 LEAKED v2: the design to build
+### 8.3 QueueBit v2: the design to build
 **Account:** a CREATE2 contract with no known private key. Add a test asserting `account != hotKeyAddress`. Never 7702.
 
 **Hot path (public mempool, under 100k):**
@@ -289,7 +289,7 @@ Don't say: "first PQ account", "stops drainers better than Safe", or "the $2M PQ
 - Expected sponsor money ≈ **$2.5k** (market council estimate); the upside is the finalist prize.
 
 ### 8.8 Final answer
-**Build LEAKED v2.** It is a technically sound, timely EF-track entry with the best finalist odds of our three ideas. It is *not* a venture business: pitch it as a Kohaku-bound public good and reference implementation for Hegotá. The single biggest risk is outside the team's control (the sidecar's verify budget), so ask the organisers today. If the answer is bad, pivot to the WOTS variant or the "measured gap" entry while staying in the EF track.
+**Build QueueBit v2.** It is a technically sound, timely EF-track entry with the best finalist odds of our three ideas. It is *not* a venture business: pitch it as a Kohaku-bound public good and reference implementation for Hegotá. The single biggest risk is outside the team's control (the sidecar's verify budget), so ask the organisers today. If the answer is bad, pivot to the WOTS variant or the "measured gap" entry while staying in the EF track.
 
 ## 9. Implementability check (2026-10-30, measured)
 - **PORST runs locally.** I cloned duncancmt/porst and ran `forge test --gas-report` with solc 0.8.34: **13/13 tests pass**. Over 267 calls, `isValidSignature` costs **min 124,681 / avg 130,555 / max 135,429 gas**; deployment costs 285,187. The test file contains a working **reference signer** (`_sign` and `_deriveSubset`, about 100 lines of Solidity), so the TypeScript signer is a port, not research.
@@ -323,6 +323,6 @@ Code is in `prototype/`: `probe.mts`, `ProbeWallets.sol`, `RollingCap.sol` and i
 | 12 | Workshop gateway + faucet | ⚠️ `altmempoolgateway.forshtat.com` returns HTTP 502 (faucet down). It works by pointing at `altmempool.forshtat.com/rpc` and funding from the published genesis devnet key. | — |
 
 **What this means for the plan:**
-- Every LEAKED component works individually **except the one the EF prize headline depends on**: PQ verification *inside* validation. The live alt mempool doesn't admit it yet.
+- Every QueueBit component works individually **except the one the EF prize headline depends on**: PQ verification *inside* validation. The live alt mempool doesn't admit it yet.
 - The working design today is "PQ in the execution frame". It runs end to end, but it is the griefable variant the council warned about.
 - **Ask the Access Layer team before Nov 5** whether the Mumbai devnet will ship per-entity budgets (BUDGET-010). If not, the strongest EF-track entry is: *working PQ two-tier account (execution-frame variant, live) + a measured proof that the alt mempool needs BUDGET-010 for PQ validation + a sidecar PR implementing the staked budget.*

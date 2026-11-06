@@ -7,9 +7,9 @@ import {TxParam} from "@forshtat/hegota-support/contracts/Params.sol";
 import {IStakingRegistry} from "../../src/interfaces/IStakingRegistry.sol";
 import {RoleSignerFactory} from "../../src/roles/RoleSignerFactory.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {ILeakedAccount} from "../../src/account/ILeakedAccount.sol";
-import {LeakedAccountImpl} from "../../src/account/LeakedAccountImpl.sol";
-import {LeakedAccountRoles} from "../../src/account/LeakedAccountRoles.sol";
+import {IQueueBitAccount} from "../../src/account/IQueueBitAccount.sol";
+import {QueueBitAccountImpl} from "../../src/account/QueueBitAccountImpl.sol";
+import {QueueBitAccountRoles} from "../../src/account/QueueBitAccountRoles.sol";
 import {AccountFactory} from "../../src/account/AccountFactory.sol";
 import {MockToken, MockRouter, MockPQVerifier} from "./mocks/AccountMocks.sol";
 
@@ -31,8 +31,8 @@ contract OpenModeVictim {
 contract AccountHandler is Test {
     uint256 internal constant USD = 1e6;
 
-    LeakedAccountImpl public account;
-    LeakedAccountRoles public roles;
+    QueueBitAccountImpl public account;
+    QueueBitAccountRoles public roles;
     MockToken public usdc;
     MockRouter public router;
     address public recovery;
@@ -68,13 +68,13 @@ contract AccountHandler is Test {
     mapping(bytes32 => uint48) public ghostEta;
     mapping(bytes32 => uint256) public executions;
     mapping(bytes32 => bool) public ghostCancelled;
-    mapping(bytes32 => ILeakedAccount.Call[]) internal opCalls;
+    mapping(bytes32 => IQueueBitAccount.Call[]) internal opCalls;
 
     uint256 public calls;
 
-    constructor(LeakedAccountImpl a, MockToken u, MockRouter r, address rec, address g, address al) {
+    constructor(QueueBitAccountImpl a, MockToken u, MockRouter r, address rec, address g, address al) {
         account = a;
-        roles = LeakedAccountRoles(payable(address(a)));
+        roles = QueueBitAccountRoles(payable(address(a)));
         usdc = u;
         router = r;
         (, thresholdMax,) = roles.getVaultBucket();
@@ -93,7 +93,7 @@ contract AccountHandler is Test {
         (v,,,,) = roles.getRoles();
     }
 
-    function _cfg() internal view returns (ILeakedAccount.HotConfig memory) {
+    function _cfg() internal view returns (IQueueBitAccount.HotConfig memory) {
         return account.getHotConfig();
     }
 
@@ -102,11 +102,12 @@ contract AccountHandler is Test {
     }
 
     /// Compares two snapshots: did anything a hot transaction relies on get looser?
-    function _loosened(ILeakedAccount.HotConfig memory a, uint256 capA, ILeakedAccount.HotConfig memory b, uint256 capB)
-        internal
-        view
-        returns (bool)
-    {
+    function _loosened(
+        IQueueBitAccount.HotConfig memory a,
+        uint256 capA,
+        IQueueBitAccount.HotConfig memory b,
+        uint256 capB
+    ) internal view returns (bool) {
         bool unfroze = a.hotFrozen && !b.hotFrozen && a.frozenUntil > block.timestamp;
         return capB > capA || b.perTxMaxUsd > a.perTxMaxUsd || b.maxFeeWeiPerTx > a.maxFeeWeiPerTx
             || b.maxHotFrames > a.maxHotFrames || b.maxPriorityFeePerGas > a.maxPriorityFeePerGas
@@ -115,7 +116,7 @@ contract AccountHandler is Test {
     }
 
     modifier nonVault() {
-        ILeakedAccount.HotConfig memory a = _cfg();
+        IQueueBitAccount.HotConfig memory a = _cfg();
         uint256 capA = _cap();
         bool strictA = _strictMode();
         _;
@@ -123,7 +124,7 @@ contract AccountHandler is Test {
     }
 
     function _strictMode() internal view returns (bool) {
-        return account.recipientMode() == ILeakedAccount.RecipientMode.Strict;
+        return account.recipientMode() == IQueueBitAccount.RecipientMode.Strict;
     }
 
     modifier vaultAction() {
@@ -144,16 +145,16 @@ contract AccountHandler is Test {
     function hotTransfer(uint256 amount) external nonVault {
         _track();
         amount = bound(amount, 1, 600 * USD);
-        ILeakedAccount.Call[] memory c = new ILeakedAccount.Call[](1);
-        c[0] = ILeakedAccount.Call(address(usdc), 0, abi.encodeCall(IERC20.transfer, (alice, amount)));
+        IQueueBitAccount.Call[] memory c = new IQueueBitAccount.Call[](1);
+        c[0] = IQueueBitAccount.Call(address(usdc), 0, abi.encodeCall(IERC20.transfer, (alice, amount)));
         _hotRun(amount, c, amount);
     }
 
     function hotEth(uint256 weiAmount) external nonVault {
         _track();
         weiAmount = bound(weiAmount, 1, 0.2 ether);
-        ILeakedAccount.Call[] memory c = new ILeakedAccount.Call[](1);
-        c[0] = ILeakedAccount.Call(alice, weiAmount, "");
+        IQueueBitAccount.Call[] memory c = new IQueueBitAccount.Call[](1);
+        c[0] = IQueueBitAccount.Call(alice, weiAmount, "");
         uint256 usd = (weiAmount * 3_000 * USD + 1e18 - 1) / 1e18;
         _hotRun(usd, c, usd);
     }
@@ -166,15 +167,15 @@ contract AccountHandler is Test {
             to = makeAddr("bob");
         }
         bool strict = _strictMode();
-        ILeakedAccount.Call[] memory c = new ILeakedAccount.Call[](1);
+        IQueueBitAccount.Call[] memory c = new IQueueBitAccount.Call[](1);
         uint256 usd;
         if (eth) {
             amount = bound(amount, 1, 0.2 ether);
-            c[0] = ILeakedAccount.Call(to, amount, "");
+            c[0] = IQueueBitAccount.Call(to, amount, "");
             usd = (amount * 3_000 * USD + 1e18 - 1) / 1e18;
         } else {
             amount = bound(amount, 1, 600 * USD);
-            c[0] = ILeakedAccount.Call(address(usdc), 0, abi.encodeCall(IERC20.transfer, (to, amount)));
+            c[0] = IQueueBitAccount.Call(address(usdc), 0, abi.encodeCall(IERC20.transfer, (to, amount)));
             usd = amount;
         }
         if (_hotRun(usd, c, usd)) {
@@ -193,15 +194,15 @@ contract AccountHandler is Test {
             [address(account), v, r, guardian, address(usdc), list.length > 1 ? list[1] : address(usdc)];
         address to = bad[bound(which, 0, 5)];
         if (to == address(0) || account.isTarget(to)) return;
-        ILeakedAccount.Call[] memory c = new ILeakedAccount.Call[](1);
+        IQueueBitAccount.Call[] memory c = new IQueueBitAccount.Call[](1);
         uint256 usd;
         if (eth) {
             amount = bound(amount, 1, 0.2 ether);
-            c[0] = ILeakedAccount.Call(to, amount, "");
+            c[0] = IQueueBitAccount.Call(to, amount, "");
             usd = (amount * 3_000 * USD + 1e18 - 1) / 1e18;
         } else {
             amount = bound(amount, 1, 600 * USD);
-            c[0] = ILeakedAccount.Call(address(usdc), 0, abi.encodeCall(IERC20.transfer, (to, amount)));
+            c[0] = IQueueBitAccount.Call(address(usdc), 0, abi.encodeCall(IERC20.transfer, (to, amount)));
             usd = amount;
         }
         if (_hotRun(usd, c, usd)) forbiddenPayments++;
@@ -212,22 +213,22 @@ contract AccountHandler is Test {
         _track();
         amount = bound(amount, 1, 600 * USD);
         which = bound(which, 0, 6);
-        ILeakedAccount.Call[] memory c = new ILeakedAccount.Call[](1);
+        IQueueBitAccount.Call[] memory c = new IQueueBitAccount.Call[](1);
         if (which == 0) {
-            c[0] = ILeakedAccount.Call(address(usdc), 0, abi.encodeCall(IERC20.approve, (attacker, amount)));
+            c[0] = IQueueBitAccount.Call(address(usdc), 0, abi.encodeCall(IERC20.approve, (attacker, amount)));
         } else if (which == 1) {
-            c[0] = ILeakedAccount.Call(
+            c[0] = IQueueBitAccount.Call(
                 address(usdc), 0, abi.encodeCall(IERC20.transferFrom, (address(account), attacker, amount))
             );
         } else if (which == 2) {
-            c[0] = ILeakedAccount.Call(
+            c[0] = IQueueBitAccount.Call(
                 address(usdc),
                 0,
                 abi.encodeWithSelector(0x39509351, attacker, amount) // increaseAllowance
             );
         } else if (which == 3) {
             // ERC-2612 permit(owner, spender, value, deadline, v, r, s)
-            c[0] = ILeakedAccount.Call(
+            c[0] = IQueueBitAccount.Call(
                 address(usdc),
                 0,
                 abi.encodeWithSelector(
@@ -235,11 +236,11 @@ contract AccountHandler is Test {
                 )
             );
         } else if (which == 4) {
-            c[0] = ILeakedAccount.Call(address(victim), 0, ""); // zero-value empty call: runs the fallback
+            c[0] = IQueueBitAccount.Call(address(victim), 0, ""); // zero-value empty call: runs the fallback
         } else if (which == 5) {
-            c[0] = ILeakedAccount.Call(address(victim), 0, abi.encodeWithSignature("poke()"));
+            c[0] = IQueueBitAccount.Call(address(victim), 0, abi.encodeWithSignature("poke()"));
         } else {
-            c[0] = ILeakedAccount.Call(attacker, 1 wei, hex"deadbeef"); // ETH with calldata
+            c[0] = IQueueBitAccount.Call(attacker, 1 wei, hex"deadbeef"); // ETH with calldata
         }
         uint256 pokes = victim.pokes();
         vm.prank(address(account));
@@ -252,11 +253,13 @@ contract AccountHandler is Test {
     function hotRegister(uint256 amount, bytes32 h) external nonVault {
         _track();
         amount = bound(amount, 1, 600 * USD);
-        ILeakedAccount.Call[] memory c = new ILeakedAccount.Call[](1);
-        c[0] = ILeakedAccount.Call(
+        IQueueBitAccount.Call[] memory c = new IQueueBitAccount.Call[](1);
+        c[0] = IQueueBitAccount.Call(
             address(account),
             0,
-            abi.encodeCall(LeakedAccountImpl.registerHash, (h, address(usdc), amount, uint48(block.timestamp + 1 days)))
+            abi.encodeCall(
+                QueueBitAccountImpl.registerHash, (h, address(usdc), amount, uint48(block.timestamp + 1 days))
+            )
         );
         _hotRun(amount, c, amount);
     }
@@ -266,9 +269,9 @@ contract AccountHandler is Test {
     function hotSession(uint256 amount, bool sweep, bool leaveApproval) external nonVault {
         _track();
         amount = bound(amount, 2, 600 * USD);
-        ILeakedAccount.Call[] memory c = new ILeakedAccount.Call[](2);
-        c[0] = ILeakedAccount.Call(address(usdc), 0, abi.encodeCall(IERC20.approve, (address(router), amount)));
-        c[1] = ILeakedAccount.Call(
+        IQueueBitAccount.Call[] memory c = new IQueueBitAccount.Call[](2);
+        c[0] = IQueueBitAccount.Call(address(usdc), 0, abi.encodeCall(IERC20.approve, (address(router), amount)));
+        c[1] = IQueueBitAccount.Call(
             address(router),
             0,
             leaveApproval
@@ -280,8 +283,8 @@ contract AccountHandler is Test {
 
     /// Runs a hot batch; on success records max(declared intent, measured USD outflow of ETH + USDC), so I-1 is
     /// checked against what actually left, whichever recipient it went to.
-    function _hotRun(uint256 declared, ILeakedAccount.Call[] memory c, uint256 usd) internal returns (bool ok) {
-        ILeakedAccount.HotConfig memory cfg = _cfg();
+    function _hotRun(uint256 declared, IQueueBitAccount.Call[] memory c, uint256 usd) internal returns (bool ok) {
+        IQueueBitAccount.HotConfig memory cfg = _cfg();
         uint256 eth0 = address(account).balance;
         uint256 usdc0 = usdc.balanceOf(address(account));
         vm.prank(address(account));
@@ -301,7 +304,7 @@ contract AccountHandler is Test {
 
     function vaultTighten(uint256 cap, uint256 perTx) external vaultAction {
         _track();
-        ILeakedAccount.HotConfig memory c = _cfg();
+        IQueueBitAccount.HotConfig memory c = _cfg();
         cap = bound(cap, 0, _cap());
         perTx = bound(perTx, 0, c.perTxMaxUsd);
         vm.prank(_vault());
@@ -311,12 +314,12 @@ contract AccountHandler is Test {
     function vaultQueueLoosen(uint256 cap) external vaultAction {
         _track();
         cap = bound(cap, 0, 5_000 * USD);
-        ILeakedAccount.HotConfig memory c = _cfg();
-        ILeakedAccount.Call[] memory q = new ILeakedAccount.Call[](1);
-        q[0] = ILeakedAccount.Call(
+        IQueueBitAccount.HotConfig memory c = _cfg();
+        IQueueBitAccount.Call[] memory q = new IQueueBitAccount.Call[](1);
+        q[0] = IQueueBitAccount.Call(
             address(account),
             0,
-            abi.encodeCall(LeakedAccountRoles.vaultSetCap, (cap, 500 * USD, c.maxFeeWeiPerTx, c.maxHotFrames))
+            abi.encodeCall(QueueBitAccountRoles.vaultSetCap, (cap, 500 * USD, c.maxFeeWeiPerTx, c.maxHotFrames))
         );
         _queue(q, 1);
     }
@@ -324,12 +327,12 @@ contract AccountHandler is Test {
     function vaultQueueSpend(uint256 amount) external vaultAction {
         _track();
         amount = bound(amount, 1, 10_000 * USD);
-        ILeakedAccount.Call[] memory q = new ILeakedAccount.Call[](1);
-        q[0] = ILeakedAccount.Call(address(usdc), 0, abi.encodeCall(IERC20.transfer, (alice, amount)));
+        IQueueBitAccount.Call[] memory q = new IQueueBitAccount.Call[](1);
+        q[0] = IQueueBitAccount.Call(address(usdc), 0, abi.encodeCall(IERC20.transfer, (alice, amount)));
         _queue(q, 0);
     }
 
-    function _queue(ILeakedAccount.Call[] memory q, uint8 kind) internal {
+    function _queue(IQueueBitAccount.Call[] memory q, uint8 kind) internal {
         vm.prank(_vault());
         try roles.vaultQueue(q, kind) returns (bytes32 op) {
             ops.push(op);
@@ -353,8 +356,8 @@ contract AccountHandler is Test {
     function vaultExecuteSmall(uint256 amount) external vaultAction {
         _track();
         amount = bound(amount, 1, 3_000 * USD);
-        ILeakedAccount.Call[] memory q = new ILeakedAccount.Call[](1);
-        q[0] = ILeakedAccount.Call(address(usdc), 0, abi.encodeCall(IERC20.transfer, (alice, amount)));
+        IQueueBitAccount.Call[] memory q = new IQueueBitAccount.Call[](1);
+        q[0] = IQueueBitAccount.Call(address(usdc), 0, abi.encodeCall(IERC20.transfer, (alice, amount)));
         vm.prank(_vault());
         try roles.vaultExecute(q, amount) {
             vaultTimes.push(block.timestamp);
@@ -367,17 +370,17 @@ contract AccountHandler is Test {
         _track();
         vm.prank(_vault());
         if (strict) {
-            try roles.vaultSetRecipientMode(ILeakedAccount.RecipientMode.Strict) {} catch {}
+            try roles.vaultSetRecipientMode(IQueueBitAccount.RecipientMode.Strict) {} catch {}
         } else {
             bool wasStrict = _strictMode();
-            try roles.vaultSetRecipientMode(ILeakedAccount.RecipientMode.Open) {
+            try roles.vaultSetRecipientMode(IQueueBitAccount.RecipientMode.Open) {
                 if (wasStrict) nonVaultLoosenings++; // an unqueued loosening, even by the vault
             } catch {}
-            ILeakedAccount.Call[] memory q = new ILeakedAccount.Call[](1);
-            q[0] = ILeakedAccount.Call(
+            IQueueBitAccount.Call[] memory q = new IQueueBitAccount.Call[](1);
+            q[0] = IQueueBitAccount.Call(
                 address(account),
                 0,
-                abi.encodeCall(LeakedAccountRoles.vaultSetRecipientMode, (ILeakedAccount.RecipientMode.Open))
+                abi.encodeCall(QueueBitAccountRoles.vaultSetRecipientMode, (IQueueBitAccount.RecipientMode.Open))
             );
             _queue(q, 1);
         }
@@ -466,23 +469,23 @@ contract AccountHandler is Test {
         which = bound(which, 0, 8);
         bytes memory d;
         if (which == 0) {
-            d = abi.encodeCall(LeakedAccountRoles.vaultSetCap, (x, x, x, 64));
+            d = abi.encodeCall(QueueBitAccountRoles.vaultSetCap, (x, x, x, 64));
         } else if (which == 1) {
-            d = abi.encodeCall(LeakedAccountRoles.vaultSetTarget, (attacker, true));
+            d = abi.encodeCall(QueueBitAccountRoles.vaultSetTarget, (attacker, true));
         } else if (which == 2) {
-            d = abi.encodeCall(LeakedAccountRoles.vaultSetHotKey, (attacker));
+            d = abi.encodeCall(QueueBitAccountRoles.vaultSetHotKey, (attacker));
         } else if (which == 3) {
-            d = abi.encodeCall(LeakedAccountRoles.vaultUnfreeze, ());
+            d = abi.encodeCall(QueueBitAccountRoles.vaultUnfreeze, ());
         } else if (which == 4) {
-            d = abi.encodeCall(LeakedAccountRoles.recoveryStartVaultRotation, (attacker));
+            d = abi.encodeCall(QueueBitAccountRoles.recoveryStartVaultRotation, (attacker));
         } else if (which == 5) {
-            d = abi.encodeCall(LeakedAccountRoles.vaultSetFeePolicy, (x, true, attacker));
+            d = abi.encodeCall(QueueBitAccountRoles.vaultSetFeePolicy, (x, true, attacker));
         } else if (which == 6) {
-            d = abi.encodeCall(LeakedAccountImpl.hotExecute, (x, new ILeakedAccount.Call[](0)));
+            d = abi.encodeCall(QueueBitAccountImpl.hotExecute, (x, new IQueueBitAccount.Call[](0)));
         } else if (which == 8) {
             d = abi.encodeCall(
-                LeakedAccountRoles.vaultSetRecipientMode,
-                (x % 2 == 0 ? ILeakedAccount.RecipientMode.Open : ILeakedAccount.RecipientMode.Strict)
+                QueueBitAccountRoles.vaultSetRecipientMode,
+                (x % 2 == 0 ? IQueueBitAccount.RecipientMode.Open : IQueueBitAccount.RecipientMode.Strict)
             );
         } else {
             d = abi.encodeCall(account.upgradeToAndCall, (attacker, ""));
@@ -521,31 +524,31 @@ contract AccountHandler is Test {
 contract AccountInvariantsTest is Test {
     uint256 internal constant USD = 1e6;
     AccountHandler internal handler;
-    LeakedAccountImpl internal account;
-    LeakedAccountRoles internal roles;
+    QueueBitAccountImpl internal account;
+    QueueBitAccountRoles internal roles;
 
     function setUp() public {
         address recovery = makeAddr("recovery");
         address guardian = makeAddr("guardian");
         address alice = makeAddr("alice");
-        LeakedAccountRoles module = new LeakedAccountRoles();
-        LeakedAccountImpl impl = new LeakedAccountImpl(Devnet.ERC8421_WORKSHOP, true, address(module));
+        QueueBitAccountRoles module = new QueueBitAccountRoles();
+        QueueBitAccountImpl impl = new QueueBitAccountImpl(Devnet.ERC8421_WORKSHOP, true, address(module));
         AccountFactory factory = new AccountFactory();
         RoleSignerFactory rsf =
             new RoleSignerFactory(Devnet.ERC8421_WORKSHOP, TxParam.MAX_COST, IStakingRegistry(makeAddr("reg")), 1 ether);
         MockPQVerifier pqv = new MockPQVerifier(64);
-        ILeakedAccount.RoleSignerParams memory none;
+        IQueueBitAccount.RoleSignerParams memory none;
         // The ERC-20 allowlist comes from InitConfig.tokens (USDC and a second priced token), not a queued op.
         MockToken usdc = new MockToken("USDC", 6);
         MockToken dai = new MockToken("DAI", 18);
-        ILeakedAccount.TokenInit[] memory tokens = new ILeakedAccount.TokenInit[](2);
-        tokens[0] = ILeakedAccount.TokenInit(address(usdc), 6, 1 * USD);
-        tokens[1] = ILeakedAccount.TokenInit(address(dai), 18, 1 * USD);
+        IQueueBitAccount.TokenInit[] memory tokens = new IQueueBitAccount.TokenInit[](2);
+        tokens[0] = IQueueBitAccount.TokenInit(address(usdc), 6, 1 * USD);
+        tokens[1] = IQueueBitAccount.TokenInit(address(dai), 18, 1 * USD);
         // Bound vault (derived at initialize), explicit recovery (an address; the handler pranks as it).
-        ILeakedAccount.InitConfig memory c = ILeakedAccount.InitConfig({
+        IQueueBitAccount.InitConfig memory c = IQueueBitAccount.InitConfig({
             hotKey: makeAddr("hotKeyEOA"),
             roleSignerFactory: address(rsf),
-            vault: ILeakedAccount.RoleSignerParams(0, keccak256("vault"), address(pqv), makeAddr("payer")),
+            vault: IQueueBitAccount.RoleSignerParams(0, keccak256("vault"), address(pqv), makeAddr("payer")),
             recovery: none,
             vaultSigner: address(0),
             recoverySigner: recovery,
@@ -559,13 +562,13 @@ contract AccountInvariantsTest is Test {
             timelockDelay: 48 hours,
             timelockThresholdUsd: 2_000 * USD,
             ethUsdPrice: 3_000 * USD,
-            recipientMode: ILeakedAccount.RecipientMode.Open,
+            recipientMode: IQueueBitAccount.RecipientMode.Open,
             tokens: tokens
         });
-        account = LeakedAccountImpl(
-            payable(factory.createAccount(0, address(impl), abi.encodeCall(LeakedAccountImpl.initialize, (c))))
+        account = QueueBitAccountImpl(
+            payable(factory.createAccount(0, address(impl), abi.encodeCall(QueueBitAccountImpl.initialize, (c))))
         );
-        roles = LeakedAccountRoles(payable(address(account)));
+        roles = QueueBitAccountRoles(payable(address(account)));
         address vault =
             rsf.predictRoleSigner(0, 1, address(account), keccak256("vault"), address(pqv), makeAddr("payer"));
         (address v,,,,) = roles.getRoles();
@@ -576,34 +579,35 @@ contract AccountInvariantsTest is Test {
 
         // allowlist usdc and alice, the guardian, and a router session through the queue
         uint48 sessionExpiry = uint48(block.timestamp + 365 days);
-        ILeakedAccount.Call[] memory q = new ILeakedAccount.Call[](5);
-        q[2] = ILeakedAccount.Call(
+        IQueueBitAccount.Call[] memory q = new IQueueBitAccount.Call[](5);
+        q[2] = IQueueBitAccount.Call(
             address(account),
             0,
             abi.encodeCall(
-                LeakedAccountRoles.vaultSetSession, (address(usdc), IERC20.approve.selector, 1e9 * USD, sessionExpiry)
+                QueueBitAccountRoles.vaultSetSession, (address(usdc), IERC20.approve.selector, 1e9 * USD, sessionExpiry)
             )
         );
-        q[3] = ILeakedAccount.Call(
+        q[3] = IQueueBitAccount.Call(
             address(account),
             0,
             abi.encodeCall(
-                LeakedAccountRoles.vaultSetSession,
+                QueueBitAccountRoles.vaultSetSession,
                 (address(router), MockRouter.pull.selector, 1e9 * USD, sessionExpiry)
             )
         );
-        q[4] = ILeakedAccount.Call(
+        q[4] = IQueueBitAccount.Call(
             address(account),
             0,
             abi.encodeCall(
-                LeakedAccountRoles.vaultSetSession,
+                QueueBitAccountRoles.vaultSetSession,
                 (address(router), MockRouter.pullPartial.selector, 1e9 * USD, sessionExpiry)
             )
         );
-        q[0] =
-            ILeakedAccount.Call(address(account), 0, abi.encodeCall(LeakedAccountRoles.vaultSetTarget, (alice, true)));
-        q[1] = ILeakedAccount.Call(
-            address(account), 0, abi.encodeCall(LeakedAccountRoles.vaultSetGuardian, (guardian, true))
+        q[0] = IQueueBitAccount.Call(
+            address(account), 0, abi.encodeCall(QueueBitAccountRoles.vaultSetTarget, (alice, true))
+        );
+        q[1] = IQueueBitAccount.Call(
+            address(account), 0, abi.encodeCall(QueueBitAccountRoles.vaultSetGuardian, (guardian, true))
         );
         vm.prank(vault);
         bytes32 op = roles.vaultQueue(q, 1);
@@ -727,14 +731,14 @@ contract AccountInvariantsTest is Test {
         uint256 n = handler.opCount();
         for (uint256 i; i < n; ++i) {
             bytes32 op = handler.ops(i);
-            ILeakedAccount.QueuedOp memory q = roles.getQueued(op);
+            IQueueBitAccount.QueuedOp memory q = roles.getQueued(op);
             assertEq(q.eta, handler.ghostEta(op), "eta changed");
             assertLe(handler.executions(op), 1, "executed twice");
             if (handler.ghostCancelled(op)) {
                 assertEq(handler.executions(op), 0, "cancelled op executed");
-                assertEq(uint256(q.state), uint256(ILeakedAccount.OpState.CANCELLED));
+                assertEq(uint256(q.state), uint256(IQueueBitAccount.OpState.CANCELLED));
             }
-            if (handler.executions(op) == 1) assertEq(uint256(q.state), uint256(ILeakedAccount.OpState.EXECUTED));
+            if (handler.executions(op) == 1) assertEq(uint256(q.state), uint256(IQueueBitAccount.OpState.EXECUTED));
         }
     }
 
@@ -742,7 +746,7 @@ contract AccountInvariantsTest is Test {
     function invariant_frozenAndBunkerStopHot() public view {
         assertEq(handler.hotWhileFrozen(), 0, "hot outflow while frozen");
         assertEq(handler.hotWhileBunker(), 0, "hot outflow in bunker");
-        ILeakedAccount.HotConfig memory c = account.getHotConfig();
+        IQueueBitAccount.HotConfig memory c = account.getHotConfig();
         if (c.bunker) {
             assertEq(c.hotKey, address(0), "I-7 bunker => no hot key");
             (, address r,,,) = roles.getRoles();

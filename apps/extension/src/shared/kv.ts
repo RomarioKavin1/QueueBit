@@ -30,16 +30,16 @@ export class MemoryKV implements KV {
 
 /** Storage keys, in one place so the UI and the service worker agree. */
 export const StorageKeys = {
-  keyring: "leaked:keyring",
-  settings: "leaked:settings",
-  setup: "leaked:setup",
-  permissions: "leaked:permissions",
-  knownSites: "leaked:knownSites",
+  keyring: "queuebit:keyring",
+  settings: "queuebit:settings",
+  setup: "queuebit:setup",
+  permissions: "queuebit:permissions",
+  knownSites: "queuebit:knownSites",
   /** storage.session */
-  session: "leaked:session",
+  session: "queuebit:session",
   /** storage.session */
-  approvals: "leaked:approvals",
-  accountPlans: "leaked:accountPlans",
-  activity: "leaked:activity",
-  vaultRequests: "leaked:vaultRequests",
+  approvals: "queuebit:approvals",
+  accountPlans: "queuebit:accountPlans",
+  activity: "queuebit:activity",
+  vaultRequests: "queuebit:vaultRequests",
 } as const;

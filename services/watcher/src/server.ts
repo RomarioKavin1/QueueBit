@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { NonceCache, randomNonce, signAlert, verifyAuth, type AuthResult } from "@leaked/watcher-core";
+import { NonceCache, randomNonce, signAlert, verifyAuth, type AuthResult } from "@queuebit/watcher-core";
 import type { Hub, HubEntry } from "./hub.js";
 
 /** Token bucket per client (IP, and API key once authenticated). */
@@ -70,7 +70,7 @@ export function clientIp(socketAddr: string | undefined, xff: string | string[] 
  *  - `POST /v1/stream-token`: `{token, expiresIn}`, a single-use, short-lived token for `GET /v1/stream?token=` (for
  *    EventSource, which cannot set headers; the request signature never goes in a URL);
  *  - `GET /v1/alerts?since=<seq>`: the same envelopes as JSON.
- * Auth: `authorization: LEAKED-HMAC id=..,t=..,n=..,sig=..`, HMAC over `METHOD\npath\nt\nn` with the key's secret,
+ * Auth: `authorization: QUEUEBIT-HMAC id=..,t=..,n=..,sig=..`, HMAC over `METHOD\npath\nt\nn` with the key's secret,
  * 5-minute skew, each nonce accepted once per key inside the skew window. Rate limit per IP before auth and per key
  * after.
  */
@@ -114,7 +114,7 @@ export function createWatcherServer(o: ServerOptions): Server {
               nonces,
             });
       if (!auth.ok) {
-        res.setHeader("www-authenticate", "LEAKED-HMAC");
+        res.setHeader("www-authenticate", "QUEUEBIT-HMAC");
         return json(res, 401, { error: auth.reason });
       }
       if (!keyLimit.take(auth.keyId)) return json(res, 429, { error: "rate-limited" });
@@ -143,7 +143,7 @@ export function createWatcherServer(o: ServerOptions): Server {
         connection: "keep-alive",
         "x-accel-buffering": "no",
       });
-      res.write(": leaked watcher\n\n");
+      res.write(": queuebit watcher\n\n");
       // Serialise writes: replay first, then live entries, in order.
       let chain: Promise<void> = Promise.resolve();
       const send = (e: HubEntry) => {

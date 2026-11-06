@@ -6,11 +6,11 @@ import {IERC1271} from "@openzeppelin/contracts/interfaces/IERC1271.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {ERC7739Utils} from "@openzeppelin/contracts/utils/cryptography/draft-ERC7739Utils.sol";
 import {PackedUserOperation, Execution} from "../../src/modules/interfaces/IERC7579Modules.sol";
-import {LeakedPolicyHook} from "../../src/modules/LeakedPolicyHook.sol";
-import {LeakedRoleExecutor} from "../../src/modules/LeakedRoleExecutor.sol";
+import {QueueBitPolicyHook} from "../../src/modules/QueueBitPolicyHook.sol";
+import {QueueBitRoleExecutor} from "../../src/modules/QueueBitRoleExecutor.sol";
 import {IERC7579AccountView, IEntryPointV08, ISafeProxyFactory} from "./hosts/HostInterfaces.sol";
 import {MockToken, MockRouter} from "./mocks/ModuleMocks.sol";
-import {LeakedModulesBase} from "./LeakedModulesBase.sol";
+import {QueueBitModulesBase} from "./QueueBitModulesBase.sol";
 
 /// Safe7579's hook emergency exit (`Safe7579.emergencyUninstallHook`, no access control: the signature is the
 /// authority, checked through the validator named in its first 20 bytes with `_msgSender()` as the 1271 sender).
@@ -41,7 +41,7 @@ contract CtorProbe {
 /// Audit of the 4337 backend (M7): host-level 1271 consumers, hook removal, Kernel hash wrapping, install guards.
 /// Numbering: A1 Safe7579 emergency hook uninstall; A2 validator without hook; A3 Kernel 1271; A4 account as a
 /// 1271 sender; A5 Safe keyless owner; A6 opaque registered hashes and code-less senders.
-abstract contract LeakedModulesAuditBase is LeakedModulesBase {
+abstract contract QueueBitModulesAuditBase is QueueBitModulesBase {
     using MessageHashUtils for bytes32;
 
     // keccak256("EmergencyUninstall(address hook,uint256 hookType,bytes deInitData,uint256 nonce)")
@@ -71,7 +71,7 @@ abstract contract LeakedModulesAuditBase is LeakedModulesBase {
                     address(hook),
                     0,
                     abi.encodeCall(
-                        LeakedPolicyHook.registerHash, (h, address(usdc), 1, uint48(block.timestamp + 30 days))
+                        QueueBitPolicyHook.registerHash, (h, address(usdc), 1, uint48(block.timestamp + 30 days))
                     )
                 )
             )
@@ -85,7 +85,7 @@ abstract contract LeakedModulesAuditBase is LeakedModulesBase {
         returns (bytes memory)
     {
         bytes memory domainBytes =
-            abi.encode(keccak256("LeakedHotValidator"), keccak256("1"), block.chainid, account, bytes32(0));
+            abi.encode(keccak256("QueueBitHotValidator"), keccak256("1"), block.chainid, account, bytes32(0));
         bytes32 typeHash = keccak256(
             abi.encodePacked(
                 "TypedDataSign(",
@@ -105,12 +105,12 @@ abstract contract LeakedModulesAuditBase is LeakedModulesBase {
         c[0] = Call(
             address(hook),
             0,
-            abi.encodeCall(LeakedPolicyHook.setSession, (account, address(usdc), IERC20.approve.selector, 400e6, exp))
+            abi.encodeCall(QueueBitPolicyHook.setSession, (account, address(usdc), IERC20.approve.selector, 400e6, exp))
         );
         c[1] = Call(
             address(hook),
             0,
-            abi.encodeCall(LeakedPolicyHook.setSession, (account, address(router), router.pull.selector, 400e6, exp))
+            abi.encodeCall(QueueBitPolicyHook.setSession, (account, address(router), router.pull.selector, 400e6, exp))
         );
         _queueAndRun(c, 1);
     }
@@ -134,13 +134,13 @@ abstract contract LeakedModulesAuditBase is LeakedModulesBase {
         assertEq(validator.isValidSignatureWithSender(account, h, ""), bytes4(0xffffffff));
         vm.prank(account);
         assertEq(
-            validator.isValidSignatureWithSender(account, h, abi.encodePacked(bytes4(0xdc6b87c9), h)),
+            validator.isValidSignatureWithSender(account, h, abi.encodePacked(bytes4(0x427a9529), h)),
             bytes4(0xffffffff)
         );
     }
 }
 
-contract LeakedModulesAuditSafe7579Test is LeakedModulesAuditBase {
+contract QueueBitModulesAuditSafe7579Test is QueueBitModulesAuditBase {
     using MessageHashUtils for bytes32;
 
     function _host() internal pure override returns (Host) {
@@ -172,7 +172,7 @@ contract LeakedModulesAuditSafe7579Test is LeakedModulesAuditBase {
         _register(d1);
         assertTrue(_isValid(address(0), d1, ""), "the registration itself works for eth_call");
         _emergencyRefused(1, "");
-        _emergencyRefused(1, abi.encodePacked(bytes4(0xdc6b87c9), d1));
+        _emergencyRefused(1, abi.encodePacked(bytes4(0x427a9529), d1));
         assertTrue(IERC7579AccountView(account).isModuleInstalled(4, address(hook), ""), "hook stays");
         // The hook still bounds the hot tier: the sweep is refused (session allowance) and nothing moves.
         _expectExecFail(_op(_approvePull(5000e6, thief)), "");
@@ -222,7 +222,7 @@ contract LeakedModulesAuditSafe7579Test is LeakedModulesAuditBase {
 }
 
 /// A5: a Safe with an owner somebody holds a key for cannot install the hook (the owner path bypasses it).
-contract LeakedModulesAuditSafeOwnerTest is LeakedModulesBase {
+contract QueueBitModulesAuditSafeOwnerTest is QueueBitModulesBase {
     address internal keyedOwner = makeAddr("keyed-owner");
 
     function _host() internal pure override returns (Host) {
@@ -268,7 +268,7 @@ contract SafeOwnersStub {
     }
 }
 
-contract LeakedModulesAuditMSATest is LeakedModulesAuditBase {
+contract QueueBitModulesAuditMSATest is QueueBitModulesAuditBase {
     function _host() internal pure override returns (Host) {
         return Host.MSA;
     }
@@ -298,7 +298,7 @@ contract LeakedModulesAuditMSATest is LeakedModulesAuditBase {
         bytes memory sig = _pqSign(vaultPk, d);
         assertTrue(d != executor.hashVaultExec(stranger, n, c, 0), "account");
         assertTrue(d != executor.hashVaultExec(account, n + 1, c, 0), "nonce");
-        LeakedRoleExecutor other = new LeakedRoleExecutor();
+        QueueBitRoleExecutor other = new QueueBitRoleExecutor();
         assertTrue(d != other.hashVaultExec(account, n, c, 0), "executor address");
         // Literals: solc treats CHAINID as invariant and would re-read it after the cheatcode.
         assertEq(block.chainid, 31337);
@@ -330,7 +330,7 @@ contract LeakedModulesAuditMSATest is LeakedModulesAuditBase {
     }
 }
 
-contract LeakedModulesAuditKernelTest is LeakedModulesAuditBase {
+contract QueueBitModulesAuditKernelTest is QueueBitModulesAuditBase {
     using MessageHashUtils for bytes32;
 
     function _host() internal pure override returns (Host) {
@@ -379,25 +379,25 @@ contract LeakedModulesAuditKernelTest is LeakedModulesAuditBase {
 }
 
 /// A1-A7 again with the account installed in Strict (the suites above run in Open, the install default).
-contract LeakedModulesAuditSafe7579StrictTest is LeakedModulesAuditSafe7579Test {
+contract QueueBitModulesAuditSafe7579StrictTest is QueueBitModulesAuditSafe7579Test {
     function _recipientMode() internal pure override returns (RecipientMode) {
         return RecipientMode.Strict;
     }
 }
 
-contract LeakedModulesAuditSafeOwnerStrictTest is LeakedModulesAuditSafeOwnerTest {
+contract QueueBitModulesAuditSafeOwnerStrictTest is QueueBitModulesAuditSafeOwnerTest {
     function _recipientMode() internal pure override returns (RecipientMode) {
         return RecipientMode.Strict;
     }
 }
 
-contract LeakedModulesAuditMSAStrictTest is LeakedModulesAuditMSATest {
+contract QueueBitModulesAuditMSAStrictTest is QueueBitModulesAuditMSATest {
     function _recipientMode() internal pure override returns (RecipientMode) {
         return RecipientMode.Strict;
     }
 }
 
-contract LeakedModulesAuditKernelStrictTest is LeakedModulesAuditKernelTest {
+contract QueueBitModulesAuditKernelStrictTest is QueueBitModulesAuditKernelTest {
     function _recipientMode() internal pure override returns (RecipientMode) {
         return RecipientMode.Strict;
     }

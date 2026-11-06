@@ -4,7 +4,7 @@
  * output against the client (or an independent encoding, see vectors.test.ts), and commit it. Once a network
  * depends on a profile, never re-pin: add a new profile instead.
  *
- *   PIN_PROFILE=<profile-id> pnpm --filter @leaked/frames pin-vectors
+ *   PIN_PROFILE=<profile-id> pnpm --filter @queuebit/frames pin-vectors
  */
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -23,6 +23,6 @@ it("pins the vectors of PIN_PROFILE", async () => {
   const out = fileURLToPath(new URL(`./vectors/${id}.ts`, import.meta.url));
   fs.writeFileSync(
     out,
-    `// PINNED by \`PIN_PROFILE=${id} pnpm pin-vectors\` (@leaked/frames). Do not regenerate once a network depends on this profile.\nexport const vectors = [\n${rows.join("\n")}\n] as const;\n`,
+    `// PINNED by \`PIN_PROFILE=${id} pnpm pin-vectors\` (@queuebit/frames). Do not regenerate once a network depends on this profile.\nexport const vectors = [\n${rows.join("\n")}\n] as const;\n`,
   );
 });

@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { fromHex } from "@leaked/ur";
+import { fromHex } from "@queuebit/ur";
 import * as db from "../core/db.js";
 import type { LogEntry, Settings, VaultRecord } from "../core/db.js";
 import { sealLogEntry } from "../core/logCrypto.js";

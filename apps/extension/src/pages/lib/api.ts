@@ -18,7 +18,7 @@ export async function call<K extends UiType>(
 ): Promise<UiApi[K]["res"]> {
   const msg: UiMessage<K> = { channel: UI_CHANNEL, type, payload: payload as UiApi[K]["req"] };
   const res = (await browser.runtime.sendMessage(msg)) as UiResponse<K> | undefined;
-  if (!res) throw new UiCallError("LEAKED's background service didn't answer. Try again.");
+  if (!res) throw new UiCallError("QueueBit's background service didn't answer. Try again.");
   if (!res.ok) throw new UiCallError(res.error.message, res.error.reason);
   return res.result;
 }

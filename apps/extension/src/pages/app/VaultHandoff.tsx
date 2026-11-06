@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { hexToBytes, toHex } from "viem";
-import { UR_TYPES } from "@leaked/ur";
+import { UR_TYPES } from "@queuebit/ur";
 import type { VaultRequestRecord } from "../../background/vault";
 import { Button, Card, ReasonCode, RiskBanner, Spinner, Timeline, VaultIcon, type TimelineStep } from "../../ui";
 import { AnimatedQr, UrScanner } from "../../ui/QrHandoff";
@@ -57,7 +57,7 @@ export function VaultHandoff({
   const secs = Math.floor((left % 60_000) / 1000);
   const step = rec.status !== "waiting" ? 3 : phase === "show" ? 1 : 2;
   const steps: TimelineStep[] = [
-    { label: "Scan this code with LEAKED Vault", status: step > 1 ? "done" : "active" },
+    { label: "Scan this code with QueueBit Vault", status: step > 1 ? "done" : "active" },
     { label: "Check and approve on your phone", status: step > 2 ? "done" : step === 2 ? "done" : "pending" },
     { label: "Scan the phone's signature back", status: step > 2 ? "done" : step === 2 ? "active" : "pending" },
   ];
@@ -113,7 +113,7 @@ export function VaultHandoff({
           {rec.action.title}
         </p>
         <p className="t-small mt-1">{rec.action.effect}</p>
-        {rec.origin && rec.origin !== "LEAKED extension" && <p className="t-small mt-1">Asked by {rec.origin}</p>}
+        {rec.origin && rec.origin !== "QueueBit extension" && <p className="t-small mt-1">Asked by {rec.origin}</p>}
         <details className="mt-2">
           <summary className="t-small cursor-pointer text-muted underline underline-offset-2">Details</summary>
           <div className="t-small mt-2 flex flex-col gap-1 text-muted">
@@ -150,7 +150,7 @@ export function VaultHandoff({
               <div className="flex flex-1 flex-col gap-3">
                 <ol className="t-body list-decimal pl-5">
                   <li>
-                    Open <strong>LEAKED Vault</strong> on your phone and tap <strong>Scan request</strong>.
+                    Open <strong>QueueBit Vault</strong> on your phone and tap <strong>Scan request</strong>.
                   </li>
                   <li>Point the phone at this code. Hold it about 20 cm away.</li>
                   <li>

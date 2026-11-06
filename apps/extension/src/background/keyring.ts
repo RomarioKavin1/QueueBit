@@ -176,7 +176,7 @@ export class KeyringController {
   }
 
   private async store(mnemonic: string, password: string, source: KeyringRecord["source"]): Promise<KeyringAccounts> {
-    if (await this.isInitialized()) throw new KeyringError("exists", "This browser already has a LEAKED account.");
+    if (await this.isInitialized()) throw new KeyringError("exists", "This browser already has a QueueBit account.");
     assertPassword(password);
     const accounts = deriveAccounts(mnemonic);
     const plaintext = utf8ToBytes(JSON.stringify({ mnemonic } satisfies Secret));
@@ -247,7 +247,7 @@ export class KeyringController {
   async withMnemonic<T>(fn: (mnemonic: string) => T | Promise<T>): Promise<T> {
     const record = await this.requireRecord();
     const s = await this.session.get<SessionRecord>(StorageKeys.session);
-    if (!s) throw new KeyringError("locked", "LEAKED is locked.");
+    if (!s) throw new KeyringError("locked", "QueueBit is locked.");
     let plaintext: Uint8Array;
     try {
       plaintext = await decryptWithKey(hexToBytes(s.dek), record.blob, aadFor(record.accounts.everyday));
@@ -288,7 +288,7 @@ export class KeyringController {
     return this.withMnemonic((mnemonic) => {
       const seed = mnemonicToSeedSync(mnemonic);
       try {
-        return hkdf(sha256, seed, utf8ToBytes("leaked.storage-key.v1"), utf8ToBytes(label), 32);
+        return hkdf(sha256, seed, utf8ToBytes("queuebit.storage-key.v1"), utf8ToBytes(label), 32);
       } finally {
         seed.fill(0);
       }
@@ -303,7 +303,7 @@ export class KeyringController {
 
   private async requireRecord(): Promise<KeyringRecord> {
     const r = await this.record();
-    if (!r) throw new KeyringError("missing", "No LEAKED account in this browser yet.");
+    if (!r) throw new KeyringError("missing", "No QueueBit account in this browser yet.");
     return r;
   }
 

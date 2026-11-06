@@ -35,7 +35,7 @@ export const fullRequest = (payloadLen = 1200): SignRequest => ({
   intent: {
     action: "send",
     summary: "Send 250 USDC to 0xab…cd",
-    erc7730Ref: "leaked/account/v1#vaultExecute",
+    erc7730Ref: "queuebit/account/v1#vaultExecute",
     recipient: hex(bytes(20, 11)),
     amount: 250_000_000n,
     token: hex(bytes(20, 12)),

@@ -97,7 +97,7 @@ describe("HMAC", () => {
     const lookup = (id: string) => (id === "ext" ? KEY : undefined);
     const req = { method: "GET", path: "/v1/stream", now: T };
     const h = await authHeader("ext", KEY, "GET", "/v1/stream", T);
-    expect(h).toMatch(/^LEAKED-HMAC id=ext,t=1800000000,n=[0-9a-f]{32},sig=[0-9a-f]{64}$/u);
+    expect(h).toMatch(/^QUEUEBIT-HMAC id=ext,t=1800000000,n=[0-9a-f]{32},sig=[0-9a-f]{64}$/u);
     expect(await verifyAuth(h, lookup, req)).toEqual({ ok: true, keyId: "ext" });
     expect(await verifyAuth(await authHeader("ext", OTHER, "GET", "/v1/stream", T), lookup, req)).toEqual({
       ok: false,
@@ -115,7 +115,7 @@ describe("HMAC", () => {
     expect(await verifyAuth(null, lookup, req)).toMatchObject({ ok: false, reason: "missing" });
     expect(await verifyAuth("Bearer x", lookup, req)).toMatchObject({ ok: false, reason: "malformed" });
     // v1 header (no nonce) and a swapped nonce
-    const v1 = `LEAKED-HMAC id=ext,t=${T},sig=${await hmacHex(KEY, `GET\n/v1/stream\n${T}`)}`;
+    const v1 = `QUEUEBIT-HMAC id=ext,t=${T},sig=${await hmacHex(KEY, `GET\n/v1/stream\n${T}`)}`;
     expect(await verifyAuth(v1, lookup, req)).toMatchObject({ ok: false, reason: "malformed" });
     expect(await verifyAuth(h.replace(/n=[0-9a-f]+/u, `n=${"0".repeat(32)}`), lookup, req)).toMatchObject({
       ok: false,

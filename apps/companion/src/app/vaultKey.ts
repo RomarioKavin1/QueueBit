@@ -1,4 +1,4 @@
-import type { PQScheme } from "@leaked/pq-signer";
+import type { PQScheme } from "@queuebit/pq-signer";
 import type { Review } from "../core/clearsign.js";
 import type { VaultRecord } from "../core/db.js";
 import { chainScopeFor, keyNumberOf } from "../core/keys.js";

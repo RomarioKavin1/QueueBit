@@ -1,4 +1,4 @@
-# LEAKED PQ benchmark: standalone Foundry project (does not touch ../../contracts).
+# QueueBit PQ benchmark: standalone Foundry project (does not touch ../../contracts).
 # Default profile = the SPHINCS- upstream build (solc via-IR, optimizer 200). The vendored PORST and ETHFALCON
 # sources are compiled with their own upstream settings through compilation restrictions, so their gas matches
 # what their authors measure.

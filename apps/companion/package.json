@@ -1,8 +1,8 @@
 {
-  "name": "@leaked/companion",
+  "name": "@queuebit/companion",
   "version": "0.0.0",
   "private": true,
-  "description": "LEAKED Vault: offline-first PWA that decodes, clear-signs and signs vault approvals with a quantum-safe key",
+  "description": "QueueBit Vault: offline-first PWA that decodes, clear-signs and signs vault approvals with a quantum-safe key",
   "license": "MIT",
   "type": "module",
   "scripts": {
@@ -31,9 +31,9 @@
     "vitest": "5.1.0"
   },
   "dependencies": {
-    "@leaked/frames": "workspace:*",
-    "@leaked/pq-signer": "workspace:*",
-    "@leaked/ur": "workspace:*",
+    "@queuebit/frames": "workspace:*",
+    "@queuebit/pq-signer": "workspace:*",
+    "@queuebit/ur": "workspace:*",
     "@noble/curves": "2.4.0",
     "@noble/hashes": "2.4.0",
     "@scure/bip32": "2.4.0",

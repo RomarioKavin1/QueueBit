@@ -50,21 +50,21 @@ importers:
 
   apps/companion:
     dependencies:
-      '@leaked/frames':
-        specifier: workspace:*
-        version: link:../../packages/frames
-      '@leaked/pq-signer':
-        specifier: workspace:*
-        version: link:../../packages/pq-signer
-      '@leaked/ur':
-        specifier: workspace:*
-        version: link:../../packages/ur
       '@noble/curves':
         specifier: 2.4.0
         version: 2.4.0
       '@noble/hashes':
         specifier: 2.4.0
         version: 2.4.0
+      '@queuebit/frames':
+        specifier: workspace:*
+        version: link:../../packages/frames
+      '@queuebit/pq-signer':
+        specifier: workspace:*
+        version: link:../../packages/pq-signer
+      '@queuebit/ur':
+        specifier: workspace:*
+        version: link:../../packages/ur
       '@scure/bip32':
         specifier: 2.4.0
         version: 2.4.0
@@ -135,30 +135,30 @@ importers:
 
   apps/extension:
     dependencies:
-      '@leaked/frames':
-        specifier: workspace:*
-        version: link:../../packages/frames
-      '@leaked/groth16':
-        specifier: workspace:*
-        version: link:../../packages/groth16
-      '@leaked/pq-signer':
-        specifier: workspace:*
-        version: link:../../packages/pq-signer
-      '@leaked/privacy':
-        specifier: workspace:*
-        version: link:../../packages/privacy
-      '@leaked/rpc':
-        specifier: workspace:*
-        version: link:../../packages/rpc
-      '@leaked/ur':
-        specifier: workspace:*
-        version: link:../../packages/ur
-      '@leaked/watcher-core':
-        specifier: workspace:*
-        version: link:../../packages/watcher-core
       '@noble/hashes':
         specifier: 2.4.0
         version: 2.4.0
+      '@queuebit/frames':
+        specifier: workspace:*
+        version: link:../../packages/frames
+      '@queuebit/groth16':
+        specifier: workspace:*
+        version: link:../../packages/groth16
+      '@queuebit/pq-signer':
+        specifier: workspace:*
+        version: link:../../packages/pq-signer
+      '@queuebit/privacy':
+        specifier: workspace:*
+        version: link:../../packages/privacy
+      '@queuebit/rpc':
+        specifier: workspace:*
+        version: link:../../packages/rpc
+      '@queuebit/ur':
+        specifier: workspace:*
+        version: link:../../packages/ur
+      '@queuebit/watcher-core':
+        specifier: workspace:*
+        version: link:../../packages/watcher-core
       '@scure/bip32':
         specifier: 2.4.0
         version: 2.4.0
@@ -223,18 +223,18 @@ importers:
 
   bench:
     dependencies:
-      '@leaked/frames':
-        specifier: workspace:*
-        version: link:../packages/frames
-      '@leaked/pq-signer':
-        specifier: workspace:*
-        version: link:../packages/pq-signer
       '@noble/hashes':
         specifier: 2.4.0
         version: 2.4.0
       '@noble/post-quantum':
         specifier: 0.7.1
         version: 0.7.1
+      '@queuebit/frames':
+        specifier: workspace:*
+        version: link:../packages/frames
+      '@queuebit/pq-signer':
+        specifier: workspace:*
+        version: link:../packages/pq-signer
       viem:
         specifier: 2.57.16
         version: 2.57.16(typescript@6.0.3)(zod@4.6.7)
@@ -257,7 +257,7 @@ importers:
 
   packages/groth16:
     dependencies:
-      '@leaked/privacy':
+      '@queuebit/privacy':
         specifier: workspace:*
         version: link:../privacy
     devDependencies:
@@ -291,13 +291,13 @@ importers:
 
   packages/privacy:
     dependencies:
-      '@leaked/frames':
+      '@queuebit/frames':
         specifier: workspace:*
         version: link:../frames
-      '@leaked/rpc':
+      '@queuebit/rpc':
         specifier: workspace:*
         version: link:../rpc
-      '@leaked/ur':
+      '@queuebit/ur':
         specifier: workspace:*
         version: link:../ur
       '@zk-kit/lean-imt':
@@ -319,7 +319,7 @@ importers:
 
   packages/rpc:
     dependencies:
-      '@leaked/frames':
+      '@queuebit/frames':
         specifier: workspace:*
         version: link:../frames
       viem:
@@ -340,7 +340,7 @@ importers:
 
   packages/watcher-core:
     dependencies:
-      '@leaked/frames':
+      '@queuebit/frames':
         specifier: workspace:*
         version: link:../frames
       viem:
@@ -349,13 +349,13 @@ importers:
 
   services/watcher:
     dependencies:
-      '@leaked/frames':
+      '@queuebit/frames':
         specifier: workspace:*
         version: link:../../packages/frames
-      '@leaked/rpc':
+      '@queuebit/rpc':
         specifier: workspace:*
         version: link:../../packages/rpc
-      '@leaked/watcher-core':
+      '@queuebit/watcher-core':
         specifier: workspace:*
         version: link:../../packages/watcher-core
       viem:

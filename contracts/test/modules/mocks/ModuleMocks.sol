@@ -6,7 +6,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IPQVerifier} from "../../../src/interfaces/IPQVerifier.sol";
 
 /// Stand-in PQ verifier for policy tests: a "signature" is keccak256(abi.encode(pk, digest)). The real C13 verifier
-/// with real signatures is exercised in LeakedModulesC13.t.sol and the anvil e2e.
+/// with real signatures is exercised in QueueBitModulesC13.t.sol and the anvil e2e.
 contract MockPQVerifier is IPQVerifier {
     function schemeId() external pure returns (bytes32) {
         return keccak256("MOCK-PQ");

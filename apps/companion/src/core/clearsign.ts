@@ -6,9 +6,9 @@ import {
   sigHash as frameSigHash,
   type FrameTx,
   type Profile,
-} from "@leaked/frames";
-import { schemeById } from "@leaked/pq-signer";
-import { decodeSignRequest, ROLE, TX_TYPE, type AdvisoryPolicy, type SignRequest } from "@leaked/ur";
+} from "@queuebit/frames";
+import { schemeById } from "@queuebit/pq-signer";
+import { decodeSignRequest, ROLE, TX_TYPE, type AdvisoryPolicy, type SignRequest } from "@queuebit/ur";
 import {
   decodeAbiParameters,
   decodeFunctionData,
@@ -58,7 +58,7 @@ import {
 import type { AccountSnapshot, AddressBookEntry, DeviceContext } from "./types.js";
 
 /**
- * Clear signing (plan §20 §4.3, ux-spec §4.4). Turns a `ur:leaked-sign-request` into what the review screen shows,
+ * Clear signing (plan §20 §4.3, ux-spec §4.4). Turns a `ur:queuebit-sign-request` into what the review screen shows,
  * using only on-device knowledge: the bundled registry, this phone's address book and its own snapshot of what it
  * signed. The request's advisory keys (11 intent, 12 policy) are never shown as truth: key 11 only feeds the
  * mismatch check, key 12 only fills in "current value" / USD estimates that are labelled as browser-reported.
@@ -66,8 +66,8 @@ import type { AccountSnapshot, AddressBookEntry, DeviceContext } from "./types.j
  * The digest is recomputed here from the decoded transaction (never taken from the request), so what is displayed is
  * what is signed by construction. The signing worker runs this same function on the same bytes before it signs.
  *
- * Three request kinds: tx-type 6 (an EIP-8141 frame transaction of a native LEAKED account's role signer), tx-type 3
- * (a `LeakedRoleExecutor` call of a compatible ERC-4337 + ERC-7579 account, signed over the executor's EIP-712
+ * Three request kinds: tx-type 6 (an EIP-8141 frame transaction of a native QueueBit account's role signer), tx-type 3
+ * (a `QueueBitRoleExecutor` call of a compatible ERC-4337 + ERC-7579 account, signed over the executor's EIP-712
  * digest) and tx-type 2 (the Privacy Pools note envelope, signed by the payer key).
  */
 
@@ -167,9 +167,9 @@ export interface StructureView {
   sequence?: bigint;
   maxFee?: string;
   profileId?: string;
-  /** tx-type 3: the `LeakedRoleExecutor` the signature is bound to (EIP-712 `verifyingContract`). */
+  /** tx-type 3: the `QueueBitRoleExecutor` the signature is bound to (EIP-712 `verifyingContract`). */
   executor?: Address;
-  /** tx-type 3: whether this app knows that executor as LEAKED's module on this network. */
+  /** tx-type 3: whether this app knows that executor as QueueBit's module on this network. */
   knownExecutor?: boolean;
   origin?: string;
   requestId: string;
@@ -235,7 +235,7 @@ export function reviewRequest(req: SignRequest, ctx: DeviceContext): Review {
     reject(
       "E-76",
       "This kind of request isn't supported yet",
-      "This app signs LEAKED accounts' Vault and Recovery approvals only. Update the app.",
+      "This app signs QueueBit accounts' Vault and Recovery approvals only. Update the app.",
     );
   }
   return reviewFrameTx(req, ctx);
@@ -415,7 +415,7 @@ function reviewFrameTx(req: SignRequest, ctx: DeviceContext): Review {
       timing: { text: "unknown" },
       details: structural.map((s) => ({ label: "Why", value: s })),
       unknown: {
-        reason: `This approval is not shaped like a LEAKED Vault approval: ${structural.join("; ")}.`,
+        reason: `This approval is not shaped like a QueueBit Vault approval: ${structural.join("; ")}.`,
         target: sender,
         data: req.payload,
         value: 0n,
@@ -473,7 +473,7 @@ function maxFeeText(p: Profile, tx: FrameTx): string {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// Compatible accounts (tx-type 3): a LeakedRoleExecutor role call, signed over the executor's EIP-712 digest
+// Compatible accounts (tx-type 3): a QueueBitRoleExecutor role call, signed over the executor's EIP-712 digest
 // ---------------------------------------------------------------------------------------------------------------
 
 /** The executor's PQ-signed entry points and which key signs each. */
@@ -501,7 +501,7 @@ const CALLS_ABI = [
   },
 ] as const;
 
-/** `callsHash = keccak256(abi.encode(calls))`, as `LeakedRoleExecutor.callsHash`. */
+/** `callsHash = keccak256(abi.encode(calls))`, as `QueueBitRoleExecutor.callsHash`. */
 export function executorCallsHash(calls: readonly ExecCall[]): Hex {
   return keccak256(encodeAbiParameters(CALLS_ABI, [calls.map((c) => ({ ...c }))]));
 }
@@ -509,12 +509,12 @@ export function executorCallsHash(calls: readonly ExecCall[]): Hex {
 const T = (name: string, type: string) => ({ name, type });
 
 /**
- * The digest a role key signs for an executor call (`LeakedRoleExecutor.hash*`), recomputed from the decoded call
- * alone, in the domain `{ "LeakedRoleExecutor", "1", chainId (key 2), verifyingContract (key 14) }`. Exported for the
+ * The digest a role key signs for an executor call (`QueueBitRoleExecutor.hash*`), recomputed from the decoded call
+ * alone, in the domain `{ "QueueBitRoleExecutor", "1", chainId (key 2), verifyingContract (key 14) }`. Exported for the
  * interop tests; the request carries no digest to compare with, and none would be trusted.
  */
 export function roleCallDigest(chainId: bigint, executor: Address, fn: string, args: Record<string, unknown>): Hex {
-  const domain = { name: "LeakedRoleExecutor", version: "1", chainId: Number(chainId), verifyingContract: executor };
+  const domain = { name: "QueueBitRoleExecutor", version: "1", chainId: Number(chainId), verifyingContract: executor };
   const account = args.account as Address;
   const nonce = args.nonce as bigint;
   const typed = (primaryType: string, fields: { name: string; type: string }[], message: Record<string, unknown>) =>
@@ -559,7 +559,7 @@ function decodeRoleCall(payload: Hex): { entry: FunctionEntry; args: Record<stri
     return reject(
       "E-77",
       "This request can't be read.",
-      "It is not a Vault or Recovery approval of a LEAKED compatible account.",
+      "It is not a Vault or Recovery approval of a QueueBit compatible account.",
     );
   }
   let args: Record<string, unknown>;
@@ -594,7 +594,7 @@ function reviewRoleCall(req: SignRequest, ctx: DeviceContext): Review {
     warnings.push({
       code: "unknown-module",
       title: "Unfamiliar account module",
-      body: `This approval is for the module ${shortAddress(executor)}, which is not the LEAKED module this app knows for ${chainName(req.chainId)}. Settings changes in it can't be shown in plain words.`,
+      body: `This approval is for the module ${shortAddress(executor)}, which is not the QueueBit module this app knows for ${chainName(req.chainId)}. Settings changes in it can't be shown in plain words.`,
     });
   }
   const r = rc(ctx, req, account);
@@ -784,7 +784,7 @@ function renderContainer(
     else out.push(renderExternalCall(target, c.value, c.data, inner));
   }
   const extra: DetailRow[] = [];
-  // `usdValue` is not shown: the account measures the real outflow and does not trust it (ILeakedAccount header),
+  // `usdValue` is not shown: the account measures the real outflow and does not trust it (IQueueBitAccount header),
   // and a browser-chosen number next to the decoded amount would only confuse.
   if (typeof args.kind === "number" || typeof args.kind === "bigint") {
     extra.push({ label: "Scheduled as", value: enumLabel("queueKind", String(args.kind)) ?? `kind ${args.kind}` });

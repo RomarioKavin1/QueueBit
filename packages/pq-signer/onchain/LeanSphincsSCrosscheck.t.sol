@@ -2,7 +2,7 @@
 pragma solidity ^0.8.28;
 
 // Cross-check harness: runs the UNMODIFIED upstream leanSphincs-s verifier (copied into a temp Foundry project by
-// scripts/onchain-crosscheck.sh) against the leanSphincs-s KAT sets A (upstream fixture) and C (LEAKED). Not part of
+// scripts/onchain-crosscheck.sh) against the leanSphincs-s KAT sets A (upstream fixture) and C (QueueBit). Not part of
 // the contracts workspace.
 import "forge-std/Test.sol";
 import "../src/LeanSphincs-SAsm.sol";

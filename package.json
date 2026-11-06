@@ -1,7 +1,7 @@
 {
-  "name": "leaked-wallet",
+  "name": "queuebit-wallet",
   "private": true,
-  "description": "LEAKED: a browser-extension wallet whose everyday key is safe to leak",
+  "description": "QueueBit: a browser-extension wallet whose everyday key is safe to leak",
   "license": "MIT",
   "type": "module",
   "packageManager": "pnpm@10.34.1",

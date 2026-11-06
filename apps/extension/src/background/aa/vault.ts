@@ -10,7 +10,7 @@ import {
   type PublicClient,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { schemeById } from "@leaked/pq-signer";
+import { schemeById } from "@queuebit/pq-signer";
 import {
   ROLE,
   TX_TYPE,
@@ -19,7 +19,7 @@ import {
   encodeSignRequest,
   randomUuid,
   type SignRequest,
-} from "@leaked/ur";
+} from "@queuebit/ur";
 import { policyHookAbi, pqVerifierAbi, roleExecutorAbi } from "../../generated/contracts";
 import type { AaDeployment } from "../../shared/chains";
 import type { AccountPlan } from "../account";
@@ -31,8 +31,8 @@ import { decodeRevert, revertData } from "./userop";
 
 /**
  * The Vault flow on the 4337 backend (plan §30 §6 for backend U): the phone signs the executor's EIP-712 digest
- * (`ur:leaked-sign-request` tx-type 3), the extension verifies the witness against the executor's stored PQ key with
- * `@leaked/pq-signer`, recomputes the digest from the calldata and checks it against the executor's own `hash*` view,
+ * (`ur:queuebit-sign-request` tx-type 3), the extension verifies the witness against the executor's stored PQ key with
+ * `@queuebit/pq-signer`, recomputes the digest from the calldata and checks it against the executor's own `hash*` view,
  * simulates the exact call, and the fee tank relays it as a plain transaction (the PQ check runs in execution, so
  * the relayer needs no special rights: IMPLEMENTATION-NOTES "Contracts M7", Gas). Nothing unverified is sent.
  */
@@ -167,7 +167,7 @@ export class AaVault {
       schemeId,
       expectedPk: pk,
       verifyingContract: dep.executor.toLowerCase() as Hex,
-      origin: (meta.origin ?? "LEAKED extension").slice(0, 256),
+      origin: (meta.origin ?? "QueueBit extension").slice(0, 256),
       intent,
       ...(advisory && role === "vault" ? { policy: advisory } : {}),
     };
@@ -195,7 +195,7 @@ export class AaVault {
       args: viewArgs,
     } as never)) as Hex;
     if (onChain.toLowerCase() !== digest.toLowerCase()) {
-      throw new Error("Internal check failed: the account's digest differs from LEAKED's. Nothing was sent.");
+      throw new Error("Internal check failed: the account's digest differs from QueueBit's. Nothing was sent.");
     }
   }
 
@@ -233,7 +233,7 @@ export class AaVault {
     }
     const scheme = schemeById(schemeId);
     if (!scheme)
-      return { code: "E-22", error: "This Vault uses a key type this version doesn't support. Update LEAKED." };
+      return { code: "E-22", error: "This Vault uses a key type this version doesn't support. Update QueueBit." };
     const pk = rec.role === "vault" ? roles.vaultPk : roles.recoveryPk;
     if (!scheme.verify(hexToBytes(pk), hexToBytes(digest), hexToBytes(sig.witness))) {
       return {
@@ -245,7 +245,7 @@ export class AaVault {
     const data = withPqSig(rec.exec.calldata, sig.witness);
     const c = this.client(rec.chainId);
     const accounts = await this.keyring.accounts();
-    if (!accounts) return { code: "locked", error: "Unlock LEAKED first." };
+    if (!accounts) return { code: "locked", error: "Unlock QueueBit first." };
     let gas: bigint;
     try {
       gas = await c.estimateGas({ account: accounts.feeTank, to: dep.executor, data });

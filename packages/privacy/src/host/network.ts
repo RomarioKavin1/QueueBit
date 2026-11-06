@@ -1,5 +1,5 @@
 import { concat, getAddress, numberToHex, sha256, toHex, type Address, type Hex } from "viem";
-import { httpTransport, type Transport } from "@leaked/rpc";
+import { httpTransport, type Transport } from "@queuebit/rpc";
 import type { Network } from "./types.js";
 
 /** Anon-RPC 0.4.0 `fetch(url, { …, anonOptions: { isolationKey } })` (SPEC §9.3). */
@@ -58,7 +58,7 @@ export function directNetwork(f: typeof fetch = globalThis.fetch): Network & { r
   return { anonymous: false, fetch: (input, init) => f(input, init) };
 }
 
-/** A JSON-RPC transport (`@leaked/rpc`) whose HTTP goes through a Host `network`. */
+/** A JSON-RPC transport (`@queuebit/rpc`) whose HTTP goes through a Host `network`. */
 export function networkTransport(url: string, network: Network, timeoutMs?: number): Transport {
   return httpTransport(url, {
     fetch: ((input: string | URL, init?: RequestInit) => network.fetch(input, init)) as typeof fetch,

@@ -1,9 +1,9 @@
 // Regenerates the `abis.account` / `abis.roleSigner` / `abis.policyHook` / `abis.roleExecutor` sections and the `selectors` table of
-// src/registry/leaked.descriptors.json from the forge build artifacts (contracts/out), for exactly the functions the
+// src/registry/queuebit.descriptors.json from the forge build artifacts (contracts/out), for exactly the functions the
 // registry has display formats for (plus the role signer's frame entry points).
 //
-//   pnpm --filter @leaked/companion abi:sync          # rewrite the registry (then run prettier)
-//   pnpm --filter @leaked/companion abi:sync --check  # exit 1 if the registry has drifted from the artifacts
+//   pnpm --filter @queuebit/companion abi:sync          # rewrite the registry (then run prettier)
+//   pnpm --filter @queuebit/companion abi:sync --check  # exit 1 if the registry has drifted from the artifacts
 //
 // Needs `forge build` in contracts/ first. test/registry.test.ts runs the same comparison when artifacts exist, and
 // an artifact-free check against the Solidity sources on every run.
@@ -12,15 +12,15 @@ import { fileURLToPath } from "node:url";
 import { toFunctionSelector } from "viem";
 
 const here = (p) => fileURLToPath(new URL(p, import.meta.url));
-export const REGISTRY_PATH = here("../src/registry/leaked.descriptors.json");
+export const REGISTRY_PATH = here("../src/registry/queuebit.descriptors.json");
 const OUT = here("../../../contracts/out/");
 
 export const ARTIFACTS = {
-  account: ["LeakedAccountRoles.sol/LeakedAccountRoles.json", "LeakedAccountImpl.sol/LeakedAccountImpl.json"],
+  account: ["QueueBitAccountRoles.sol/QueueBitAccountRoles.json", "QueueBitAccountImpl.sol/QueueBitAccountImpl.json"],
   roleSigner: ["PQRoleSigner.sol/PQRoleSigner.json"],
   // Compatible accounts (ERC-4337 + ERC-7579): the role entry points (tx-type 3) and the setters a Vault batch reaches.
-  policyHook: ["LeakedPolicyHook.sol/LeakedPolicyHook.json"],
-  roleExecutor: ["LeakedRoleExecutor.sol/LeakedRoleExecutor.json"],
+  policyHook: ["QueueBitPolicyHook.sol/QueueBitPolicyHook.json"],
+  roleExecutor: ["QueueBitRoleExecutor.sol/QueueBitRoleExecutor.json"],
 };
 /** Role-signer functions the decoder needs even though they have no display format. */
 const ALWAYS = { roleSigner: ["verifyFrame", "executePQ", "relay"], account: [], policyHook: [], roleExecutor: [] };
@@ -89,7 +89,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   if (process.argv.includes("--check")) {
     if (drift) {
       console.error(
-        "leaked.descriptors.json has drifted from contracts/out: run `pnpm --filter @leaked/companion abi:sync`.",
+        "queuebit.descriptors.json has drifted from contracts/out: run `pnpm --filter @queuebit/companion abi:sync`.",
       );
       process.exit(1);
     }

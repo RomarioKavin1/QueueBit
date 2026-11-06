@@ -15,7 +15,7 @@
 //! Montgomery form *twice* (snarkjs multiplies by R² before writing them). Every point is checked to be on the curve,
 //! which for bn254 G1 (cofactor 1) is also the subgroup check. The verifying key's G2 points (beta, gamma, delta) are
 //! subgroup-checked too; the nVars B2 query points are not (tens of seconds in WASM): the zkey is pinned by sha256
-//! before it reaches the prover (`@leaked/privacy`'s `loadPinnedArtifacts`), and every proof is verified against the
+//! before it reaches the prover (`@queuebit/privacy`'s `loadPinnedArtifacts`), and every proof is verified against the
 //! key's own verifying key before it is returned.
 
 use ark_bn254::{Bn254, Fq, Fq2, Fr, G1Affine, G2Affine};

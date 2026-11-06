@@ -1,4 +1,4 @@
-// Deploys the LEAKED account stack to the LOCAL devnet (devnet/README.md) from the forge artifacts in contracts/out
+// Deploys the QueueBit account stack to the LOCAL devnet (devnet/README.md) from the forge artifacts in contracts/out
 // and writes ./addresses.local.json. The extension bundles that file (apps/extension/scripts/gen-contracts.mjs).
 //
 //   cd contracts && forge build && cd ../devnet/deploy && bun install && bun run deploy
@@ -9,8 +9,8 @@
 // only what has no code yet; an unchanged artifact set rewrites the same file. A changed artifact (e.g. an audit fix)
 // gets a new address and the file follows. Funding: anvil #7 only (devnet/README.md "Funding-key allocation": the
 // extension e2e key). Contracts:
-//   LeakedAccountRoles()                                  role surface, DELEGATECALLed by the implementation
-//   LeakedAccountImpl(ERC8421_WORKSHOP, perGasMaxFee=true, roles)
+//   QueueBitAccountRoles()                                  role surface, DELEGATECALLed by the implementation
+//   QueueBitAccountImpl(ERC8421_WORKSHOP, perGasMaxFee=true, roles)
 //   AccountFactory()                                      CREATE2 ERC1967 proxies (the extension's counterfactual)
 //   C13Verifier()                                         IPQVerifier for SPHINCS- C13 (the Vault's scheme, M4)
 //   RoleSignerFactory(ERC8421_WORKSHOP, MAX_COST, NaiveStakingRegistry, 0.01 ETH)
@@ -46,10 +46,10 @@ const CHAIN_ID = 1337;
 const FUNDER_KEY: Hex = "0x4bbbf85ce3377467afe5d46f804f221813b2bb87f24d81f60f1fcdbf7cbf4356";
 /** Arachnid deterministic-deployment proxy (devnet genesis). Calldata = salt ‖ initCode. */
 const CREATE2_DEPLOYER: Address = "0x4e59b44847b379578588920cA78FbF26c0B4956C";
-const SALT = keccak256(stringToHex("leaked.devnet.deploy.v1"));
+const SALT = keccak256(stringToHex("queuebit.devnet.deploy.v1"));
 const STAKING_REGISTRY: Address = "0x8464135c8F25Da09e49BC8782676a84730C318bC";
 /** Public by design: anyone on the local devnet can act as this Vault. Never use it anywhere else. */
-export const TEST_VAULT_KEY = keccak256(stringToHex("leaked/devnet/test-vault-stand-in/v1"));
+export const TEST_VAULT_KEY = keccak256(stringToHex("queuebit/devnet/test-vault-stand-in/v1"));
 const DEVNET_ERC8421_WORKSHOP = 0;
 const TXPARAM_MAX_COST = 6;
 
@@ -59,7 +59,7 @@ const FILE = `${here}addresses.local.json`;
 
 const chain = {
   id: CHAIN_ID,
-  name: "leaked-local-devnet",
+  name: "queuebit-local-devnet",
   nativeCurrency: { name: "ETH", symbol: "ETH", decimals: 18 },
   rpcUrls: { default: { http: [RPC] } },
 } as const;
@@ -114,7 +114,7 @@ const checkOnly = process.env.CHECK_ONLY === "1";
 const chainId = await pub.getChainId();
 if (chainId !== CHAIN_ID) throw new Error(`expected chain ${CHAIN_ID} at ${RPC}, got ${chainId}`);
 if ((await pub.getCode({ address: CREATE2_DEPLOYER })) === undefined) {
-  throw new Error(`no CREATE2 deployer at ${CREATE2_DEPLOYER}: is ${RPC} the LEAKED local devnet?`);
+  throw new Error(`no CREATE2 deployer at ${CREATE2_DEPLOYER}: is ${RPC} the QueueBit local devnet?`);
 }
 
 const contracts: Record<string, Entry> = {};
@@ -152,8 +152,8 @@ async function deploy(name: string, file: string, args: unknown[], gas: bigint):
   return address;
 }
 
-const roles = await deploy("LeakedAccountRoles", "LeakedAccountRoles.sol", [], 40_000_000n);
-await deploy("LeakedAccountImpl", "LeakedAccountImpl.sol", [DEVNET_ERC8421_WORKSHOP, true, roles], 45_000_000n);
+const roles = await deploy("QueueBitAccountRoles", "QueueBitAccountRoles.sol", [], 40_000_000n);
+await deploy("QueueBitAccountImpl", "QueueBitAccountImpl.sol", [DEVNET_ERC8421_WORKSHOP, true, roles], 45_000_000n);
 await deploy("AccountFactory", "AccountFactory.sol", [], 10_000_000n);
 const c13 = await deploy("C13Verifier", "C13Verifier.sol", [], 10_000_000n);
 await deploy(

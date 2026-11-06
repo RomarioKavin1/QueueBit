@@ -24,9 +24,9 @@ import {
   type FrameTx,
   type FrameTxReceipt,
   type WireFrameTx,
-} from "@leaked/frames";
-import { schemeById } from "@leaked/pq-signer";
-import type { NodeClient, SidecarClient } from "@leaked/rpc";
+} from "@queuebit/frames";
+import { schemeById } from "@queuebit/pq-signer";
+import type { NodeClient, SidecarClient } from "@queuebit/rpc";
 import {
   ROLE,
   TX_TYPE,
@@ -36,7 +36,7 @@ import {
   randomUuid,
   type AdvisoryPolicy,
   type SignRequest,
-} from "@leaked/ur";
+} from "@queuebit/ur";
 import { accountAbi, pqRoleSignerAbi, pqVerifierAbi, roleExecutorAbi } from "../generated/contracts";
 import { AaVault } from "./aa/vault";
 import { DeployBlocks } from "./deployBlock";
@@ -65,9 +65,9 @@ import {
 
 /**
  * The Vault flow from the extension side (plan §30 §6, ux-spec §3.6): build the role signer's frame transaction for
- * the chosen path, wrap it as `ur:leaked-sign-request` (keys 1–12 exactly as `apps/companion` parses them), and once
- * the phone's `ur:leaked-signature` is scanned back: check it is the answer to *this* request, verify the
- * quantum-safe witness locally against the signer's on-chain `pk()` with `@leaked/pq-signer` and the Path-B payer
+ * the chosen path, wrap it as `ur:queuebit-sign-request` (keys 1–12 exactly as `apps/companion` parses them), and once
+ * the phone's `ur:queuebit-signature` is scanned back: check it is the answer to *this* request, verify the
+ * quantum-safe witness locally against the signer's on-chain `pk()` with `@queuebit/pq-signer` and the Path-B payer
  * signature against `payerKey()`, simulate the exact signed bytes, and only then submit. Nothing unverified or
  * unsimulated is ever sent; a request is never re-broadcast automatically (plan §30 §4.7).
  */
@@ -111,7 +111,7 @@ export interface VaultRequestRecord {
   role: VaultRole;
   account: Address;
   signer: Address;
-  /** "direct": 4337 backend, a `LeakedRoleExecutor` call relayed by the fee tank (PQ check in execution). */
+  /** "direct": 4337 backend, a `QueueBitRoleExecutor` call relayed by the fee tank (PQ check in execution). */
   path: "A" | "B" | "direct";
   lane: "standard" | "staked" | "direct";
   backend?: "4337";
@@ -123,7 +123,7 @@ export interface VaultRequestRecord {
   /** Native account: the unsigned frame transaction (PQ placeholder in entry 0, payer placeholder in entry 1 on Path B). */
   wire?: WireFrameTx;
   digest: Hex;
-  /** `ur:leaked-sign-request` CBOR (hex); the page renders the animated QR from it. */
+  /** `ur:queuebit-sign-request` CBOR (hex); the page renders the animated QR from it. */
   cbor: Hex;
   createdAt: number;
   expiresAt: number;
@@ -374,7 +374,7 @@ export class VaultFlow {
     const code = await client.getCode({ address });
     if (code && code !== "0x") return undefined;
     const accounts = await this.d.keyring.accounts();
-    if (!accounts) throw new VaultError("locked", "Unlock LEAKED first.");
+    if (!accounts) throw new VaultError("locked", "Unlock QueueBit first.");
     const data = createRoleSignerCalldata(plan, role);
     const value = role === "vault" ? VAULT_SIGNER_FLOAT : RECOVERY_SIGNER_FLOAT;
     const gasPrice = await this.gasPrice(chainId);
@@ -424,7 +424,7 @@ export class VaultFlow {
         "This key isn't on the network yet; it gets its first fees when it's set up.",
       );
     const accounts = await this.d.keyring.accounts();
-    if (!accounts) throw new VaultError("locked", "Unlock LEAKED first.");
+    if (!accounts) throw new VaultError("locked", "Unlock QueueBit first.");
     const gasPrice = await this.gasPrice(chainId);
     const est = await client.estimateGas({ account: accounts.feeTank, to: address, value });
     const gas = (est * 5n) / 4n + 10_000n;
@@ -530,7 +530,7 @@ export class VaultFlow {
       schemeId: signer.schemeId,
       pk: signer.pk,
       profileId: net.profileId,
-      origin: meta.origin ?? "LEAKED extension",
+      origin: meta.origin ?? "QueueBit extension",
       built,
       policy: advisoryPolicy(plan.address, policy),
     });
@@ -674,7 +674,7 @@ export class VaultFlow {
     if (rec.status === "cancelled" && rec.error?.code === "superseded") {
       throw new VaultError(
         "superseded",
-        "This code was replaced by a newer request. Nothing was sent. Scan the newest code shown by LEAKED instead.",
+        "This code was replaced by a newer request. Nothing was sent. Scan the newest code shown by QueueBit instead.",
       );
     }
     if (rec.status !== "waiting") throw new VaultError("not-waiting", "This request was already handled.");
@@ -708,7 +708,7 @@ export class VaultFlow {
     // 1. The quantum-safe witness, against the signer's on-chain pk() (plan §30 §6.2).
     const scheme = schemeById(signer.schemeId);
     if (!scheme)
-      throw new VaultError("E-22", "This Vault uses a key type this version doesn't support. Update LEAKED.");
+      throw new VaultError("E-22", "This Vault uses a key type this version doesn't support. Update QueueBit.");
     if (!scheme.verify(hexToBytes(signer.pk), hexToBytes(digest), hexToBytes(sig.witness))) {
       throw new VaultError(
         "E-62",
@@ -780,7 +780,7 @@ export class VaultFlow {
       id: rec.id,
       chainId: rec.chainId,
       kind: "vault",
-      ...(rec.origin && rec.origin !== "LEAKED extension" ? { origin: rec.origin } : {}),
+      ...(rec.origin && rec.origin !== "QueueBit extension" ? { origin: rec.origin } : {}),
       account: rec.account,
       tank: rec.signer,
       calls: [],
@@ -811,7 +811,7 @@ export class VaultFlow {
             error: {
               code: "hash-mismatch",
               message:
-                "Sent, but the network answered with a different transaction id than the one LEAKED computed. LEAKED keeps watching for the one it sent. If nothing confirms within a few minutes, start the request again: the old approval can't be used twice.",
+                "Sent, but the network answered with a different transaction id than the one QueueBit computed. QueueBit keeps watching for the one it sent. If nothing confirms within a few minutes, start the request again: the old approval can't be used twice.",
             },
           }
         : {}),
@@ -849,7 +849,7 @@ export class VaultFlow {
             await this.d.activity.update(r.id, {
               status: "failed",
               headline: `Not confirmed: ${r.action.title}`,
-              detail: "The network never confirmed it. Start it again from LEAKED.",
+              detail: "The network never confirmed it. Start it again from QueueBit.",
             });
             if (u) changed.push(u);
           }
@@ -1044,7 +1044,7 @@ export class VaultFlow {
     const plan = await this.plan(chainId);
     const rec = (await this.list()).find((r) => r.opId?.toLowerCase() === opId.toLowerCase());
     if (!rec?.action.queued)
-      throw new VaultError("unknown-op", "LEAKED doesn't have the details of this change, so it can't send it.");
+      throw new VaultError("unknown-op", "QueueBit doesn't have the details of this change, so it can't send it.");
     const calls = rec.action.queued.calls.map((c) => ({ target: c.target, value: BigInt(c.value), data: c.data }));
     const aa = plan.backend === "4337" ? this.aa.dep(chainId) : undefined;
     const data = aa
@@ -1121,7 +1121,7 @@ export function advisoryPolicy(account: Address, p: CurrentPolicy): AdvisoryPoli
   };
 }
 
-/** `ur:leaked-sign-request` for a role-signer frame tx, keys 1–12 as `apps/companion` parses them. */
+/** `ur:queuebit-sign-request` for a role-signer frame tx, keys 1–12 as `apps/companion` parses them. */
 export function signRequest(o: {
   id: string;
   chainId: number;

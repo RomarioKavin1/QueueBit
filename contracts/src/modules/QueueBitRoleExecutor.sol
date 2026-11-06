@@ -5,10 +5,10 @@ import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {RollingCap} from "../lib/RollingCap.sol";
 import {IPQVerifier} from "../interfaces/IPQVerifier.sol";
 import {IERC7579Module, IERC7579Execution, MODULE_TYPE_EXECUTOR} from "./interfaces/IERC7579Modules.sol";
-import {ILeakedModules} from "./interfaces/ILeakedModules.sol";
-import {LeakedPolicyHook, ILeakedRoleContext} from "./LeakedPolicyHook.sol";
+import {IQueueBitModules} from "./interfaces/IQueueBitModules.sol";
+import {QueueBitPolicyHook, IQueueBitRoleContext} from "./QueueBitPolicyHook.sol";
 
-/// @title LeakedRoleExecutor
+/// @title QueueBitRoleExecutor
 /// @notice ERC-7579 executor (type 2): the 4337-backend analogue of `PQRoleSigner` plus the account's role surface
 ///         (plan `10-contracts.md` §10.4.2, mirroring §10.3.2's vault / recovery / guardian rules). Anyone may
 ///         submit; the authority is a post-quantum signature verified **in execution** through `IPQVerifier`
@@ -27,7 +27,7 @@ import {LeakedPolicyHook, ILeakedRoleContext} from "./LeakedPolicyHook.sol";
 ///           older ops are void after the rotation (vault epoch);
 ///         - guardians (addresses): `guardianFreeze`, once per 7 days each, 72 h.
 ///         Separate nonce lanes for vault and recovery, so the vault cannot burn recovery's nonces.
-contract LeakedRoleExecutor is IERC7579Module, ILeakedModules, ILeakedRoleContext, EIP712 {
+contract QueueBitRoleExecutor is IERC7579Module, IQueueBitModules, IQueueBitRoleContext, EIP712 {
     using RollingCap for RollingCap.Bucket;
 
     uint256 public constant MAX_VAULT_CALLS = 16;
@@ -57,11 +57,11 @@ contract LeakedRoleExecutor is IERC7579Module, ILeakedModules, ILeakedRoleContex
     bytes32 private constant MODE_SINGLE = bytes32(0);
 
     // Transient context (EIP-1153): the account a role action is running for, and whether it is a queued op.
-    bytes32 private constant T_CTX_ACCOUNT = keccak256("leaked.executor.t.account");
-    bytes32 private constant T_CTX_QUEUED = keccak256("leaked.executor.t.queued");
+    bytes32 private constant T_CTX_ACCOUNT = keccak256("queuebit.executor.t.account");
+    bytes32 private constant T_CTX_QUEUED = keccak256("queuebit.executor.t.queued");
 
     struct Roles {
-        LeakedPolicyHook hook;
+        QueueBitPolicyHook hook;
         uint48 timelockDelay;
         uint32 vaultEpoch;
         bool initialized;
@@ -83,7 +83,7 @@ contract LeakedRoleExecutor is IERC7579Module, ILeakedModules, ILeakedRoleContex
     mapping(address account => mapping(bytes32 opId => QueuedOp)) internal _queue;
     mapping(address account => mapping(address guardian => GuardianCfg)) internal _guardians;
 
-    constructor() EIP712("LeakedRoleExecutor", "1") {}
+    constructor() EIP712("QueueBitRoleExecutor", "1") {}
 
     // ---------------------------------------------------------------------------------------- ERC-7579 ------
 
@@ -92,7 +92,7 @@ contract LeakedRoleExecutor is IERC7579Module, ILeakedModules, ILeakedRoleContex
         Roles storage r = _roles[account];
         if (r.initialized) revert AlreadyInitialized(account);
         ExecutorInit memory c = abi.decode(data, (ExecutorInit));
-        if (address(c.hook).code.length == 0 || LeakedPolicyHook(c.hook).EXECUTOR() != address(this)) {
+        if (address(c.hook).code.length == 0 || QueueBitPolicyHook(c.hook).EXECUTOR() != address(this)) {
             revert BadAddress(c.hook);
         }
         if (c.verifier.code.length == 0) revert BadAddress(c.verifier);
@@ -104,7 +104,7 @@ contract LeakedRoleExecutor is IERC7579Module, ILeakedModules, ILeakedRoleContex
         if (delay < MIN_TIMELOCK || delay > MAX_TIMELOCK) revert BadConfig();
 
         r.initialized = true;
-        r.hook = LeakedPolicyHook(c.hook);
+        r.hook = QueueBitPolicyHook(c.hook);
         r.verifier = IPQVerifier(c.verifier);
         r.sigLength = uint32(sigLen);
         r.vaultPk = c.vaultPk;
@@ -316,7 +316,7 @@ contract LeakedRoleExecutor is IERC7579Module, ILeakedModules, ILeakedRoleContex
         emit RecoveryKeySet(account, pk);
     }
 
-    // ------------------------------------------------------------------------------- ILeakedRoleContext ------
+    // ------------------------------------------------------------------------------- IQueueBitRoleContext ------
 
     function isQueuedContext(address account) public view returns (bool) {
         return _tloadAddr(T_CTX_ACCOUNT) == account && account != address(0) && _tload(T_CTX_QUEUED) != 0;
@@ -460,12 +460,12 @@ contract LeakedRoleExecutor is IERC7579Module, ILeakedModules, ILeakedRoleContex
         bool allowed = c.target == address(this)
             ? (sel == this.setGuardian.selector || sel == this.setTimelock.selector || sel == this.setRecoveryKey.selector)
             : (
-                sel == LeakedPolicyHook.setHotKey.selector || sel == LeakedPolicyHook.setCap.selector
-                    || sel == LeakedPolicyHook.setToken.selector || sel == LeakedPolicyHook.setTarget.selector
-                    || sel == LeakedPolicyHook.setSession.selector || sel == LeakedPolicyHook.setValueVerifier.selector
-                    || sel == LeakedPolicyHook.setTrustedVerifier.selector || sel == LeakedPolicyHook.setRecipientMode.selector
-                    || sel == LeakedPolicyHook.freeze.selector || sel == LeakedPolicyHook.unfreeze.selector
-                    || sel == LeakedPolicyHook.enableBunker.selector
+                sel == QueueBitPolicyHook.setHotKey.selector || sel == QueueBitPolicyHook.setCap.selector
+                    || sel == QueueBitPolicyHook.setToken.selector || sel == QueueBitPolicyHook.setTarget.selector
+                    || sel == QueueBitPolicyHook.setSession.selector || sel == QueueBitPolicyHook.setValueVerifier.selector
+                    || sel == QueueBitPolicyHook.setTrustedVerifier.selector
+                    || sel == QueueBitPolicyHook.setRecipientMode.selector || sel == QueueBitPolicyHook.freeze.selector
+                    || sel == QueueBitPolicyHook.unfreeze.selector || sel == QueueBitPolicyHook.enableBunker.selector
             );
         if (!allowed) revert NotAllowed(c.target, sel);
     }
@@ -485,7 +485,7 @@ contract LeakedRoleExecutor is IERC7579Module, ILeakedModules, ILeakedRoleContex
         view
         returns (uint256 usd)
     {
-        LeakedPolicyHook hook = r.hook;
+        QueueBitPolicyHook hook = r.hook;
         uint256 ethNow = account.balance;
         if (before[0] > ethNow) {
             if (!hook.getToken(account, address(0)).allowed) revert MustQueue();

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// BenchAccount: a minimal EIP-8141 sender used by the LEAKED PQ-in-VERIFY benchmark (bench/). Written for this
+// BenchAccount: a minimal EIP-8141 sender used by the QueueBit PQ-in-VERIFY benchmark (bench/). Written for this
 // repo. One deployment per (scheme, key). NOT a wallet: no replay protection beyond the protocol nonce, no
 // upgrade path, and the Path B ECDSA "payer" key is trusted only to authorize gas. Do not hold real funds.
 //

@@ -1,5 +1,5 @@
 /**
- * @leaked/privacy's real prove path (createGroth16Prover → pinned artifacts → engine → self-verify → toSolProof)
+ * @queuebit/privacy's real prove path (createGroth16Prover → pinned artifacts → engine → self-verify → toSolProof)
  * with the arkworks engine injected, plus the worker RPC. packages/privacy itself is untouched.
  */
 import { afterAll, describe, expect, it } from "vitest";
@@ -11,7 +11,7 @@ import {
   loadPinnedArtifacts,
   type Groth16Proof,
   type PortLike,
-} from "@leaked/privacy";
+} from "@queuebit/privacy";
 import { createArkworksGroth16, createDefaultProver, serveDefaultProver, type ArkworksGroth16 } from "../src/index.js";
 import { buildWithdrawal, fsLoader } from "./fixture.js";
 
@@ -33,7 +33,7 @@ function spied(): ArkworksGroth16 & { verifies: { result: boolean }[] } {
 }
 const base = createArkworksGroth16();
 
-describe("@leaked/privacy prove path with the arkworks engine", () => {
+describe("@queuebit/privacy prove path with the arkworks engine", () => {
   it("createDefaultProver: a withdrawal proof whose SolProof binds the change note, nullifier, roots, context", async () => {
     const w = await buildWithdrawal();
     const engine = spied();

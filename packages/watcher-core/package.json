@@ -1,5 +1,5 @@
 {
-  "name": "@leaked/watcher-core",
+  "name": "@queuebit/watcher-core",
   "version": "0.0.0",
   "private": true,
   "description": "Watcher/alerts core shared by the extension light mode and the self-hosted watcher: event decoding for both backends, alert model and copy, blocked-payment derivation from frame receipts, timelock tracking, rules, dedup, HMAC",
@@ -23,7 +23,7 @@
     "gen:abi": "node scripts/gen-abi.mjs"
   },
   "dependencies": {
-    "@leaked/frames": "workspace:*",
+    "@queuebit/frames": "workspace:*",
     "viem": "2.57.16"
   }
 }

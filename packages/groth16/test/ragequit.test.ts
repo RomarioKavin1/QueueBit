@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import * as snarkjs from "snarkjs";
-import { loadPinnedCommitmentArtifacts, nullifierHashOf, commitmentOf, precommitmentOf } from "@leaked/privacy";
+import { loadPinnedCommitmentArtifacts, nullifierHashOf, commitmentOf, precommitmentOf } from "@queuebit/privacy";
 import { createArkworksGroth16, createDefaultRagequitProver } from "../src/index.js";
 import { fsLoader } from "./fixture.js";
 

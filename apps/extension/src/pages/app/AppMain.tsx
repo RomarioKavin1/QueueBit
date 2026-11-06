@@ -72,20 +72,20 @@ export function AppMain() {
   useEffect(() => {
     document.title =
       route === "onboarding"
-        ? "Set up LEAKED"
+        ? "Set up QueueBit"
         : route === "vault"
-          ? "Approve on your phone · LEAKED"
+          ? "Approve on your phone · QueueBit"
           : route === "privacy"
-            ? "Private balance · LEAKED"
+            ? "Private balance · QueueBit"
             : route === "alerts"
-              ? "Alerts · LEAKED"
-              : "LEAKED";
+              ? "Alerts · QueueBit"
+              : "QueueBit";
   }, [route]);
 
   if (!state) {
     return (
       <div className="grid min-h-screen place-items-center text-muted">
-        <Spinner size={28} label="Loading LEAKED" />
+        <Spinner size={28} label="Loading QueueBit" />
       </div>
     );
   }
@@ -155,7 +155,7 @@ function useUnreadAlerts(route: string): number {
   const { reload } = list;
   useEffect(() => {
     const on = (changes: Record<string, Browser.storage.StorageChange>, area: string) => {
-      if (area === "local" && "leaked:alerts" in changes) void reload();
+      if (area === "local" && "queuebit:alerts" in changes) void reload();
     };
     browser.storage.onChanged.addListener(on);
     return () => browser.storage.onChanged.removeListener(on);
@@ -182,10 +182,10 @@ function Shell({ route, children }: { route: string; children: ReactNode }) {
   return (
     <div className="min-h-screen bg-surface">
       <div className="mx-auto flex max-w-[1040px] gap-6 px-6 py-8">
-        <nav aria-label="LEAKED" className="flex w-44 shrink-0 flex-col gap-1">
+        <nav aria-label="QueueBit" className="flex w-44 shrink-0 flex-col gap-1">
           <div className="mb-4 flex items-center gap-2">
             <LogoMark size={26} />
-            <span className="t-title">LEAKED</span>
+            <span className="t-title">QueueBit</span>
           </div>
           {items.map((i) => (
             <a

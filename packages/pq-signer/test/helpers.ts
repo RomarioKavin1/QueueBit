@@ -81,5 +81,5 @@ export const leanKatC = readJson<{
 export const benchLean = readJson<{ publicKey: string; digests: string[]; sigs: string[] }>(
   "../../../bench/vectors/leansphincs-s.json",
 );
-/** keccak256("leaked-bench/v1/leansphincs-s/seed"): the bench's lssk seed (bench/src/signers.ts). */
+/** keccak256("queuebit-bench/v1/leansphincs-s/seed"): the bench's lssk seed (bench/src/signers.ts). */
 export const BENCH_LEAN_SEED = "0x8530e25021c78261824410eb99d6e860bff14e918fcb4fcd44ef4da4583e1450";

@@ -246,7 +246,7 @@ export function SendScreen({
                       setHandedOff(true);
                     }}
                   >
-                    {handedOff ? "Continuing in the LEAKED tab" : "Approve on phone"}
+                    {handedOff ? "Continuing in the QueueBit tab" : "Approve on phone"}
                   </Button>
                 </div>
               )}

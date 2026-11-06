@@ -1,17 +1,17 @@
-# @leaked/groth16
+# @queuebit/groth16
 
-MIT Groth16 (BN254) prover for circom circuits: the default `@leaked/privacy` engine, replacing snarkjs (GPL-3.0) in
+MIT Groth16 (BN254) prover for circom circuits: the default `@queuebit/privacy` engine, replacing snarkjs (GPL-3.0) in
 the shipped extension. Proofs and public signals are snarkjs-shaped (`pi_a`/`pi_b`/`pi_c` decimal strings), so
 `toSolProof`, PoolPayer and the 0xbow relayer take them unchanged. NOT AUDITED.
 
 ```ts
 // Worker in the MV3 offscreen document
-import { fetchArtifactLoader } from "@leaked/privacy";
-import { serveDefaultProver } from "@leaked/groth16";
+import { fetchArtifactLoader } from "@queuebit/privacy";
+import { serveDefaultProver } from "@queuebit/groth16";
 serveDefaultProver(self, { loader: fetchArtifactLoader(chrome.runtime.getURL("pp-circuits/")) });
 
 // page side
-const prover = createWorkerProver(worker); // from @leaked/privacy
+const prover = createWorkerProver(worker); // from @queuebit/privacy
 ```
 
 `createArkworksGroth16()` implements `Groth16Backend` (`fullProve` + `verify`); `createDefaultProver` wraps it in
@@ -30,7 +30,7 @@ const prover = createWorkerProver(worker); // from @leaked/privacy
 
 **Never a bogus proof.** The circuit's own `===` assertions fail witness generation (`WitnessError`, circom code 4);
 a witness that slips past them is caught because the core verifies every proof against the zkey's verifying key
-before returning it (`ConstraintUnsatisfiedError`). `@leaked/privacy` then self-verifies again against the pinned
+before returning it (`ConstraintUnsatisfiedError`). `@queuebit/privacy` then self-verifies again against the pinned
 vkey through the engine's `verify`.
 
 **Randomness.** The blinding scalars r, s come from 128 bytes of `crypto.getRandomValues` on the JS side (reduced
@@ -66,9 +66,9 @@ Proving is synchronous inside WASM for ~2.4 s (BENCH.md): run it in a Worker, ne
 
 ```sh
 pnpm install                                  # artifacts (dev dep) + snarkjs (test-only oracle)
-pnpm --filter @leaked/groth16 test            # snarkjs cross-check, forge on-chain check, negatives, privacy path
-pnpm --filter @leaked/groth16 test:rust       # cargo test --features native
-pnpm --filter @leaked/groth16 build:wasm      # rebuild wasm/ (wasm-bindgen-cli 0.2.117, rustc 1.94.1)
+pnpm --filter @queuebit/groth16 test            # snarkjs cross-check, forge on-chain check, negatives, privacy path
+pnpm --filter @queuebit/groth16 test:rust       # cargo test --features native
+pnpm --filter @queuebit/groth16 build:wasm      # rebuild wasm/ (wasm-bindgen-cli 0.2.117, rustc 1.94.1)
 ```
 
 The on-chain check compiles a temp copy of `contracts/test/privacy/WithdrawalGroth16Verifier.sol` (MIT, same key

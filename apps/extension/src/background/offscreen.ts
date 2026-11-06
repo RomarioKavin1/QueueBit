@@ -1,4 +1,4 @@
-import type { Prover, ProveResult, RagequitProver, WithdrawCircuitInputs } from "@leaked/privacy";
+import type { Prover, ProveResult, RagequitProver, WithdrawCircuitInputs } from "@queuebit/privacy";
 import {
   OFFSCREEN_PATH,
   offscreenRequest,

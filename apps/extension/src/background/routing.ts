@@ -191,7 +191,7 @@ export function routeCopy(
         tone: "limit",
         headline: "Activate your account first",
         detail: "Your account isn't active on this network yet, so it can't pay. Activation sets your daily limit.",
-        remedy: "Open LEAKED and choose Activate account.",
+        remedy: "Open QueueBit and choose Activate account.",
       };
     case "blocked":
       if (d.rules[0] === "ROUTE-BUNKER") {

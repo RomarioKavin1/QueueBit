@@ -20,10 +20,10 @@ export const REGISTRY: Address = (process.env.STAKING_REGISTRY as Address) ?? "0
 /** anvil #5: the privacy workstream's root funding key (public test key). */
 export const ROOT_FUNDER: Hex = "0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba";
 /** The key the scripts fund from: anvil #5 itself, or (`FUNDER_LABEL=x`) the sub-account
- *  keccak256(anvil#5 ‖ "leaked.privacy.sub:" ‖ x), topped up from anvil #5 by `ensureFunder` (so a run never shares
+ *  keccak256(anvil#5 ‖ "queuebit.privacy.sub:" ‖ x), topped up from anvil #5 by `ensureFunder` (so a run never shares
  *  nonces with another script on anvil #5). */
 export const FUNDER: Hex = process.env.FUNDER_LABEL
-  ? keccak256(concat([ROOT_FUNDER, toHex(`leaked.privacy.sub:${process.env.FUNDER_LABEL}`)]))
+  ? keccak256(concat([ROOT_FUNDER, toHex(`queuebit.privacy.sub:${process.env.FUNDER_LABEL}`)]))
   : ROOT_FUNDER;
 export const addr = (k: Hex): Address => privateKeyToAccount(k).address;
 

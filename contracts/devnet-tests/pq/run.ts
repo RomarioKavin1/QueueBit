@@ -2,9 +2,9 @@
 //
 //   cd contracts && forge build && cd devnet-tests/pq && bun install && bun run test
 //
-// 1. Deploys C13Verifier, a MockLeakedAccount (stand-in for the account's vault entry points), RoleSignerFactory, and
+// 1. Deploys C13Verifier, a MockQueueBitAccount (stand-in for the account's vault entry points), RoleSignerFactory, and
 //    a VaultSigner (PQRoleSigner, role 1) through the factory; funds them from anvil #2.
-// 2. Generates a real SPHINCS- C13 key and signatures with @leaked/pq-signer over the codec's sig hash.
+// 2. Generates a real SPHINCS- C13 key and signatures with @queuebit/pq-signer over the codec's sig hash.
 // 3. Path B (public mempool, ethrex eth_sendRawTransaction): vaultExecute moving ETH via the mock -> mined.
 // 4. Path B through the sidecar: executePQ(self, stake(86400, 0.012 ETH)) -> staked in the ERC-8421 registry.
 // 5. Path B with a forged PQ witness: admitted (payer key is valid), SENDER frame reverts, nothing moves, nonce +1.
@@ -34,8 +34,8 @@ import {
   signTx,
   txHash,
   type FrameTx,
-} from "@leaked/frames";
-import { SCHEME_ID, SIG_LENGTH, keygen, sign } from "@leaked/pq-signer";
+} from "@queuebit/frames";
+import { SCHEME_ID, SIG_LENGTH, keygen, sign } from "@queuebit/pq-signer";
 import {
   STAKING_REGISTRY,
   artifact,
@@ -65,7 +65,7 @@ const results: Record<string, unknown> = { startedAt: new Date().toISOString() }
 const verifierArt = artifact("C13Verifier.sol", "C13Verifier");
 const signerArt = artifact("PQRoleSigner.sol", "PQRoleSigner");
 const factoryArt = artifact("RoleSignerFactory.sol", "RoleSignerFactory");
-const mockArt = artifact("RoleMocks.sol", "MockLeakedAccount");
+const mockArt = artifact("RoleMocks.sol", "MockQueueBitAccount");
 const registryAbi = [
   {
     type: "function",
@@ -88,7 +88,7 @@ log("node", { chainId, client: await rpc.node.clientVersion(), block: await rpc.
 
 // A deterministic test PQ key (public test material: never use for funds).
 const seed = hexToBytes(
-  `${keccak256(stringToHex("leaked/devnet-tests/pq/seed/0"))}${keccak256(stringToHex("leaked/devnet-tests/pq/seed/1")).slice(2)}` as Hex,
+  `${keccak256(stringToHex("queuebit/devnet-tests/pq/seed/0"))}${keccak256(stringToHex("queuebit/devnet-tests/pq/seed/1")).slice(2)}` as Hex,
 );
 const { publicKey, secretKey } = keygen(seed, { role: "vault" });
 const pk = bytesToHex(publicKey);
@@ -100,7 +100,7 @@ log("keys", { pk, payer, recipient });
 const verifier = await deploy(verifierArt);
 const mock = await deploy(mockArt);
 const factory = await deploy(factoryArt, [DEVNET_ERC8421_WORKSHOP, TXPARAM_MAX_COST, STAKING_REGISTRY, MAX_FEE_WEI]);
-const salt = keccak256(stringToHex(`leaked/devnet-tests/pq/${Date.now()}`));
+const salt = keccak256(stringToHex(`queuebit/devnet-tests/pq/${Date.now()}`));
 const createArgs = [salt, 1, mock.address, pk, verifier.address, payer] as const;
 const signer = (await pub.readContract({
   address: factory.address,
@@ -123,7 +123,7 @@ const setRoles = await call(
 await call(mock.address, "0x", parseEther("0.1"), 500_000n);
 results.deployments = {
   C13Verifier: { address: verifier.address, tx: verifier.hash, gasUsed: verifier.gasUsed },
-  MockLeakedAccount: { address: mock.address, tx: mock.hash, gasUsed: mock.gasUsed },
+  MockQueueBitAccount: { address: mock.address, tx: mock.hash, gasUsed: mock.gasUsed },
   RoleSignerFactory: { address: factory.address, tx: factory.hash, gasUsed: factory.gasUsed },
   VaultSigner: { address: signer, tx: created.hash, gasUsed: created.gasUsed },
   setRoles: setRoles.hash,

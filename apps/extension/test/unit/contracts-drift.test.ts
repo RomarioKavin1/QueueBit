@@ -6,7 +6,7 @@ import { AA_DEPLOYMENT_FILE, DEPLOYMENT_FILE, OUT_DIR, TARGET, render } from "..
 /**
  * The account ABI is read from the forge artifacts, never hand-copied: this fails when contracts/out (e.g. an audit
  * fix) or the devnet deployment changed and src/generated/contracts.ts was not regenerated
- * (`pnpm --filter @leaked/extension gen:contracts`). Skipped where the artifacts are not built.
+ * (`pnpm --filter @queuebit/extension gen:contracts`). Skipped where the artifacts are not built.
  */
 describe.runIf(existsSync(OUT_DIR as string))("generated contracts", () => {
   it("src/generated/contracts.ts matches contracts/out and devnet/deploy/addresses.local.json", async () => {

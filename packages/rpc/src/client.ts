@@ -8,7 +8,7 @@ import {
   type FrameTxReceipt,
   type SidecarReceiptRpc,
   type WireFrameTx,
-} from "@leaked/frames";
+} from "@queuebit/frames";
 import type { EthrexFrameTransactionRpc } from "./ethrexJson.js";
 import { httpTransport, RpcError, type HttpTransportOptions, type Transport } from "./transport.js";
 import type {

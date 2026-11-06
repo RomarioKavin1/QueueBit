@@ -19,7 +19,7 @@ cargo_home="${CARGO_HOME:-$HOME/.cargo}"
 export RUSTFLAGS="--remap-path-prefix=$cargo_home=/cargo --remap-path-prefix=$here=/pq-signer"
 cargo build --release --lib --target wasm32-unknown-unknown --features wasm
 rm -rf "$here/wasm"
-wasm-bindgen --target web --out-dir "$here/wasm" --out-name leaked_pq \
-  target/wasm32-unknown-unknown/release/leaked_pq.wasm
-node "$here/scripts/inline-wasm.mjs" "$here/wasm/leaked_pq_bg.wasm" "$here/wasm/leaked_pq_inline.js"
+wasm-bindgen --target web --out-dir "$here/wasm" --out-name queuebit_pq \
+  target/wasm32-unknown-unknown/release/queuebit_pq.wasm
+node "$here/scripts/inline-wasm.mjs" "$here/wasm/queuebit_pq_bg.wasm" "$here/wasm/queuebit_pq_inline.js"
 ls -l "$here/wasm"

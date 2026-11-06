@@ -1,8 +1,8 @@
-import { decodeRecoveryChallenge, type Hex } from "@leaked/ur";
+import { decodeRecoveryChallenge, type Hex } from "@queuebit/ur";
 import { last8 } from "./format.js";
 
 /**
- * The browser's `ur:leaked-recovery-challenge` (extension M2): the request id a recovery test must sign, chosen by the
+ * The browser's `ur:queuebit-recovery-challenge` (extension M2): the request id a recovery test must sign, chosen by the
  * browser and accepted once, within 30 minutes of when the browser showed it (`RECOVERY_CHALLENGE_TTL_MS` there). The
  * code carries no time, so this phone counts from when it scanned it. That is a bound at the latest (the scan comes
  * after the showing), so the phone's window is never shorter than the browser's; the browser's cutoff is the one that

@@ -183,7 +183,7 @@ export function Scanner({
             spellCheck={false}
             autoCapitalize="off"
             autoCorrect="off"
-            placeholder="UR:LEAKED-…"
+            placeholder="UR:QUEUEBIT-…"
             className="w-full rounded-md border border-line bg-bg p-3 t-mono"
             data-testid="paste-input"
           />

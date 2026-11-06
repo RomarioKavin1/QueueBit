@@ -2,10 +2,10 @@ import type { Address, Hex } from "viem";
 import type { KV } from "../shared/kv";
 
 /** Persisted per `chainId:address` (lower case): the block the account's code first appeared in. */
-export const DEPLOY_BLOCKS_KEY = "leaked:deployBlocks";
+export const DEPLOY_BLOCKS_KEY = "queuebit:deployBlocks";
 
 /** Per chain id: the fingerprint (`eth_chainId` + genesis hash) the cached deploy blocks were found on. */
-export const CHAIN_FINGERPRINTS_KEY = "leaked:chainFingerprints";
+export const CHAIN_FINGERPRINTS_KEY = "queuebit:chainFingerprints";
 
 export interface CodeReader {
   getBlockNumber(): Promise<bigint>;

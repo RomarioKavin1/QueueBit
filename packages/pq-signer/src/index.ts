@@ -1,11 +1,11 @@
 /**
- * @leaked/pq-signer: SPHINCS- C13 (keccak, FIPS 205 ADRS; 3,688-byte signatures) for LEAKED, plus the EXPERIMENTAL
+ * @queuebit/pq-signer: SPHINCS- C13 (keccak, FIPS 205 ADRS; 3,688-byte signatures) for QueueBit, plus the EXPERIMENTAL
  * second scheme leanSphincs-s (4,164-byte signatures; fits Path A under the stock 100 K VERIFY budget).
  *
  * The top-level exports (`keygen`, `sign`, `verify`, `SIG_LENGTH`, `SCHEME_ID`, ...) are C13 and unchanged. The
  * scheme-parametrised API is `schemes.c13` / `schemes.leanSphincsS` (same shape, `PQScheme`) and `schemeById`.
  *
- * Synchronous API over a WASM core (Rust crate `leaked-pq`, `rust/`). The WASM is inlined, so the
+ * Synchronous API over a WASM core (Rust crate `queuebit-pq`, `rust/`). The WASM is inlined, so the
  * module works unchanged in browsers, extension service workers and Node. Signing takes seconds
  * (see BENCH.md): call it from a Worker, never from a UI thread.
  *
@@ -23,8 +23,8 @@ import {
   leanSignDigest,
   leanVerifyDigest,
   leanSchemeId as wasmLeanSchemeId,
-} from "../wasm/leaked_pq.js";
-import { WASM_BASE64, WASM_SHA256 } from "../wasm/leaked_pq_inline.js";
+} from "../wasm/queuebit_pq.js";
+import { WASM_BASE64, WASM_SHA256 } from "../wasm/queuebit_pq_inline.js";
 
 function fromBase64(b64: string): Uint8Array {
   const bin = atob(b64);
@@ -90,7 +90,7 @@ function split(sk: Uint8Array): KeyPair {
 
 /**
  * Derive the role key pair from a master seed (the 64-byte BIP-39 seed; 32..64 bytes accepted):
- * `HMAC-SHA512(key = "leaked/v1/" ‖ schemeId ‖ "/" ‖ role ‖ "/" ‖ chainScope, msg = seed)`.
+ * `HMAC-SHA512(key = "queuebit/v1/" ‖ schemeId ‖ "/" ‖ role ‖ "/" ‖ chainScope, msg = seed)`.
  * The input is copied into WASM memory and wiped there; the caller still owns (and should wipe)
  * its own copy.
  */
@@ -117,7 +117,7 @@ export function publicKeyOf(secretKey: Uint8Array): Uint8Array {
 }
 
 /**
- * Sign a 32-byte digest (in LEAKED always `compute_sig_hash(tx)`, TXPARAM 0x08). Returns the
+ * Sign a 32-byte digest (in QueueBit always `compute_sig_hash(tx)`, TXPARAM 0x08). Returns the
  * 3,688-byte witness. The signature is self-verified inside the core before it is returned.
  */
 export function sign(secretKey: Uint8Array, digest32: Uint8Array, opts: SignOptions = {}): Uint8Array {
@@ -210,7 +210,7 @@ function budgetStatusOf(budget: number, used: number, bits?: (used: number) => n
 }
 
 /**
- * The cover estimate of upstream spec §14 ("Lifetime") for LEAKED's Light-tier keys (h = 26, b = 13, a = 12,
+ * The cover estimate of upstream spec §14 ("Lifetime") for QueueBit's Light-tier keys (h = 26, b = 13, a = 12,
  * k = 13): the security bits after `used` signatures are `-log2(2^(b-26) · E_{r ~ Poisson(used / 2^b)}
  * [(1 - (1 - 2^-12)^r)^13])`; upstream's rating is the largest `used` with 127 bits (43,715), scaled down to 20,000.
  * The estimate is not proved (for the original leanSphincs parameters the Lean-proved lifetimes are 4–17% below it),

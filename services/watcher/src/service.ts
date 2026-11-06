@@ -1,6 +1,6 @@
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
-import { WatcherCore, type CoreState } from "@leaked/watcher-core";
+import { WatcherCore, type CoreState } from "@queuebit/watcher-core";
 import { rpcChainClient, type ChainClient } from "./chain.js";
 import type { WatcherConfig } from "./config.js";
 import { ntfySink, webhookSink } from "./delivery.js";

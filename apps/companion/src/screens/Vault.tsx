@@ -1,5 +1,5 @@
-import { SCHEME_ID } from "@leaked/pq-signer";
-import { UR_TYPES, UrReceiver } from "@leaked/ur";
+import { SCHEME_ID } from "@queuebit/pq-signer";
+import { UR_TYPES, UrReceiver } from "@queuebit/ur";
 import { useEffect, useMemo, useState } from "react";
 import type { Address } from "viem";
 import type { Built } from "../app/routes.js";
@@ -239,7 +239,7 @@ function KeyBudgetBanner({ k, onRotate }: { k: KeyState; onRotate: () => void })
 // Scan → review → signed
 // ---------------------------------------------------------------------------------------------------------------
 
-/** The scanning panel used by Vault and Recovery mode: collects a `ur:leaked-sign-request` and reviews it. */
+/** The scanning panel used by Vault and Recovery mode: collects a `ur:queuebit-sign-request` and reviews it. */
 export function RequestScanner({
   ctx,
   onReview,

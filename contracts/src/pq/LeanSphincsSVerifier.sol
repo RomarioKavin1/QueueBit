@@ -10,7 +10,7 @@ import {LeanSphincsSAsm} from "./vendor/LeanSphincs-SAsm.sol";
 ///         public-mempool budget, so a role signer on it can use Path A on any mempool (decision "Path A scheme options
 ///         after the M3 benchmark", `docs/plan/IMPLEMENTATION-NOTES.md`). One stateless deployment shared by every
 ///         role signer on this scheme. Unlike C13 the verifier has no formal proof, and the per-key lifetime (20,000
-///         signatures for LEAKED's Light-tier keys) is an upstream estimate, not proved (`packages/pq-signer/README.md`).
+///         signatures for QueueBit's Light-tier keys) is an upstream estimate, not proved (`packages/pq-signer/README.md`).
 /// @dev    Same shape as `C13Verifier`: the contract IS the unmodified upstream verifier (`LeanSphincsSAsm`, vendored at
 ///         4c76aaf) plus the adapter entry point, so one deployment serves both ABIs:
 ///           - `verify(bytes32 pkSeed, bytes32 pkRoot, bytes32 message, bytes sig)` (upstream, selector 0x2bf6eda8):
@@ -23,7 +23,7 @@ import {LeanSphincsSAsm} from "./vendor/LeanSphincs-SAsm.sol";
 ///         with `return`, so it needs its own call frame. A residual revert (out of gas) is mapped to `false`.
 ///         No storage, no environment opcodes: usable in a VERIFY frame. `GAS` appears only right before STATICCALL.
 contract LeanSphincsSVerifier is LeanSphincsSAsm, IPQVerifier {
-    /// keccak256("leanSphincs-s/keccak/v1"); equals `schemes.leanSphincsS.SCHEME_ID` of the leaked pq-signer package.
+    /// keccak256("leanSphincs-s/keccak/v1"); equals `schemes.leanSphincsS.SCHEME_ID` of the queuebit pq-signer package.
     bytes32 public constant SCHEME_ID = 0x5f6989ca8f8b5be0ec5193400cd602392000e54a51f3290ed4be9c075229daed;
     /// `LeanSphincs-SAsm.sol` rejects any other length.
     uint256 public constant SIG_LENGTH = 4164;

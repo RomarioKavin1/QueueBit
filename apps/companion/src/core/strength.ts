@@ -30,7 +30,7 @@ const zxcvbn = new ZxcvbnFactory({
 });
 
 /** Words that make a passphrase easier to guess for this app in particular. */
-const USER_INPUTS = ["leaked", "vault", "wallet", "recovery", "passphrase", "password", "ethereum", "crypto"];
+const USER_INPUTS = ["queuebit", "vault", "wallet", "recovery", "passphrase", "password", "ethereum", "crypto"];
 
 export function checkStrength(passphrase: string, extra: string[] = []): StrengthResult {
   const r = zxcvbn.check(passphrase.slice(0, 256), [...USER_INPUTS, ...extra]);

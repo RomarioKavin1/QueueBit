@@ -34,7 +34,7 @@ const signatureCbor = encodeSignature(signatureResponse());
 describe("animated UR round trip", () => {
   it("emits upper-case parts in QR alphanumeric charset", () => {
     const enc = new AnimatedUr(UR_TYPES.signature, signatureCbor);
-    for (const p of enc.parts(30)) expect(p).toMatch(/^UR:LEAKED-SIGNATURE\/\d+-\d+\/[A-Z]+$/);
+    for (const p of enc.parts(30)) expect(p).toMatch(/^UR:QUEUEBIT-SIGNATURE\/\d+-\d+\/[A-Z]+$/);
   });
 
   it("a C13 signature at the default 400-byte fragments is ~10 parts", () => {

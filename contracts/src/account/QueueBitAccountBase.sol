@@ -3,15 +3,15 @@ pragma solidity 0.8.28;
 
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {ILeakedAccount} from "./ILeakedAccount.sol";
-import {LeakedAccountStorage} from "./LeakedAccountStorage.sol";
+import {IQueueBitAccount} from "./IQueueBitAccount.sol";
+import {QueueBitAccountStorage} from "./QueueBitAccountStorage.sol";
 
-/// @title LeakedAccountBase
-/// @notice Constants and internal helpers shared by `LeakedAccountImpl` (hot tier, VERIFY, 1271, UUPS) and
-///         `LeakedAccountRoles` (vault / recovery / guardian surface, reached by DELEGATECALL from the
+/// @title QueueBitAccountBase
+/// @notice Constants and internal helpers shared by `QueueBitAccountImpl` (hot tier, VERIFY, 1271, UUPS) and
+///         `QueueBitAccountRoles` (vault / recovery / guardian surface, reached by DELEGATECALL from the
 ///         implementation's fallback). Both run in the proxy's context on the same ERC-7201 storage.
-/// @dev Nothing here is VERIFY-reachable: `LeakedVerify` reads storage directly.
-abstract contract LeakedAccountBase is ILeakedAccount {
+/// @dev Nothing here is VERIFY-reachable: `QueueBitVerify` reads storage directly.
+abstract contract QueueBitAccountBase is IQueueBitAccount {
     uint256 public constant MAX_HOT_CALLS = 8;
     uint256 public constant MAX_VAULT_CALLS = 16;
     uint256 public constant MAX_TOKENS = 16;
@@ -32,27 +32,27 @@ abstract contract LeakedAccountBase is ILeakedAccount {
 
     // Transient slots (EIP-1153). Discarded between frames on chain; always cleared explicitly within one, because
     // a test harness (and a nested call in one frame) would otherwise see them. Never touched in VERIFY.
-    bytes32 internal constant T_HOT = keccak256("leaked.account.t.hot");
-    bytes32 internal constant T_HOT_DEBIT = keccak256("leaked.account.t.hotDebit");
-    bytes32 internal constant T_QUEUED = keccak256("leaked.account.t.queued");
-    bytes32 internal constant T_VAULT = keccak256("leaked.account.t.vault");
-    bytes32 internal constant T_UPGRADE = keccak256("leaked.account.t.upgrade");
+    bytes32 internal constant T_HOT = keccak256("queuebit.account.t.hot");
+    bytes32 internal constant T_HOT_DEBIT = keccak256("queuebit.account.t.hotDebit");
+    bytes32 internal constant T_QUEUED = keccak256("queuebit.account.t.queued");
+    bytes32 internal constant T_VAULT = keccak256("queuebit.account.t.vault");
+    bytes32 internal constant T_UPGRADE = keccak256("queuebit.account.t.upgrade");
 
-    function _s() internal pure returns (LeakedAccountStorage.Layout storage) {
-        return LeakedAccountStorage.layout();
+    function _s() internal pure returns (QueueBitAccountStorage.Layout storage) {
+        return QueueBitAccountStorage.layout();
     }
 
     function _noActiveContext() internal view {
         if (_tload(T_HOT) != 0 || _tload(T_QUEUED) != 0 || _tload(T_VAULT) != 0) revert Reentrancy();
     }
 
-    function _freeze(LeakedAccountStorage.Layout storage $, uint48 until) internal {
+    function _freeze(QueueBitAccountStorage.Layout storage $, uint48 until) internal {
         $.hotFrozen = true;
         if (until > $.frozenUntil) $.frozenUntil = until;
         emit Frozen(msg.sender, $.frozenUntil);
     }
 
-    function _setFeePolicy(LeakedAccountStorage.Layout storage $, uint256 maxPrio, bool selfPay, address tank)
+    function _setFeePolicy(QueueBitAccountStorage.Layout storage $, uint256 maxPrio, bool selfPay, address tank)
         internal
     {
         $.maxPriorityFeePerGas = uint128(maxPrio);
@@ -93,7 +93,7 @@ abstract contract LeakedAccountBase is ILeakedAccount {
     }
 
     /// Balances of the monitored assets: [ETH, tokenList...].
-    function _snapshot(LeakedAccountStorage.Layout storage $) internal view returns (uint256[] memory bals) {
+    function _snapshot(QueueBitAccountStorage.Layout storage $) internal view returns (uint256[] memory bals) {
         address[] storage list = $.tokenList;
         uint256 n = list.length;
         bals = new uint256[](n + 1);
@@ -105,7 +105,7 @@ abstract contract LeakedAccountBase is ILeakedAccount {
 
     /// USD value of the monitored assets that left since `before`: sum of max(0, before - now) x price. An outflow
     /// of unpriced ETH reverts: `TokenNotAllowed` in the hot context (`strict`), `MustQueue` for the vault.
-    function _outflowUsd(LeakedAccountStorage.Layout storage $, uint256[] memory before, bool strict)
+    function _outflowUsd(QueueBitAccountStorage.Layout storage $, uint256[] memory before, bool strict)
         internal
         view
         returns (uint256 usd)

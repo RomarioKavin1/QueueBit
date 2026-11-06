@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { isAddress, type Address } from "viem";
-import { AnimatedUr, UR_TYPES, singlePartUr } from "@leaked/ur";
+import { AnimatedUr, UR_TYPES, singlePartUr } from "@queuebit/ur";
 import { NETWORKS, getNetwork, type TokenPreset } from "../../shared/chains";
 import type { WalletState } from "../../shared/types";
 import type { PairPreview } from "../../shared/views";
@@ -77,7 +77,7 @@ export function Onboarding({ state, step, go }: { state: WalletState; step: Step
       <div className="mx-auto flex max-w-[720px] flex-col gap-6 px-6 py-8">
         <header className="flex flex-col gap-4">
           <div className="flex items-center justify-between">
-            <span className="t-title">LEAKED</span>
+            <span className="t-title">QueueBit</span>
             <span className="t-small text-muted">
               Step {stepNo} of {RAIL.length}
             </span>
@@ -620,16 +620,16 @@ const usdText = (v: number) => `$${v.toLocaleString("en-US", { minimumFractionDi
 export function priceWarning(preset: TokenPreset, price: number): string | undefined {
   if (!(price > 0) || !(preset.usd > 0)) return undefined;
   if (price * 2 <= preset.usd) {
-    return `That's below the ${usdText(preset.usd)} LEAKED suggests: ${preset.symbol} would count for less, so your daily limit lets about ${Math.round(preset.usd / price)}× more ${preset.symbol} through. Use the real price unless you mean that.`;
+    return `That's below the ${usdText(preset.usd)} QueueBit suggests: ${preset.symbol} would count for less, so your daily limit lets about ${Math.round(preset.usd / price)}× more ${preset.symbol} through. Use the real price unless you mean that.`;
   }
   if (price >= preset.usd * 2) {
-    return `That's above the ${usdText(preset.usd)} LEAKED suggests: your daily limit would be reached with about ${Math.round(price / preset.usd)}× fewer ${preset.symbol} than its real value.`;
+    return `That's above the ${usdText(preset.usd)} QueueBit suggests: your daily limit would be reached with about ${Math.round(price / preset.usd)}× fewer ${preset.symbol} than its real value.`;
   }
   return undefined;
 }
 
 /**
- * The tokens the account allows from the first day, with the static price LEAKED counts them at toward the daily
+ * The tokens the account allows from the first day, with the static price QueueBit counts them at toward the daily
  * limit. The price is pinned by the account (never read from an API), so the user confirms it in plain words; it can
  * be changed later with the Vault (Limits).
  */
@@ -660,7 +660,7 @@ function Tokens({ headingRef, state, go }: StepProps & { state: WalletState }) {
       </Title>
       {rows.length === 0 ? (
         <p className="t-body mb-6 text-muted" data-testid="tokens-none">
-          LEAKED has no token suggestions for {net.name}. ETH works as usual; your Vault can add tokens later.
+          QueueBit has no token suggestions for {net.name}. ETH works as usual; your Vault can add tokens later.
         </p>
       ) : (
         <ul className="mb-6 flex flex-col gap-3" aria-label="Tokens">
@@ -695,7 +695,7 @@ function Tokens({ headingRef, state, go }: StepProps & { state: WalletState }) {
                 {r.on && (
                   <div className="mt-3 flex flex-col gap-2 pl-8">
                     <p className="t-body" data-testid={`token-${r.preset.symbol}-sentence`}>
-                      LEAKED counts {r.preset.symbol} as {price > 0 ? usdText(price) : "—"} toward your daily limit.
+                      QueueBit counts {r.preset.symbol} as {price > 0 ? usdText(price) : "—"} toward your daily limit.
                     </p>
                     <MoneyInput
                       id={`price-${r.preset.symbol}`}
@@ -919,7 +919,7 @@ function PairVault({ headingRef, state, go }: StepProps & { state: WalletState }
         <div className="flex flex-col gap-6 sm:flex-row">
           <ol className="t-body flex flex-1 list-decimal flex-col gap-2 pl-5">
             <li>
-              On your phone, open <strong>LEAKED Vault</strong>. New Vault: <em>Create a new Vault</em>; it ends on a
+              On your phone, open <strong>QueueBit Vault</strong>. New Vault: <em>Create a new Vault</em>; it ends on a
               pairing code. Existing Vault: Settings › <em>Pair with a browser</em>.
             </li>
             <li>Point the phone's code at this camera (or paste it as text).</li>
@@ -942,7 +942,7 @@ function PairVault({ headingRef, state, go }: StepProps & { state: WalletState }
         </div>
       )}
       <p className="t-small mt-6 text-muted">
-        There is no "skip": without a Vault there is no daily limit, so LEAKED doesn't create an account without one.
+        There is no "skip": without a Vault there is no daily limit, so QueueBit doesn't create an account without one.
       </p>
     </>
   );
@@ -1084,7 +1084,7 @@ function RecoveryStep({ headingRef, state, go }: StepProps & { state: WalletStat
 }
 
 /**
- * The browser's single-use test code (`ur:leaked-recovery-challenge`): the phone signs over its request id, so only a
+ * The browser's single-use test code (`ur:queuebit-recovery-challenge`): the phone signs over its request id, so only a
  * test made just now, for this screen, is accepted.
  */
 function RecoveryChallenge() {
@@ -1242,7 +1242,7 @@ function Done({ headingRef, state, go }: StepProps & { state: WalletState }) {
           <p className="t-body">
             {net.backend === "4337" ? (
               <>
-                Activation creates your account on {net.name} with your limits and your Vault (LEAKED's modules). Your{" "}
+                Activation creates your account on {net.name} with your limits and your Vault (QueueBit's modules). Your{" "}
                 <strong>fee tank</strong> pays the one-time network fee and later sends your phone's approvals. Everyday
                 payments pay their small network fee from your account itself, never more than a fixed cap.
               </>
@@ -1320,8 +1320,8 @@ function Done({ headingRef, state, go }: StepProps & { state: WalletState }) {
           )}
           <Card className="mt-6 bg-surface" heading="Open your wallet">
             <p className="t-body text-muted">
-              Click the LEAKED icon in your browser's toolbar. Tip: pin it from the puzzle-piece menu so it's always one
-              click away.
+              Click the QueueBit icon in your browser's toolbar. Tip: pin it from the puzzle-piece menu so it's always
+              one click away.
             </p>
             <Button className="mt-3" variant="secondary" onClick={() => (location.hash = "#home")}>
               Open wallet here

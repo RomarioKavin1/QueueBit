@@ -1,5 +1,5 @@
 // LOCAL devnet e2e (devnet/up.sh): deposit → sync → prove → withdraw via the PoolPayer frame paymaster through the
-// BUDGET-010 sidecar → the balance arrives. Opt-in: LOCAL_DEVNET=1 pnpm --filter @leaked/privacy test.
+// BUDGET-010 sidecar → the balance arrives. Opt-in: LOCAL_DEVNET=1 pnpm --filter @queuebit/privacy test.
 // Needs `forge build` in contracts/ (reads contracts/out). Funding: anvil #5 (the privacy workstream's key) sends
 // one top-up to this suite's own sub-account, which then does everything on its own nonce stream.
 import { readFileSync } from "node:fs";
@@ -18,8 +18,8 @@ import {
   type Hex,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { getProfile } from "@leaked/frames";
-import { httpTransport } from "@leaked/rpc";
+import { getProfile } from "@queuebit/frames";
+import { httpTransport } from "@queuebit/rpc";
 import {
   DEFAULT_SIDECAR_URL,
   EncryptedStorage,
@@ -54,7 +54,7 @@ const REGISTRY: Address = "0x8464135c8F25Da09e49BC8782676a84730C318bC";
 /** anvil #5 (public test key): the privacy workstream's funding key (devnet/README.md). */
 const ANVIL5: Hex = "0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba";
 /** This suite's own sub-account (a public, derived test key), funded from anvil #5. */
-const SUB: Hex = keccak256(stringToHex("leaked/privacy-package-e2e/v1"));
+const SUB: Hex = keccak256(stringToHex("queuebit/privacy-package-e2e/v1"));
 const OUT = new URL("../../../contracts/out/", import.meta.url).pathname;
 const ART = new URL("../node_modules/@fatsolutions/privacy-pools-core-circuits/artifacts/", import.meta.url).pathname;
 const E = 10n ** 18n;

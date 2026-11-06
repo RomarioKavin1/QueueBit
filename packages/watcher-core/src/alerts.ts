@@ -111,7 +111,7 @@ export interface CopyInput {
   ref: AlertRef;
 }
 
-/** Revert reasons of the Vault / Recovery / waiting-period rules (`ILeakedModules` "roles and timelock"). */
+/** Revert reasons of the Vault / Recovery / waiting-period rules (`IQueueBitModules` "roles and timelock"). */
 const VAULT_SIDE_ERRORS = new Set([
   "MustQueue",
   "BadSignature",
@@ -218,7 +218,7 @@ export function copyFor(c: CopyInput): { title: string; body: string; action: Al
     case "pause-ended":
       return {
         title: "Pause ended",
-        body: "The pause on everyday spending has run out. LEAKED will switch everyday spending back on.",
+        body: "The pause on everyday spending has run out. QueueBit will switch everyday spending back on.",
         action: { label: "Open Security", deepLink: deepLinks.security() },
       };
     case "resumed":

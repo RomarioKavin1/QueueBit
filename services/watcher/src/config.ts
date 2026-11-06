@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { getAddress, isAddress, type Address } from "viem";
-import type { Backend, Severity } from "@leaked/watcher-core";
+import type { Backend, Severity } from "@queuebit/watcher-core";
 
 /**
  * Configuration: a JSON file (`WATCHER_CONFIG=/path/config.json` or the first CLI argument) overlaid by environment

@@ -1,8 +1,8 @@
 import { keccak256, parseAbi, toFunctionSelector, type Abi, type AbiFunction, type Address, type Hex } from "viem";
-import raw from "../registry/leaked.descriptors.json" with { type: "json" };
+import raw from "../registry/queuebit.descriptors.json" with { type: "json" };
 
 /**
- * Typed view of `src/registry/leaked.descriptors.json`, the one data file that says how calls are decoded and worded.
+ * Typed view of `src/registry/queuebit.descriptors.json`, the one data file that says how calls are decoded and worded.
  * Everything here is derived from that file at load; nothing is fetched.
  */
 
@@ -180,7 +180,7 @@ export function privacyPool(chainId: bigint): Address | undefined {
   return reg.privacyPools.pools?.[chainId.toString()] as Address | undefined;
 }
 
-/** The LEAKED ERC-7579 modules on a compatible-account chain (tx-type 3), if this app knows them. */
+/** The QueueBit ERC-7579 modules on a compatible-account chain (tx-type 3), if this app knows them. */
 export function aaModules(chainId: bigint): { executor: Address; hook: Address } | undefined {
   const m = reg.aaModules[chainId.toString()];
   return typeof m === "object" ? { executor: m.executor as Address, hook: m.hook as Address } : undefined;

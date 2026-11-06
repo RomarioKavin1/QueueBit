@@ -16,7 +16,7 @@ export interface Host {
   externalSyncProvider?: ExternalSyncProvider;
 }
 
-/** `fetch`-shaped. LEAKED: the Anon-RPC worker's fetch, with an `isolationKey` per account (§6.2). */
+/** `fetch`-shaped. QueueBit: the Anon-RPC worker's fetch, with an `isolationKey` per account (§6.2). */
 export interface Network {
   fetch(input: string | URL, init?: RequestInit): Promise<Response>;
 }
@@ -28,7 +28,7 @@ export interface Storage {
   get(key: string): Promise<string | null>;
 }
 
-/** Returns a private key at a BIP-32 path. LEAKED: throws for everything except vault-registered delegation paths. */
+/** Returns a private key at a BIP-32 path. QueueBit: throws for everything except vault-registered delegation paths. */
 export interface Keystore {
   deriveAt(path: string): Promise<Hex>;
 }

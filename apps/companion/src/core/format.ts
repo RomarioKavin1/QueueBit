@@ -97,7 +97,7 @@ export function formatBps(bps: bigint): string {
 }
 
 /** usd6 value of `amount` base units of a token with `decimals`, priced at `usdPerToken` (USD-6 per whole token,
- *  `ILeakedAccount.TokenCfg`; the account's `quoteUsd` rounds the same way: down). */
+ *  `IQueueBitAccount.TokenCfg`; the account's `quoteUsd` rounds the same way: down). */
 export function usdValue(amount: bigint, decimals: number, usdPerToken: bigint): bigint {
   return (amount * usdPerToken) / 10n ** BigInt(decimals);
 }

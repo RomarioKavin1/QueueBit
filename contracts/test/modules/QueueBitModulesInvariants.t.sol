@@ -4,10 +4,10 @@ pragma solidity 0.8.28;
 import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {PackedUserOperation, Execution} from "../../src/modules/interfaces/IERC7579Modules.sol";
-import {LeakedPolicyHook} from "../../src/modules/LeakedPolicyHook.sol";
-import {LeakedRoleExecutor} from "../../src/modules/LeakedRoleExecutor.sol";
+import {QueueBitPolicyHook} from "../../src/modules/QueueBitPolicyHook.sol";
+import {QueueBitRoleExecutor} from "../../src/modules/QueueBitRoleExecutor.sol";
 import {MockToken} from "./mocks/ModuleMocks.sol";
-import {LeakedModulesBase} from "./LeakedModulesBase.sol";
+import {QueueBitModulesBase} from "./QueueBitModulesBase.sol";
 
 /// A contract whose fallback must never run from a hot batch: a zero-value empty call or ETH with calldata is not a
 /// payment (it needs a session or the allowlist). A plain ETH send (value, no data) is a payment in Open.
@@ -21,7 +21,7 @@ contract FallbackProbe {
 
 /// Plays hot key, vault, recovery, attacker and time against an MSA account with the three modules, through the
 /// real EntryPoint. Mirrors plan §10.7.1 layer 3 for the 4337 backend, in Open or Strict recipient mode.
-contract ModulesHandler is LeakedModulesBase {
+contract ModulesHandler is QueueBitModulesBase {
     uint256 public t0;
     uint256 public cap0;
     uint256 public hotOutUsd; // USD that left the account through hot userOps, plus registered-hash debits
@@ -125,7 +125,7 @@ contract ModulesHandler is LeakedModulesBase {
             return;
         }
         Call[] memory c =
-            _calls1(address(executor), 0, abi.encodeCall(LeakedRoleExecutor.setRecoveryKey, (account, vaultPk)));
+            _calls1(address(executor), 0, abi.encodeCall(QueueBitRoleExecutor.setRecoveryKey, (account, vaultPk)));
         uint256 n = _vaultNonce();
         bytes memory sig = _pqSign(vaultPk, executor.hashVaultQueue(account, n, c, 1));
         bytes32 opId;
@@ -158,7 +158,7 @@ contract ModulesHandler is LeakedModulesBase {
     function hotRegister(uint256 amount) external {
         amount = bound(amount, 1, 600e6);
         bytes memory call = abi.encodeCall(
-            LeakedPolicyHook.registerHash,
+            QueueBitPolicyHook.registerHash,
             (keccak256(abi.encode(amount, block.timestamp)), address(usdc), amount, uint48(block.timestamp + 1 days))
         );
         (bool ok,) = _hot(_single(address(hook), 0, call));
@@ -167,8 +167,8 @@ contract ModulesHandler is LeakedModulesBase {
 
     function hotTryWritePolicy(uint256 which) external {
         bytes memory data = which % 2 == 0
-            ? abi.encodeCall(LeakedPolicyHook.setCap, (account, 1e30, 1e20, 1 ether, 1 gwei))
-            : abi.encodeCall(LeakedPolicyHook.setTarget, (account, stranger, true));
+            ? abi.encodeCall(QueueBitPolicyHook.setCap, (account, 1e30, 1e20, 1 ether, 1 gwei))
+            : abi.encodeCall(QueueBitPolicyHook.setTarget, (account, stranger, true));
         (bool ok,) = _hot(_single(address(hook), 0, data));
         if (ok) unauthorizedWrite = true;
     }
@@ -205,11 +205,11 @@ contract ModulesHandler is LeakedModulesBase {
         vm.startPrank(who);
         bool ok;
         if (which % 3 == 0) {
-            (ok,) = address(hook).call(abi.encodeCall(LeakedPolicyHook.setCap, (account, 1e30, 1e20, 1, 1)));
+            (ok,) = address(hook).call(abi.encodeCall(QueueBitPolicyHook.setCap, (account, 1e30, 1e20, 1, 1)));
         } else if (which % 3 == 1) {
-            (ok,) = address(hook).call(abi.encodeCall(LeakedPolicyHook.setHotKey, (account, who)));
+            (ok,) = address(hook).call(abi.encodeCall(QueueBitPolicyHook.setHotKey, (account, who)));
         } else {
-            (ok,) = address(hook).call(abi.encodeCall(LeakedPolicyHook.unfreeze, (account)));
+            (ok,) = address(hook).call(abi.encodeCall(QueueBitPolicyHook.unfreeze, (account)));
         }
         vm.stopPrank();
         if (ok) unauthorizedWrite = true;
@@ -221,18 +221,19 @@ contract ModulesHandler is LeakedModulesBase {
         (,, uint256 cap) = hook.getBucket(account);
         newCap = bound(newCap, 100e6, cap);
         Call[] memory c =
-            _hookCall(abi.encodeCall(LeakedPolicyHook.setCap, (account, newCap, PER_TX, MAX_FEE_WEI, MAX_PRIO)));
+            _hookCall(abi.encodeCall(QueueBitPolicyHook.setCap, (account, newCap, PER_TX, MAX_FEE_WEI, MAX_PRIO)));
         _tryVault(c);
     }
 
     function vaultTryLoosenInstant() external {
         Call[] memory c =
-            _hookCall(abi.encodeCall(LeakedPolicyHook.setCap, (account, 1e30, 1e20, MAX_FEE_WEI, MAX_PRIO)));
+            _hookCall(abi.encodeCall(QueueBitPolicyHook.setCap, (account, 1e30, 1e20, MAX_FEE_WEI, MAX_PRIO)));
         if (_tryVault(c)) unauthorizedWrite = true;
     }
 
     function vaultStrict() external {
-        if (_tryVault(_hookCall(abi.encodeCall(LeakedPolicyHook.setRecipientMode, (account, RecipientMode.Strict))))) {
+        if (_tryVault(_hookCall(abi.encodeCall(QueueBitPolicyHook.setRecipientMode, (account, RecipientMode.Strict)))))
+        {
             strictNow = true;
         }
     }
@@ -240,12 +241,13 @@ contract ModulesHandler is LeakedModulesBase {
     /// Strict -> Open without the queue must fail (Open -> Open is a no-op and may pass).
     function vaultTryOpenInstant() external {
         bool wasStrict = strictNow;
-        bool ok = _tryVault(_hookCall(abi.encodeCall(LeakedPolicyHook.setRecipientMode, (account, RecipientMode.Open))));
+        bool ok =
+            _tryVault(_hookCall(abi.encodeCall(QueueBitPolicyHook.setRecipientMode, (account, RecipientMode.Open))));
         if (ok && wasStrict) unauthorizedWrite = true;
     }
 
     function vaultQueueOpen() external {
-        Call[] memory c = _hookCall(abi.encodeCall(LeakedPolicyHook.setRecipientMode, (account, RecipientMode.Open)));
+        Call[] memory c = _hookCall(abi.encodeCall(QueueBitPolicyHook.setRecipientMode, (account, RecipientMode.Open)));
         uint256 n = _vaultNonce();
         bytes memory sig = _pqSign(vaultPk, executor.hashVaultQueue(account, n, c, 1));
         bytes32 opId;
@@ -319,7 +321,7 @@ contract ModulesHandler is LeakedModulesBase {
     }
 }
 
-contract LeakedModulesInvariantsTest is Test {
+contract QueueBitModulesInvariantsTest is Test {
     ModulesHandler internal h;
 
     function _strict() internal pure virtual returns (bool) {
@@ -388,7 +390,7 @@ contract LeakedModulesInvariantsTest is Test {
     }
 }
 
-contract LeakedModulesInvariantsStrictTest is LeakedModulesInvariantsTest {
+contract QueueBitModulesInvariantsStrictTest is QueueBitModulesInvariantsTest {
     function _strict() internal pure override returns (bool) {
         return true;
     }

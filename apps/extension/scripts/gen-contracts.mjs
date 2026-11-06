@@ -19,8 +19,8 @@ const art = (file, name) => JSON.parse(readFileSync(join(OUT_DIR, file, `${name}
 
 /** The account's ABI = implementation + the roles module (reached through the fallback), deduplicated. */
 function accountAbi() {
-  const impl = art("LeakedAccountImpl.sol", "LeakedAccountImpl").abi;
-  const roles = art("LeakedAccountRoles.sol", "LeakedAccountRoles").abi;
+  const impl = art("QueueBitAccountImpl.sol", "QueueBitAccountImpl").abi;
+  const roles = art("QueueBitAccountRoles.sol", "QueueBitAccountRoles").abi;
   const seen = new Set();
   const out = [];
   for (const item of [...impl, ...roles]) {
@@ -41,9 +41,9 @@ export async function render() {
   const roleSigner = strip(art("PQRoleSigner.sol", "PQRoleSigner").abi);
   const pqVerifier = strip(art("IPQVerifier.sol", "IPQVerifier").abi);
   const proxy = art("ERC1967Proxy.sol", "ERC1967Proxy").bytecode.object;
-  const hook = strip(art("LeakedPolicyHook.sol", "LeakedPolicyHook").abi);
-  const validator = strip(art("LeakedHotValidator.sol", "LeakedHotValidator").abi);
-  const executor = strip(art("LeakedRoleExecutor.sol", "LeakedRoleExecutor").abi);
+  const hook = strip(art("QueueBitPolicyHook.sol", "QueueBitPolicyHook").abi);
+  const validator = strip(art("QueueBitHotValidator.sol", "QueueBitHotValidator").abi);
+  const executor = strip(art("QueueBitRoleExecutor.sol", "QueueBitRoleExecutor").abi);
   const msaFactory = strip(art("MSAFactory.sol", "MSAFactory").abi);
   const msaProxy = art("MSAProxy.sol", "MSAProxy").bytecode.object;
   const bootstrap = strip(art("Bootstrap.sol", "Bootstrap").abi);
@@ -67,10 +67,10 @@ export async function render() {
         factory: aaDeployment.contracts.MSAFactory.address,
         msaImpl: aaDeployment.contracts.MSAAdvancedEP.address,
         bootstrap: aaDeployment.contracts.Bootstrap.address,
-        validator: aaDeployment.contracts.LeakedHotValidator.address,
-        hook: aaDeployment.contracts.LeakedPolicyHook.address,
-        hookInitCodeHash: aaDeployment.contracts.LeakedPolicyHook.initCodeHash,
-        executor: aaDeployment.contracts.LeakedRoleExecutor.address,
+        validator: aaDeployment.contracts.QueueBitHotValidator.address,
+        hook: aaDeployment.contracts.QueueBitPolicyHook.address,
+        hookInitCodeHash: aaDeployment.contracts.QueueBitPolicyHook.initCodeHash,
+        executor: aaDeployment.contracts.QueueBitRoleExecutor.address,
         c13Verifier: aaDeployment.contracts.C13Verifier.address,
         tokens: tokens(aaDeployment),
       }
@@ -79,9 +79,9 @@ export async function render() {
   const local = deployment
     ? {
         chainId: deployment.network.chainId,
-        accountImpl: deployment.contracts.LeakedAccountImpl.address,
-        accountImplInitCodeHash: deployment.contracts.LeakedAccountImpl.initCodeHash,
-        rolesModule: deployment.contracts.LeakedAccountRoles.address,
+        accountImpl: deployment.contracts.QueueBitAccountImpl.address,
+        accountImplInitCodeHash: deployment.contracts.QueueBitAccountImpl.initCodeHash,
+        rolesModule: deployment.contracts.QueueBitAccountRoles.address,
         factory: deployment.contracts.AccountFactory.address,
         c13Verifier: deployment.contracts.C13Verifier.address,
         roleSignerFactory: deployment.contracts.RoleSignerFactory.address,
@@ -110,13 +110,13 @@ export const pqVerifierAbi = ${j(pqVerifier)} as const;
 /** \`type(ERC1967Proxy).creationCode\`: the factory's CREATE2 init code is this ‖ abi.encode(implementation, initData). */
 export const erc1967ProxyCreationCode = ${j(proxy)} as const;
 
-/** \`LeakedPolicyHook\` (ERC-7579 hook, 4337 backend): the policy store (bucket, prices, allowlist, sessions). */
+/** \`QueueBitPolicyHook\` (ERC-7579 hook, 4337 backend): the policy store (bucket, prices, allowlist, sessions). */
 export const policyHookAbi = ${j(hook)} as const;
 
-/** \`LeakedHotValidator\` (ERC-7579 validator): the hot key's userOp and scoped ERC-1271 checks. */
+/** \`QueueBitHotValidator\` (ERC-7579 validator): the hot key's userOp and scoped ERC-1271 checks. */
 export const hotValidatorAbi = ${j(validator)} as const;
 
-/** \`LeakedRoleExecutor\` (ERC-7579 executor): the Vault / Recovery PQ roles, timelock queue and EIP-712 digests. */
+/** \`QueueBitRoleExecutor\` (ERC-7579 executor): the Vault / Recovery PQ roles, timelock queue and EIP-712 digests. */
 export const roleExecutorAbi = ${j(executor)} as const;
 
 /** Reference ERC-7579 \`MSAFactory\`: \`createAccount(salt, initCode)\`, \`getAddress(salt, initCode)\`. */

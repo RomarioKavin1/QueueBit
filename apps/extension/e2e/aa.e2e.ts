@@ -18,11 +18,11 @@ import {
 } from "./fixtures";
 
 /**
- * M2 end to end on the compatible-account backend: a local anvil (chain 31337) with EntryPoint v0.8, the LEAKED
+ * M2 end to end on the compatible-account backend: a local anvil (chain 31337) with EntryPoint v0.8, the QueueBit
  * 7579 modules on the reference MSA, and the minimal bundler (devnet/deploy `up-4337.ts`, started by the global
  * setup). Onboarding on "Local 4337 test chain" with USDC → activation (the tank creates the account with its three
  * modules) → an Open-mode everyday userOp to a fresh address → an over-limit payment through the Vault
- * (LeakedRoleExecutor.vaultExec, a C13 signature over the EIP-712 digest) → a dapp: wallet_getCapabilities,
+ * (QueueBitRoleExecutor.vaultExec, a C13 signature over the EIP-712 digest) → a dapp: wallet_getCapabilities,
  * wallet_sendCalls batch + getCallsStatus, eth_sendTransaction answered with a userOpHash whose receipt resolves,
  * SIWE (7739 through the validator) and an ERC-2612 pre-approval consumed by the token.
  */
@@ -30,7 +30,7 @@ const RPC = "http://localhost:8546";
 const CHAIN = 31337;
 const SHOTS = join(dirname(fileURLToPath(import.meta.url)), "..", "docs", "screenshots");
 async function shot(name: string, page: Page) {
-  if (process.env.LEAKED_SHOTS !== "1") return;
+  if (process.env.QUEUEBIT_SHOTS !== "1") return;
   await page.screenshot({ path: join(SHOTS, `${name}.png`), fullPage: true, animations: "disabled" });
 }
 const pub = createPublicClient({ transport: http(RPC) });
@@ -48,7 +48,7 @@ async function chainReady(): Promise<string | undefined> {
 }
 
 type Win = Window & {
-  leaked(): { request(a: { method: string; params?: unknown[] }): Promise<unknown> };
+  queuebit(): { request(a: { method: string; params?: unknown[] }): Promise<unknown> };
   __result?: unknown;
   __error?: { code: number; message: string; data?: unknown };
 };
@@ -59,7 +59,7 @@ async function start(dapp: Page, method: string, params: unknown[]) {
       const w = window as unknown as Win;
       delete w.__result;
       delete w.__error;
-      w.leaked()
+      w.queuebit()
         .request({ method: m as string, params: p as unknown[] })
         .then(
           (r) => (w.__result = r),
@@ -76,7 +76,7 @@ const rpc = (dapp: Page, method: string, params: unknown[] = []) =>
     async ([m, p]) => {
       try {
         return {
-          result: await (window as unknown as Win).leaked().request({ method: m as string, params: p as unknown[] }),
+          result: await (window as unknown as Win).queuebit().request({ method: m as string, params: p as unknown[] }),
         };
       } catch (e) {
         const err = e as { code: number; message: string };
@@ -170,7 +170,7 @@ test("M2: compatible account on a local 4337 chain: onboarding, activation, ever
   );
   await shot("aa-popup-home", popup);
 
-  // ---- over the per-payment limit: the Vault, through LeakedRoleExecutor.vaultExec ----
+  // ---- over the per-payment limit: the Vault, through QueueBitRoleExecutor.vaultExec ----
   await popup.getByRole("button", { name: "Send" }).last().click();
   await popup.getByLabel("To").fill(fresh);
   await popup.getByLabel("Amount").fill("0.1"); // $300 > $200
@@ -186,14 +186,14 @@ test("M2: compatible account on a local 4337 chain: onboarding, activation, ever
   // ---- a dapp on the 4337 chain ----
   const dapp = await context.newPage();
   await dapp.goto(dappUrl);
-  await dapp.getByRole("button", { name: "Connect LEAKED" }).click();
+  await dapp.getByRole("button", { name: "Connect QueueBit" }).click();
   const connect = await waitForApproval(context);
   await Promise.all([connect.waitForEvent("close"), connect.getByRole("button", { name: "Connect" }).click()]);
   await expect(dapp.locator("#account")).toHaveText(account);
   expect((await rpc(dapp, "eth_chainId")).result).toBe("0x7a69");
   const caps = await rpc(dapp, "wallet_getCapabilities", [account]);
   expect(caps.result).toMatchObject({
-    "0x7a69": { atomic: { status: "supported" }, leaked: { backend: "4337", activated: true } },
+    "0x7a69": { atomic: { status: "supported" }, queuebit: { backend: "4337", activated: true } },
   });
 
   // wallet_sendCalls: one userOp with a 7579 batch execute; id = userOpHash.
@@ -244,7 +244,7 @@ test("M2: compatible account on a local 4337 chain: onboarding, activation, ever
     )
     .toBe("0x1");
 
-  // SIWE: a 7739 PersonalSign in LeakedHotValidator's domain, routed by the validator prefix; checked by 1271.
+  // SIWE: a 7739 PersonalSign in QueueBitHotValidator's domain, routed by the validator prefix; checked by 1271.
   const host = new URL(dappUrl).host;
   const siwe = [
     `${host} wants you to sign in with your Ethereum account:`,

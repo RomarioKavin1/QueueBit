@@ -1,4 +1,4 @@
-import { UR_TYPES } from "@leaked/ur";
+import { UR_TYPES } from "@queuebit/ur";
 import { useEffect, useRef, useState } from "react";
 import { SIGNATURE_TTL_MS, type Built } from "../app/routes.js";
 import { useNav, useStore } from "../app/state.js";
@@ -178,7 +178,7 @@ export function ReviewScreen({
           {review.structure.sequence !== undefined && <Row label="Sequence" value={`#${review.structure.sequence}`} />}
           {review.structure.executor && (
             <Row
-              label={review.structure.knownExecutor ? "LEAKED module" : "Module (not one this app knows)"}
+              label={review.structure.knownExecutor ? "QueueBit module" : "Module (not one this app knows)"}
               value={review.structure.executor}
               mono
             />

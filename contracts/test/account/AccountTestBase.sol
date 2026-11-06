@@ -6,10 +6,10 @@ import {TxParam} from "@forshtat/hegota-support/contracts/Params.sol";
 import {IStakingRegistry} from "../../src/interfaces/IStakingRegistry.sol";
 import {RoleSignerFactory} from "../../src/roles/RoleSignerFactory.sol";
 import {FrameSim} from "../frame/FrameSim.sol";
-import {LeakedAccountImpl} from "../../src/account/LeakedAccountImpl.sol";
-import {LeakedAccountRoles} from "../../src/account/LeakedAccountRoles.sol";
+import {QueueBitAccountImpl} from "../../src/account/QueueBitAccountImpl.sol";
+import {QueueBitAccountRoles} from "../../src/account/QueueBitAccountRoles.sol";
 import {AccountFactory} from "../../src/account/AccountFactory.sol";
-import {ILeakedAccount} from "../../src/account/ILeakedAccount.sol";
+import {IQueueBitAccount} from "../../src/account/IQueueBitAccount.sol";
 import {MockToken, MockRouter, MockPQVerifier} from "./mocks/AccountMocks.sol";
 
 /// Shared setup: one implementation + roles module, a factory-deployed proxy with a default policy, two priced
@@ -33,8 +33,8 @@ abstract contract AccountTestBase is FrameSim {
     address internal tank;
     address internal vault;
     address internal recovery;
-    bytes32 internal constant VAULT_PK = keccak256("leaked.test.vault-pk");
-    bytes32 internal constant RECOVERY_PK = keccak256("leaked.test.recovery-pk");
+    bytes32 internal constant VAULT_PK = keccak256("queuebit.test.vault-pk");
+    bytes32 internal constant RECOVERY_PK = keccak256("queuebit.test.recovery-pk");
     uint256 internal constant SIG_LEN = 64;
     address internal vaultPayer = makeAddr("vaultPayer");
     RoleSignerFactory internal signerFactory;
@@ -43,11 +43,11 @@ abstract contract AccountTestBase is FrameSim {
     address internal alice = makeAddr("alice");
     address internal stranger = makeAddr("stranger");
 
-    LeakedAccountRoles internal rolesModule;
-    LeakedAccountImpl internal impl;
+    QueueBitAccountRoles internal rolesModule;
+    QueueBitAccountImpl internal impl;
     AccountFactory internal factory;
-    LeakedAccountImpl internal account;
-    LeakedAccountRoles internal roles;
+    QueueBitAccountImpl internal account;
+    QueueBitAccountRoles internal roles;
     MockToken internal usdc;
     MockToken internal weth;
     MockRouter internal router;
@@ -55,8 +55,8 @@ abstract contract AccountTestBase is FrameSim {
     function setUp() public virtual {
         hot = vm.addr(hotPk);
         tank = vm.addr(tankPk);
-        rolesModule = new LeakedAccountRoles();
-        impl = new LeakedAccountImpl(Devnet.ERC8421_WORKSHOP, true, address(rolesModule));
+        rolesModule = new QueueBitAccountRoles();
+        impl = new QueueBitAccountImpl(Devnet.ERC8421_WORKSHOP, true, address(rolesModule));
         simAttach(address(impl));
         factory = new AccountFactory();
         pqVerifier = new MockPQVerifier(SIG_LEN);
@@ -70,8 +70,8 @@ abstract contract AccountTestBase is FrameSim {
         vm.label(vault, "vaultSigner");
         vm.label(recovery, "recoverySigner");
         address a = factory.createAccount(bytes32(uint256(1)), address(impl), init);
-        account = LeakedAccountImpl(payable(a));
-        roles = LeakedAccountRoles(payable(a));
+        account = QueueBitAccountImpl(payable(a));
+        roles = QueueBitAccountRoles(payable(a));
         vm.label(a, "account");
 
         usdc = new MockToken("USDC", 6);
@@ -81,10 +81,10 @@ abstract contract AccountTestBase is FrameSim {
         roles.vaultSetGuardian(guardian, true);
         vm.stopPrank();
         // Loosening config through the queue, as production does.
-        ILeakedAccount.Call[] memory c = new ILeakedAccount.Call[](3);
-        c[0] = _selfCall(abi.encodeCall(LeakedAccountRoles.vaultSetToken, (address(usdc), true, 6, 1 * USD)));
-        c[1] = _selfCall(abi.encodeCall(LeakedAccountRoles.vaultSetToken, (address(weth), true, 18, ETH_PRICE)));
-        c[2] = _selfCall(abi.encodeCall(LeakedAccountRoles.vaultSetTarget, (alice, true)));
+        IQueueBitAccount.Call[] memory c = new IQueueBitAccount.Call[](3);
+        c[0] = _selfCall(abi.encodeCall(QueueBitAccountRoles.vaultSetToken, (address(usdc), true, 6, 1 * USD)));
+        c[1] = _selfCall(abi.encodeCall(QueueBitAccountRoles.vaultSetToken, (address(weth), true, 18, ETH_PRICE)));
+        c[2] = _selfCall(abi.encodeCall(QueueBitAccountRoles.vaultSetTarget, (alice, true)));
         _queueAndExecute(c, 1);
 
         usdc.mint(address(account), 100_000 * USD);
@@ -96,17 +96,17 @@ abstract contract AccountTestBase is FrameSim {
     // ---------------------------------------------------------------------------------------------- helpers ------
 
     /// Bound mode (default): vault and recovery derived from their PQ parameters at initialize.
-    function _defaultCfg() internal view returns (ILeakedAccount.InitConfig memory c) {
+    function _defaultCfg() internal view returns (IQueueBitAccount.InitConfig memory c) {
         c = _explicitCfg(address(0), address(0));
         c.roleSignerFactory = address(signerFactory);
-        c.vault = ILeakedAccount.RoleSignerParams(bytes32(0), VAULT_PK, address(pqVerifier), vaultPayer);
-        c.recovery = ILeakedAccount.RoleSignerParams(bytes32(0), RECOVERY_PK, address(pqVerifier), address(0));
+        c.vault = IQueueBitAccount.RoleSignerParams(bytes32(0), VAULT_PK, address(pqVerifier), vaultPayer);
+        c.recovery = IQueueBitAccount.RoleSignerParams(bytes32(0), RECOVERY_PK, address(pqVerifier), address(0));
     }
 
     /// Explicit (unbound / legacy) mode: the signers by address.
-    function _explicitCfg(address v, address r) internal view returns (ILeakedAccount.InitConfig memory) {
-        ILeakedAccount.RoleSignerParams memory none;
-        return ILeakedAccount.InitConfig({
+    function _explicitCfg(address v, address r) internal view returns (IQueueBitAccount.InitConfig memory) {
+        IQueueBitAccount.RoleSignerParams memory none;
+        return IQueueBitAccount.InitConfig({
             hotKey: hot,
             roleSignerFactory: address(0),
             vault: none,
@@ -123,8 +123,8 @@ abstract contract AccountTestBase is FrameSim {
             timelockDelay: DELAY,
             timelockThresholdUsd: THRESHOLD,
             ethUsdPrice: ETH_PRICE,
-            recipientMode: ILeakedAccount.RecipientMode.Open,
-            tokens: new ILeakedAccount.TokenInit[](0)
+            recipientMode: IQueueBitAccount.RecipientMode.Open,
+            tokens: new IQueueBitAccount.TokenInit[](0)
         });
     }
 
@@ -136,23 +136,23 @@ abstract contract AccountTestBase is FrameSim {
     /// Instant tightening to the recipient allowlist (the pre-2026-11-06 behaviour).
     function _strict() internal {
         vm.prank(vault);
-        roles.vaultSetRecipientMode(ILeakedAccount.RecipientMode.Strict);
+        roles.vaultSetRecipientMode(IQueueBitAccount.RecipientMode.Strict);
     }
 
-    function _initData(ILeakedAccount.InitConfig memory c) internal pure returns (bytes memory) {
-        return abi.encodeCall(LeakedAccountImpl.initialize, (c));
+    function _initData(IQueueBitAccount.InitConfig memory c) internal pure returns (bytes memory) {
+        return abi.encodeCall(QueueBitAccountImpl.initialize, (c));
     }
 
-    function _selfCall(bytes memory data) internal view returns (ILeakedAccount.Call memory) {
-        return ILeakedAccount.Call(address(account), 0, data);
+    function _selfCall(bytes memory data) internal view returns (IQueueBitAccount.Call memory) {
+        return IQueueBitAccount.Call(address(account), 0, data);
     }
 
-    function _one(ILeakedAccount.Call memory c) internal pure returns (ILeakedAccount.Call[] memory a) {
-        a = new ILeakedAccount.Call[](1);
+    function _one(IQueueBitAccount.Call memory c) internal pure returns (IQueueBitAccount.Call[] memory a) {
+        a = new IQueueBitAccount.Call[](1);
         a[0] = c;
     }
 
-    function _queueAndExecute(ILeakedAccount.Call[] memory c, uint8 kind) internal returns (bytes32 opId) {
+    function _queueAndExecute(IQueueBitAccount.Call[] memory c, uint8 kind) internal returns (bytes32 opId) {
         vm.prank(vault);
         opId = roles.vaultQueue(c, kind);
         vm.warp(vm.getBlockTimestamp() + DELAY);
@@ -165,7 +165,7 @@ abstract contract AccountTestBase is FrameSim {
 
     /// Queues a loosening self-call and expects its execution to revert (the inner call's error is wrapped).
     function _queueLoosenReverts(bytes memory data) internal {
-        ILeakedAccount.Call[] memory c = _one(_selfCall(data));
+        IQueueBitAccount.Call[] memory c = _one(_selfCall(data));
         vm.prank(vault);
         bytes32 opId = roles.vaultQueue(c, 1);
         vm.warp(vm.getBlockTimestamp() + DELAY);
@@ -173,22 +173,22 @@ abstract contract AccountTestBase is FrameSim {
         roles.executeQueued(opId, c);
     }
 
-    function _usdcTransfer(address to, uint256 amount) internal view returns (ILeakedAccount.Call memory) {
-        return ILeakedAccount.Call(address(usdc), 0, abi.encodeWithSelector(usdc.transfer.selector, to, amount));
+    function _usdcTransfer(address to, uint256 amount) internal view returns (IQueueBitAccount.Call memory) {
+        return IQueueBitAccount.Call(address(usdc), 0, abi.encodeWithSelector(usdc.transfer.selector, to, amount));
     }
 
-    function _ethSend(address to, uint256 amount) internal pure returns (ILeakedAccount.Call memory) {
-        return ILeakedAccount.Call(to, amount, "");
+    function _ethSend(address to, uint256 amount) internal pure returns (IQueueBitAccount.Call memory) {
+        return IQueueBitAccount.Call(to, amount, "");
     }
 
     /// Runs a hot batch as its SENDER frame would (msg.sender == account).
-    function _hot(uint256 declared, ILeakedAccount.Call[] memory calls) internal {
+    function _hot(uint256 declared, IQueueBitAccount.Call[] memory calls) internal {
         vm.prank(address(account));
         account.hotExecute(declared, calls);
     }
 
-    function _hotData(uint256 declared, ILeakedAccount.Call[] memory calls) internal pure returns (bytes memory) {
-        return abi.encodeCall(LeakedAccountImpl.hotExecute, (declared, calls));
+    function _hotData(uint256 declared, IQueueBitAccount.Call[] memory calls) internal pure returns (bytes memory) {
+        return abi.encodeCall(QueueBitAccountImpl.hotExecute, (declared, calls));
     }
 
     function _verifyData() internal pure returns (bytes memory) {

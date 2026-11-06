@@ -155,7 +155,7 @@ export function UpdateBanner() {
             <p className="t-body">
               Every file of the new build was checked against the fingerprints that build carries, so the download is
               complete and not a mix of builds. That check can't tell a genuine build from one served by a compromised
-              site: if you can, compare the new build id with the one LEAKED publishes for this release before you
+              site: if you can, compare the new build id with the one QueueBit publishes for this release before you
               update.
             </p>
             <p className="t-small text-muted">

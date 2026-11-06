@@ -3,7 +3,7 @@ import type { Address, Hex } from "viem";
 /** Which account backend an address uses: the frame-native account (EIP-8141) or ERC-4337 + the ERC-7579 modules. */
 export type Backend = "frame" | "4337";
 
-/** Queue kinds, by name (`LeakedAccountBase.KIND_*`; the 4337 executor uses the same numbering). */
+/** Queue kinds, by name (`QueueBitAccountBase.KIND_*`; the 4337 executor uses the same numbering). */
 export type QueueKind = "spend" | "loosen" | "upgrade" | "migrate" | "unknown";
 
 /** A log as `eth_getLogs` (or a receipt) returns it. Quantities may be hex strings or already numbers. */
@@ -25,7 +25,7 @@ export interface RpcLog {
 export interface WatchTargets {
   chainId: number;
   accounts: { address: Address; backend: Backend }[];
-  /** 4337 backend: the LeakedPolicyHook and LeakedRoleExecutor module addresses (their events carry `account`). */
+  /** 4337 backend: the QueueBitPolicyHook and QueueBitRoleExecutor module addresses (their events carry `account`). */
   modules?: Address[];
   /** 4337 backend: the EntryPoint (a failed hot userOp leaves `UserOperationRevertReason`). */
   entryPoint?: Address;

@@ -4,7 +4,7 @@ pragma solidity ^0.8.25;
 import {hashToPointEVM} from "./vendor/ethfalcon/ZKNOX_HashToPoint.sol";
 import {falcon_core} from "./vendor/ethfalcon/ZKNOX_falcon_core.sol";
 
-/// @title EthFalconAdapter (LEAKED bench)
+/// @title EthFalconAdapter (QueueBit bench)
 /// @notice Flat-witness entry point for ZKNOX ETHFALCON (Falcon-512 with a keccak-CTR hash-to-point), so the bench
 ///         account can call it like every other scheme: `verify(bytes32 pkHash, bytes32 digest, bytes sig)`.
 /// @dev    Witness = salt(40) ‖ s2 (32 compacted words) ‖ ntth (the public key in NTT form, 32 compacted words),

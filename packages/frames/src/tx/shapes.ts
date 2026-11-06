@@ -13,21 +13,21 @@ import {
 import type { FrameTx } from "./types.js";
 
 /**
- * The LEAKED transaction shapes (plan `10-contracts.md` §10.2.2, `30-extension.md` §4.2). The contracts own them;
+ * The QueueBit transaction shapes (plan `10-contracts.md` §10.2.2, `30-extension.md` §4.2). The contracts own them;
  * these builders produce exactly what the account's and the role signers' VERIFY frame-walkers admit. SENDER calldata
  * (`hotExecute`, `executePQ`, `relay`) is passed in encoded, since those ABIs belong to the contracts.
  */
 
 /** VERIFY-frame entry points: an explicit selector, because empty calldata would reach `receive()` (§10.3.2). */
-export const LEAKED_VERIFY_ABI = parseAbi(["function verifyFrame()", "function verifyFrame(uint256 sigIndex)"]);
+export const QUEUEBIT_VERIFY_ABI = parseAbi(["function verifyFrame()", "function verifyFrame(uint256 sigIndex)"]);
 
 /** `verifyFrame()`: the account's VERIFY frame data. */
 export const accountVerifyData = (): Hex =>
-  encodeFunctionData({ abi: LEAKED_VERIFY_ABI, functionName: "verifyFrame", args: [] });
+  encodeFunctionData({ abi: QUEUEBIT_VERIFY_ABI, functionName: "verifyFrame", args: [] });
 
 /** `verifyFrame(uint256 sigIndex)`: a PQRoleSigner's VERIFY frame data (entry `sigIndex` holds the PQ witness). */
 export const roleSignerVerifyData = (sigIndex: bigint): Hex =>
-  encodeFunctionData({ abi: LEAKED_VERIFY_ABI, functionName: "verifyFrame", args: [sigIndex] });
+  encodeFunctionData({ abi: QUEUEBIT_VERIFY_ABI, functionName: "verifyFrame", args: [sigIndex] });
 
 interface Common {
   chainId: bigint | number;

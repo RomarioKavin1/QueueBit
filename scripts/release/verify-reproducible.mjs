@@ -16,8 +16,8 @@ for (const t of targets) if (!TARGETS.includes(t)) throw new Error(`unknown targ
 let failed = false;
 for (const t of targets) {
   const dirs = [
-    mkdtempSync(join(tmpdir(), `leaked-repro-${t}-a-`)),
-    mkdtempSync(join(tmpdir(), `leaked-repro-${t}-b-`)),
+    mkdtempSync(join(tmpdir(), `queuebit-repro-${t}-a-`)),
+    mkdtempSync(join(tmpdir(), `queuebit-repro-${t}-b-`)),
   ];
   try {
     const manifests = dirs.map((d) => buildRelease(d, [t]));

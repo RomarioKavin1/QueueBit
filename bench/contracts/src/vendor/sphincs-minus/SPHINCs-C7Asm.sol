@@ -1,4 +1,4 @@
-// ---- LEAKED bench provenance ----
+// ---- QueueBit bench provenance ----
 // Vendored from https://github.com/nconsigny/SPHINCS- @ 4c76aaf113d326df9adede63d015f3b394ab84f4, src/keccak/SPHINCs-C7Asm.sol
 // License: MIT, Copyright (c) 2026 Nicolas Consigny (full text: bench/contracts/src/vendor/LICENSE-SPHINCS-minus). Byte-identical below this header.
 // ---- end provenance; upstream file follows ----

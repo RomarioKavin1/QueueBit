@@ -4,7 +4,7 @@ import type { Keystore } from "./types.js";
 export class KeystorePathNotAllowedError extends Error {
   constructor(readonly path: string) {
     super(
-      `Keystore path ${path} is not a vault delegation path: LEAKED never derives pool keys from the hot seed ` +
+      `Keystore path ${path} is not a vault delegation path: QueueBit never derives pool keys from the hot seed ` +
         "(note secrets come from the vault's envelope signature)",
     );
     this.name = "KeystorePathNotAllowedError";

@@ -1,9 +1,9 @@
 {
-  "name": "leaked-devnet-tools",
+  "name": "queuebit-devnet-tools",
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Smoke tests and probes for the LEAKED local EIP-8141 devnet (run with bun; standalone, not a workspace package)",
+  "description": "Smoke tests and probes for the QueueBit local EIP-8141 devnet (run with bun; standalone, not a workspace package)",
   "scripts": {
     "smoke": "bun run src/smoke.ts",
     "probe": "bun run src/probe-opcodes.ts",

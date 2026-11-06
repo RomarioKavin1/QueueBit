@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { hexToBytes, toHex } from "viem";
 import { browser, type Browser } from "wxt/browser";
-import { UR_TYPES } from "@leaked/ur";
+import { UR_TYPES } from "@queuebit/ur";
 import type { NoteView, PrivacyOp, PrivacyView } from "../../shared/privacy";
 import {
   Button,
@@ -35,7 +35,7 @@ export function Privacy() {
     // Resume whatever was in progress (e.g. after the deposit's Vault approval on the hand-off page).
     void call("privacy:run", {}).catch(() => undefined);
     const onChanged = (changes: Record<string, Browser.storage.StorageChange>, area: string) => {
-      if (area === "local" && Object.keys(changes).some((k) => k.startsWith("leaked:privacy:"))) void v.reload();
+      if (area === "local" && Object.keys(changes).some((k) => k.startsWith("queuebit:privacy:"))) void v.reload();
     };
     browser.storage.onChanged.addListener(onChanged);
     return () => browser.storage.onChanged.removeListener(onChanged);
@@ -112,8 +112,8 @@ function PrivacyBody({ view, reload }: { view: PrivacyView; reload: () => void }
             </li>
             <li>
               Moving to public sends the money to a fresh address made for that withdrawal. Its network fee is paid out
-              of the withdrawal itself by a fee payer that charges exactly the network fee and refunds the rest. LEAKED
-              takes no fee, and there is no fee to choose.
+              of the withdrawal itself by a fee payer that charges exactly the network fee and refunds the rest.
+              QueueBit takes no fee, and there is no fee to choose.
             </li>
             <li>{view.connection.text}</li>
             <li>Reads on this network are not checked by a light client.</li>
@@ -302,7 +302,7 @@ function AmountForm({
         {kind === "unshield" && (
           <p className="t-small text-muted" data-testid="fee-explainer">
             Network fee: paid from the withdrawal itself, exactly at cost. The fee payer refunds what isn&apos;t used.
-            There are no fee options and LEAKED takes nothing.
+            There are no fee options and QueueBit takes nothing.
           </p>
         )}
         <div className="flex gap-2">
@@ -454,7 +454,7 @@ function OpPanel({ view, op, reload }: { view: PrivacyView; op: PrivacyOp; reloa
               <div className="flex flex-1 flex-col gap-3">
                 <ol className="t-body list-decimal pl-5">
                   <li>
-                    Open <strong>LEAKED Vault</strong> and tap <strong>Scan request</strong>.
+                    Open <strong>QueueBit Vault</strong> and tap <strong>Scan request</strong>.
                   </li>
                   <li>
                     It shows &ldquo;Privacy Pools note keys&rdquo;, deposit #{op.phone.depositIndex}, note #
@@ -554,7 +554,8 @@ function OpPanel({ view, op, reload }: { view: PrivacyView; op: PrivacyOp; reloa
           <dt className="text-muted">Network fee</dt>
           <dd data-testid="privacy-fee">
             {eth(BigInt(op.amountWei) - BigInt(op.withdraw.receivedWei ?? op.amountWei))}, taken from the withdrawal at
-            cost (the fee payer held up to {eth(op.withdraw.feeWei ?? "0")} and refunded the rest). LEAKED took nothing.
+            cost (the fee payer held up to {eth(op.withdraw.feeWei ?? "0")} and refunded the rest). QueueBit took
+            nothing.
           </dd>
         </dl>
       )}

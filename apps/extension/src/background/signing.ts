@@ -114,7 +114,11 @@ export function classifyPersonalSign(message: string): SignatureClass {
 export function classifyTypedData(input: unknown): SignatureClass {
   const td = (typeof input === "string" ? safeJson(input) : input) as TypedData | undefined;
   if (!td || typeof td !== "object" || !td.primaryType || !td.types?.[td.primaryType]) {
-    return { kind: "needs-vault", rule: "SIG-UNKNOWN-SCHEMA", reason: "LEAKED couldn't read this signature request." };
+    return {
+      kind: "needs-vault",
+      rule: "SIG-UNKNOWN-SCHEMA",
+      reason: "QueueBit couldn't read this signature request.",
+    };
   }
   const primary = td.primaryType;
   const fields = td.types[primary]!.map((f) => f.name);
@@ -127,7 +131,7 @@ export function classifyTypedData(input: unknown): SignatureClass {
       kind: "needs-vault",
       rule: "SIG-PERMIT2",
       reason:
-        "This Permit2 signature (a batch, a witness transfer, or one for another Permit2 contract) lets a contract move your tokens in a way LEAKED can't record and limit, so it isn't signed.",
+        "This Permit2 signature (a batch, a witness transfer, or one for another Permit2 contract) lets a contract move your tokens in a way QueueBit can't record and limit, so it isn't signed.",
     };
   }
   if (primary === "Permit" && ERC2612_FIELDS.every((f) => fields.includes(f)) && verifying && isAddress(verifying)) {
@@ -151,7 +155,7 @@ export function classifyTypedData(input: unknown): SignatureClass {
       kind: "needs-vault",
       rule: "SIG-VALUE-BEARING",
       reason:
-        "This signature can move your money (an order or a payment), so LEAKED won't sign it with the everyday key.",
+        "This signature can move your money (an order or a payment), so QueueBit won't sign it with the everyday key.",
     };
   }
   const allTypes = Object.values(td.types).flat();
@@ -160,7 +164,7 @@ export function classifyTypedData(input: unknown): SignatureClass {
     return {
       kind: "needs-vault",
       rule: "SIG-UNKNOWN-SCHEMA",
-      reason: "We don't recognise this kind of signature, so LEAKED won't sign it blind.",
+      reason: "We don't recognise this kind of signature, so QueueBit won't sign it blind.",
     };
   }
   return { kind: "sign-in", rule: "SIG-SIGN-IN", ...(td.domain?.name ? { domain: td.domain.name } : {}) };
@@ -304,7 +308,7 @@ export function permit2Problem(
   if (c.kind === "register-permit2") {
     if (c.amount >= 1n << 160n) return "This permit's amount is too large to record.";
     if (c.expiration <= now || c.expiration > now + MAX_TTL)
-      return "This permit must expire within 30 days (and not already be expired); LEAKED can't record an open-ended one.";
+      return "This permit must expire within 30 days (and not already be expired); QueueBit can't record an open-ended one.";
     if (c.sigDeadline <= now) return "This permit has already expired.";
     if (o.allowanceNonce !== undefined && o.allowanceNonce !== c.nonce)
       return "This permit uses an old Permit2 nonce, so it can't be recorded as asked. Ask the site to try again.";

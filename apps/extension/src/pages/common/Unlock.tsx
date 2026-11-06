@@ -40,11 +40,11 @@ export function UnlockForm({ onUnlocked, compact }: { onUnlocked?: () => void; c
           <LogoMark size={56} />
           <div>
             <h1 className="t-title">Welcome back</h1>
-            <p className="t-small text-muted">Unlock LEAKED in this browser.</p>
+            <p className="t-small text-muted">Unlock QueueBit in this browser.</p>
           </div>
         </div>
       )}
-      <form onSubmit={submit} className="flex flex-col gap-3" aria-label="Unlock LEAKED">
+      <form onSubmit={submit} className="flex flex-col gap-3" aria-label="Unlock QueueBit">
         <PasswordField
           ref={inputRef}
           label="Password"

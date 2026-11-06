@@ -1,5 +1,5 @@
 {
-  "name": "@leaked/frames",
+  "name": "@queuebit/frames",
   "version": "0.0.0",
   "private": true,
   "description": "Profile-driven EIP-8141 frame-transaction codec: encode, decode, sig hash, signing, builders, receipts",

@@ -4,19 +4,19 @@ pragma solidity 0.8.28;
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {C13Verifier} from "../../src/pq/C13Verifier.sol";
 import {PackedUserOperation} from "../../src/modules/interfaces/IERC7579Modules.sol";
-import {LeakedRoleExecutor} from "../../src/modules/LeakedRoleExecutor.sol";
-import {LeakedPolicyHook} from "../../src/modules/LeakedPolicyHook.sol";
-import {LeakedHotValidator} from "../../src/modules/LeakedHotValidator.sol";
+import {QueueBitRoleExecutor} from "../../src/modules/QueueBitRoleExecutor.sol";
+import {QueueBitPolicyHook} from "../../src/modules/QueueBitPolicyHook.sol";
+import {QueueBitHotValidator} from "../../src/modules/QueueBitHotValidator.sol";
 import {ISimpleAccount} from "./hosts/HostInterfaces.sol";
-import {LeakedModulesBase} from "./LeakedModulesBase.sol";
+import {QueueBitModulesBase} from "./QueueBitModulesBase.sol";
 
 /// PQ vault/recovery actions with real SPHINCS- C13 signatures (3,688 B) verified by `C13Verifier` in execution.
 /// Signatures come from `test/modules/fixtures/c13-executor.json`, produced by
-/// `contracts/devnet-tests/4337/gen-fixtures.ts` with the leaked pq-signer package from fixed test seeds. The generator computes
+/// `contracts/devnet-tests/4337/gen-fixtures.ts` with the queuebit pq-signer package from fixed test seeds. The generator computes
 /// the EIP-712 digests itself (viem `hashTypedData`) from the addresses below; this test recomputes them on chain
 /// and requires equality, so the fixture is also an independent check of the executor's digest encoding.
 /// Foundry deploys deterministically: if setUp changes, the addresses move and the generator must be re-run.
-contract LeakedModulesC13Test is LeakedModulesBase {
+contract QueueBitModulesC13Test is QueueBitModulesBase {
     string internal constant FIXTURE = "test/modules/fixtures/c13-executor.json";
     string internal json;
 
@@ -48,9 +48,9 @@ contract LeakedModulesC13Test is LeakedModulesBase {
     }
 
     function _deployModules() internal override {
-        executor = new LeakedRoleExecutor();
-        hook = new LeakedPolicyHook(address(executor));
-        validator = new LeakedHotValidator(hook);
+        executor = new QueueBitRoleExecutor();
+        hook = new QueueBitPolicyHook(address(executor));
+        validator = new QueueBitHotValidator(hook);
         pq = new C13Verifier();
     }
 
@@ -112,7 +112,7 @@ contract LeakedModulesC13Test is LeakedModulesBase {
         op.nonce = ep.getNonce(relayer, 0);
         op.callData = abi.encodeCall(
             ISimpleAccount.execute,
-            (address(executor), 0, abi.encodeCall(LeakedRoleExecutor.vaultExec, (account, c, 0, 0, sig)))
+            (address(executor), 0, abi.encodeCall(QueueBitRoleExecutor.vaultExec, (account, c, 0, 0, sig)))
         );
         op.accountGasLimits = bytes32((uint256(100_000) << 128) | 600_000);
         op.preVerificationGas = 120_000; // 3.7 KB of calldata

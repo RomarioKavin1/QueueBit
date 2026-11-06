@@ -30,7 +30,7 @@ export function useWalletState() {
         if (s && (s.oldValue === undefined) !== (s.newValue === undefined)) void refresh();
         return;
       }
-      if (area === "local" && keys.some((k) => k.startsWith("leaked:"))) void refresh();
+      if (area === "local" && keys.some((k) => k.startsWith("queuebit:"))) void refresh();
     };
     browser.storage.onChanged.addListener(onChanged);
     return () => browser.storage.onChanged.removeListener(onChanged);

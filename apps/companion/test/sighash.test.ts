@@ -1,4 +1,4 @@
-import { getProfile, sigHash } from "@leaked/frames";
+import { getProfile, sigHash } from "@queuebit/frames";
 import { describe, expect, it } from "vitest";
 import { vectors as current } from "../../../packages/frames/test/vectors/eip8141-current.js";
 import { vectors as tracer } from "../../../packages/frames/test/vectors/ethrex-eip8141-tracer.js";
@@ -6,12 +6,12 @@ import { vectors as hegota } from "../../../packages/frames/test/vectors/ethrex-
 import { frameDigest } from "../src/core/clearsign.js";
 import { PROFILE_ID, limitRaise, usdcWithdrawal } from "./fixtures/requests.js";
 
-// The companion recomputes the sig hash from the request bytes. These are the pinned @leaked/frames vectors (two of
+// The companion recomputes the sig hash from the request bytes. These are the pinned @queuebit/frames vectors (two of
 // the three sets are copied verbatim from hegota-support, i.e. independent of our codec): the companion's digest path
 // must reproduce every one of them.
 const sets = { "eip8141-current": current, "ethrex-eip8141-tracer": tracer, "ethrex-hegota-devnet": hegota } as const;
 
-describe("sig hash recomputation matches the @leaked/frames vectors", () => {
+describe("sig hash recomputation matches the @queuebit/frames vectors", () => {
   for (const [id, vs] of Object.entries(sets)) {
     for (const v of vs) {
       it(`${id}: ${v.name}`, () => {

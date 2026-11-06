@@ -1,7 +1,7 @@
-# LEAKED threat model
+# QueueBit threat model
 
 Status: 2026-11-06, pre-audit. Nothing here has had an external audit. This document says what each key can do,
-what the contracts stop, and what they don't. It is written for users deciding what to keep in a LEAKED account,
+what the contracts stop, and what they don't. It is written for users deciding what to keep in a QueueBit account,
 and for auditors deciding where to look. If something here disagrees with the code, the code wins; please report the
 mismatch.
 
@@ -9,7 +9,7 @@ Code: `contracts/src/account` (frame-native account, EIP-8141), `contracts/src/m
 backend), `contracts/src/roles` (PQ role signers, guardian), `contracts/src/privacy/PoolPayer.sol`,
 `apps/companion` (the offline vault device), `apps/extension` (the browser wallet). Design: `docs/plan/sections/10-contracts.md`.
 Audit history and regression tests: `docs/plan/IMPLEMENTATION-NOTES.md`, `contracts/test/account/Audit.t.sol`,
-`contracts/test/account/TypedPermits.t.sol`, `contracts/test/modules/LeakedModulesAudit.t.sol`.
+`contracts/test/account/TypedPermits.t.sol`, `contracts/test/modules/QueueBitModulesAudit.t.sol`.
 
 ## 1. The idea in one paragraph
 
@@ -80,7 +80,7 @@ Lesson from audit C1: a hash is opaque; the account cannot tell what it authoris
 
 All expire at the permit's own deadline, at most 30 days out. A declared amount different from the real one, the wrong
 caller, and a replay are each a separate PoC test that fails (`TypedPermits.t.sol`, both recipient modes, and the
-7579 hosts in `LeakedModulesHosts.t.sol`). Not supported (no registration exists, so they always fail): Permit2
+7579 hosts in `QueueBitModulesHosts.t.sol`). Not supported (no registration exists, so they always fail): Permit2
 batch permits and witness transfers (UniswapX orders), ERC-2612 variants with non-standard type strings. Permit2
 needs the vault to have approved Permit2 on the token once; the hot key cannot.
 
@@ -152,8 +152,8 @@ vault policy (and for the extension's vault screens):
 
 ## 6. The ERC-4337 / ERC-7579 backend (before Hegotá)
 
-The same policy runs as three modules: `LeakedHotValidator` (validation), `LeakedPolicyHook` (policy and
-accounting), `LeakedRoleExecutor` (vault, recovery, guardian with PQ signatures checked in execution).
+The same policy runs as three modules: `QueueBitHotValidator` (validation), `QueueBitPolicyHook` (policy and
+accounting), `QueueBitRoleExecutor` (vault, recovery, guardian with PQ signatures checked in execution).
 
 Host matrix (tested in `contracts/test/modules`):
 
@@ -167,7 +167,7 @@ Things specific to this backend:
 
 - **Kernel `MAGIC_VALUE_SIG_REPLAYABLE` (low).** Kernel accepts a userOp signature prefixed with
   `keccak256("kernel.replayable.signature")` over a hash that leaves out the chain id. A hot-key userOp signed that
-  way is valid on every chain where the same Kernel account exists with the LEAKED modules and the same nonce. Each
+  way is valid on every chain where the same Kernel account exists with the QueueBit modules and the same nonce. Each
   chain still applies its own cap, so the loss bound is per chain. The extension never produces such signatures, but
   a leaked hot key can. On Kernel, the leaked-key bound is the cap times the number of chains where the account is
   deployed.

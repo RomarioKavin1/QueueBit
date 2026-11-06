@@ -66,7 +66,7 @@ export function PrivateConnectionSection({ chainId, enabled }: { chainId: number
 
 /**
  * Settings › Private balance network: where Privacy Pools and its fee payer (PoolPayer) live. Fixed on every network
- * LEAKED ships; the local devnet's pool is deployed per run, so a local-devnet build lets it be entered here (it is
+ * QueueBit ships; the local devnet's pool is deployed per run, so a local-devnet build lets it be entered here (it is
  * checked on chain before it is saved).
  */
 export function PrivacyNetworkSection({ chainId }: { chainId: number }) {
@@ -113,7 +113,7 @@ export function PrivacyNetworkSection({ chainId }: { chainId: number }) {
         <p className="t-small text-muted">
           {editable
             ? "No pool set for the local devnet yet."
-            : "LEAKED has no Privacy Pools deployment for this network yet."}
+            : "QueueBit has no Privacy Pools deployment for this network yet."}
         </p>
       )}
       {saved && (

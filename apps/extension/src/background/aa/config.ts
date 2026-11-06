@@ -26,7 +26,7 @@ import {
 /**
  * The compatible account (plan §30 §8, backend U): the reference ERC-7579 MSA (`MSAAdvanced` with an EntryPoint v0.8
  * shim) created by `MSAFactory.createAccount(salt, initCode)`, whose `initCode` delegatecalls `Bootstrap.initMSA` to
- * install LeakedHotValidator (type 1), LeakedRoleExecutor (type 2) and LeakedPolicyHook (type 4, the global hook) in
+ * install QueueBitHotValidator (type 1), QueueBitRoleExecutor (type 2) and QueueBitPolicyHook (type 4, the global hook) in
  * one transaction. The address is a CREATE2 function of the whole init code (the Vault's and the Recovery key's PQ
  * public keys, the limits, the tokens), so, as on the native account, it is frozen when it is computed.
  *
@@ -34,9 +34,9 @@ import {
  * does not bubble module reverts, +29k gas per hot op) and Kernel v3.3 (hot ERC-1271 must be off, so no sign-in).
  */
 
-export const AA_VERSION = "leaked.account.4337.1";
+export const AA_VERSION = "queuebit.account.4337.1";
 
-/** `ILeakedModules.HookInit` (field order = the Solidity struct). */
+/** `IQueueBitModules.HookInit` (field order = the Solidity struct). */
 export interface HookInit {
   hotKey: Address;
   capUsdPerDay: bigint;
@@ -50,7 +50,7 @@ export interface HookInit {
   recipientMode: number;
 }
 
-/** `ILeakedModules.ExecutorInit`. */
+/** `IQueueBitModules.ExecutorInit`. */
 export interface ExecutorInit {
   hook: Address;
   verifier: Address;
@@ -211,7 +211,7 @@ export async function predictAaAccount(client: PublicClient, dep: AaDeployment, 
   })) as Address;
   if (!isAddressEqual(onChain, local)) {
     throw new Error(
-      "The network's answer for your account address doesn't match the one LEAKED computed. Nothing was shown or sent; check the network's RPC and try again.",
+      "The network's answer for your account address doesn't match the one QueueBit computed. Nothing was shown or sent; check the network's RPC and try again.",
     );
   }
   return local;

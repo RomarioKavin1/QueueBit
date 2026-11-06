@@ -218,7 +218,7 @@ test("activity log: encrypted at rest, readable with the passphrase", async ({ p
   const dump = await page.evaluate(
     () =>
       new Promise<string>((resolve, reject) => {
-        const req = indexedDB.open("leaked-companion");
+        const req = indexedDB.open("queuebit-companion");
         req.onsuccess = () => {
           const all = req.result.transaction("kv").objectStore("kv").getAll();
           all.onsuccess = () => {
@@ -250,7 +250,7 @@ test("activity log: encrypted at rest, readable with the passphrase", async ({ p
 
 test("navigation guard: the page can't navigate itself to another site or open windows", async ({ page }) => {
   await page.goto("./");
-  await expect(page.getByRole("heading", { name: "LEAKED Vault" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "QueueBit Vault" })).toBeVisible();
   const origin = new URL(page.url()).origin;
   const out = await page.evaluate(async () => {
     const opened = window.open("https://example.com/?leak=1");
@@ -265,7 +265,7 @@ test("navigation guard: the page can't navigate itself to another site or open w
   });
   expect(out).toEqual({ opened: true, navigationApi: true });
   expect(new URL(page.url()).origin).toBe(origin);
-  await expect(page.getByRole("heading", { name: "LEAKED Vault" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "QueueBit Vault" })).toBeVisible();
 });
 
 test("update: a new build waits, is offered as build X → Y, and runs only after the user's tap", async ({ page }) => {

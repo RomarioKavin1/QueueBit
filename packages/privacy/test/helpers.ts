@@ -8,7 +8,7 @@ import {
   type Hex,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { UR_TYPES, UrReceiver, encodeSignature, type SignRequest } from "@leaked/ur";
+import { UR_TYPES, UrReceiver, encodeSignature, type SignRequest } from "@queuebit/ur";
 import {
   ENTRYPOINT_ABI,
   POOL_ABI,

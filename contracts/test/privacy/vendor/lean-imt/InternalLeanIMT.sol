@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Vendored for LEAKED tests from npm @zk-kit/lean-imt.sol@2.0.0 (InternalLeanIMT.sol; MIT, see ./LICENSE). Modified: the PoseidonT3 import path only. See THIRD_PARTY.md.
+// Vendored for QueueBit tests from npm @zk-kit/lean-imt.sol@2.0.0 (InternalLeanIMT.sol; MIT, see ./LICENSE). Modified: the PoseidonT3 import path only. See THIRD_PARTY.md.
 pragma solidity ^0.8.4;
 
 import {PoseidonT3} from "../poseidon-solidity/PoseidonT3.sol";

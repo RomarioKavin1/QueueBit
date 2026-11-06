@@ -29,7 +29,7 @@ import {
   txHash,
   type FrameTx,
   type SignatureEntry,
-} from "@leaked/frames";
+} from "@queuebit/frames";
 import { concat, encodeAbiParameters, keccak256, numberToHex, toHex, toRlp, type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { CACHE_DIR, CONTRACTS_DIR, readJson, writeJson } from "./env.js";
@@ -60,7 +60,7 @@ const CHAIN_ID = 1337;
 const FUNDER_KEY: Hex = "0x92db14e403b83dfe3df233f83dfa3a0d7096f21ca9b0d6d6b8d88b2b4ec1564e";
 const funder = privateKeyToAccount(FUNDER_KEY);
 /** Path B payer key: derived from a public label, holds no funds (the account pays). */
-const PAYER_KEY = keccak256(toHex("leaked-bench/v1/path-b-payer"));
+const PAYER_KEY = keccak256(toHex("queuebit-bench/v1/path-b-payer"));
 const payer = privateKeyToAccount(PAYER_KEY);
 const P = getProfile("ethrex-eip8141-tracer");
 const FEES = { maxFeePerGas: 2_000_000_000n, maxPriorityFeePerGas: 1_000_000_000n };

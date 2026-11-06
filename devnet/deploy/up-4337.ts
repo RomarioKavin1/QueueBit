@@ -1,6 +1,6 @@
 // One command for the local ERC-4337 chain: anvil (chain 31337, :8546) + deploy-4337.ts + bundler.ts (:4337).
 //
-//   bun run up:4337       # prints `LEAKED-4337-READY rpc=… bundler=…`, runs until SIGINT/SIGTERM
+//   bun run up:4337       # prints `QUEUEBIT-4337-READY rpc=… bundler=…`, runs until SIGINT/SIGTERM
 //
 // Reuses a node that already answers on ANVIL_URL (and then does not stop it).
 import { spawn, type ChildProcess } from "node:child_process";
@@ -66,7 +66,7 @@ try {
     shutdown(1);
   });
   await waitFor(BUNDLER, "eth_supportedEntryPoints", "bundler");
-  console.log(`LEAKED-4337-READY rpc=${ANVIL_URL} bundler=${BUNDLER}`);
+  console.log(`QUEUEBIT-4337-READY rpc=${ANVIL_URL} bundler=${BUNDLER}`);
 } catch (e) {
   console.error(e);
   shutdown(1);

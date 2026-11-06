@@ -1,14 +1,19 @@
-import type { CommitmentCircuitInputs, ProveResult, RagequitProveResult, WithdrawCircuitInputs } from "@leaked/privacy";
+import type {
+  CommitmentCircuitInputs,
+  ProveResult,
+  RagequitProveResult,
+  WithdrawCircuitInputs,
+} from "@queuebit/privacy";
 
 /**
  * Service worker ⇄ offscreen document (plan §30 §2.1, §2.3): `chrome.runtime.sendMessage` with a `target`
  * discriminator. The extension has ONE offscreen document (`offscreen.html`, Chrome allows one per extension); it
- * hosts the Groth16 withdraw prover in a Worker (`@leaked/groth16`, MIT) and is the place the Anon-RPC harness
+ * hosts the Groth16 withdraw prover in a Worker (`@queuebit/groth16`, MIT) and is the place the Anon-RPC harness
  * would mount (`mountOffscreenHost()`); today it answers `anon:status` with why the private connection is off.
  *
  * Runtime messages are JSON-serialised, so bigints travel tagged (`{"$n": "123"}`): `encodeWire` / `decodeWire`.
  */
-export const OFFSCREEN_TARGET = "leaked-offscreen";
+export const OFFSCREEN_TARGET = "queuebit-offscreen";
 export const OFFSCREEN_PATH = "offscreen.html";
 
 /** Why the private connection (Anon-RPC) is not used, in plain words (ux-spec §3.13). */

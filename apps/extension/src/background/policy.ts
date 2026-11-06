@@ -105,7 +105,7 @@ export class PolicyReader {
     };
   }
 
-  /** The policy facts of each call, mirroring `_hotCall` (LeakedAccountImpl). */
+  /** The policy facts of each call, mirroring `_hotCall` (QueueBitAccountImpl). */
   async classify(plan: AccountPlan, state: AccountChainState, calls: Call[]): Promise<ClassifiedCall[]> {
     const cfg = planConfig(plan);
     return classifyCalls(
@@ -258,7 +258,7 @@ export async function classifyCalls(src: PolicySource, calls: Call[]): Promise<C
   return out;
 }
 
-/** `Math.mulDiv(amount, usdPerToken, 10**decimals, Ceil)` (LeakedAccountBase._quote). */
+/** `Math.mulDiv(amount, usdPerToken, 10**decimals, Ceil)` (QueueBitAccountBase._quote). */
 export function quote(amount: bigint, usdPerToken: bigint, decimals: number): bigint {
   const d = 10n ** BigInt(decimals);
   return (amount * usdPerToken + d - 1n) / d;

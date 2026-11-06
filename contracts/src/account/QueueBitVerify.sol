@@ -3,15 +3,15 @@ pragma solidity 0.8.28;
 
 import {HegotaSupport, Devnet} from "@forshtat/hegota-support/contracts/HegotaSupport.sol";
 import {Scope, TxParam, FrameParam, FrameMode, SigParam} from "@forshtat/hegota-support/contracts/Params.sol";
-import {ILeakedAccount} from "./ILeakedAccount.sol";
-import {LeakedAccountStorage} from "./LeakedAccountStorage.sol";
+import {IQueueBitAccount} from "./IQueueBitAccount.sol";
+import {QueueBitAccountStorage} from "./QueueBitAccountStorage.sol";
 
-/// @title LeakedVerify
+/// @title QueueBitVerify
 /// @notice The hot transaction's VERIFY frame: the frame walker of `docs/plan/sections/10-contracts.md` §10.5.1.
 ///         Everything reachable from `_verifyHot()` is VERIFY-reachable code and is held to the validation rules of
 ///         both mempools (EIP-8141 "Public Mempool" trace rules; ERC-8421):
 ///         - no banned opcode: no TIMESTAMP/NUMBER/BASEFEE/GASPRICE/BALANCE/SELFBALANCE/SSTORE/CREATE*/...;
-///         - SLOADs only of the account's own storage (three packed slots of `LeakedAccountStorage`);
+///         - SLOADs only of the account's own storage (three packed slots of `QueueBitAccountStorage`);
 ///         - CALLs only to the account's own opcode helpers (stateless Yul contracts);
 ///         - none of the three reads that halt on the devnet (docs/plan/50-devnet-review.md F6-F8):
 ///           `SIGDATACOPY` (not used at all), `SIGPARAM(j, RESOLVED_SIGNER)` before entry j's scheme is known to be
@@ -25,7 +25,7 @@ import {LeakedAccountStorage} from "./LeakedAccountStorage.sol";
 ///                with signatures [SECP256K1 hotKey]
 ///      Every SENDER frame calls `hotExecute(declaredUsd, calls)` on the account with value 0, or, when the hot tier
 ///      is frozen, exactly one SENDER frame calls `clearExpiredFreeze()`.
-abstract contract LeakedVerify is HegotaSupport, ILeakedAccount {
+abstract contract QueueBitVerify is HegotaSupport, IQueueBitAccount {
     uint256 internal constant SCHEME_SECP256K1 = 1;
     bytes4 internal constant HOT_EXECUTE_SELECTOR = 0x7d450a06; // hotExecute(uint256,(address,uint256,bytes)[])
     bytes4 internal constant CLEAR_FREEZE_SELECTOR = 0x1127bd60; // clearExpiredFreeze()
@@ -53,7 +53,7 @@ abstract contract LeakedVerify is HegotaSupport, ILeakedAccount {
         // Step 1: only a VERIFY frame may approve (a DEFAULT frame is also called by ENTRY_POINT).
         if (frameparam(cur, FrameParam.MODE) != uint256(FrameMode.VERIFY)) revert NotVerifyFrame();
 
-        LeakedAccountStorage.Layout storage $ = LeakedAccountStorage.layout();
+        QueueBitAccountStorage.Layout storage $ = QueueBitAccountStorage.layout();
         // Step 2: one SLOAD (slot 0): hot key and the vault/guardian-written flags.
         address hotKey = $.hotKey;
         bool frozen = $.hotFrozen;

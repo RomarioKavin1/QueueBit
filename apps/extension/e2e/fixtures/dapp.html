@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>LEAKED test dapp</title>
+    <title>QueueBit test dapp</title>
     <style>
       body {
         font:
@@ -20,7 +20,7 @@
     <h1>Test dapp</h1>
     <p>Wallets discovered via EIP-6963: <span id="wallets">none</span></p>
     <p>Account: <code id="account">not connected</code></p>
-    <button id="connect">Connect LEAKED</button>
+    <button id="connect">Connect QueueBit</button>
     <script>
       // EIP-6963 discovery: listen first, then ask wallets to (re-)announce. The extension announced once at
       // document_start, before this listener existed, so this exercises the requestProvider path.
@@ -36,9 +36,9 @@
         }
       });
       window.dispatchEvent(new Event("eip6963:requestProvider"));
-      window.leaked = () => window.__providers.find((p) => p.info.rdns === "xyz.leaked.wallet")?.provider;
+      window.queuebit = () => window.__providers.find((p) => p.info.rdns === "xyz.queuebit.wallet")?.provider;
       document.getElementById("connect").onclick = async () => {
-        const [a] = await window.leaked().request({ method: "eth_requestAccounts" });
+        const [a] = await window.queuebit().request({ method: "eth_requestAccounts" });
         document.getElementById("account").textContent = a;
       };
     </script>

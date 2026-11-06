@@ -40,7 +40,7 @@ const RPC = "http://localhost:8545";
 const SIDECAR = "http://localhost:14340/rpc";
 const SHOTS = join(dirname(fileURLToPath(import.meta.url)), "..", "docs", "screenshots");
 async function shot(name: string, page: Page) {
-  if (process.env.LEAKED_SHOTS !== "1") return;
+  if (process.env.QUEUEBIT_SHOTS !== "1") return;
   await page.screenshot({ path: join(SHOTS, `${name}.png`), fullPage: true, animations: "disabled" });
 }
 const pub = createPublicClient({ transport: http(RPC) });
@@ -226,7 +226,7 @@ test("M6: shield → sync → withdraw via PoolPayer to a fresh address; the wat
   const local = await dumpStorage(serviceWorker, "local");
   const session = await dumpStorage(serviceWorker, "session");
   // The spend keys left the session when the withdrawal finished; storage.local never had them under any key.
-  expect(session["leaked:privacy:answers:1337"]).toBeUndefined();
+  expect(session["queuebit:privacy:answers:1337"]).toBeUndefined();
   expect(Object.keys(local).filter((k) => /ans:|sig:/u.test(k))).toEqual([]);
   const ppKeys = Object.keys(local).filter((k) => k.startsWith("pp:1337:0:"));
   expect(ppKeys.map((k) => k.slice("pp:1337:0:".length).split(":")[0]).sort()).toEqual(["ledger", "state"]);
@@ -268,7 +268,7 @@ test("M6: shield → sync → withdraw via PoolPayer to a fresh address; the wat
     const s = (
       globalThis as unknown as { chrome: { storage: { local: { get(k: string): Promise<Record<string, unknown>> } } } }
     ).chrome.storage.local;
-    return ((await s.get("leaked:privacy:1337"))["leaked:privacy:1337"] as { proofMs: number[] }).proofMs;
+    return ((await s.get("queuebit:privacy:1337"))["queuebit:privacy:1337"] as { proofMs: number[] }).proofMs;
   });
   expect(proofMs.length).toBe(1);
   expect(proofMs[0]).toBeGreaterThan(0);
@@ -276,7 +276,7 @@ test("M6: shield → sync → withdraw via PoolPayer to a fresh address; the wat
     const s = (
       globalThis as unknown as { chrome: { storage: { local: { get(k: string): Promise<Record<string, unknown>> } } } }
     ).chrome.storage.local;
-    const r = (await s.get("leaked:privacy:1337"))["leaked:privacy:1337"] as {
+    const r = (await s.get("queuebit:privacy:1337"))["queuebit:privacy:1337"] as {
       op?: { withdraw?: { hash?: string; feeWei?: string } };
       history: Array<{ withdraw?: { hash?: string; feeWei?: string } }>;
     };
@@ -342,7 +342,7 @@ test("M6: shield → sync → withdraw via PoolPayer to a fresh address; the wat
           const c = (
             globalThis as unknown as { chrome: { notifications: { getAll(): Promise<Record<string, boolean>> } } }
           ).chrome;
-          return Object.keys(await c.notifications.getAll()).some((id) => id.startsWith("leaked-alert:"));
+          return Object.keys(await c.notifications.getAll()).some((id) => id.startsWith("queuebit-alert:"));
         }),
       { timeout: 30_000 },
     )

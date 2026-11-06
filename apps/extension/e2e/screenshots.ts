@@ -103,7 +103,7 @@ test("screens", async ({ context, extensionId, serviceWorker, dappUrl }) => {
   // Dapp: connect, an instant transaction, a needs-Vault transaction.
   const dapp = await context.newPage();
   await dapp.goto(dappUrl);
-  await dapp.getByRole("button", { name: "Connect LEAKED" }).click();
+  await dapp.getByRole("button", { name: "Connect QueueBit" }).click();
   const approval = await waitForApproval(context);
   await approval.setViewportSize({ width: 360, height: 600 });
   await expect(approval.getByRole("button", { name: "Connect" })).toBeEnabled();
@@ -117,10 +117,10 @@ test("screens", async ({ context, extensionId, serviceWorker, dappUrl }) => {
     dapp.evaluate(
       ([to, v]) => {
         const w = window as unknown as {
-          leaked(): { request(a: { method: string; params: unknown[] }): Promise<unknown> };
+          queuebit(): { request(a: { method: string; params: unknown[] }): Promise<unknown> };
         };
         void w
-          .leaked()
+          .queuebit()
           .request({ method: "eth_sendTransaction", params: [{ to, value: v }] })
           .catch(() => undefined);
       },
@@ -169,7 +169,7 @@ test("screens", async ({ context, extensionId, serviceWorker, dappUrl }) => {
   const gallery = await context.newPage();
   await gallery.setViewportSize({ width: 900, height: 900 });
   await gallery.goto(extUrl(extensionId, "app.html#design"));
-  await expect(gallery.getByRole("heading", { name: "LEAKED components" })).toBeVisible();
+  await expect(gallery.getByRole("heading", { name: "QueueBit components" })).toBeVisible();
   await shot("components-light", gallery);
   await gallery.emulateMedia({ colorScheme: "dark" });
   await shot("components-dark", gallery);
@@ -177,6 +177,6 @@ test("screens", async ({ context, extensionId, serviceWorker, dappUrl }) => {
 
 test("first run popup", async ({ context, extensionId }) => {
   const popup = await openPopup(context, extensionId);
-  await expect(popup.getByRole("button", { name: "Set up LEAKED" })).toBeVisible();
+  await expect(popup.getByRole("button", { name: "Set up QueueBit" })).toBeVisible();
   await shot("popup-first-run", popup);
 });

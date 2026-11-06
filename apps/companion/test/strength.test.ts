@@ -3,7 +3,7 @@ import { checkStrength } from "../src/core/strength.js";
 
 describe("passphrase strength (zxcvbn-ts)", () => {
   it("blocks common and patterned passphrases", () => {
-    for (const p of ["password1", "qwertyuiop", "12345678", "leakedvault", "iloveyou2026"])
+    for (const p of ["password1", "qwertyuiop", "12345678", "queuebitvault", "iloveyou2026"])
       expect(checkStrength(p).strength, p).toBe("weak");
   });
   it("lets random multi-word and long mixed passphrases through", () => {

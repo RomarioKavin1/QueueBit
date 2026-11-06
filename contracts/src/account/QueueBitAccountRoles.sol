@@ -5,12 +5,12 @@ import {UUPSUpgradeable} from "@openzeppelin/contracts/proxy/utils/UUPSUpgradeab
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {RollingCap} from "../lib/RollingCap.sol";
-import {LeakedAccountBase} from "./LeakedAccountBase.sol";
-import {LeakedAccountStorage} from "./LeakedAccountStorage.sol";
+import {QueueBitAccountBase} from "./QueueBitAccountBase.sol";
+import {QueueBitAccountStorage} from "./QueueBitAccountStorage.sol";
 
-/// @title LeakedAccountRoles
+/// @title QueueBitAccountRoles
 /// @notice The account's role surface (vault, recovery, guardian, timelock, upgrade, migration). Deployed once per
-///         implementation and reached only by DELEGATECALL from `LeakedAccountImpl`'s fallback, so it runs on the
+///         implementation and reached only by DELEGATECALL from `QueueBitAccountImpl`'s fallback, so it runs on the
 ///         proxy's storage with the caller's `msg.sender` (split out of the implementation for EIP-170).
 ///         Spec: `docs/plan/sections/10-contracts.md` §10.3.2 ("Role entry points", access-control matrix).
 ///
@@ -22,7 +22,7 @@ import {LeakedAccountStorage} from "./LeakedAccountStorage.sol";
 ///         - recovery outranks the vault: cancels any queued op, starts a 7-day rotation the vault cannot cancel,
 ///           during which the hot tier is frozen and the vault can neither spend, queue nor execute;
 ///         - guardians: freeze only, once per 7 days each, 72 h.
-contract LeakedAccountRoles is LeakedAccountBase {
+contract QueueBitAccountRoles is QueueBitAccountBase {
     using RollingCap for RollingCap.Bucket;
     using SafeERC20 for IERC20;
 
@@ -46,7 +46,7 @@ contract LeakedAccountRoles is LeakedAccountBase {
     ///         daily instant allowance; a larger batch reverts `VaultOverDailyThreshold` and must be queued. Calls to
     ///         the account itself are refused (config goes through the `vault*` setters).
     function vaultExecute(Call[] calldata calls, uint256 usdValue) external delegated {
-        LeakedAccountStorage.Layout storage $ = _onlyVault();
+        QueueBitAccountStorage.Layout storage $ = _onlyVault();
         if ($.pendingVaultEta != 0) revert RotationPending();
         _noActiveContext();
         uint256 n = calls.length;
@@ -69,7 +69,7 @@ contract LeakedAccountRoles is LeakedAccountBase {
     /// @notice Queues a vault batch: `KIND_SPEND` (large spends) or `KIND_LOOSEN` (calls to the account's own
     ///         `vault*` setters that loosen policy). Executable by anyone after `timelockDelay`.
     function vaultQueue(Call[] calldata calls, uint8 kind) external delegated returns (bytes32 opId) {
-        LeakedAccountStorage.Layout storage $ = _onlyVault();
+        QueueBitAccountStorage.Layout storage $ = _onlyVault();
         if ($.pendingVaultEta != 0) revert RotationPending();
         if (kind > KIND_LOOSEN) revert BadKind(kind);
         if (calls.length == 0 || calls.length > MAX_VAULT_CALLS) revert BadCallCount(calls.length);
@@ -83,7 +83,7 @@ contract LeakedAccountRoles is LeakedAccountBase {
 
     /// @notice Executes a queued SPEND/LOOSEN op after its eta. Permissionless; runs with vault authority.
     function executeQueued(bytes32 opId, Call[] calldata calls) external delegated {
-        LeakedAccountStorage.Layout storage $ = _s();
+        QueueBitAccountStorage.Layout storage $ = _s();
         QueuedOp storage op = _readyOp($, opId);
         if (op.kind > KIND_LOOSEN) revert BadKind(op.kind);
         if (keccak256(abi.encode(calls)) != op.payloadHash) revert PayloadMismatch();
@@ -99,7 +99,7 @@ contract LeakedAccountRoles is LeakedAccountBase {
 
     /// @notice Cancels one of the vault's own pending ops (never a recovery rotation).
     function vaultCancel(bytes32 opId) external delegated {
-        LeakedAccountStorage.Layout storage $ = _onlyVault();
+        QueueBitAccountStorage.Layout storage $ = _onlyVault();
         QueuedOp storage op = $.queue[opId];
         if (op.state != OpState.PENDING || op.vaultEpoch != $.vaultEpoch) revert BadOp(opId);
         _cancel($, opId, op);
@@ -109,7 +109,7 @@ contract LeakedAccountRoles is LeakedAccountBase {
 
     /// @notice Hot key rotation; instant (clears bunker).
     function vaultSetHotKey(address newHotKey) external delegated {
-        LeakedAccountStorage.Layout storage $ = _authVault(false);
+        QueueBitAccountStorage.Layout storage $ = _authVault(false);
         if (
             newHotKey == address(0) || newHotKey == address(this) || newHotKey == $.vaultSigner
                 || newHotKey == $.recoverySigner || newHotKey == $.pendingVaultSigner
@@ -128,10 +128,10 @@ contract LeakedAccountRoles is LeakedAccountBase {
         external
         delegated
     {
-        LeakedAccountStorage.Layout storage $0 = _s();
+        QueueBitAccountStorage.Layout storage $0 = _s();
         bool loosening = capUsdPerDay > $0.hotBucket.cap || perTxMaxUsd > $0.perTxMaxUsd
             || maxFeeWeiPerTx > $0.maxFeeWeiPerTx || maxHotFrames > $0.maxHotFrames;
-        LeakedAccountStorage.Layout storage $ = _authVault(loosening);
+        QueueBitAccountStorage.Layout storage $ = _authVault(loosening);
         _checkCapBounds(perTxMaxUsd, maxFeeWeiPerTx, maxHotFrames);
         $.hotBucket.setCap(capUsdPerDay);
         $.perTxMaxUsd = uint96(perTxMaxUsd);
@@ -144,9 +144,9 @@ contract LeakedAccountRoles is LeakedAccountBase {
     ///         loosening (queued). The pin only restricts who pays, so changing it is instant (it does not allowlist
     ///         the new tank as a recipient: that is `vaultSetTarget`).
     function vaultSetFeePolicy(uint256 maxPriorityFeePerGas, bool selfPay, address tank) external delegated {
-        LeakedAccountStorage.Layout storage $0 = _s();
+        QueueBitAccountStorage.Layout storage $0 = _s();
         bool loosening = maxPriorityFeePerGas > $0.maxPriorityFeePerGas || (selfPay && !$0.selfPay);
-        LeakedAccountStorage.Layout storage $ = _authVault(loosening);
+        QueueBitAccountStorage.Layout storage $ = _authVault(loosening);
         if (maxPriorityFeePerGas > type(uint128).max) revert BadConfig();
         if (
             tank == address(this)
@@ -164,7 +164,7 @@ contract LeakedAccountRoles is LeakedAccountBase {
     function vaultSetToken(address token, bool allowed, uint8 decimals, uint256 usdPerToken) external delegated {
         TokenCfg memory cur = _s().tokens[token];
         bool loosening = allowed && (!cur.allowed || decimals != cur.decimals || usdPerToken < cur.usdPerToken);
-        LeakedAccountStorage.Layout storage $ = _authVault(loosening);
+        QueueBitAccountStorage.Layout storage $ = _authVault(loosening);
         if (token == address(this)) revert BadAddress(token);
         if (allowed) {
             if (usdPerToken == 0 || decimals > 36 || (token == address(0) && decimals != 18)) revert BadConfig();
@@ -185,7 +185,7 @@ contract LeakedAccountRoles is LeakedAccountBase {
     /// @notice Recipient allowlist for hot transfers. Adding is queued, removing instant.
     function vaultSetTarget(address target, bool allowed) external delegated {
         bool loosening = allowed && !_s().targets[target];
-        LeakedAccountStorage.Layout storage $ = _authVault(loosening);
+        QueueBitAccountStorage.Layout storage $ = _authVault(loosening);
         _checkPolicyTarget($, target);
         $.targets[target] = allowed;
         emit TargetConfigured(target, allowed);
@@ -200,7 +200,7 @@ contract LeakedAccountRoles is LeakedAccountBase {
     ///      freeze do not already give. Not read in VERIFY (execution-only slot; I-2).
     function vaultSetRecipientMode(RecipientMode mode) external delegated {
         bool open = mode == RecipientMode.Open;
-        LeakedAccountStorage.Layout storage $ = _authVault(open && !_s().recipientsOpen);
+        QueueBitAccountStorage.Layout storage $ = _authVault(open && !_s().recipientsOpen);
         $.recipientsOpen = open;
         emit RecipientModeSet(mode);
     }
@@ -214,7 +214,7 @@ contract LeakedAccountRoles is LeakedAccountBase {
         Session memory cur = _s().sessions[sid];
         bool removal = allowanceUsd == 0 || expiry == 0;
         bool loosening = !removal && (allowanceUsd > cur.allowanceUsd || expiry > cur.expiry);
-        LeakedAccountStorage.Layout storage $ = _authVault(loosening);
+        QueueBitAccountStorage.Layout storage $ = _authVault(loosening);
         _checkPolicyTarget($, target);
         if (removal) {
             delete $.sessions[sid];
@@ -231,7 +231,7 @@ contract LeakedAccountRoles is LeakedAccountBase {
     ///         books). Denying is instant; un-denying is queued.
     function vaultSetValueVerifier(address verifier, bool denied) external delegated {
         bool loosening = !denied && _s().valueVerifiers[verifier];
-        LeakedAccountStorage.Layout storage $ = _authVault(loosening);
+        QueueBitAccountStorage.Layout storage $ = _authVault(loosening);
         $.valueVerifiers[verifier] = denied;
         emit ValueVerifierSet(verifier, denied);
     }
@@ -241,7 +241,7 @@ contract LeakedAccountRoles is LeakedAccountBase {
     ///         The deny list (`vaultSetValueVerifier`) and the token allowlist always win over trust.
     function vaultSetTrustedVerifier(address verifier, bool trusted) external delegated {
         bool loosening = trusted && !_s().trustedVerifiers[verifier];
-        LeakedAccountStorage.Layout storage $ = _authVault(loosening);
+        QueueBitAccountStorage.Layout storage $ = _authVault(loosening);
         if (verifier == address(0) || verifier == address(this)) revert BadAddress(verifier);
         $.trustedVerifiers[verifier] = trusted;
         emit TrustedVerifierSet(verifier, trusted);
@@ -249,9 +249,9 @@ contract LeakedAccountRoles is LeakedAccountBase {
 
     /// @notice Timelock delay and daily instant-spend allowance. Longer delay / lower threshold is instant.
     function vaultSetTimelock(uint48 delay, uint256 thresholdUsd) external delegated {
-        LeakedAccountStorage.Layout storage $0 = _s();
+        QueueBitAccountStorage.Layout storage $0 = _s();
         bool loosening = delay < $0.timelockDelay || thresholdUsd > $0.vaultBucket.cap;
-        LeakedAccountStorage.Layout storage $ = _authVault(loosening);
+        QueueBitAccountStorage.Layout storage $ = _authVault(loosening);
         if (delay < MIN_TIMELOCK || delay > MAX_TIMELOCK) revert BadConfig();
         $.timelockDelay = delay;
         $.vaultBucket.setCap(thresholdUsd);
@@ -263,7 +263,7 @@ contract LeakedAccountRoles is LeakedAccountBase {
     ///         tank) and, when both signers are deployed, a distinct PQ key (`SameRoleKey`).
     function vaultSetRecoverySigner(address newRecoverySigner) external delegated {
         bool loosening = !(_s().recoverySigner == address(0) && newRecoverySigner != address(0));
-        LeakedAccountStorage.Layout storage $ = _authVault(loosening);
+        QueueBitAccountStorage.Layout storage $ = _authVault(loosening);
         if (newRecoverySigner != address(0)) {
             // Role independence: a distinct signer (account, vault, a pending vault, everyday key, tank) holding a
             // PQ key distinct from the vault's (and a pending vault's).
@@ -284,7 +284,7 @@ contract LeakedAccountRoles is LeakedAccountBase {
 
     /// @notice Adds or removes a guardian (freeze-only power); instant both ways.
     function vaultSetGuardian(address guardian, bool enabled) external delegated {
-        LeakedAccountStorage.Layout storage $ = _authVault(false);
+        QueueBitAccountStorage.Layout storage $ = _authVault(false);
         if (guardian == address(0) || guardian == address(this)) revert BadAddress(guardian);
         $.guardians[guardian].enabled = enabled;
         emit GuardianSet(guardian, enabled);
@@ -300,7 +300,7 @@ contract LeakedAccountRoles is LeakedAccountBase {
     /// @notice Lifts any freeze (a guardian's included: "guardian pauses, user resumes"). Not while a recovery
     ///         rotation is pending.
     function vaultUnfreeze() external delegated {
-        LeakedAccountStorage.Layout storage $ = _authVault(false);
+        QueueBitAccountStorage.Layout storage $ = _authVault(false);
         if ($.pendingVaultEta != 0) revert RotationPending();
         if (!$.hotFrozen) revert NotFrozen();
         $.hotFrozen = false;
@@ -310,7 +310,7 @@ contract LeakedAccountRoles is LeakedAccountBase {
 
     /// @notice Freezes the hot tier until at least `until`.
     function vaultExtendFreeze(uint48 until) external delegated {
-        LeakedAccountStorage.Layout storage $ = _authVault(false);
+        QueueBitAccountStorage.Layout storage $ = _authVault(false);
         if (until <= block.timestamp) revert BadExpiry();
         _freeze($, until);
     }
@@ -318,7 +318,7 @@ contract LeakedAccountRoles is LeakedAccountBase {
     /// @notice Bunker: hot tier off (hot key cleared) until the vault installs a new hot key. Refused without a
     ///         recovery signer, so a lost vault never bricks a bunkered account (H6, I-7).
     function vaultEnableBunker() external delegated {
-        LeakedAccountStorage.Layout storage $ = _authVault(false);
+        QueueBitAccountStorage.Layout storage $ = _authVault(false);
         if ($.recoverySigner == address(0)) revert BunkerNeedsRecovery();
         address old = $.hotKey;
         $.bunker = true;
@@ -331,7 +331,7 @@ contract LeakedAccountRoles is LeakedAccountBase {
 
     /// @notice Queues a UUPS upgrade (replacing any pending one); executable by anyone after the delay.
     function vaultQueueUpgrade(address newImpl) external delegated returns (bytes32 opId) {
-        LeakedAccountStorage.Layout storage $ = _onlyVault();
+        QueueBitAccountStorage.Layout storage $ = _onlyVault();
         if ($.pendingVaultEta != 0) revert RotationPending();
         if (newImpl.code.length == 0) revert BadAddress(newImpl);
         _cancelIfPending($, $.pendingUpgradeOp);
@@ -342,7 +342,7 @@ contract LeakedAccountRoles is LeakedAccountBase {
     }
 
     function executeUpgrade(address newImpl) external delegated {
-        LeakedAccountStorage.Layout storage $ = _s();
+        QueueBitAccountStorage.Layout storage $ = _s();
         bytes32 opId = $.pendingUpgradeOp;
         QueuedOp storage op = _readyOp($, opId);
         if (keccak256(abi.encode(newImpl)) != op.payloadHash) revert PayloadMismatch();
@@ -363,7 +363,7 @@ contract LeakedAccountRoles is LeakedAccountBase {
         delegated
         returns (bytes32 opId)
     {
-        LeakedAccountStorage.Layout storage $ = _onlyVault();
+        QueueBitAccountStorage.Layout storage $ = _onlyVault();
         if ($.pendingVaultEta != 0) revert RotationPending();
         if (newAccount == address(0) || newAccount == address(this)) revert BadAddress(newAccount);
         if (tokens.length > MAX_MIGRATE_TOKENS) revert TooManyTokens();
@@ -376,7 +376,7 @@ contract LeakedAccountRoles is LeakedAccountBase {
     /// @notice Moves ETH and the listed tokens to the new account, then retires the hot tier (key cleared, frozen
     ///         indefinitely). Permissionless after the delay.
     function executeMigrate(address newAccount, address[] calldata tokens) external delegated {
-        LeakedAccountStorage.Layout storage $ = _s();
+        QueueBitAccountStorage.Layout storage $ = _s();
         bytes32 opId = $.pendingMigrateOp;
         QueuedOp storage op = _readyOp($, opId);
         if (keccak256(abi.encode(newAccount, tokens)) != op.payloadHash) revert PayloadMismatch();
@@ -403,7 +403,7 @@ contract LeakedAccountRoles is LeakedAccountBase {
 
     /// @notice Cancels any pending vault op (spend, loosening, upgrade, migration), whatever its epoch.
     function recoveryCancel(bytes32 opId) external delegated {
-        LeakedAccountStorage.Layout storage $ = _onlyRecovery();
+        QueueBitAccountStorage.Layout storage $ = _onlyRecovery();
         QueuedOp storage op = $.queue[opId];
         if (op.state != OpState.PENDING) revert BadOp(opId);
         _cancel($, opId, op);
@@ -412,7 +412,7 @@ contract LeakedAccountRoles is LeakedAccountBase {
     /// @notice Starts (or restarts) a 7-day vault rotation the vault cannot cancel. Freezes the hot tier until the
     ///         eta; while pending the vault cannot spend, queue, execute queued ops or unfreeze.
     function recoveryStartVaultRotation(address newVaultSigner) external delegated {
-        LeakedAccountStorage.Layout storage $ = _onlyRecovery();
+        QueueBitAccountStorage.Layout storage $ = _onlyRecovery();
         if (
             newVaultSigner == address(0) || newVaultSigner == address(this) || newVaultSigner == $.vaultSigner
                 || newVaultSigner == $.recoverySigner || newVaultSigner == $.hotKey || newVaultSigner == $.tank
@@ -428,7 +428,7 @@ contract LeakedAccountRoles is LeakedAccountBase {
 
     /// @notice Completes a rotation after its eta. Permissionless. Ops queued by the old vault become void (epoch).
     function recoveryFinalizeVaultRotation() external delegated {
-        LeakedAccountStorage.Layout storage $ = _s();
+        QueueBitAccountStorage.Layout storage $ = _s();
         uint48 eta = $.pendingVaultEta;
         if (eta == 0) revert NoRotationPending();
         if (block.timestamp < eta) revert RotationNotReady(eta);
@@ -451,7 +451,7 @@ contract LeakedAccountRoles is LeakedAccountBase {
     }
 
     function recoveryCancelVaultRotation() external delegated {
-        LeakedAccountStorage.Layout storage $ = _onlyRecovery();
+        QueueBitAccountStorage.Layout storage $ = _onlyRecovery();
         if ($.pendingVaultEta == 0) revert NoRotationPending();
         address pending = $.pendingVaultSigner;
         delete $.pendingVaultSigner;
@@ -463,7 +463,7 @@ contract LeakedAccountRoles is LeakedAccountBase {
 
     /// @notice Pauses the hot tier for 72 h; each guardian once per 7 days. VERIFY reads only the boolean.
     function guardianFreeze() external delegated {
-        LeakedAccountStorage.Layout storage $ = _s();
+        QueueBitAccountStorage.Layout storage $ = _s();
         GuardianCfg storage g = $.guardians[msg.sender];
         if (!g.enabled) revert Unauthorized();
         uint48 now48 = uint48(block.timestamp);
@@ -478,7 +478,7 @@ contract LeakedAccountRoles is LeakedAccountBase {
 
     /// @notice The vault's daily instant-spend bucket (cap = timelock threshold) and the timelock delay.
     function getVaultBucket() external view returns (uint256 available, uint256 cap, uint48 delay) {
-        LeakedAccountStorage.Layout storage $ = _s();
+        QueueBitAccountStorage.Layout storage $ = _s();
         return ($.vaultBucket.availableNow(), $.vaultBucket.cap, $.timelockDelay);
     }
 
@@ -501,12 +501,12 @@ contract LeakedAccountRoles is LeakedAccountBase {
             uint32 vaultEpoch
         )
     {
-        LeakedAccountStorage.Layout storage $ = _s();
+        QueueBitAccountStorage.Layout storage $ = _s();
         return ($.vaultSigner, $.recoverySigner, $.pendingVaultSigner, $.pendingVaultEta, $.vaultEpoch);
     }
 
     function getPending() external view returns (bytes32 upgradeOp, address impl, bytes32 migrateOp) {
-        LeakedAccountStorage.Layout storage $ = _s();
+        QueueBitAccountStorage.Layout storage $ = _s();
         return ($.pendingUpgradeOp, $.pendingImpl, $.pendingMigrateOp);
     }
 
@@ -528,18 +528,18 @@ contract LeakedAccountRoles is LeakedAccountBase {
 
     // ----------------------------------------------------------------------------------------- internals ------
 
-    function _onlyVault() private view returns (LeakedAccountStorage.Layout storage $) {
+    function _onlyVault() private view returns (QueueBitAccountStorage.Layout storage $) {
         $ = _s();
         if (msg.sender != $.vaultSigner) revert Unauthorized();
     }
 
-    function _onlyRecovery() private view returns (LeakedAccountStorage.Layout storage $) {
+    function _onlyRecovery() private view returns (QueueBitAccountStorage.Layout storage $) {
         $ = _s();
         if (msg.sender != $.recoverySigner || msg.sender == address(0)) revert Unauthorized();
     }
 
     /// Config setters: the vault directly (tightening only) or a queued op executing (anything).
-    function _authVault(bool loosening) private view returns (LeakedAccountStorage.Layout storage $) {
+    function _authVault(bool loosening) private view returns (QueueBitAccountStorage.Layout storage $) {
         $ = _s();
         if (msg.sender == address(this) && _tload(T_QUEUED) != 0) return $;
         if (msg.sender != $.vaultSigner) revert Unauthorized();
@@ -558,7 +558,7 @@ contract LeakedAccountRoles is LeakedAccountBase {
             || sel == this.vaultExtendFreeze.selector || sel == this.vaultEnableBunker.selector;
     }
 
-    function _enqueue(LeakedAccountStorage.Layout storage $, uint8 kind, bytes32 payloadHash)
+    function _enqueue(QueueBitAccountStorage.Layout storage $, uint8 kind, bytes32 payloadHash)
         private
         returns (bytes32 opId)
     {
@@ -569,14 +569,18 @@ contract LeakedAccountRoles is LeakedAccountBase {
         emit Queued(opId, kind, eta);
     }
 
-    function _readyOp(LeakedAccountStorage.Layout storage $, bytes32 opId) private view returns (QueuedOp storage op) {
+    function _readyOp(QueueBitAccountStorage.Layout storage $, bytes32 opId)
+        private
+        view
+        returns (QueuedOp storage op)
+    {
         op = $.queue[opId];
         if (op.state != OpState.PENDING || op.vaultEpoch != $.vaultEpoch) revert BadOp(opId);
         if ($.pendingVaultEta != 0) revert RotationPending();
         if (block.timestamp < op.eta) revert OpNotReady(opId, op.eta);
     }
 
-    function _cancel(LeakedAccountStorage.Layout storage $, bytes32 opId, QueuedOp storage op) private {
+    function _cancel(QueueBitAccountStorage.Layout storage $, bytes32 opId, QueuedOp storage op) private {
         op.state = OpState.CANCELLED;
         if ($.pendingUpgradeOp == opId) {
             delete $.pendingUpgradeOp;
@@ -586,18 +590,18 @@ contract LeakedAccountRoles is LeakedAccountBase {
         emit QueueCancelled(opId, msg.sender);
     }
 
-    function _cancelIfPending(LeakedAccountStorage.Layout storage $, bytes32 opId) private {
+    function _cancelIfPending(QueueBitAccountStorage.Layout storage $, bytes32 opId) private {
         if (opId != bytes32(0) && $.queue[opId].state == OpState.PENDING) _cancel($, opId, $.queue[opId]);
     }
 
     /// H2: policy targets are never address(0), the account itself or a role signer.
-    function _checkPolicyTarget(LeakedAccountStorage.Layout storage $, address target) private view {
+    function _checkPolicyTarget(QueueBitAccountStorage.Layout storage $, address target) private view {
         if (target == address(0) || target == address(this) || target == $.vaultSigner || target == $.recoverySigner) {
             revert BadAddress(target);
         }
     }
 
-    function _removeToken(LeakedAccountStorage.Layout storage $, address token) private {
+    function _removeToken(QueueBitAccountStorage.Layout storage $, address token) private {
         address[] storage list = $.tokenList;
         uint256 n = list.length;
         for (uint256 i; i < n; ++i) {

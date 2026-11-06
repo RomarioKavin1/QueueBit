@@ -12,7 +12,7 @@ import {
   type Hex,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { decodeSignRequest } from "@leaked/ur";
+import { decodeSignRequest } from "@queuebit/ur";
 import {
   EncryptedStorage,
   EnvelopeSignatureError,
@@ -115,15 +115,15 @@ describe("note envelope", () => {
 });
 
 describe("vault EnvelopeSigner over QR", () => {
-  it("emits a schema-valid ur:leaked-sign-request (tx-type 2, vault role, payer)", () => {
-    const req = createNoteSignRequest(env(2, 0), { payer: payer.address, origin: "LEAKED Privacy" });
+  it("emits a schema-valid ur:queuebit-sign-request (tx-type 2, vault role, payer)", () => {
+    const req = createNoteSignRequest(env(2, 0), { payer: payer.address, origin: "QueueBit Privacy" });
     const back = decodeSignRequest(req.cbor);
     expect(back).toMatchObject({ txType: 2, role: 1, chainId: 1337n, payer: payer.address.toLowerCase() });
     const json = JSON.parse(hexToString(back.payload));
     expect(Object.keys(json).sort()).toEqual(["domain", "message", "primaryType", "types"]);
     expect(Object.keys(json.domain).sort()).toEqual(["chainId", "name", "salt", "verifyingContract", "version"]);
     expect(json.message).toEqual({ depositIndex: "2", secretIndex: "0" });
-    expect(req.ur.nextPart()).toMatch(/^UR:LEAKED-SIGN-REQUEST\//);
+    expect(req.ur.nextPart()).toMatch(/^UR:QUEUEBIT-SIGN-REQUEST\//);
   });
 
   it("rejects a signature by another key, for another request, or without a typed sig", async () => {

@@ -4,7 +4,7 @@
 //! review findings C13-S-f1/f2).
 mod common;
 use common::*;
-use leaked_pq::{prf, SecretKey};
+use queuebit_pq::{prf, SecretKey};
 use serde_json::Value;
 
 fn fixture() -> Value {
@@ -16,7 +16,7 @@ fn prf_parity_with_python_signer() {
     let f = fixture();
     let p = &f["pythonPrimitives"];
     let (sk_seed, pk_seed) = {
-        use leaked_pq::hash::{keccak256_parts, top16};
+        use queuebit_pq::hash::{keccak256_parts, top16};
         let e = [0x42u8; 32];
         (keccak256_parts(&[b"sk_seed", &e]), top16(&keccak256_parts(&[b"pk_seed", &e])))
     };
@@ -48,8 +48,8 @@ fn upstream_vectors_reproduce_bit_for_bit() {
         let msg: [u8; 32] = arr(v["msg"].as_str().unwrap());
         let want = unhex(v["sig"].as_str().unwrap());
         assert_eq!(want.len(), 3688);
-        assert!(leaked_pq::verify(&pk.to_bytes(), &msg, &want), "{name}: upstream sig must verify");
-        let got = leaked_pq::sign_deterministic(&sk, &msg).unwrap();
+        assert!(queuebit_pq::verify(&pk.to_bytes(), &msg, &want), "{name}: upstream sig must verify");
+        let got = queuebit_pq::sign_deterministic(&sk, &msg).unwrap();
         assert!(got[..] == want[..], "{name}: deterministic signature differs from upstream");
     }
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
-"""LEAKED bench driver for the ZKNOX ETHFALCON Python signer (ZKNoxHQ/ETHFALCON `pythonref/`, MIT).
+"""QueueBit bench driver for the ZKNOX ETHFALCON Python signer (ZKNoxHQ/ETHFALCON `pythonref/`, MIT).
 
 Imports the upstream modules from a checkout given on the command line; no upstream code is copied here. The output
 is the bench witness: salt(40) || s2 (32 compacted words) || ntth (public key in NTT form, 32 compacted words).

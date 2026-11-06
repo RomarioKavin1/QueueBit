@@ -1,4 +1,4 @@
-import { AnimatedUr, type UrType } from "@leaked/ur";
+import { AnimatedUr, type UrType } from "@queuebit/ur";
 import QRCode from "qrcode";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ClipboardIcon, PauseIcon, PlayIcon } from "./icons.js";

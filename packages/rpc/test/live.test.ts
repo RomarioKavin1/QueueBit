@@ -1,5 +1,13 @@
 import fixture from "../../frames/test/fixtures/devnet-1337/tx-0x38753a56.json" with { type: "json" };
-import { decodeTx, encodeTx, frameStatus, profileForChain, toWire, txHash, verifySecp256k1Entry } from "@leaked/frames";
+import {
+  decodeTx,
+  encodeTx,
+  frameStatus,
+  profileForChain,
+  toWire,
+  txHash,
+  verifySecp256k1Entry,
+} from "@queuebit/frames";
 import type { Hex } from "viem";
 import { describe, expect, it } from "vitest";
 import { DEVNET_1337, RpcError, createFrameRpc, frameTxFromEthrexJson } from "../src/index.js";

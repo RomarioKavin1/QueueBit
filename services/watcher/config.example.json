@@ -14,7 +14,7 @@
   "http": { "host": "127.0.0.1", "port": 8787 },
   "apiKeys": [{ "id": "extension", "secret": "0x<64 hex chars: openssl rand -hex 32>" }],
   "rateLimit": { "perMinute": 60, "burst": 20, "maxStreamsPerKey": 4 },
-  "webhook": { "url": "https://example.invalid/leaked-hook", "secret": "0x<64 hex chars>", "minSeverity": "info" },
+  "webhook": { "url": "https://example.invalid/queuebit-hook", "secret": "0x<64 hex chars>", "minSeverity": "info" },
   "ntfy": { "url": "https://ntfy.sh", "topic": "<long random topic>", "minSeverity": "warning" },
   "blockedThreshold": 3,
   "blockedWindowSec": 3600

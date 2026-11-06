@@ -3,8 +3,8 @@ pragma solidity 0.8.28;
 
 import {ERC1967Utils} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.sol";
 import {AccountFactory} from "../../src/account/AccountFactory.sol";
-import {ILeakedAccount} from "../../src/account/ILeakedAccount.sol";
-import {LeakedAccountImpl} from "../../src/account/LeakedAccountImpl.sol";
+import {IQueueBitAccount} from "../../src/account/IQueueBitAccount.sol";
+import {QueueBitAccountImpl} from "../../src/account/QueueBitAccountImpl.sol";
 import {AccountTestBase} from "./AccountTestBase.sol";
 
 contract AccountFactoryTest is AccountTestBase {
@@ -23,7 +23,7 @@ contract AccountFactoryTest is AccountTestBase {
     }
 
     function test_initDataBindsAddress() public view {
-        ILeakedAccount.InitConfig memory c = _defaultCfg();
+        IQueueBitAccount.InitConfig memory c = _defaultCfg();
         address a1 = factory.predictAccount(bytes32(uint256(7)), address(impl), _initData(c));
         c.hotKey = stranger;
         address a2 = factory.predictAccount(bytes32(uint256(7)), address(impl), _initData(c));
@@ -37,11 +37,11 @@ contract AccountFactoryTest is AccountTestBase {
 
     function testFuzz_accountIsNeverTheHotKeyEOA_C3(uint256 pk, bytes32 salt) public {
         pk = bound(pk, 1, 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364140);
-        ILeakedAccount.InitConfig memory c = _defaultCfg();
+        IQueueBitAccount.InitConfig memory c = _defaultCfg();
         c.hotKey = vm.addr(pk);
         address a = factory.createAccount(salt, address(impl), _initData(c));
         assertTrue(a != vm.addr(pk));
-        assertEq(LeakedAccountImpl(payable(a)).getHotConfig().hotKey, vm.addr(pk));
+        assertEq(QueueBitAccountImpl(payable(a)).getHotConfig().hotKey, vm.addr(pk));
     }
 
     function test_factoryIsStateless() public {

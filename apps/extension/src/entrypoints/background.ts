@@ -9,7 +9,7 @@ import { alertUrl, notificationFor } from "../background/watcher/alerts";
 import { EngineError } from "../background/engine";
 import { ProviderRpcError, serializeError } from "../shared/errors";
 import { LOCAL_DEVNET } from "../shared/build";
-import { schemes } from "@leaked/pq-signer";
+import { schemes } from "@queuebit/pq-signer";
 import {
   PROVIDER_PORT,
   isUiMessage,
@@ -18,12 +18,12 @@ import {
   type UiResponse,
 } from "../shared/messages";
 
-const AUTOLOCK_ALARM = "leaked:autolock";
+const AUTOLOCK_ALARM = "queuebit:autolock";
 /** The watcher light mode's poll (plan §40 §5: every 60 s while the browser runs). */
-const WATCHER_ALARM = "leaked:watcher";
+const WATCHER_ALARM = "queuebit:watcher";
 /** A timelock / pause deadline the watcher knows about (`WatcherCore.alarms()`): woken exactly then. */
-const DEADLINE_ALARM = "leaked:watcher:deadline";
-const NOTIFICATION_PREFIX = "leaked-alert:";
+const DEADLINE_ALARM = "queuebit:watcher:deadline";
+const NOTIFICATION_PREFIX = "queuebit-alert:";
 
 export default defineBackground({
   type: "module",
@@ -31,10 +31,10 @@ export default defineBackground({
     // Every listener is registered synchronously at top level, so events that woke a terminated service worker are
     // delivered (MV3). State is read from storage on demand: nothing important lives only in this instance's memory.
     const ports = new Map<Browser.runtime.Port, string>();
-    // @leaked/pq-signer instantiated its WASM (initSync from the embedded bytes, no fetch) when this module loaded.
+    // @queuebit/pq-signer instantiated its WASM (initSync from the embedded bytes, no fetch) when this module loaded.
     // A local-devnet build exposes that fact for the e2e, which also checks no .wasm was ever fetched.
     if (LOCAL_DEVNET) {
-      (globalThis as { __leakedPq?: unknown }).__leakedPq = {
+      (globalThis as { __queuebitPq?: unknown }).__queuebitPq = {
         schemes: Object.values(schemes).map((x) => x.name),
         rejectsGarbage: !schemes.c13.verify(new Uint8Array(32), new Uint8Array(32), new Uint8Array(3688)),
       };
@@ -118,7 +118,7 @@ export default defineBackground({
             (err: unknown) => {
               // Unexpected failures are logged by method name and error only; requests and keys never are.
               if (!(err instanceof ProviderRpcError) && !hasRpcCode(err))
-                console.error(`LEAKED: ${msg.method} failed`, err);
+                console.error(`QueueBit: ${msg.method} failed`, err);
               safePost(port, { id: msg.id, error: serializeError(err) });
             },
           );

@@ -1,7 +1,7 @@
 import { defaultServerConditions } from "vite";
 import { defineProject } from "vitest/config";
 
-// Workspace packages resolve to their TypeScript sources (the `source` export condition), as in @leaked/privacy.
+// Workspace packages resolve to their TypeScript sources (the `source` export condition), as in @queuebit/privacy.
 const conditions = ["source", ...defaultServerConditions];
 
 export default defineProject({
@@ -13,7 +13,7 @@ export default defineProject({
     // A withdraw proof takes seconds in single-threaded WASM; snarkjs cross-checks add more.
     testTimeout: 180_000,
     hookTimeout: 180_000,
-    // @ngraveio/bc-ur (via @leaked/privacy -> @leaked/ur) imports the bare directory "buffer/".
+    // @ngraveio/bc-ur (via @queuebit/privacy -> @queuebit/ur) imports the bare directory "buffer/".
     server: { deps: { inline: ["@ngraveio/bc-ur"] } },
   },
 });

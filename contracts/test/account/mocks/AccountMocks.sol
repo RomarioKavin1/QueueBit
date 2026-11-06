@@ -6,9 +6,9 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {SignatureChecker} from "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
 import {Devnet} from "@forshtat/hegota-support/contracts/HegotaSupport.sol";
-import {LeakedAccountImpl} from "../../../src/account/LeakedAccountImpl.sol";
+import {QueueBitAccountImpl} from "../../../src/account/QueueBitAccountImpl.sol";
 
-/// Test fixtures for the account suite (not LEAKED contracts).
+/// Test fixtures for the account suite (not QueueBit contracts).
 
 contract MockToken is ERC20 {
     uint8 private immutable DEC;
@@ -145,13 +145,13 @@ contract RejectEth {
 /// A contract that asks the account for ERC-1271 (stand-in for a dapp / permit verifier).
 contract Verifier1271 {
     function check(address account, bytes32 hash, bytes calldata sig) external view returns (bytes4) {
-        return LeakedAccountImpl(payable(account)).isValidSignature(hash, sig);
+        return QueueBitAccountImpl(payable(account)).isValidSignature(hash, sig);
     }
 }
 
 /// Next implementation for upgrade tests.
-contract LeakedAccountImplV2 is LeakedAccountImpl {
-    constructor(Devnet d, bool perGas, address roles) LeakedAccountImpl(d, perGas, roles) {}
+contract QueueBitAccountImplV2 is QueueBitAccountImpl {
+    constructor(Devnet d, bool perGas, address roles) QueueBitAccountImpl(d, perGas, roles) {}
 
     function version() external pure returns (uint256) {
         return 2;
@@ -174,7 +174,7 @@ contract MockPQVerifier {
     }
 
     function schemeId() external pure returns (bytes32) {
-        return keccak256("leaked.test.mock-pq");
+        return keccak256("queuebit.test.mock-pq");
     }
 
     function verifyGasEstimate() external pure returns (uint256) {

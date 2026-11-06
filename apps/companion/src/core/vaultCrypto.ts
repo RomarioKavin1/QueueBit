@@ -26,7 +26,7 @@ export interface SealedSeed {
 }
 
 export const DEFAULT_KDF = { alg: "scrypt", N: 2 ** 17, r: 8, p: 1 } as const;
-const AAD_PREFIX = "leaked-companion/seed/v1/";
+const AAD_PREFIX = "queuebit-companion/seed/v1/";
 
 export class WrongPassphrase extends Error {
   constructor() {
@@ -152,7 +152,7 @@ export async function unlock(
   return { secret: { entropy, bip39Passphrase }, key };
 }
 
-/** A small record sealed under the seed's key: AES-256-GCM, AAD = `leaked-companion/<purpose>/v1/<bindTo>`. */
+/** A small record sealed under the seed's key: AES-256-GCM, AAD = `queuebit-companion/<purpose>/v1/<bindTo>`. */
 export interface SealedBlob {
   iv: Uint8Array;
   ciphertext: Uint8Array;
@@ -161,7 +161,7 @@ export interface SealedBlob {
 export type BlobPurpose = "usage" | "logkey";
 
 const blobAad = (purpose: BlobPurpose, bindTo: string) =>
-  new TextEncoder().encode(`leaked-companion/${purpose}/v1/${bindTo.toLowerCase()}`);
+  new TextEncoder().encode(`queuebit-companion/${purpose}/v1/${bindTo.toLowerCase()}`);
 
 export async function sealBlob(
   key: CryptoKey,

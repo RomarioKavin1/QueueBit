@@ -1,4 +1,4 @@
-// KAT set B: the upstream vectors (set A) and the LEAKED vectors (set C) through the WASM build.
+// KAT set B: the upstream vectors (set A) and the QueueBit vectors (set C) through the WASM build.
 import { describe, expect, it } from "vitest";
 import { keygen, keygenFromSeedParts, sign, verify, SCHEME_ID, SIG_LENGTH } from "../src/index.js";
 import { bytesToHex, hexToBytes, katC, upstream } from "./helpers.js";
@@ -22,7 +22,7 @@ describe("KAT B: upstream vectors through WASM", () => {
   });
 });
 
-describe("KAT B: LEAKED set C through WASM", () => {
+describe("KAT B: QueueBit set C through WASM", () => {
   it("metadata", () => {
     expect(katC.schemeId).toBe(SCHEME_ID);
     expect(katC.sigLength).toBe(SIG_LENGTH);

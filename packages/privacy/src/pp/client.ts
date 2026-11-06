@@ -31,7 +31,7 @@ export interface DepositTx {
   value: bigint;
 }
 
-/** `Entrypoint.deposit(precommitment)` for the native pool: sent by the LEAKED account as a hot/vault-tier call. */
+/** `Entrypoint.deposit(precommitment)` for the native pool: sent by the QueueBit account as a hot/vault-tier call. */
 export const buildDepositTx = (entrypoint: Address, value: bigint, precommitment: bigint): DepositTx => ({
   to: entrypoint,
   data: encodeFunctionData({ abi: ENTRYPOINT_ABI, functionName: "deposit", args: [precommitment] }),

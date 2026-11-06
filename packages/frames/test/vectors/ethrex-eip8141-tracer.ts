@@ -1,5 +1,5 @@
 // Copied verbatim from @forshtat/hegota-support (MIT, Copyright (c) 2026 Alex Forshtat), test/vectors/ethrex-eip8141-tracer.ts at
-// 2377188, where they were pinned by that library's codec. @leaked/frames must reproduce them byte for byte
+// 2377188, where they were pinned by that library's codec. @queuebit/frames must reproduce them byte for byte
 // (vectors.test.ts): this is the cross-check of the port. See THIRD_PARTY.md. Never regenerate.
 export const vectors = [
   {

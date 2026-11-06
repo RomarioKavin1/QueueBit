@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 import { createPublicClient, createWalletClient, http, parseEther, type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { createFrameRpc } from "@leaked/rpc";
+import { createFrameRpc } from "@queuebit/rpc";
 import { localDeployment } from "../src/generated/contracts";
 import {
   activateFromOnboarding,
@@ -52,7 +52,7 @@ async function fund(to: string, eth: string) {
 }
 
 type Win = Window & {
-  leaked(): { request(a: { method: string; params?: unknown[] }): Promise<unknown> };
+  queuebit(): { request(a: { method: string; params?: unknown[] }): Promise<unknown> };
   __result?: unknown;
   __error?: { code: number; message: string; data?: unknown };
 };
@@ -64,7 +64,7 @@ async function start(dapp: Page, method: string, params: unknown[]) {
       const w = window as unknown as Win;
       delete w.__result;
       delete w.__error;
-      w.leaked()
+      w.queuebit()
         .request({ method: m as string, params: p as unknown[] })
         .then(
           (r) => (w.__result = r),
@@ -82,7 +82,7 @@ const rpc = (dapp: Page, method: string, params: unknown[] = []) =>
     async ([m, p]) => {
       try {
         return {
-          result: await (window as unknown as Win).leaked().request({ method: m as string, params: p as unknown[] }),
+          result: await (window as unknown as Win).queuebit().request({ method: m as string, params: p as unknown[] }),
         };
       } catch (e) {
         const err = e as { code: number; message: string };
@@ -160,7 +160,7 @@ test("M1: activate, everyday send, needs-Vault before submission, dapp send and 
   // ---- a dapp: connect, then eth_sendTransaction within the limit via the approval window ----
   const dapp = await context.newPage();
   await dapp.goto(dappUrl);
-  await dapp.getByRole("button", { name: "Connect LEAKED" }).click();
+  await dapp.getByRole("button", { name: "Connect QueueBit" }).click();
   const connect = await waitForApproval(context);
   await Promise.all([connect.waitForEvent("close"), connect.getByRole("button", { name: "Connect" }).click()]);
   await expect(dapp.locator("#account")).toHaveText(account);
@@ -189,11 +189,11 @@ test("M1: activate, everyday send, needs-Vault before submission, dapp send and 
   await Promise.all([vault.waitForEvent("close"), vault.getByRole("button", { name: "Close" }).click()]);
   await expect
     .poll(() => dapp.evaluate(() => (window as unknown as Win).__error), { timeout: 15_000 })
-    .toMatchObject({ code: 4100, data: { leakedRule: "ROUTE-NEEDS-VAULT" } });
+    .toMatchObject({ code: 4100, data: { queuebitRule: "ROUTE-NEEDS-VAULT" } });
 
   // ---- wallet_getCapabilities + wallet_sendCalls batch + wallet_getCallsStatus ----
   const caps = await rpc(dapp, "wallet_getCapabilities", [account]);
-  expect(caps.result).toMatchObject({ "0x539": { atomic: { status: "supported" }, leaked: { backend: "frame" } } });
+  expect(caps.result).toMatchObject({ "0x539": { atomic: { status: "supported" }, queuebit: { backend: "frame" } } });
   await start(dapp, "wallet_sendCalls", [
     {
       version: "2.0.0",

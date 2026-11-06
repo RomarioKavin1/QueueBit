@@ -7,12 +7,12 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {RollingCap} from "../../src/lib/RollingCap.sol";
 import {PackedUserOperation, Execution} from "../../src/modules/interfaces/IERC7579Modules.sol";
-import {LeakedPolicyHook} from "../../src/modules/LeakedPolicyHook.sol";
-import {LeakedHotValidator} from "../../src/modules/LeakedHotValidator.sol";
-import {LeakedRoleExecutor} from "../../src/modules/LeakedRoleExecutor.sol";
+import {QueueBitPolicyHook} from "../../src/modules/QueueBitPolicyHook.sol";
+import {QueueBitHotValidator} from "../../src/modules/QueueBitHotValidator.sol";
+import {QueueBitRoleExecutor} from "../../src/modules/QueueBitRoleExecutor.sol";
 import {IERC7579AccountView, IAccount4337 as IAccountValidate} from "./hosts/HostInterfaces.sol";
-import {ILeakedModules} from "../../src/modules/interfaces/ILeakedModules.sol";
-import {LeakedModulesBase} from "./LeakedModulesBase.sol";
+import {IQueueBitModules} from "../../src/modules/interfaces/IQueueBitModules.sol";
+import {QueueBitModulesBase} from "./QueueBitModulesBase.sol";
 import {Permit2Mock, Auth3009Token} from "../account/mocks/TypedPermitMocks.sol";
 
 contract PermitToken is ERC20Permit {
@@ -24,7 +24,7 @@ contract PermitToken is ERC20Permit {
 }
 
 /// Every policy rule of the 4337 backend, run on each host (MSA, Safe7579, Kernel v3.3).
-abstract contract LeakedModulesHostsTest is LeakedModulesBase {
+abstract contract QueueBitModulesHostsTest is QueueBitModulesBase {
     using MessageHashUtils for bytes32;
 
     // ---------------------------------------------------------------------------------------- install ------
@@ -203,7 +203,7 @@ abstract contract LeakedModulesHostsTest is LeakedModulesBase {
     function test_recipientMode_openPayeeReentry() public {
         if (!_open()) return;
         Call[] memory up =
-            _hookCall(abi.encodeCall(LeakedPolicyHook.setCap, (account, 2000e6, PER_TX, MAX_FEE_WEI, MAX_PRIO)));
+            _hookCall(abi.encodeCall(QueueBitPolicyHook.setCap, (account, 2000e6, PER_TX, MAX_FEE_WEI, MAX_PRIO)));
         bytes32 opId = _vaultQueue(up, 1);
         vm.warp(block.timestamp + 48 hours);
         ReentrantPayee payee = new ReentrantPayee(executor, hook, account, opId, up);
@@ -242,7 +242,7 @@ abstract contract LeakedModulesHostsTest is LeakedModulesBase {
         assertEq(usdc.balanceOf(stranger), 0, "nothing moved");
         assertEq(hook.getSession(account, address(router), router.pull.selector).allowanceUsd, 400e6);
         // The token allowlisted as a recipient (H2 allows it) still cannot receive its own transfer.
-        _queueAndRun(_hookCall(abi.encodeCall(LeakedPolicyHook.setTarget, (account, address(usdc), true))), 1);
+        _queueAndRun(_hookCall(abi.encodeCall(QueueBitPolicyHook.setTarget, (account, address(usdc), true))), 1);
         assertTrue(hook.isTarget(account, address(usdc)));
         _expectValidationRevert(
             _op(_single(address(usdc), 0, abi.encodeCall(IERC20.transfer, (address(usdc), 1e6)))),
@@ -251,7 +251,7 @@ abstract contract LeakedModulesHostsTest is LeakedModulesBase {
     }
 
     function _setModeCall(RecipientMode m) internal view returns (Call[] memory) {
-        return _hookCall(abi.encodeCall(LeakedPolicyHook.setRecipientMode, (account, m)));
+        return _hookCall(abi.encodeCall(QueueBitPolicyHook.setRecipientMode, (account, m)));
     }
 
     /// Open -> Strict is instant; Strict -> Open must be queued (from either starting mode).
@@ -279,8 +279,8 @@ abstract contract LeakedModulesHostsTest is LeakedModulesBase {
     /// Only the vault (a PQ-verified executor batch) sets the mode: not the hot key, the account, a guardian, an
     /// attacker, nor a vault batch naming another account.
     function test_recipientMode_onlyVault() public {
-        bytes memory toOpen = abi.encodeCall(LeakedPolicyHook.setRecipientMode, (account, RecipientMode.Open));
-        bytes memory toStrict = abi.encodeCall(LeakedPolicyHook.setRecipientMode, (account, RecipientMode.Strict));
+        bytes memory toOpen = abi.encodeCall(QueueBitPolicyHook.setRecipientMode, (account, RecipientMode.Open));
+        bytes memory toStrict = abi.encodeCall(QueueBitPolicyHook.setRecipientMode, (account, RecipientMode.Strict));
         address[3] memory who = [account, guardian, stranger];
         for (uint256 i; i < 3; ++i) {
             vm.prank(who[i]);
@@ -290,13 +290,14 @@ abstract contract LeakedModulesHostsTest is LeakedModulesBase {
         }
         _expectValidationRevert(
             _op(_single(address(hook), 0, toOpen)),
-            abi.encodeWithSelector(NotAllowed.selector, address(hook), LeakedPolicyHook.setRecipientMode.selector)
+            abi.encodeWithSelector(NotAllowed.selector, address(hook), QueueBitPolicyHook.setRecipientMode.selector)
         );
-        Call[] memory c = _hookCall(abi.encodeCall(LeakedPolicyHook.setRecipientMode, (stranger, RecipientMode.Strict)));
+        Call[] memory c =
+            _hookCall(abi.encodeCall(QueueBitPolicyHook.setRecipientMode, (stranger, RecipientMode.Strict)));
         uint256 n = _vaultNonce();
         bytes memory sig = _pqSign(vaultPk, executor.hashVaultExec(account, n, c, 0));
         vm.expectRevert(
-            abi.encodeWithSelector(NotAllowed.selector, address(hook), LeakedPolicyHook.setRecipientMode.selector)
+            abi.encodeWithSelector(NotAllowed.selector, address(hook), QueueBitPolicyHook.setRecipientMode.selector)
         );
         executor.vaultExec(account, c, 0, n, sig);
         assertEq(uint8(hook.recipientMode(account)), uint8(_recipientMode()), "unchanged");
@@ -311,10 +312,10 @@ abstract contract LeakedModulesHostsTest is LeakedModulesBase {
     }
 
     function test_hotCannotCallModulesOrSelf() public {
-        bytes memory setCap = abi.encodeCall(LeakedPolicyHook.setCap, (account, type(uint96).max, 1, 1, 1));
+        bytes memory setCap = abi.encodeCall(QueueBitPolicyHook.setCap, (account, type(uint96).max, 1, 1, 1));
         _expectValidationRevert(
             _op(_single(address(hook), 0, setCap)),
-            abi.encodeWithSelector(NotAllowed.selector, address(hook), LeakedPolicyHook.setCap.selector)
+            abi.encodeWithSelector(NotAllowed.selector, address(hook), QueueBitPolicyHook.setCap.selector)
         );
         bytes memory install = abi.encodeCall(IERC7579AccountView.uninstallModule, (2, address(executor), ""));
         _expectValidationRevert(
@@ -371,7 +372,7 @@ abstract contract LeakedModulesHostsTest is LeakedModulesBase {
         _expectValidationRevert(
             _op(_single(recipient, 0.01 ether, "")), abi.encodeWithSelector(FrozenOnlyClear.selector)
         );
-        bytes memory clear = _single(address(hook), 0, abi.encodeCall(LeakedPolicyHook.clearExpiredFreeze, (account)));
+        bytes memory clear = _single(address(hook), 0, abi.encodeCall(QueueBitPolicyHook.clearExpiredFreeze, (account)));
         // Admitted in validation, but the freeze has not expired: fails in execution.
         _expectExecFail(_op(clear), "");
         vm.warp(block.timestamp + 72 hours);
@@ -390,19 +391,19 @@ abstract contract LeakedModulesHostsTest is LeakedModulesBase {
     }
 
     function test_vaultFreezeUnfreeze() public {
-        _vaultExec(_hookCall(abi.encodeCall(LeakedPolicyHook.freeze, (account, type(uint48).max))), 0);
+        _vaultExec(_hookCall(abi.encodeCall(QueueBitPolicyHook.freeze, (account, type(uint48).max))), 0);
         _expectValidationRevert(
             _op(_single(recipient, 0.01 ether, "")), abi.encodeWithSelector(FrozenOnlyClear.selector)
         );
-        _vaultExec(_hookCall(abi.encodeCall(LeakedPolicyHook.unfreeze, (account))), 0);
+        _vaultExec(_hookCall(abi.encodeCall(QueueBitPolicyHook.unfreeze, (account))), 0);
         _submitOk(_op(_single(recipient, 0.01 ether, "")));
     }
 
     function test_bunker_thenNewHotKey() public {
-        _vaultExec(_hookCall(abi.encodeCall(LeakedPolicyHook.enableBunker, (account))), 0);
+        _vaultExec(_hookCall(abi.encodeCall(QueueBitPolicyHook.enableBunker, (account))), 0);
         _expectValidationRevert(_op(_single(recipient, 0.01 ether, "")), abi.encodeWithSelector(HotDisabled.selector));
         (address newHot, uint256 newPk) = makeAddrAndKey("hot2");
-        _vaultExec(_hookCall(abi.encodeCall(LeakedPolicyHook.setHotKey, (account, newHot))), 0);
+        _vaultExec(_hookCall(abi.encodeCall(QueueBitPolicyHook.setHotKey, (account, newHot))), 0);
         PackedUserOperation memory op = _op(_single(recipient, 0.01 ether, ""));
         _expectValidationFail(op, "AA24 signature error"); // old key
         op.signature = _sign(op, newPk);
@@ -415,7 +416,7 @@ abstract contract LeakedModulesHostsTest is LeakedModulesBase {
         xi.recoveryPk = bytes32(0);
         address saved = account;
         account = _createAccountSalted(xi);
-        Call[] memory c = _hookCall(abi.encodeCall(LeakedPolicyHook.enableBunker, (account)));
+        Call[] memory c = _hookCall(abi.encodeCall(QueueBitPolicyHook.enableBunker, (account)));
         uint256 n = _vaultNonce();
         bytes memory sig = _pqSign(vaultPk, executor.hashVaultExec(account, n, c, 0));
         vm.expectRevert(
@@ -433,12 +434,12 @@ abstract contract LeakedModulesHostsTest is LeakedModulesBase {
         c[0] = Call(
             address(hook),
             0,
-            abi.encodeCall(LeakedPolicyHook.setSession, (account, address(usdc), IERC20.approve.selector, 400e6, exp))
+            abi.encodeCall(QueueBitPolicyHook.setSession, (account, address(usdc), IERC20.approve.selector, 400e6, exp))
         );
         c[1] = Call(
             address(hook),
             0,
-            abi.encodeCall(LeakedPolicyHook.setSession, (account, address(router), router.pull.selector, 400e6, exp))
+            abi.encodeCall(QueueBitPolicyHook.setSession, (account, address(router), router.pull.selector, 400e6, exp))
         );
         // New sessions are loosening: an instant vault batch is refused.
         uint256 n = _vaultNonce();
@@ -493,7 +494,7 @@ abstract contract LeakedModulesHostsTest is LeakedModulesBase {
         MockTokenLike other = new MockTokenLike();
         Call[] memory c = _hookCall(
             abi.encodeCall(
-                LeakedPolicyHook.setSession,
+                QueueBitPolicyHook.setSession,
                 (account, address(other), IERC20.approve.selector, 100e6, uint48(block.timestamp + 30 days))
             )
         );
@@ -523,16 +524,16 @@ abstract contract LeakedModulesHostsTest is LeakedModulesBase {
 
     function test_registerHash_and1271() public {
         _queueAndRun(
-            _hookCall(abi.encodeCall(LeakedPolicyHook.setTrustedVerifier, (account, address(router), true))), 1
+            _hookCall(abi.encodeCall(QueueBitPolicyHook.setTrustedVerifier, (account, address(router), true))), 1
         );
         bytes32 h = keccak256("order");
         bytes memory call =
-            abi.encodeCall(LeakedPolicyHook.registerHash, (h, address(usdc), 100e6, uint48(block.timestamp + 1 days)));
+            abi.encodeCall(QueueBitPolicyHook.registerHash, (h, address(usdc), 100e6, uint48(block.timestamp + 1 days)));
         _submitOk(_op(_single(address(hook), 0, call)));
         assertEq(_available(), CAP - 100e6, "registered value debited");
         bool expectOk = _host() != Host.KERNEL; // Kernel rewraps the hash: hot 1271 is off there (audit A3)
         assertEq(_isValid(address(0), h, ""), expectOk, "eth_call (sender 0), empty sig");
-        assertEq(_isValid(address(0), h, abi.encodePacked(bytes4(0xdc6b87c9), h)), expectOk, "marker");
+        assertEq(_isValid(address(0), h, abi.encodePacked(bytes4(0x427a9529), h)), expectOk, "marker");
         // Audit C1: an opaque registered hash never validates for a token, Permit2 or an untrusted contract;
         // audit A6: nor for a non-zero code-less sender (an EOA transaction looks the same as an eth_call).
         assertFalse(_isValid(stranger, h, ""), "EOA sender");
@@ -567,7 +568,7 @@ abstract contract LeakedModulesHostsTest is LeakedModulesBase {
                 _single(
                     address(hook),
                     0,
-                    abi.encodeCall(LeakedPolicyHook.registerHash, (digest, address(pt), 1, uint48(deadline)))
+                    abi.encodeCall(QueueBitPolicyHook.registerHash, (digest, address(pt), 1, uint48(deadline)))
                 )
             )
         );
@@ -583,7 +584,7 @@ abstract contract LeakedModulesHostsTest is LeakedModulesBase {
                 _single(
                     address(hook),
                     0,
-                    abi.encodeCall(LeakedPolicyHook.registerPermit, (address(pt), address(router), 300e6, deadline))
+                    abi.encodeCall(QueueBitPolicyHook.registerPermit, (address(pt), address(router), 300e6, deadline))
                 )
             )
         );
@@ -616,12 +617,12 @@ abstract contract LeakedModulesHostsTest is LeakedModulesBase {
         vm.etch(hook.PERMIT2(), address(new Permit2Mock()).code);
         p2 = Permit2Mock(hook.PERMIT2());
         Call[] memory c = new Call[](2);
-        c[0] = Call(address(hook), 0, abi.encodeCall(LeakedPolicyHook.setToken, (account, address(t), true, 18, 1e6)));
+        c[0] = Call(address(hook), 0, abi.encodeCall(QueueBitPolicyHook.setToken, (account, address(t), true, 18, 1e6)));
         c[1] = Call(
             address(hook),
             0,
             abi.encodeCall(
-                LeakedPolicyHook.setSession,
+                QueueBitPolicyHook.setSession,
                 (account, address(router), router.pull.selector, 400e6, uint48(block.timestamp + 30 days))
             )
         );
@@ -641,7 +642,7 @@ abstract contract LeakedModulesHostsTest is LeakedModulesBase {
                     address(hook),
                     0,
                     abi.encodeCall(
-                        LeakedPolicyHook.registerPermit2,
+                        QueueBitPolicyHook.registerPermit2,
                         (address(t), uint160(40 ether), exp, address(router), dl, router.pull.selector)
                     )
                 )
@@ -681,7 +682,7 @@ abstract contract LeakedModulesHostsTest is LeakedModulesBase {
                     address(hook),
                     0,
                     abi.encodeCall(
-                        LeakedPolicyHook.registerPermit2Transfer,
+                        QueueBitPolicyHook.registerPermit2Transfer,
                         (address(t), 1 ether, thief, 1, block.timestamp + 1 hours, router.pull.selector)
                     )
                 )
@@ -699,7 +700,7 @@ abstract contract LeakedModulesHostsTest is LeakedModulesBase {
                     address(hook),
                     0,
                     abi.encodeCall(
-                        LeakedPolicyHook.registerPermit2Transfer,
+                        QueueBitPolicyHook.registerPermit2Transfer,
                         (address(t), 30 ether, address(router), 77, dl, router.pull.selector)
                     )
                 )
@@ -726,7 +727,7 @@ abstract contract LeakedModulesHostsTest is LeakedModulesBase {
                     address(hook),
                     0,
                     abi.encodeCall(
-                        LeakedPolicyHook.registerPermit2Transfer,
+                        QueueBitPolicyHook.registerPermit2Transfer,
                         (address(t), 30 ether, address(router), 77, dl, router.pull.selector)
                     )
                 )
@@ -746,7 +747,7 @@ abstract contract LeakedModulesHostsTest is LeakedModulesBase {
                     address(hook),
                     0,
                     abi.encodeCall(
-                        LeakedPolicyHook.registerTransferAuthorization,
+                        QueueBitPolicyHook.registerTransferAuthorization,
                         (address(t), 25 ether, recipient, 0, dl, nonce, false)
                     )
                 )
@@ -775,7 +776,7 @@ abstract contract LeakedModulesHostsTest is LeakedModulesBase {
                 address(hook),
                 0,
                 abi.encodeCall(
-                    LeakedPolicyHook.registerTransferAuthorization,
+                    QueueBitPolicyHook.registerTransferAuthorization,
                     (address(t), 1 ether, stranger, 0, dl, keccak256("s"), false)
                 )
             )
@@ -788,7 +789,7 @@ abstract contract LeakedModulesHostsTest is LeakedModulesBase {
                     address(hook),
                     0,
                     abi.encodeCall(
-                        LeakedPolicyHook.registerTransferAuthorization,
+                        QueueBitPolicyHook.registerTransferAuthorization,
                         (address(t), 1 ether, address(t), 0, dl, keccak256("t"), false)
                     )
                 )
@@ -800,7 +801,7 @@ abstract contract LeakedModulesHostsTest is LeakedModulesBase {
     function _allowPermitToken() internal returns (PermitToken pt) {
         pt = new PermitToken();
         pt.mint(account, 10_000e6);
-        _queueAndRun(_hookCall(abi.encodeCall(LeakedPolicyHook.setToken, (account, address(pt), true, 6, 1e6))), 1);
+        _queueAndRun(_hookCall(abi.encodeCall(QueueBitPolicyHook.setToken, (account, address(pt), true, 6, 1e6))), 1);
     }
 
     function _personalSign(bytes32 h, uint256 pk) internal view returns (bytes memory) {
@@ -818,7 +819,7 @@ abstract contract LeakedModulesHostsTest is LeakedModulesBase {
         // Audit H1: on-chain callers only if vault-trusted; tokens and Permit2 never.
         assertFalse(_isValid(address(router), h, sig), "untrusted contract");
         _queueAndRun(
-            _hookCall(abi.encodeCall(LeakedPolicyHook.setTrustedVerifier, (account, address(router), true))), 1
+            _hookCall(abi.encodeCall(QueueBitPolicyHook.setTrustedVerifier, (account, address(router), true))), 1
         );
         assertEq(_isValid(address(router), h, sig), expectOk, "trusted verifier");
         assertFalse(_isValid(address(usdc), h, sig), "token");
@@ -837,7 +838,7 @@ abstract contract LeakedModulesHostsTest is LeakedModulesBase {
         bytes32 h = appSep.toTypedDataHash(contentsHash);
         string memory descr = "Login(uint256 nonce)";
         bytes memory domainBytes =
-            abi.encode(keccak256("LeakedHotValidator"), keccak256("1"), block.chainid, account, bytes32(0));
+            abi.encode(keccak256("QueueBitHotValidator"), keccak256("1"), block.chainid, account, bytes32(0));
         bytes32 typeHash = keccak256(
             abi.encodePacked(
                 "TypedDataSign(Login contents,string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)",
@@ -913,13 +914,13 @@ abstract contract LeakedModulesHostsTest is LeakedModulesBase {
     function test_vaultLooseningMustQueue_tighteningInstant() public {
         // Tightening is instant.
         _vaultExec(
-            _hookCall(abi.encodeCall(LeakedPolicyHook.setCap, (account, 800e6, 400e6, MAX_FEE_WEI, MAX_PRIO))), 0
+            _hookCall(abi.encodeCall(QueueBitPolicyHook.setCap, (account, 800e6, 400e6, MAX_FEE_WEI, MAX_PRIO))), 0
         );
         (,, uint256 cap) = hook.getBucket(account);
         assertEq(cap, 800e6);
         // Loosening (raise the cap, add a recipient, re-price lower) must be queued.
         Call[] memory up =
-            _hookCall(abi.encodeCall(LeakedPolicyHook.setCap, (account, 2000e6, 500e6, MAX_FEE_WEI, MAX_PRIO)));
+            _hookCall(abi.encodeCall(QueueBitPolicyHook.setCap, (account, 2000e6, 500e6, MAX_FEE_WEI, MAX_PRIO)));
         uint256 n = _vaultNonce();
         bytes memory sig = _pqSign(vaultPk, executor.hashVaultExec(account, n, up, 0));
         vm.expectRevert(abi.encodeWithSelector(CallFailed.selector, 0, abi.encodeWithSelector(MustQueue.selector)));
@@ -929,7 +930,7 @@ abstract contract LeakedModulesHostsTest is LeakedModulesBase {
         assertEq(cap, 2000e6);
         // The executor's own role setters follow the same rule.
         Call[] memory tl = _calls1(
-            address(executor), 0, abi.encodeCall(LeakedRoleExecutor.setTimelock, (account, 1 hours, VAULT_THRESHOLD))
+            address(executor), 0, abi.encodeCall(QueueBitRoleExecutor.setTimelock, (account, 1 hours, VAULT_THRESHOLD))
         );
         n = _vaultNonce();
         sig = _pqSign(vaultPk, executor.hashVaultExec(account, n, tl, 0));
@@ -950,10 +951,12 @@ abstract contract LeakedModulesHostsTest is LeakedModulesBase {
         vm.expectRevert(Unauthorized.selector);
         hook.onUninstall("");
         // A config call naming another account is refused.
-        Call[] memory c = _hookCall(abi.encodeCall(LeakedPolicyHook.setTarget, (stranger, recipient, false)));
+        Call[] memory c = _hookCall(abi.encodeCall(QueueBitPolicyHook.setTarget, (stranger, recipient, false)));
         uint256 n = _vaultNonce();
         bytes memory sig = _pqSign(vaultPk, executor.hashVaultExec(account, n, c, 0));
-        vm.expectRevert(abi.encodeWithSelector(NotAllowed.selector, address(hook), LeakedPolicyHook.setTarget.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(NotAllowed.selector, address(hook), QueueBitPolicyHook.setTarget.selector)
+        );
         executor.vaultExec(account, c, 0, n, sig);
     }
 
@@ -995,7 +998,7 @@ abstract contract LeakedModulesHostsTest is LeakedModulesBase {
         _expectValidationRevert(
             _op(_single(recipient, 0.01 ether, "")), abi.encodeWithSelector(FrozenOnlyClear.selector)
         );
-        Call[] memory un = _hookCall(abi.encodeCall(LeakedPolicyHook.unfreeze, (account)));
+        Call[] memory un = _hookCall(abi.encodeCall(QueueBitPolicyHook.unfreeze, (account)));
         uint256 n = _vaultNonce();
         bytes memory sig = _pqSign(vaultPk, executor.hashVaultExec(account, n, un, 0));
         vm.expectRevert(RotationPending.selector);
@@ -1041,7 +1044,7 @@ abstract contract LeakedModulesHostsTest is LeakedModulesBase {
             address(hook),
             0,
             abi.encodeCall(
-                LeakedPolicyHook.registerHash, (keccak256("x"), address(usdc), 1e6, uint48(block.timestamp + 1 days))
+                QueueBitPolicyHook.registerHash, (keccak256("x"), address(usdc), 1e6, uint48(block.timestamp + 1 days))
             )
         );
         e[3] = Execution(address(router), 0, abi.encodeCall(router.pull, (IERC20(address(usdc)), 0, stranger)));
@@ -1095,15 +1098,15 @@ abstract contract LeakedModulesHostsTest is LeakedModulesBase {
 
 /// An Open-mode payee that reenters from `receive`: runs a ready queued op, writes policy, refunds the payment.
 contract ReentrantPayee {
-    LeakedRoleExecutor internal immutable X;
-    LeakedPolicyHook internal immutable H;
+    QueueBitRoleExecutor internal immutable X;
+    QueueBitPolicyHook internal immutable H;
     address internal immutable A;
     bytes32 internal immutable OP;
-    ILeakedModules.Call[] internal calls;
+    IQueueBitModules.Call[] internal calls;
     bytes public execErr;
     bytes public writeErr;
 
-    constructor(LeakedRoleExecutor x, LeakedPolicyHook h, address a, bytes32 op, ILeakedModules.Call[] memory c) {
+    constructor(QueueBitRoleExecutor x, QueueBitPolicyHook h, address a, bytes32 op, IQueueBitModules.Call[] memory c) {
         (X, H, A, OP) = (x, h, a, op);
         for (uint256 i; i < c.length; ++i) {
             calls.push(c[i]);
@@ -1115,7 +1118,7 @@ contract ReentrantPayee {
         catch (bytes memory e) {
             execErr = e;
         }
-        try H.setRecipientMode(A, ILeakedModules.RecipientMode.Open) {}
+        try H.setRecipientMode(A, IQueueBitModules.RecipientMode.Open) {}
         catch (bytes memory e) {
             writeErr = e;
         }
@@ -1136,7 +1139,7 @@ contract MockTokenLike is ERC20 {
     constructor() ERC20("X", "X") {}
 }
 
-contract LeakedModulesMSATest is LeakedModulesHostsTest {
+contract QueueBitModulesMSATest is QueueBitModulesHostsTest {
     function _host() internal pure override returns (Host) {
         return Host.MSA;
     }
@@ -1180,32 +1183,32 @@ contract LeakedModulesMSATest is LeakedModulesHostsTest {
     }
 }
 
-contract LeakedModulesSafe7579Test is LeakedModulesHostsTest {
+contract QueueBitModulesSafe7579Test is QueueBitModulesHostsTest {
     function _host() internal pure override returns (Host) {
         return Host.SAFE7579;
     }
 }
 
-contract LeakedModulesKernelTest is LeakedModulesHostsTest {
+contract QueueBitModulesKernelTest is QueueBitModulesHostsTest {
     function _host() internal pure override returns (Host) {
         return Host.KERNEL;
     }
 }
 
 /// Every rule above again with the account installed in Strict (the old recipient allowlist).
-contract LeakedModulesMSAStrictTest is LeakedModulesMSATest {
+contract QueueBitModulesMSAStrictTest is QueueBitModulesMSATest {
     function _recipientMode() internal pure override returns (RecipientMode) {
         return RecipientMode.Strict;
     }
 }
 
-contract LeakedModulesSafe7579StrictTest is LeakedModulesSafe7579Test {
+contract QueueBitModulesSafe7579StrictTest is QueueBitModulesSafe7579Test {
     function _recipientMode() internal pure override returns (RecipientMode) {
         return RecipientMode.Strict;
     }
 }
 
-contract LeakedModulesKernelStrictTest is LeakedModulesKernelTest {
+contract QueueBitModulesKernelStrictTest is QueueBitModulesKernelTest {
     function _recipientMode() internal pure override returns (RecipientMode) {
         return RecipientMode.Strict;
     }

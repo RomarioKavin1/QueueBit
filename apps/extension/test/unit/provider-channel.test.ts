@@ -18,7 +18,7 @@ const swPort = vi.hoisted(() => {
 vi.mock("wxt/browser", () => ({ browser: { runtime: { connect: () => swPort.port } } }));
 
 const { startBridge } = await import("../../src/provider/bridge");
-const { LeakedProvider } = await import("../../src/provider/inpage");
+const { QueueBitProvider } = await import("../../src/provider/inpage");
 
 /** A window whose postMessage delivers `{data, source, ports}` to every listener in a later task, like a browser. */
 function fakeWindow() {
@@ -45,13 +45,13 @@ describe("provider ↔ bridge private channel (M0 review: co-installed extension
       seen((e) => onWindow.push(e.data));
       vi.stubGlobal("window", win);
       vi.stubGlobal("location", win.location);
-      let provider: InstanceType<typeof LeakedProvider>;
+      let provider: InstanceType<typeof QueueBitProvider>;
       if (order === "provider first") {
-        provider = new LeakedProvider(win as unknown as Window);
+        provider = new QueueBitProvider(win as unknown as Window);
         startBridge();
       } else {
         startBridge();
-        provider = new LeakedProvider(win as unknown as Window);
+        provider = new QueueBitProvider(win as unknown as Window);
       }
       const r = provider.request({ method: "eth_chainId" });
       await expect(r).resolves.toBe("ok:eth_chainId");
@@ -69,17 +69,17 @@ describe("provider ↔ bridge private channel (M0 review: co-installed extension
     vi.stubGlobal("window", win);
     vi.stubGlobal("location", win.location);
     startBridge();
-    const provider = new LeakedProvider(win as unknown as Window);
+    const provider = new QueueBitProvider(win as unknown as Window);
     await tick();
     // An attacker says hello with its own nonce: the bridge already handed its one channel to the provider.
     const ports: MessagePort[] = [];
     win.addEventListener("message", (e: MessageEvent) => ports.push(...e.ports));
-    win.postMessage({ target: "leaked-content", hello: "attacker" }, "*");
+    win.postMessage({ target: "queuebit-content", hello: "attacker" }, "*");
     await tick();
     expect(ports).toEqual([]);
     // A forged "response" on window for a request id is ignored by the provider.
     const pending = provider.request({ method: "eth_accounts" });
-    win.postMessage({ target: "leaked-inpage", message: { id: "x", result: ["0xevil"] } }, "*");
+    win.postMessage({ target: "queuebit-inpage", message: { id: "x", result: ["0xevil"] } }, "*");
     await expect(pending).resolves.toBe("ok:eth_accounts");
     await tick();
     vi.unstubAllGlobals();

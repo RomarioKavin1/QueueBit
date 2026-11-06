@@ -2,8 +2,8 @@
 //! signing reproduce a sample of them exactly.
 mod common;
 use common::*;
-use leaked_pq::lean_s::{self, SCHEME_ID, SIG_LEN};
-use leaked_pq::Role;
+use queuebit_pq::lean_s::{self, SCHEME_ID, SIG_LEN};
+use queuebit_pq::Role;
 use serde_json::Value;
 
 #[test]
@@ -17,7 +17,7 @@ fn kat_c_vectors() {
     for v in vecs {
         let s = |k: &str| v[k].as_str().unwrap();
         assert!(lean_s::verify(&unhex(s("pk")), &unhex(s("digest")), &unhex(s("sig"))), "vector {}", v["id"]);
-        assert!(!leaked_pq::verify(&unhex(s("pk")), &unhex(s("digest")), &unhex(s("sig"))), "not a C13 signature");
+        assert!(!queuebit_pq::verify(&unhex(s("pk")), &unhex(s("digest")), &unhex(s("sig"))), "not a C13 signature");
     }
     for i in [0usize, 5, 15, 30] {
         let v = &vecs[i];

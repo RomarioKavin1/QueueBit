@@ -118,7 +118,7 @@ export async function samples(profile: Profile): Promise<{ name: string; tx: Fra
   }
 
   if (budget(profile)) {
-    // Only on profiles pinned by @leaked/frames: a fixed-length ARBITRARY witness next to a SECP256K1 payer, the
+    // Only on profiles pinned by @queuebit/frames: a fixed-length ARBITRARY witness next to a SECP256K1 payer, the
     // shape of a Path-B vault transaction. The witness is filled after the payer signed: the sig hash commits only
     // to its length.
     const unsigned = newTx({

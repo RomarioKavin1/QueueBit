@@ -19,7 +19,7 @@ cargo_home="${CARGO_HOME:-$HOME/.cargo}"
 export RUSTFLAGS="--remap-path-prefix=$cargo_home=/cargo --remap-path-prefix=$here=/groth16"
 cargo build --release --locked --lib --target wasm32-unknown-unknown --features wasm
 rm -rf "$here/wasm"
-wasm-bindgen --target web --out-dir "$here/wasm" --out-name leaked_groth16 \
-  target/wasm32-unknown-unknown/release/leaked_groth16.wasm
-node "$here/scripts/inline-wasm.mjs" "$here/wasm/leaked_groth16_bg.wasm" "$here/wasm/leaked_groth16_inline.js"
+wasm-bindgen --target web --out-dir "$here/wasm" --out-name queuebit_groth16 \
+  target/wasm32-unknown-unknown/release/queuebit_groth16.wasm
+node "$here/scripts/inline-wasm.mjs" "$here/wasm/queuebit_groth16_bg.wasm" "$here/wasm/queuebit_groth16_inline.js"
 ls -l "$here/wasm"

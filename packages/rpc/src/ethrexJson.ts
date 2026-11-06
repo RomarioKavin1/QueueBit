@@ -1,5 +1,5 @@
 import type { Address, Hex } from "viem";
-import type { FrameTx } from "@leaked/frames";
+import type { FrameTx } from "@queuebit/frames";
 
 /**
  * A frame transaction as ethrex's `eth_getTransactionByHash` returns it (devnet 1337; observed 2026-11-06). Frames use

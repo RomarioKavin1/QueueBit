@@ -1,7 +1,7 @@
-//! LEAKED key derivation (plan section 20 §3.3).
+//! QueueBit key derivation (plan section 20 §3.3).
 //!
 //! ```text
-//! role_key = HMAC-SHA512(key = "leaked/v1/" || schemeId(32 raw bytes) || "/" || role || "/" || chainScope,
+//! role_key = HMAC-SHA512(key = "queuebit/v1/" || schemeId(32 raw bytes) || "/" || role || "/" || chainScope,
 //!                        msg = master)
 //! skSeed   = role_key[0..32]   (plan's sk.seed || sk.prf; upstream uses one 32-byte PRF key)
 //! pkSeed   = role_key[32..48]
@@ -62,7 +62,7 @@ pub enum DeriveError {
     BadChainScope,
 }
 
-/// The 64-byte role key of any scheme: `HMAC-SHA512(key = "leaked/v1/" || scheme_id || "/" || role || "/" ||
+/// The 64-byte role key of any scheme: `HMAC-SHA512(key = "queuebit/v1/" || scheme_id || "/" || role || "/" ||
 /// chainScope, msg = master)`. Every scheme the package supports derives through this one function with its own
 /// 32-byte `scheme_id` in the HMAC key, so one mnemonic never yields related keys for two schemes (or two roles, or
 /// two scopes). Exposed for test vectors and the cross-scheme separation tests.
@@ -82,7 +82,7 @@ pub fn role_key(
         return Err(DeriveError::BadChainScope);
     }
     let mut key = Vec::with_capacity(10 + 32 + 1 + 8 + 1 + chain_scope.len());
-    key.extend_from_slice(b"leaked/v1/");
+    key.extend_from_slice(b"queuebit/v1/");
     key.extend_from_slice(scheme_id);
     key.push(b'/');
     key.extend_from_slice(role.label().as_bytes());

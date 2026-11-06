@@ -1,6 +1,6 @@
 # Architecture
 
-How the pieces of LEAKED fit together and how data moves between them. The binding design is
+How the pieces of QueueBit fit together and how data moves between them. The binding design is
 [`plan/00-v4-design-decisions.md`](plan/00-v4-design-decisions.md); the build specs are the four section files in
 [`plan/sections/`](plan/sections/); what the code actually does, with measurements, is
 [`plan/IMPLEMENTATION-NOTES.md`](plan/IMPLEMENTATION-NOTES.md). What each key can and cannot do is
@@ -11,25 +11,25 @@ How the pieces of LEAKED fit together and how data moves between them. The bindi
 ```
  ┌─────────────────────────── Browser (Chromium MV3): apps/extension ───────────────────────────┐
  │ inpage provider (EIP-1193 + EIP-6963) ⇄ content script ⇄ service worker                      │
- │ service worker: keyring (hot key, fee-tank key), router, FrameEngine (@leaked/frames),       │
+ │ service worker: keyring (hot key, fee-tank key), router, FrameEngine (@queuebit/frames),       │
  │   4337 engine (viem account-abstraction), policy pre-checks, typed-data classifier            │
  │ app.html (full tab): onboarding, Vault QR display + camera scan                              │
- │ offscreen.html: Anon-RPC harness, the Privacy Pools prover (@leaked/groth16 WASM)            │
+ │ offscreen.html: Anon-RPC harness, the Privacy Pools prover (@queuebit/groth16 WASM)            │
  └──────────┬─────────────────────────────────┬────────────────────────────┬────────────────────┘
             │ public mempool (ethrex)         │ ERC-8421 alt mempool       │ ERC-4337 bundler
             │ hot txs, Vault Path B           │ (sidecar) Path A, PoolPayer│ (pre-Hegotá chains)
  ┌──────────▼─────────────────────────────────▼──────────┐ ┌──────────────▼─────────────────────┐
  │ Frame-native (EIP-8141, Hegotá): contracts/src         │ │ ERC-4337 v0.8 + ERC-7579 modules   │
- │  LeakedAccount (UUPS proxy → LeakedAccountImpl,        │ │  on a host account (MSA, Safe7579, │
- │    LeakedAccountRoles): hot path, RollingCap, policy,  │ │  Kernel):                          │
- │    timelock, freeze, scoped ERC-1271                   │ │  LeakedHotValidator (type 1)       │
- │  PQRoleSigner clones (VaultSigner, RecoverySigner)     │ │  LeakedPolicyHook (type 4)         │
- │    via RoleSignerFactory, C13Verifier                  │ │  LeakedRoleExecutor (type 2)       │
+ │  QueueBitAccount (UUPS proxy → QueueBitAccountImpl,        │ │  on a host account (MSA, Safe7579, │
+ │    QueueBitAccountRoles): hot path, RollingCap, policy,  │ │  Kernel):                          │
+ │    timelock, freeze, scoped ERC-1271                   │ │  QueueBitHotValidator (type 1)       │
+ │  PQRoleSigner clones (VaultSigner, RecoverySigner)     │ │  QueueBitPolicyHook (type 4)         │
+ │    via RoleSignerFactory, C13Verifier                  │ │  QueueBitRoleExecutor (type 2)       │
  │  GuardianSigner (freeze only) · PoolPayer (privacy)    │ │  C13Verifier                       │
  └───────────────────────────────▲────────────────────────┘ └────────────────────────────────────┘
-                                 │ ur:leaked-sign-request / ur:leaked-signature (BC-UR, animated QR)
+                                 │ ur:queuebit-sign-request / ur:queuebit-signature (BC-UR, animated QR)
  ┌───────────────────────────────┴─────────── Vault companion (separate device): apps/companion ┐
- │ offline PWA (CSP connect-src 'none'); @leaked/pq-signer (Rust → WASM, SPHINCS- C13);          │
+ │ offline PWA (CSP connect-src 'none'); @queuebit/pq-signer (Rust → WASM, SPHINCS- C13);          │
  │ decodes and clear-signs every request itself; holds the Vault PQ key and its payer key;       │
  │ Recovery is a separate seed (offline ceremony)                                               │
  └──────────────────────────────────────────────────────────────────────────────────────────────┘
@@ -96,11 +96,11 @@ opcodes executed in every VERIFY branch; gate G1 checks the traces on the devnet
 
 ## 4. The ERC-4337 / ERC-7579 backend (before Hegotá)
 
-On chains without EIP-8141 the same policy runs as modules on a host account: `LeakedHotValidator` validates hot
-userOps, `LeakedPolicyHook` enforces the cap, targets, freeze and the fee bound in pre/post checks, and
-`LeakedRoleExecutor` takes Vault and Recovery calls authenticated by a PQ signature over an EIP-712 digest. Everyday
-userOps go to a bundler (EntryPoint v0.8); Vault actions are `LeakedRoleExecutor` calls relayed as plain transactions
-by the fee tank (the PQ check runs in execution). The QR request is `ur:leaked-sign-request` tx-type 3: the executor
+On chains without EIP-8141 the same policy runs as modules on a host account: `QueueBitHotValidator` validates hot
+userOps, `QueueBitPolicyHook` enforces the cap, targets, freeze and the fee bound in pre/post checks, and
+`QueueBitRoleExecutor` takes Vault and Recovery calls authenticated by a PQ signature over an EIP-712 digest. Everyday
+userOps go to a bundler (EntryPoint v0.8); Vault actions are `QueueBitRoleExecutor` calls relayed as plain transactions
+by the fee tank (the PQ check runs in execution). The QR request is `ur:queuebit-sign-request` tx-type 3: the executor
 calldata with an empty signature, from which the phone recomputes the digest. The account address differs from the
 frame-native one (each host derives its own). Host compatibility and the review fixes: THREAT-MODEL §6. Locally:
 `devnet/deploy` `up-4337.ts` (anvil + EntryPoint v0.8 + the modules + a minimal bundler).
@@ -112,10 +112,10 @@ unknown keys, non-canonical bytes and control/bidi characters are rejected). Typ
 
 | UR | Direction | Contents |
 |---|---|---|
-| `ur:leaked-pq-key` | phone → browser | pairing: scheme id, public key, role, payer address |
-| `ur:leaked-sign-request` | browser → phone | request id, chain, tx type (frame tx · PP note envelope · 4337 executor call), the exact bytes to sign, advisory intent (key 11) and policy (key 12) |
-| `ur:leaked-signature` | phone → browser | request id, PQ witness, payer signature (Path B) or typed signature |
-| `ur:leaked-recovery-challenge` / `ur:leaked-recovery-test` | browser → phone → browser | the Recovery key test, bound to a browser-chosen request id |
+| `ur:queuebit-pq-key` | phone → browser | pairing: scheme id, public key, role, payer address |
+| `ur:queuebit-sign-request` | browser → phone | request id, chain, tx type (frame tx · PP note envelope · 4337 executor call), the exact bytes to sign, advisory intent (key 11) and policy (key 12) |
+| `ur:queuebit-signature` | phone → browser | request id, PQ witness, payer signature (Path B) or typed signature |
+| `ur:queuebit-recovery-challenge` / `ur:queuebit-recovery-test` | browser → phone → browser | the Recovery key test, bound to a browser-chosen request id |
 
 The phone never trusts the browser's description: it decodes the bytes itself, recomputes the signature hash, renders
 the calls from its own registry (`apps/companion/src/registry`, ABI sections generated from `contracts/out`), and
@@ -128,18 +128,18 @@ only if every file matches the SHA-256 table in `sw.js` (the same digests the re
 
 ## 6. Privacy (Privacy Pools v1)
 
-`@leaked/privacy` syncs a Privacy Pools v1 pool fail-closed (every event's root recomputed and checked against the
+`@queuebit/privacy` syncs a Privacy Pools v1 pool fail-closed (every event's root recomputed and checked against the
 on-chain root), keeps notes in encrypted storage, and derives note secrets from Vault signatures over an EIP-712
-envelope (`ur:leaked-sign-request` tx-type 2), so notes are recoverable from the Vault. Withdrawals have two modes:
+envelope (`ur:queuebit-sign-request` tx-type 2), so notes are recoverable from the Vault. Withdrawals have two modes:
 the 0xbow relayer, or the **frame paymaster**: a fresh default-code EOA sender and PoolPayer, in the shape
 `[only_verify(fresh EOA), pay(PoolPayer.verify), DEFAULT settle, DEFAULT refund()]`. PoolPayer checks the proof and the
 shape read-only in `pay`, fronts the gas, is repaid from the withdrawal at cost (no margin), and refunds the rest.
-Proofs come from `@leaked/groth16` in the offscreen document. Reads go through Anon-RPC with a per-account isolation key
+Proofs come from `@queuebit/groth16` in the offscreen document. Reads go through Anon-RPC with a per-account isolation key
 (a fresh one per withdrawal). Engineering rules from plan §40.7: no operated pool, no fees, PoolPayer handed off.
 
 ## 7. Watcher
 
-`services/watcher` (and the extension's light mode, via `@leaked/watcher-core`) follows the account's events and the
+`services/watcher` (and the extension's light mode, via `@queuebit/watcher-core`) follows the account's events and the
 receipts of its frame transactions, `confirmations` blocks deep, with reorg handling. Some outcomes leave no log (an
 over-cap hot batch reverts its SENDER frame), so the watcher also reads the blocks' transactions whose sender is a
 watched account. Alerts (large payment, queued loosening, Guardian pause, Vault rotation, repeated blocked payments)

@@ -21,7 +21,7 @@ import {
   type Frame,
   type FrameTx,
   type Profile,
-} from "@leaked/frames";
+} from "@queuebit/frames";
 import type { HostProvider } from "../host/types.js";
 import { POOL_PAYER_ABI } from "./abi.js";
 import {

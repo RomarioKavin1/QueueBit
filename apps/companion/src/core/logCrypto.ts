@@ -11,13 +11,13 @@ import type { LogEntry } from "./db.js";
  *    is sealed with the same key-wrapping as the seed (scrypt(passphrase) → AES-256-GCM, `sealBlob(…, "logkey")`),
  *    the public key is stored in clear;
  *  - each entry is encrypted to the public key: `epk(32) ‖ iv(12) ‖ AES-256-GCM(HKDF-SHA256(x25519(esk, pk),
- *    salt = epk ‖ pk, info = "leaked-companion/log/v1"), JSON(entry))`, so the UI thread can append without the
+ *    salt = epk ‖ pk, info = "queuebit-companion/log/v1"), JSON(entry))`, so the UI thread can append without the
  *    passphrase but nothing on the phone can read the log back without it;
  *  - reading happens in the worker, after the passphrase (Settings › Activity).
  * What stays visible without the passphrase: how many entries there are, and their sizes.
  */
 
-const INFO = new TextEncoder().encode("leaked-companion/log/v1");
+const INFO = new TextEncoder().encode("queuebit-companion/log/v1");
 
 export function newLogKeyPair(): { secretKey: Uint8Array; publicKey: Uint8Array } {
   const secretKey = x25519.utils.randomSecretKey();

@@ -1,8 +1,8 @@
 {
-  "name": "@leaked/ur",
+  "name": "@queuebit/ur",
   "version": "0.0.0",
   "private": true,
-  "description": "LEAKED BC-UR vocabulary: CBOR schemas for vault sign requests, signatures, pairing keys and recovery tests, with fountain-coded animated-QR parts",
+  "description": "QueueBit BC-UR vocabulary: CBOR schemas for vault sign requests, signatures, pairing keys and recovery tests, with fountain-coded animated-QR parts",
   "license": "MIT",
   "type": "module",
   "sideEffects": false,

@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { getAddress, toFunctionSelector, type Abi, type Address, type Hex } from "viem";
 import { privateKeyToAddress } from "viem/accounts";
-import { arbitraryEntry, frameMode, getProfile, senderFrame, type FrameTx } from "@leaked/frames";
+import { arbitraryEntry, frameMode, getProfile, senderFrame, type FrameTx } from "@queuebit/frames";
 import {
   DEFAULT_POOL_PAYER_LIMITS,
   MAX_SIGNATURES,

@@ -1,5 +1,5 @@
-import { SCHEME_ID } from "@leaked/pq-signer";
-import { ROLE, UR_TYPES, UrReceiver, encodePqKey, singlePartUr, type Hex } from "@leaked/ur";
+import { SCHEME_ID } from "@queuebit/pq-signer";
+import { ROLE, UR_TYPES, UrReceiver, encodePqKey, singlePartUr, type Hex } from "@queuebit/ur";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Address } from "viem";
 import { SIGNATURE_TTL_MS, type Built } from "../app/routes.js";
@@ -88,7 +88,7 @@ export function recoveryPairingUr(pk: Hex, payer: Address): string {
 
 /**
  * Test-ok QR: the recovery-test signature for the browser's conductor (ux-spec PLAN CHANGE 9.3), over the request id
- * the browser chose (`ur:leaked-recovery-challenge`), so it answers that one test only. It carries the Recovery
+ * the browser chose (`ur:queuebit-recovery-challenge`), so it answers that one test only. It carries the Recovery
  * fee-payment address, covered by the signature (v2 challenge), for the browser's `InitConfig`.
  */
 async function signTest(ch: ScannedChallenge): Promise<Built> {
@@ -121,7 +121,7 @@ const errorParts = (e: unknown): { title: string; body?: string } => {
   return w.title ? { title: w.title, ...(w.body ? { body: w.body } : {}) } : { title: w.message };
 };
 
-/** Scans the browser's `ur:leaked-recovery-challenge`; with `expectPk`, refuses one for another Recovery key. */
+/** Scans the browser's `ur:queuebit-recovery-challenge`; with `expectPk`, refuses one for another Recovery key. */
 function ChallengeScanner({ expectPk, onChallenge }: { expectPk?: Hex; onChallenge: (c: ScannedChallenge) => void }) {
   const receiver = useMemo(() => new UrReceiver([UR_TYPES.recoveryChallenge]), []);
   const [progress, setProgress] = useState<string>();

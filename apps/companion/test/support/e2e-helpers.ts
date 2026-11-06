@@ -1,5 +1,5 @@
-import { getProfile, recoverSecp256k1Signer, setSignature } from "@leaked/frames";
-import { SCHEME_ID, schemeById, verify } from "@leaked/pq-signer";
+import { getProfile, recoverSecp256k1Signer, setSignature } from "@queuebit/frames";
+import { SCHEME_ID, schemeById, verify } from "@queuebit/pq-signer";
 import {
   AnimatedUr,
   UR_TYPES,
@@ -9,7 +9,7 @@ import {
   recoveryTestChallengeOf,
   singlePartUr,
   type DecodedUr,
-} from "@leaked/ur";
+} from "@queuebit/ur";
 import { PROFILE_ID, type Built } from "../fixtures/requests.js";
 
 /**
@@ -20,7 +20,7 @@ import { PROFILE_ID, type Built } from "../fixtures/requests.js";
 export * from "../fixtures/requests.js";
 export * from "../fixtures/aa.js";
 
-/** The browser's recovery test code (`ur:leaked-recovery-challenge`), as its "test code as text" box shows it. */
+/** The browser's recovery test code (`ur:queuebit-recovery-challenge`), as its "test code as text" box shows it. */
 export function challengeText(requestId: string, recoveryPk: `0x${string}`): string {
   return singlePartUr(UR_TYPES.recoveryChallenge, encodeRecoveryChallenge({ requestId, recoveryPk }));
 }
@@ -54,7 +54,7 @@ export function decodeParts(text: string, type: (typeof UR_TYPES)[keyof typeof U
   throw new Error("incomplete UR");
 }
 
-/** What the extension does with `ur:leaked-signature` (plan §30 §6.2): verify the witness and, on Path B, the payer. */
+/** What the extension does with `ur:queuebit-signature` (plan §30 §6.2): verify the witness and, on Path B, the payer. */
 export async function checkSignature(text: string, built: Built, pk: `0x${string}`, payer?: `0x${string}`) {
   const d = decodeParts(text, UR_TYPES.signature);
   if (d.type !== UR_TYPES.signature) throw new Error("not a signature");

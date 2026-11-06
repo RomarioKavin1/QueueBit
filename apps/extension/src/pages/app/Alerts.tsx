@@ -19,7 +19,8 @@ export function Alerts() {
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     const onChanged = (changes: Record<string, Browser.storage.StorageChange>, area: string) => {
-      if (area === "local" && ("leaked:alerts" in changes || "leaked:watcherPairing" in changes)) void list.reload();
+      if (area === "local" && ("queuebit:alerts" in changes || "queuebit:watcherPairing" in changes))
+        void list.reload();
     };
     browser.storage.onChanged.addListener(onChanged);
     return () => browser.storage.onChanged.removeListener(onChanged);
@@ -68,7 +69,7 @@ export function Alerts() {
         </div>
       </div>
       <p className="t-small text-muted" data-testid="watcher-status">
-        In-browser alerts are on: LEAKED checks your account every minute while the browser is open
+        In-browser alerts are on: QueueBit checks your account every minute while the browser is open
         {st?.lastPollAt ? `, last at ${new Date(st.lastPollAt).toLocaleTimeString("en-GB")}` : ""}.
         {st?.paired ? ` Also paired with your watcher at ${new URL(st.paired.url).host}.` : ""} Alerts never include
         amounts or addresses.

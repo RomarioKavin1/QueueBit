@@ -2,9 +2,9 @@
 //
 //   cd contracts && forge build && cd devnet-tests/pq && bun install && bun run lean-path-a
 //
-// 1. Deploys LeanSphincsSVerifier, a MockLeakedAccount (the account's vault entry points), RoleSignerFactory and a
+// 1. Deploys LeanSphincsSVerifier, a MockQueueBitAccount (the account's vault entry points), RoleSignerFactory and a
 //    VaultSigner clone (PQRoleSigner, role 1) whose verifier is leanSphincs-s; funds them from anvil #2.
-// 2. A leanSphincs-s key (Light tier) and signatures from @leaked/pq-signer `schemes.leanSphincsS` over the codec's
+// 2. A leanSphincs-s key (Light tier) and signatures from @queuebit/pq-signer `schemes.leanSphincsS` over the codec's
 //    sig hash.
 // 3. Path A (PQ verified inside VERIFY, no payer key): relay -> vaultExecute moving ETH. The VERIFY limit is 99,900
 //    (+100 for the ARBITRARY entry = the stock MAX_VERIFY_GAS 100,000). Simulated first ({trace:true}: canonical
@@ -24,8 +24,8 @@ import {
   type Hex,
 } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
-import { encodeTx, getProfile, roleSignerPathATx, setSignature, sigHash, txHash, type FrameTx } from "@leaked/frames";
-import { schemes } from "@leaked/pq-signer";
+import { encodeTx, getProfile, roleSignerPathATx, setSignature, sigHash, txHash, type FrameTx } from "@queuebit/frames";
+import { schemes } from "@queuebit/pq-signer";
 import { artifact, call, deploy, ethrexRaw, json, log, pub, rpc, traceSummary, waitReceipt } from "./lib.js";
 
 const L = schemes.leanSphincsS;
@@ -49,7 +49,7 @@ const results: Record<string, unknown> = {
 const verifierArt = artifact("LeanSphincsSVerifier.sol", "LeanSphincsSVerifier");
 const signerArt = artifact("PQRoleSigner.sol", "PQRoleSigner");
 const factoryArt = artifact("RoleSignerFactory.sol", "RoleSignerFactory");
-const mockArt = artifact("RoleMocks.sol", "MockLeakedAccount");
+const mockArt = artifact("RoleMocks.sol", "MockQueueBitAccount");
 
 // ------------------------------------------------------------------------------------------------ setup ----------
 
@@ -59,7 +59,7 @@ log("node", { chainId, client: await rpc.node.clientVersion(), block: await rpc.
 
 // A deterministic test PQ key (public test material: never use for funds).
 const seed = hexToBytes(
-  `${keccak256(stringToHex("leaked/devnet-tests/pq/lean/seed/0"))}${keccak256(stringToHex("leaked/devnet-tests/pq/lean/seed/1")).slice(2)}` as Hex,
+  `${keccak256(stringToHex("queuebit/devnet-tests/pq/lean/seed/0"))}${keccak256(stringToHex("queuebit/devnet-tests/pq/lean/seed/1")).slice(2)}` as Hex,
 );
 const t0 = performance.now();
 const { publicKey, secretKey } = L.keygen(seed, { role: "vault" });
@@ -71,7 +71,7 @@ log("keys", { scheme: L.name, schemeId: L.SCHEME_ID, pk, recipient, keygenMs: re
 const verifier = await deploy(verifierArt);
 const mock = await deploy(mockArt);
 const factory = await deploy(factoryArt, [DEVNET_ERC8421_WORKSHOP, TXPARAM_MAX_COST, STAKING_REGISTRY, MAX_FEE_WEI]);
-const salt = keccak256(stringToHex(`leaked/devnet-tests/pq/lean/${Date.now()}`));
+const salt = keccak256(stringToHex(`queuebit/devnet-tests/pq/lean/${Date.now()}`));
 // payerKey = 0: Path B disabled; this signer can only act through Path A.
 const createArgs = [salt, 1, mock.address, pk, verifier.address, "0x0000000000000000000000000000000000000000"] as const;
 const signer = (await pub.readContract({
@@ -100,7 +100,7 @@ const setRoles = await call(
 await call(mock.address, "0x", parseEther("0.1"), 500_000n);
 results.deployments = {
   LeanSphincsSVerifier: { address: verifier.address, tx: verifier.hash, gasUsed: verifier.gasUsed },
-  MockLeakedAccount: { address: mock.address, tx: mock.hash, gasUsed: mock.gasUsed },
+  MockQueueBitAccount: { address: mock.address, tx: mock.hash, gasUsed: mock.gasUsed },
   RoleSignerFactory: { address: factory.address, tx: factory.hash, gasUsed: factory.gasUsed },
   PQRoleSignerImplementation: implementation,
   VaultSigner: { address: signer, tx: created.hash, gasUsed: created.gasUsed, payerKey: "none (Path A only)" },

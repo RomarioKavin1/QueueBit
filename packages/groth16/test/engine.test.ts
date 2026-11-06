@@ -11,7 +11,7 @@ import {
   type Groth16Proof,
   type SolProof,
   type WithdrawArtifacts,
-} from "@leaked/privacy";
+} from "@queuebit/privacy";
 import {
   ConstraintUnsatisfiedError,
   Groth16EngineError,
@@ -20,7 +20,7 @@ import {
   type ArkworksGroth16,
   type SnarkjsVkey,
 } from "../src/index.js";
-import coreInit from "../wasm/leaked_groth16.js";
+import coreInit from "../wasm/queuebit_groth16.js";
 import { buildWithdrawal, fsLoader, toJson, type Withdrawal } from "./fixture.js";
 
 type Proved = { proof: Groth16Proof; publicSignals: string[] };
@@ -46,7 +46,7 @@ afterAll(async () => {
 });
 
 describe("cross-check against snarkjs (test-only oracle)", () => {
-  it("same public signals as snarkjs and as @leaked/privacy expects", () => {
+  it("same public signals as snarkjs and as @queuebit/privacy expects", () => {
     expect(ours.publicSignals).toEqual(theirs.publicSignals);
     expect(ours.publicSignals).toEqual(w.expected.map(String));
     expect(ours.proof.protocol).toBe("groth16");
@@ -171,7 +171,7 @@ describe.runIf(hasForge || requireForge)("on-chain verifier (forge, temp copy of
     const sig = [...o.pubSignals];
     sig[2] = sig[2]! + 1n; // withdrawnValue + 1 wei
     const badSignal: SolProof = { ...o, pubSignals: sig as unknown as SolProof["pubSignals"] };
-    const dir = mkdtempSync(join(tmpdir(), "leaked-groth16-onchain-"));
+    const dir = mkdtempSync(join(tmpdir(), "queuebit-groth16-onchain-"));
     try {
       execFileSync("mkdir", ["-p", join(dir, "src")]);
       for (const f of ["WithdrawalGroth16Verifier.sol", "WithdrawVkey.sol"])
@@ -270,7 +270,7 @@ describe("negative", () => {
 
 describe("worker/CSP friendliness", () => {
   it("no eval / new Function in the shipped JS; the core needs only WebAssembly.instantiate on bytes", () => {
-    for (const f of ["../wasm/leaked_groth16.js", "../src/engine.ts", "../src/witness.ts", "../src/index.ts"]) {
+    for (const f of ["../wasm/queuebit_groth16.js", "../src/engine.ts", "../src/witness.ts", "../src/index.ts"]) {
       const src = readFileSync(new URL(f, import.meta.url), "utf8");
       expect(src).not.toMatch(/\beval\s*\(|new Function\s*\(/);
       expect(src).not.toMatch(/from "node:|require\(/);

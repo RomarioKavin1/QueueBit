@@ -30,9 +30,9 @@ import {
  */
 const RPC = "http://localhost:8545";
 const SHOTS = join(dirname(fileURLToPath(import.meta.url)), "..", "docs", "screenshots");
-/** `LEAKED_SHOTS=1` also captures the M3/M4 screens into docs/screenshots (design review against ux-spec). */
+/** `QUEUEBIT_SHOTS=1` also captures the M3/M4 screens into docs/screenshots (design review against ux-spec). */
 async function shot(name: string, page: Page) {
-  if (process.env.LEAKED_SHOTS !== "1") return;
+  if (process.env.QUEUEBIT_SHOTS !== "1") return;
   await page.screenshot({ path: join(SHOTS, `${name}.png`), fullPage: true, animations: "disabled" });
 }
 const pub = createPublicClient({ transport: http(RPC) });
@@ -50,7 +50,7 @@ async function devnetReady(): Promise<string | undefined> {
 }
 
 type Win = Window & {
-  leaked(): { request(a: { method: string; params?: unknown[] }): Promise<unknown> };
+  queuebit(): { request(a: { method: string; params?: unknown[] }): Promise<unknown> };
   __result?: unknown;
   __error?: { code: number; message: string; data?: unknown };
 };
@@ -61,7 +61,7 @@ async function start(dapp: Page, method: string, params: unknown[]) {
       const w = window as unknown as Win;
       delete w.__result;
       delete w.__error;
-      w.leaked()
+      w.queuebit()
         .request({ method: m as string, params: p as unknown[] })
         .then(
           (r) => (w.__result = r),
@@ -142,7 +142,7 @@ test("M3/M4: Vault-first onboarding, Open payment, Vault payment, queued change 
   await sim.fund(account, "0.5");
 
   // The PQ verifier's WASM runs in the MV3 service worker, instantiated from embedded bytes (no fetch).
-  const pq = await serviceWorker.evaluate(() => (globalThis as { __leakedPq?: unknown }).__leakedPq);
+  const pq = await serviceWorker.evaluate(() => (globalThis as { __queuebitPq?: unknown }).__queuebitPq);
   expect(pq).toMatchObject({ schemes: ["SPHINCS- C13", "leanSphincs-s"], rejectsGarbage: true });
 
   // ---- Open mode: an everyday payment to a never-seen address is instant ----
@@ -223,7 +223,7 @@ test("M3/M4: Vault-first onboarding, Open payment, Vault payment, queued change 
   // ---- SIWE: the everyday key signs a 7739 envelope; the site checks it with an ERC-1271 eth_call ----
   const dapp = await context.newPage();
   await dapp.goto(dappUrl);
-  await dapp.getByRole("button", { name: "Connect LEAKED" }).click();
+  await dapp.getByRole("button", { name: "Connect QueueBit" }).click();
   const connect = await waitForApproval(context);
   await Promise.all([connect.waitForEvent("close"), connect.getByRole("button", { name: "Connect" }).click()]);
   await expect(dapp.locator("#account")).toHaveText(account);
@@ -311,9 +311,9 @@ test("M3/M4: Vault-first onboarding, Open payment, Vault payment, queued change 
   ]);
   await expect
     .poll(() => dapp.evaluate(() => (window as unknown as Win).__result), { timeout: 240_000 })
-    .toMatch(/^0xdc6b87c9/u);
+    .toMatch(/^0x427a9529/u);
   const marker = (await dapp.evaluate(() => (window as unknown as Win).__result)) as Hex;
-  expect(marker.toLowerCase()).toBe(`0xdc6b87c9${marker.slice(10)}`.toLowerCase());
+  expect(marker.toLowerCase()).toBe(`0x427a9529${marker.slice(10)}`.toLowerCase());
   expect(
     await sim.consumePermit(1337, usdc.address, { owner: account, spender, value, deadline, signature: marker }),
   ).toBe(value);

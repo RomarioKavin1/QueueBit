@@ -21,7 +21,7 @@ interface IERC3009Views {
 /// @title TypedPermits
 /// @notice On-chain EIP-712 digests of the value-moving signatures the hot tier may pre-authorise for ERC-1271
 ///         (`registerPermit`, `registerPermit2`, `registerPermit2Transfer`, `registerTransferAuthorization`; the
-///         account and `LeakedPolicyHook` both use this library). Audit C1: the account never honours an opaque hash
+///         account and `QueueBitPolicyHook` both use this library). Audit C1: the account never honours an opaque hash
 ///         for a token or Permit2, so every digest a token or Permit2 may consume is computed here from its typed
 ///         fields, and the debit is the typed amount.
 /// @dev Type strings and domain are copied from the canonical sources and checked in `test/account/TypedPermits.t.sol`:

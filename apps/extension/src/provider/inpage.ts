@@ -8,7 +8,7 @@ import {
   type PortMessageFromSw,
 } from "../shared/messages";
 
-export const RDNS = "xyz.leaked.wallet";
+export const RDNS = "xyz.queuebit.wallet";
 
 type Listener = (...args: unknown[]) => void;
 
@@ -42,8 +42,8 @@ export class ProviderError extends Error {
  * The page-facing EIP-1193 provider. It deliberately does not claim to be MetaMask (`isMetaMask` is absent) and is not
  * assigned to `window.ethereum`: discovery is EIP-6963 only (plan §30 §3.1).
  */
-export class LeakedProvider {
-  readonly isLeaked = true;
+export class QueueBitProvider {
+  readonly isQueueBit = true;
   #listeners = new Map<string, Set<Listener>>();
   #pending = new Map<string, { resolve: (v: unknown) => void; reject: (e: unknown) => void }>();
   #chainId: string | null = null;
@@ -179,11 +179,11 @@ export interface Eip6963ProviderInfo {
 }
 
 /** Create the provider and announce it per EIP-6963, now and on every `eip6963:requestProvider`. */
-export function installProvider(win: Window): LeakedProvider {
-  const provider = new LeakedProvider(win);
+export function installProvider(win: Window): QueueBitProvider {
+  const provider = new QueueBitProvider(win);
   const info: Eip6963ProviderInfo = Object.freeze({
     uuid: uuidv4(),
-    name: "LEAKED",
+    name: "QueueBit",
     icon: ICON_DATA_URI,
     rdns: RDNS,
   });

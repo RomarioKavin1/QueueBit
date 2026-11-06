@@ -1,16 +1,16 @@
 import { decodeFunctionData, getAddress, toFunctionSelector, type Abi, type Address, type Hex } from "viem";
-import { frameStatus } from "@leaked/frames";
+import { frameStatus } from "@queuebit/frames";
 import { blockReasonOf, decodeRevertName, type TargetIndex } from "./decode.js";
 import { hotExecuteAbi } from "./generated/abi.js";
 import type { BlockReason, WatchedEvent } from "./types.js";
 
 /**
  * Over-limit attempts leave no log: `OverCap` reverts the hot SENDER frame, and only the frame receipt shows it
- * (`frameReceipts[i].status == 0`; ILeakedAccount "Paths that cannot log"). This module turns a mined frame transaction
+ * (`frameReceipts[i].status == 0`; IQueueBitAccount "Paths that cannot log"). This module turns a mined frame transaction
  * of a watched account plus its receipt into `hotBlocked` events.
  */
 
-/** The SENDER frame mode in every codec profile of @leaked/frames (EIP-8141 current, ethrex devnets). */
+/** The SENDER frame mode in every codec profile of @queuebit/frames (EIP-8141 current, ethrex devnets). */
 export const SENDER_MODE = 2;
 
 export const HOT_EXECUTE_SELECTOR: Hex = toFunctionSelector(hotExecuteAbi[0]);

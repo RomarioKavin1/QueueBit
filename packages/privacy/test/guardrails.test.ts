@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { getAddress, toFunctionSelector, type Address, type Hex } from "viem";
 import { generatePrivateKey } from "viem/accounts";
-import { getProfile } from "@leaked/frames";
-import type { NodeClient, SidecarClient } from "@leaked/rpc";
+import { getProfile } from "@queuebit/frames";
+import type { NodeClient, SidecarClient } from "@queuebit/rpc";
 import * as pkg from "../src/index.js";
 import {
   CircuitError,

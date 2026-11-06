@@ -22,7 +22,7 @@ export function queueKind(kind: number): QueueKind {
   }
 }
 
-/** A revert selector's error name (any LEAKED contract) as the reason a hot payment was blocked. */
+/** A revert selector's error name (any QueueBit contract) as the reason a hot payment was blocked. */
 export function blockReasonOf(errorName: string | undefined): BlockReason {
   switch (errorName) {
     case undefined:
@@ -46,7 +46,7 @@ export function blockReasonOf(errorName: string | undefined): BlockReason {
   }
 }
 
-/** Decodes revert data against the LEAKED error ABIs (both backends). Undefined when unknown or empty. */
+/** Decodes revert data against the QueueBit error ABIs (both backends). Undefined when unknown or empty. */
 export function decodeRevertName(data: Hex | undefined): string | undefined {
   if (!data || data.length < 10) return undefined;
   for (const abi of [frameAccountAbi, moduleAbi] as const) {
@@ -63,7 +63,7 @@ type Args = Record<string, unknown>;
 const addr = (v: unknown) => getAddress(v as string);
 const n = (v: unknown) => Number(v as bigint | number);
 
-/** Maps a decoded LEAKED event (either backend; the 4337 variants carry an extra `account`) to an AccountEvent. */
+/** Maps a decoded QueueBit event (either backend; the 4337 variants carry an extra `account`) to an AccountEvent. */
 function toAccountEvent(name: string, a: Args, emitter: Address): AccountEvent | null {
   switch (name) {
     case "Queued":
@@ -184,7 +184,7 @@ export class TargetIndex {
 }
 
 /**
- * Decodes one log into a WatchedEvent, or null when it is not about a watched account (or not a LEAKED event).
+ * Decodes one log into a WatchedEvent, or null when it is not about a watched account (or not a QueueBit event).
  *  - frame backend: the account itself emits; the account is the log's address;
  *  - 4337 backend: the modules emit with `account` as the first indexed topic; the EntryPoint's
  *    `UserOperationRevertReason` for a watched sender becomes a `hotBlocked` event with the decoded reason;

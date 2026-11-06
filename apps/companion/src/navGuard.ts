@@ -31,7 +31,7 @@ export function installNavigationGuard(w: Window & typeof globalThis = window): 
       }
       if ((!dest || dest.origin !== origin) && ev.cancelable) {
         ev.preventDefault();
-        console.warn("LEAKED Vault: blocked a navigation away from the app");
+        console.warn("QueueBit Vault: blocked a navigation away from the app");
       }
     });
   }

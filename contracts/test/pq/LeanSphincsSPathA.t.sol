@@ -7,12 +7,12 @@ import {FrameSim} from "../frame/FrameSim.sol";
 import {LeanSphincsSVerifier} from "../../src/pq/LeanSphincsSVerifier.sol";
 import {C13Verifier} from "../../src/pq/C13Verifier.sol";
 import {IStakingRegistry} from "../../src/interfaces/IStakingRegistry.sol";
-import {ILeakedAccountRoles} from "../../src/interfaces/ILeakedAccountRoles.sol";
+import {IQueueBitAccountRoles} from "../../src/interfaces/IQueueBitAccountRoles.sol";
 import {PQRoleSigner} from "../../src/roles/PQRoleSigner.sol";
 import {RoleSignerFactory} from "../../src/roles/RoleSignerFactory.sol";
 import {LeanSphincsSKat} from "./LeanSphincsSKat.sol";
 import {C13Kat} from "./C13Kat.sol";
-import {MockLeakedAccount, MockStakingRegistry} from "../roles/RoleMocks.sol";
+import {MockQueueBitAccount, MockStakingRegistry} from "../roles/RoleMocks.sol";
 
 /// A VaultSigner clone (`RoleSignerFactory`, the production path) whose verifier is `LeanSphincsSVerifier`: Path A
 /// (PQ verified inside VERIFY) and Path B work unchanged with the 4,164-byte witness (the clone's `sigLength` comes
@@ -24,7 +24,7 @@ import {MockLeakedAccount, MockStakingRegistry} from "../roles/RoleMocks.sol";
 /// real cost of the PQ part of VERIFY: the adapter call with this witness (`test_pathA_pqPartGas`).
 contract LeanSphincsSPathATest is FrameSim {
     LeanSphincsSVerifier internal verifier;
-    MockLeakedAccount internal account;
+    MockQueueBitAccount internal account;
     MockStakingRegistry internal registry;
     RoleSignerFactory internal factory;
     PQRoleSigner internal signer;
@@ -44,7 +44,7 @@ contract LeanSphincsSPathATest is FrameSim {
         kat = LeanSphincsSKat.load(1); // vault key, non-zero digest
         verifier = new LeanSphincsSVerifier();
         registry = new MockStakingRegistry();
-        account = new MockLeakedAccount();
+        account = new MockQueueBitAccount();
         (payer, payerPk) = makeAddrAndKey("payer");
         factory = new RoleSignerFactory(
             Devnet.ERC8421_WORKSHOP, TxParam.MAX_COST, IStakingRegistry(address(registry)), MAX_FEE
@@ -59,9 +59,9 @@ contract LeanSphincsSPathATest is FrameSim {
     }
 
     function _move(uint256 amount) internal view returns (bytes memory) {
-        ILeakedAccountRoles.Call[] memory calls = new ILeakedAccountRoles.Call[](1);
-        calls[0] = ILeakedAccountRoles.Call(recipient, amount, "");
-        return abi.encodeCall(ILeakedAccountRoles.vaultExecute, (calls, 0));
+        IQueueBitAccountRoles.Call[] memory calls = new IQueueBitAccountRoles.Call[](1);
+        calls[0] = IQueueBitAccountRoles.Call(recipient, amount, "");
+        return abi.encodeCall(IQueueBitAccountRoles.vaultExecute, (calls, 0));
     }
 
     function _pathA(bytes memory witness, bytes32 sigHash) internal {

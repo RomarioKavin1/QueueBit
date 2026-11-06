@@ -26,8 +26,8 @@ import {
   type Hex,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { encodeTx, frame, getProfile, newTx, secp256k1Placeholder, signTx, txHash, type FrameTx } from "@leaked/frames";
-import { RpcError, createNodeClient, createSidecarClient, httpTransport } from "@leaked/rpc";
+import { encodeTx, frame, getProfile, newTx, secp256k1Placeholder, signTx, txHash, type FrameTx } from "@queuebit/frames";
+import { RpcError, createNodeClient, createSidecarClient, httpTransport } from "@queuebit/rpc";
 
 const ETHREX = process.env.ETHREX_URL ?? "http://localhost:8545";
 const PATCHED = process.env.PATCHED_SIDECAR_URL ?? "http://localhost:14340/rpc";
@@ -44,7 +44,7 @@ const patched = createSidecarClient(httpTransport(PATCHED));
 const stock = createSidecarClient(httpTransport(STOCK));
 const chain = {
   id: CHAIN_ID,
-  name: "leaked-devnet",
+  name: "queuebit-devnet",
   nativeCurrency: { name: "ETH", symbol: "ETH", decimals: 18 },
   rpcUrls: { default: { http: [ETHREX] } },
 } as const;

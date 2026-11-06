@@ -5,8 +5,8 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createPublicClient, createWalletClient, encodeDeployData, http, type Abi, type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import type { FrameTxReceipt } from "@leaked/frames";
-import { createFrameRpc } from "@leaked/rpc";
+import type { FrameTxReceipt } from "@queuebit/frames";
+import { createFrameRpc } from "@queuebit/rpc";
 
 export const ETHREX = process.env.ETHREX_URL ?? "http://localhost:8545";
 export const SIDECAR = process.env.SIDECAR_URL ?? "http://localhost:14337/rpc";
@@ -21,7 +21,7 @@ export const rpc = createFrameRpc(ETHREX, { sidecarUrl: SIDECAR });
 
 const chain = {
   id: CHAIN_ID,
-  name: "leaked-devnet",
+  name: "queuebit-devnet",
   nativeCurrency: { name: "ETH", symbol: "ETH", decimals: 18 },
   rpcUrls: { default: { http: [ETHREX] } },
 } as const;
@@ -40,7 +40,7 @@ export function artifact(file: string, name: string): Artifact {
   return { abi: j.abi, bytecode: j.bytecode.object };
 }
 
-/** Raw JSON-RPC to ethrex for the methods @leaked/rpc does not wrap (e.g. ethrex_submitPrivilegedFrameTransaction). */
+/** Raw JSON-RPC to ethrex for the methods @queuebit/rpc does not wrap (e.g. ethrex_submitPrivilegedFrameTransaction). */
 export async function ethrexRaw<T = unknown>(method: string, params: unknown[] = []): Promise<T> {
   return rpc.node.transport.request<T>(method, params);
 }

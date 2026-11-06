@@ -4,12 +4,12 @@
 //!    verbatim (made by `lssk kat`, confirmed by upstream's independent spec-literal Python verifier): b = 6, 10, 12.
 //! 2. Upstream crate's own `known_answer` test (`src/scheme.rs`): seed(1), b = 11, pk and keccak256(sig), counter.
 //! 3. The bench's vectors (`bench/vectors/leansphincs-s.json`), signed by upstream `lssk sign-key` from a Light-tier
-//!    key file (b = 13, the LEAKED tier): keygen from the bench seed and deterministic signing reproduce them, which
+//!    key file (b = 13, the QueueBit tier): keygen from the bench seed and deterministic signing reproduce them, which
 //!    pins the exact key/signature path the product uses against upstream's binary.
 mod common;
 use common::*;
-use leaked_pq::hash::keccak256;
-use leaked_pq::lean_s::{self, scheme, SecretKey, B, SIG_LEN};
+use queuebit_pq::hash::keccak256;
+use queuebit_pq::lean_s::{self, scheme, SecretKey, B, SIG_LEN};
 use serde_json::Value;
 
 #[test]
@@ -59,9 +59,9 @@ fn upstream_crate_known_answer() {
 #[test]
 fn bench_lssk_light_tier_vectors_reproduce() {
     let f: Value = serde_json::from_str(include_str!("../../../../bench/vectors/leansphincs-s.json")).unwrap();
-    // bench/src/signers.ts leanSphincsSigner: seed file = hex(keccak256("leaked-bench/v1/leansphincs-s/seed")),
+    // bench/src/signers.ts leanSphincsSigner: seed file = hex(keccak256("queuebit-bench/v1/leansphincs-s/seed")),
     // `lssk keygen --tier light` (b = 13).
-    let seed = keccak256(b"leaked-bench/v1/leansphincs-s/seed");
+    let seed = keccak256(b"queuebit-bench/v1/leansphincs-s/seed");
     let sk = SecretKey::from_seed(&seed);
     assert_eq!(B, 13);
     assert_eq!(format!("0x{}", hex::encode(sk.public_key())), f["publicKey"].as_str().unwrap());

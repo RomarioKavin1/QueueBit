@@ -1,6 +1,6 @@
-# LEAKED watcher (self-hosted)
+# QueueBit watcher (self-hosted)
 
-Watches LEAKED accounts on chain and tells you, in plain language, when something happens that you should know
+Watches QueueBit accounts on chain and tells you, in plain language, when something happens that you should know
 about: the Vault scheduled a change, everyday spending was paused, a payment was blocked for being over the limit,
 the Recovery key started replacing the Vault, a waiting period ended. Plan: `docs/plan/sections/40-privacy-infra.md`
 §5 (milestone P9). Copy: `docs/design/ux-spec.md`.
@@ -10,11 +10,11 @@ in SQLite (or a JSON file) and delivers alerts three ways:
 
 | Channel | Auth / integrity | Contents |
 |---|---|---|
-| `GET /v1/stream` (Server-Sent Events) | request: `LEAKED-HMAC` API key; every event: HMAC-signed envelope | full alert (account address, tx hash, opId, eta) |
-| HMAC-signed webhook | `x-leaked-signature: t=…,n=…,v2=HMAC(secret, "t.n.body")`, `x-leaked-delivery: <n>` | full alert |
+| `GET /v1/stream` (Server-Sent Events) | request: `QUEUEBIT-HMAC` API key; every event: HMAC-signed envelope | full alert (account address, tx hash, opId, eta) |
+| HMAC-signed webhook | `x-queuebit-signature: t=…,n=…,v2=HMAC(secret, "t.n.body")`, `x-queuebit-delivery: <n>` | full alert |
 | ntfy.sh-compatible push (optional) | your topic (+ optional token) | title and body only: **no amounts, no addresses** |
 
-The alert logic is `@leaked/watcher-core` (`packages/watcher-core`), the same code the extension's in-browser light
+The alert logic is `@queuebit/watcher-core` (`packages/watcher-core`), the same code the extension's in-browser light
 mode runs, so both modes raise the same alerts with the same ids.
 
 ## What it detects
@@ -37,7 +37,7 @@ mode runs, so both modes raise the same alerts with the same ids.
 | 4337 backend: module events (`account`-indexed); `UserOperationRevertReason` with `OverCap` | same alerts | same |
 | `PQRoleSigner` `StakeUnlocked` (role signers you list) | "Vault sender deposit unlocking" | warning |
 
-Over-limit attempts **emit no log** (`OverCap` reverts the SENDER frame; ILeakedAccount "Paths that cannot log"), so
+Over-limit attempts **emit no log** (`OverCap` reverts the SENDER frame; IQueueBitAccount "Paths that cannot log"), so
 for frame accounts the poller also reads each block's transactions of the account and their frame receipts. The
 reason is pinned down with `getBucket()` at the parent block: `hotExecute` debits at most the declared USD, so
 `declared > available` means over the limit, anything else means another rule blocked it. ERC-1271 checks of
@@ -49,7 +49,7 @@ Only on-chain facts are used. Nothing about devices, IPs or browsers.
 
 ```sh
 # from the repository root
-pnpm install && pnpm --filter "@leaked/watcher..." run build
+pnpm install && pnpm --filter "@queuebit/watcher..." run build
 WATCHER_RPC_URL=http://localhost:8545 \
 WATCHER_ACCOUNTS=0xYourAccount:frame \
 WATCHER_API_KEYS=extension:0x$(openssl rand -hex 32) \
@@ -59,9 +59,9 @@ node services/watcher/dist/main.js
 Docker (context = repository root):
 
 ```sh
-docker build -f services/watcher/Dockerfile -t leaked/watcher .
-docker run -d -p 127.0.0.1:8787:8787 -v leaked-watcher:/data \
-  -v $PWD/watcher.json:/config/watcher.json:ro -e WATCHER_CONFIG=/config/watcher.json leaked/watcher
+docker build -f services/watcher/Dockerfile -t queuebit/watcher .
+docker run -d -p 127.0.0.1:8787:8787 -v queuebit-watcher:/data \
+  -v $PWD/watcher.json:/config/watcher.json:ro -e WATCHER_CONFIG=/config/watcher.json queuebit/watcher
 ```
 
 Put it behind TLS (a reverse proxy) before exposing it beyond localhost.
@@ -76,7 +76,7 @@ variables. Accounts are addresses only; any other field on an account (a label, 
 | `rpcUrl` | `WATCHER_RPC_URL` | – | your own node, or Helios / an Anon-RPC gateway |
 | `chainId` | `WATCHER_CHAIN_ID` | 1337 | checked against the node at start |
 | `accounts[]` `{address, backend: frame\|4337}` | `WATCHER_ACCOUNTS=0x..:frame,0x..:4337` | – | |
-| `modules[]`, `entryPoint` | `WATCHER_ENTRYPOINT` | – | 4337 backend: LeakedPolicyHook + LeakedRoleExecutor, EntryPoint |
+| `modules[]`, `entryPoint` | `WATCHER_ENTRYPOINT` | – | 4337 backend: QueueBitPolicyHook + QueueBitRoleExecutor, EntryPoint |
 | `roleSigners[]` `{address, account}` | – | – | PQRoleSigner clones to watch for stake unlocks |
 | `confirmations` | `WATCHER_CONFIRMATIONS` | 2 | blocks behind head before processing |
 | `pollIntervalMs` | `WATCHER_POLL_MS` | 6000 | |
@@ -94,14 +94,14 @@ variables. Accounts are addresses only; any other field on an account (a label, 
 
 ## API
 
-Auth header: `authorization: LEAKED-HMAC id=<keyId>,t=<unix s>,n=<nonce>,sig=<hex HMAC-SHA256(secret,
+Auth header: `authorization: QUEUEBIT-HMAC id=<keyId>,t=<unix s>,n=<nonce>,sig=<hex HMAC-SHA256(secret,
 "<METHOD>\n<path>\n<t>\n<n>")>` (± 5 min; `n` = 16–64 chars of `[0-9A-Za-z_-]`, e.g. 16 random bytes hex). The
 server remembers each `keyId:n` for the skew window (bounded cache), so a captured request cannot be replayed (`401
 replayed`). Bad or unknown keys get `401`, excess requests `429`. The signature never goes in a URL.
 
 - `GET /healthz`: `{ok, chainId, lastBlock, accounts}` (no addresses).
 - `GET /v1/stream`: SSE. `id: <seq>`, `event: alert | retract`, `data: {v: 2, t, type, seq, alert, sig}` where
-  `sig = HMAC(secret, "leaked-alert-v2\n<t>\n<type>\n<seq>\n<JSON(alert)>")`: the type and sequence number are
+  `sig = HMAC(secret, "queuebit-alert-v2\n<t>\n<type>\n<seq>\n<JSON(alert)>")`: the type and sequence number are
   signed too, so a relay cannot relabel an alert as a retraction or forge `seq` (v1 envelopes, which signed
   `"<t>.<JSON(alert)>"` only, are refused). Resume with `Last-Event-ID` (or `?since=`). A `retract` event names an
   alert whose transaction disappeared in a reorg.
@@ -110,10 +110,10 @@ replayed`). Bad or unknown keys get `401`, excess requests `429`. The signature 
 - `GET /v1/alerts?since=<seq>`: the same envelopes as JSON.
 
 Webhook receivers: verify with `verifyWebhook(secret, rawBody, header, {seen})`, where `seen = (n, t) =>
-!cache.use(n, t)` with a `NonceCache`; `n` (also in `x-leaked-delivery`) stays the same across retries of one
+!cache.use(n, t)` with a `NonceCache`; `n` (also in `x-queuebit-delivery`) stays the same across retries of one
 delivery, so dedupe on it. Headers without `n`/`v2` (the old `v1` form) are refused.
 
-Verify with `verifyAlert` / `verifyWebhook` / `authHeader` / `NonceCache` from `@leaked/watcher-core`. The extension pairs by
+Verify with `verifyAlert` / `verifyWebhook` / `authHeader` / `NonceCache` from `@queuebit/watcher-core`. The extension pairs by
 scanning `{url, topic, keyId, hmacKey}` (`parsePairing`).
 
 ## Reorgs and checkpoints
@@ -132,7 +132,7 @@ best-effort, without retractions).
 ## Tests
 
 ```sh
-pnpm --filter @leaked/watcher-core test   # decoding against real artifacts + devnet fixtures, rules, eta, HMAC, ABI drift
-pnpm --filter @leaked/watcher test        # mock chain: confirmations, paging, reorgs, checkpoints; HTTP auth, SSE, rate limit, webhook, ntfy
-LIVE_DEVNET=1 pnpm --filter @leaked/watcher test   # local devnet (anvil #9): over-limit, queued loosening, Guardian pause
+pnpm --filter @queuebit/watcher-core test   # decoding against real artifacts + devnet fixtures, rules, eta, HMAC, ABI drift
+pnpm --filter @queuebit/watcher test        # mock chain: confirmations, paging, reorgs, checkpoints; HTTP auth, SSE, rate limit, webhook, ntfy
+LIVE_DEVNET=1 pnpm --filter @queuebit/watcher test   # local devnet (anvil #9): over-limit, queued loosening, Guardian pause
 ```

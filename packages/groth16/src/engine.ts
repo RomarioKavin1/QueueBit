@@ -1,5 +1,5 @@
 /**
- * The arkworks Groth16 engine behind `@leaked/privacy`'s `Groth16Backend` interface.
+ * The arkworks Groth16 engine behind `@queuebit/privacy`'s `Groth16Backend` interface.
  *
  * `fullProve(input, wasm, zkey)`: witness in the host's WebAssembly engine (`witness.ts`), proof in our Rust/WASM
  * core (ark-groth16 over BN254, `rust/`), returned in snarkjs' JSON shape. Every proof is verified against the zkey's
@@ -19,12 +19,12 @@
  * are variable-time in the witness, as in every Groth16 prover; run it in a dedicated Worker, not next to
  * attacker-controlled code.
  */
-import type { Groth16Backend, Groth16Proof } from "@leaked/privacy";
-import init, { ProvingKey, verify as wasmVerify } from "../wasm/leaked_groth16.js";
-import { WASM_BASE64, WASM_SHA256 } from "../wasm/leaked_groth16_inline.js";
+import type { Groth16Backend, Groth16Proof } from "@queuebit/privacy";
+import init, { ProvingKey, verify as wasmVerify } from "../wasm/queuebit_groth16.js";
+import { WASM_BASE64, WASM_SHA256 } from "../wasm/queuebit_groth16_inline.js";
 import { calculateWitness, compileCircuit, type CircuitInput } from "./witness.js";
 
-/** sha256 of the embedded prover WASM (`wasm/leaked_groth16_bg.wasm`). */
+/** sha256 of the embedded prover WASM (`wasm/queuebit_groth16_bg.wasm`). */
 export const WASM_HASH = WASM_SHA256;
 
 /** Bad zkey, bad witness length, malformed arguments: an engine/caller error, not a circuit rejection. */

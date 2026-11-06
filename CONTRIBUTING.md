@@ -15,9 +15,9 @@ git rules below exist so that nobody destroys someone else's uncommitted work. T
 4. **Need a clean state** (a clean-clone check, a bisect, an experiment)? Use a separate worktree, and remove it when
    done:
    ```sh
-   git worktree add /tmp/leaked-clean-$(date +%s) HEAD
+   git worktree add /tmp/queuebit-clean-$(date +%s) HEAD
    # ... work there ...
-   git worktree remove /tmp/leaked-clean-<ts>
+   git worktree remove /tmp/queuebit-clean-<ts>
    ```
 5. Do not rewrite published history (no force-push to `main`, no amending a commit that is already pushed or that
    someone else may have built on).
@@ -37,7 +37,7 @@ feat(companion): sign tx-type 3 role-executor requests (compatible 4337 accounts
 fix(extension): 4337 review: local CREATE2 account address, callGasLimit floor, token price bounds
 test(g1): re-run on the typed-registration implementation (a-g PASS)
 docs(backlog): tick the companion tx-type 3 and recovery challenge items
-chore(deploy): redeploy LeakedAccountImpl and the 7579 modules with the typed registrations
+chore(deploy): redeploy QueueBitAccountImpl and the 7579 modules with the typed registrations
 ```
 
 Types: `feat`, `fix`, `test`, `docs`, `chore`, `refactor`, `perf`, `ci`, `build`. Scopes are the component:
@@ -58,7 +58,7 @@ pnpm typecheck && pnpm lint && pnpm test && pnpm build
 cd contracts && forge build && forge test && forge fmt --check && ./script/lint-verify.sh
 ```
 
-Plus, when you touched them: `pnpm --filter @leaked/companion e2e`, `pnpm --filter @leaked/extension e2e`,
+Plus, when you touched them: `pnpm --filter @queuebit/companion e2e`, `pnpm --filter @queuebit/extension e2e`,
 `cd contracts/devnet-tests/4337 && bun run e2e`, and the devnet suites (`README.md` "Quickstart"). A change to
 `packages/pq-signer/rust` or `packages/groth16/rust` must rebuild and commit `wasm/` (`bash scripts/build-wasm.sh`):
 CI rebuilds it and fails on any byte difference.

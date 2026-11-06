@@ -1,9 +1,9 @@
 {
-  "name": "leaked-contracts-devnet-tests-pq",
+  "name": "queuebit-contracts-devnet-tests-pq",
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Devnet integration tests for the LEAKED contracts (run with bun against devnet/; standalone, not a pnpm workspace package). @leaked/* resolve to the workspace sources via tsconfig paths.",
+  "description": "Devnet integration tests for the QueueBit contracts (run with bun against devnet/; standalone, not a pnpm workspace package). @queuebit/* resolve to the workspace sources via tsconfig paths.",
   "scripts": {
     "test": "bun run run.ts",
     "lint:verify-opcodes": "python3 lint-verify-opcodes.py ../../out/C13Verifier.sol/C13Verifier.json ../../out/PQRoleSigner.sol/PQRoleSigner.json ../../out/GuardianSigner.sol/GuardianSigner.json ../../out/LeanSphincsSVerifier.sol/LeanSphincsSVerifier.json",

@@ -5,7 +5,7 @@
 // (used under MIT), Copyright (c) 2026 Tom Wambsgans, itself adapted from leanEthereum/leanVM (crates/sphincs), MIT OR
 // Apache-2.0, Copyright (c) 2026 leanEthereum. See THIRD_PARTY.md.
 
-//! leanSphincs-s parameters. Nothing here is chosen by LEAKED except [`B`] (the kept-subtree height, upstream's
+//! leanSphincs-s parameters. Nothing here is chosen by QueueBit except [`B`] (the kept-subtree height, upstream's
 //! "Light" tier) and the scheme id; every other value is read from upstream `nconsigny/SPHINCS-` at commit
 //! `4c76aaf113d326df9adede63d015f3b394ab84f4`:
 //!
@@ -29,7 +29,7 @@ pub const V: usize = 64;
 /// WOTS+C target sum. Spec §1.
 pub const TARGET_SUM: u32 = 128;
 
-/// Kept-subtree height of a LEAKED leanSphincs-s key: upstream's **Light** tier (spec §14, `b = 13`), rated for
+/// Kept-subtree height of a QueueBit leanSphincs-s key: upstream's **Light** tier (spec §14, `b = 13`), rated for
 /// 20,000 signatures per key. Fixed for this scheme id: one seed is one key (spec §14 "Operational rules"), so a
 /// different `b` must come with a new scheme id / derivation label, never from the same seed.
 pub const B: usize = 13;
@@ -49,7 +49,7 @@ pub const SIG_LEN: usize = AUTH_OFF + H * N; // 4164
 
 /// Public key = P(16) || root(16): the `IPQVerifier` `bytes32 pk` (the adapter splits it into the verifier's
 /// high-aligned `pkSeed = P || 0^16`, `pkRoot = root || 0^16`, spec §12). Note: upstream's own byte form is
-/// `root || P` (`scheme.rs` `PublicKey::to_bytes`); LEAKED uses the verifier's argument order, as for C13.
+/// `root || P` (`scheme.rs` `PublicKey::to_bytes`); QueueBit uses the verifier's argument order, as for C13.
 pub const PK_LEN: usize = 2 * N;
 /// Secret key = S(32) || P(16) || root(16) (last 32 bytes = public key).
 pub const SK_LEN: usize = 32 + PK_LEN;

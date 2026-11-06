@@ -2,8 +2,8 @@
 //! secret keys are refused before or by the signer's self-check.
 mod common;
 use common::*;
-use leaked_pq::hash::keccak256;
-use leaked_pq::lean_s::{self, SecretKey, SignError, SIG_LEN, SK_LEN};
+use queuebit_pq::hash::keccak256;
+use queuebit_pq::lean_s::{self, SecretKey, SignError, SIG_LEN, SK_LEN};
 use std::sync::OnceLock;
 
 struct Fx {
@@ -16,8 +16,8 @@ struct Fx {
 fn fx() -> &'static Fx {
     static F: OnceLock<Fx> = OnceLock::new();
     F.get_or_init(|| {
-        let sk = SecretKey::from_seed(&keccak256(b"LEAKED leanSphincs-s negative tests seed"));
-        let msg = keccak256(b"LEAKED leanSphincs-s negative tests");
+        let sk = SecretKey::from_seed(&keccak256(b"QueueBit leanSphincs-s negative tests seed"));
+        let msg = keccak256(b"QueueBit leanSphincs-s negative tests");
         let sig = lean_s::sign_with_entropy(&sk, &msg, &[9u8; 32]).unwrap();
         Fx { pk: sk.public_key(), msg, sig, sk }
     })
@@ -100,7 +100,7 @@ fn bad_secret_keys_refused() {
     bad[32] ^= 1;
     assert!(SecretKey::from_bytes(&bad).is_none());
     let (c13_sk_seed, c13_pk_seed) = upstream_test_keys(&[7u8; 32]);
-    let c13 = leaked_pq::SecretKey::from_seeds(&c13_sk_seed, &c13_pk_seed).to_bytes();
+    let c13 = queuebit_pq::SecretKey::from_seeds(&c13_sk_seed, &c13_pk_seed).to_bytes();
     assert!(SecretKey::from_bytes(&c13[..]).is_none(), "a C13 secret key is not a leanSphincs-s key");
     assert!(SecretKey::from_bytes(&good[..63]).is_none());
     // a wrong root is caught before anything is returned

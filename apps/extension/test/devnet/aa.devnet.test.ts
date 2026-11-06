@@ -1,13 +1,13 @@
-// Contract-in-the-loop for the 4337 backend (plan §30 §10.1) on a local anvil with EntryPoint v0.8, the LEAKED 7579
+// Contract-in-the-loop for the 4337 backend (plan §30 §10.1) on a local anvil with EntryPoint v0.8, the QueueBit 7579
 // modules and the minimal bundler (devnet/deploy: `bun run up:4337`):
-//   LOCAL_4337=1 VITE_LEAKED_LOCAL_DEVNET=1 pnpm vitest run test/devnet/aa.devnet.test.ts
+//   LOCAL_4337=1 VITE_QUEUEBIT_LOCAL_DEVNET=1 pnpm vitest run test/devnet/aa.devnet.test.ts
 // Funds from anvil #7. Computes the account with the paired Vault and a token, activates it, sends an everyday
 // userOp through the bundler, classifies an over-limit payment before submission, and runs a Vault approval through
-// LeakedRoleExecutor.vaultExec with a C13 signature over the executor's EIP-712 digest (checked against the chain).
+// QueueBitRoleExecutor.vaultExec with a C13 signature over the executor's EIP-712 digest (checked against the chain).
 import { createPublicClient, createWalletClient, decodeFunctionData, hexToBytes, http, parseEther, toHex, type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { SCHEME_ID, keygen, sign } from "@leaked/pq-signer";
-import { decodeSignRequest, encodeSignature, TX_TYPE } from "@leaked/ur";
+import { SCHEME_ID, keygen, sign } from "@queuebit/pq-signer";
+import { decodeSignRequest, encodeSignature, TX_TYPE } from "@queuebit/ur";
 import { describe, expect, it, vi } from "vitest";
 import { executorDigest } from "../../src/background/aa/executor";
 import { publicClient, nodeClient } from "../../src/background/rpc";

@@ -251,18 +251,18 @@ describe("receiver fuzz", () => {
     const samples = [
       "",
       "ur:",
-      "ur:leaked-sign-request/",
-      "ur:leaked-sign-request/1-0/aaaa",
-      "ur:leaked-sign-request/0-1/aaaa",
-      "ur:leaked-sign-request/99999999999999999999-1/aaaa",
-      "ur:leaked-sign-request/1-1/" + "a".repeat(5000),
-      "UR:LEAKED-SIGN-REQUEST/" + "Z".repeat(100),
-      "ur:leaked-sign-request/1-2/\u0000\u0000",
+      "ur:queuebit-sign-request/",
+      "ur:queuebit-sign-request/1-0/aaaa",
+      "ur:queuebit-sign-request/0-1/aaaa",
+      "ur:queuebit-sign-request/99999999999999999999-1/aaaa",
+      "ur:queuebit-sign-request/1-1/" + "a".repeat(5000),
+      "UR:QUEUEBIT-SIGN-REQUEST/" + "Z".repeat(100),
+      "ur:queuebit-sign-request/1-2/\u0000\u0000",
       "ur:bytes/aaaa",
-      "‮ur:leaked-sign-request/aaaa",
+      "‮ur:queuebit-sign-request/aaaa",
     ];
     for (let i = 0; i < 300; i++)
-      samples.push(mutateText("ur:leaked-sign-request/1-3/" + "abcdefghijklmnopqrstuvwxyz".repeat(10), r));
+      samples.push(mutateText("ur:queuebit-sign-request/1-3/" + "abcdefghijklmnopqrstuvwxyz".repeat(10), r));
     for (const s of samples) {
       const res = rx.receive(s);
       expect(["ignored", "progress", "error"]).toContain(res.status);

@@ -4,7 +4,7 @@ pragma solidity 0.8.28;
 import {HegotaSupport, Devnet} from "@forshtat/hegota-support/contracts/HegotaSupport.sol";
 import {Scope, TxParam, FrameParam, FrameMode, SigParam} from "@forshtat/hegota-support/contracts/Params.sol";
 
-/// Contracts that exercise FrameSim. They are test fixtures, not LEAKED contracts.
+/// Contracts that exercise FrameSim. They are test fixtures, not QueueBit contracts.
 
 contract Foreign {
     uint256 public value = 1;

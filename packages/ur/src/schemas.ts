@@ -15,18 +15,18 @@ import {
 } from "./cbor.js";
 
 /**
- * The LEAKED UR vocabulary (plan `20-pq-crypto-vault.md` §4.2, keys 10–11 from `30-extension.md` §6.1; the additions
+ * The QueueBit UR vocabulary (plan `20-pq-crypto-vault.md` §4.2, keys 10–11 from `30-extension.md` §6.1; the additions
  * here are recorded in `docs/plan/IMPLEMENTATION-NOTES.md`). Every payload is a CBOR map with integer keys, encoded
  * deterministically; decoders reject unknown keys, wrong types, wrong sizes and non-canonical bytes.
  */
 
 export const UR_TYPES = {
-  signRequest: "leaked-sign-request",
-  signature: "leaked-signature",
-  pqKey: "leaked-pq-key",
-  recoveryTest: "leaked-recovery-test",
+  signRequest: "queuebit-sign-request",
+  signature: "queuebit-signature",
+  pqKey: "queuebit-pq-key",
+  recoveryTest: "queuebit-recovery-test",
   /** Added 2026-11-06: the browser's fresh, single-use request id for a recovery test (browser → phone). */
-  recoveryChallenge: "leaked-recovery-challenge",
+  recoveryChallenge: "queuebit-recovery-challenge",
 } as const;
 export type UrType = (typeof UR_TYPES)[keyof typeof UR_TYPES];
 
@@ -37,11 +37,11 @@ export const TX_TYPE = {
   /** EIP-712 typed data (as ERC-4527 data-type 2): the Privacy Pools `PrivacyPoolNote` envelope, signed by the payer key. */
   typedData: 2,
   /**
-   * Added 2026-11-06 (pre-Hegotá backend B): a `LeakedRoleExecutor` role call on an ERC-7579 account. Key 4 is the
+   * Added 2026-11-06 (pre-Hegotá backend B): a `QueueBitRoleExecutor` role call on an ERC-7579 account. Key 4 is the
    * ABI calldata of the executor function (`vaultExec`, `vaultQueue`, `vaultCancel`, `recoveryCancel`,
    * `recoveryStartVaultRotation`, `recoveryCancelVaultRotation`) with an EMPTY trailing `pqSig`; key 14 is the
    * executor (the EIP-712 `verifyingContract`). The witness signs the executor's EIP-712 digest in the domain
-   * `{name "LeakedRoleExecutor", version "1", chainId (key 2), verifyingContract (key 14)}` of the decoded call, e.g.
+   * `{name "QueueBitRoleExecutor", version "1", chainId (key 2), verifyingContract (key 14)}` of the decoded call, e.g.
    * `VaultExec(address account,uint256 nonce,bytes32 callsHash,uint256 usdValue)` with
    * `callsHash = keccak256(abi.encode(calls))`. No payer signature: any relayer pays (the check runs in execution).
    */
@@ -70,7 +70,7 @@ export const MAX_WITNESS = 32 * 1024;
 const PROFILE_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
 // ---------------------------------------------------------------------------------------------------------------
-// ur:leaked-sign-request
+// ur:queuebit-sign-request
 // ---------------------------------------------------------------------------------------------------------------
 
 /**
@@ -97,18 +97,18 @@ export interface AdvisoryTokenPrice {
   token: Hex;
   /** 2: decimals, as the Vault set them (`vaultSetToken`). */
   decimals: number;
-  /** 3: `usdPerToken`: 6-decimal USD per one whole token, as `vaultSetToken` / `TokenConfigured` (ILeakedAccount.TokenCfg). */
+  /** 3: `usdPerToken`: 6-decimal USD per one whole token, as `vaultSetToken` / `TokenConfigured` (IQueueBitAccount.TokenCfg). */
   usdPerToken: bigint;
 }
 
 /**
- * Key 12 (LEAKED addition): the account state the browser reads from chain and the companion has no other way to
+ * Key 12 (QueueBit addition): the account state the browser reads from chain and the companion has no other way to
  * learn: the Vault-pinned token prices (`TokenConfigured`) and the current limits. Advisory: used for USD estimates
  * and the "from → to" of a limit change, always labelled as coming from the browser, and cross-checked against the
  * phone's own snapshot of what it last signed (ux-spec E-74).
  */
 export interface AdvisoryPolicy {
-  /** 1: the LEAKED account these values belong to. */
+  /** 1: the QueueBit account these values belong to. */
   account?: Hex;
   /** 2: `capUsdPerDay`, 6-decimal USD. */
   capUsdPerDay?: bigint;
@@ -134,7 +134,7 @@ export interface SignRequest {
   /** 3 */
   txType: TxType;
   /**
-   * 4: tx-type 6: the frame tx in `@leaked/frames` wire form (`encodeTx`) with every empty-`msg` signature entry
+   * 4: tx-type 6: the frame tx in `@queuebit/frames` wire form (`encodeTx`) with every empty-`msg` signature entry
    * holding its placeholder (the PQ entry: `sigLength` zero bytes), i.e. exactly what `sigHash(profile, decodeTx(…))`
    * hashes after elision. tx-type 2: the EIP-712 typed data as UTF-8 JSON (`{types, primaryType, domain, message}`).
    */
@@ -149,15 +149,15 @@ export interface SignRequest {
   expectedPk?: Hex;
   /** 9: the dapp or page that asked, as the browser saw it. */
   origin?: string;
-  /** 10: tx-type 6: the `@leaked/frames` profile that encoded key 4. */
+  /** 10: tx-type 6: the `@queuebit/frames` profile that encoded key 4. */
   profileId?: string;
   /** 11 */
   intent?: AdvisoryIntent;
   /** 12 */
   policy?: AdvisoryPolicy;
-  /** 13 (LEAKED addition): tx-type 2: the payer address the request expects to sign. */
+  /** 13 (QueueBit addition): tx-type 2: the payer address the request expects to sign. */
   payer?: Hex;
-  /** 14 (LEAKED addition, 2026-11-06): tx-type 3 only: the `LeakedRoleExecutor` (EIP-712 `verifyingContract`). */
+  /** 14 (QueueBit addition, 2026-11-06): tx-type 3 only: the `QueueBitRoleExecutor` (EIP-712 `verifyingContract`). */
   verifyingContract?: Hex;
 }
 
@@ -391,7 +391,7 @@ export function decodeSignRequest(cbor: Uint8Array): SignRequest {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// ur:leaked-signature
+// ur:queuebit-signature
 // ---------------------------------------------------------------------------------------------------------------
 
 export interface SignatureResponse {
@@ -402,11 +402,11 @@ export interface SignatureResponse {
   /** 3: the PQ witness (3,688 bytes for C13) for `tx.signatures[sigIndex]`. */
   witness?: Hex;
   /**
-   * 4: Path B: the payer key's secp256k1 signature over the same sig hash, in `@leaked/frames` entry form
+   * 4: Path B: the payer key's secp256k1 signature over the same sig hash, in `@queuebit/frames` entry form
    * `v ‖ r ‖ s` (65 bytes, v ∈ {0, 1}, low s): drop it into the payer's SECP256K1 entry with `setSignature`.
    */
   payerSig?: Hex;
-  /** 5 (LEAKED addition): tx-type 2: the EIP-712 signature `r ‖ s ‖ v` (65 bytes, v ∈ {27, 28}, low s, RFC 6979). */
+  /** 5 (QueueBit addition): tx-type 2: the EIP-712 signature `r ‖ s ‖ v` (65 bytes, v ∈ {27, 28}, low s, RFC 6979). */
   typedSig?: Hex;
 }
 
@@ -479,7 +479,7 @@ export function decodeSignature(cbor: Uint8Array): SignatureResponse {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// ur:leaked-pq-key (pairing: the public key a role device shows the browser)
+// ur:queuebit-pq-key (pairing: the public key a role device shows the browser)
 // ---------------------------------------------------------------------------------------------------------------
 
 export interface PqKeyAnnouncement {
@@ -528,13 +528,13 @@ export function decodePqKey(cbor: Uint8Array): PqKeyAnnouncement {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// ur:leaked-recovery-test (the end of the recovery setup: the phone proves the written-down key signs)
+// ur:queuebit-recovery-test (the end of the recovery setup: the phone proves the written-down key signs)
 // ---------------------------------------------------------------------------------------------------------------
 
 export interface RecoveryTest {
   /**
    * 1: fresh per test; part of the challenge. Chosen by the browser and scanned from its
-   * `ur:leaked-recovery-challenge` (since 2026-11-06); older phones chose it themselves.
+   * `ur:queuebit-recovery-challenge` (since 2026-11-06); older phones chose it themselves.
    */
   requestId: string;
   /** 2 */
@@ -554,14 +554,14 @@ export interface RecoveryTest {
 }
 
 const RECOVERY_TEST_KEYS = [1, 2, 3, 4, 5, 6] as const;
-const RECOVERY_TEST_DOMAIN = new TextEncoder().encode("LEAKED recovery test v1");
-const RECOVERY_TEST_DOMAIN_V2 = new TextEncoder().encode("LEAKED recovery test v2");
+const RECOVERY_TEST_DOMAIN = new TextEncoder().encode("QueueBit recovery test v1");
+const RECOVERY_TEST_DOMAIN_V2 = new TextEncoder().encode("QueueBit recovery test v2");
 
 /**
- * The digest a Recovery key signs to prove a test restore: `keccak256("LEAKED recovery test v1" ‖ schemeId ‖ pk ‖
- * requestId)`, or with a payer address `keccak256("LEAKED recovery test v2" ‖ schemeId ‖ pk ‖ requestId ‖
+ * The digest a Recovery key signs to prove a test restore: `keccak256("QueueBit recovery test v1" ‖ schemeId ‖ pk ‖
+ * requestId)`, or with a payer address `keccak256("QueueBit recovery test v2" ‖ schemeId ‖ pk ‖ requestId ‖
  * payer(20))`. Domain-separated so it can never be a frame transaction's sig hash (those are keccak of a `0x06`-led
- * RLP payload, which these 87/107-byte preimages are not). Verifiers should call `recoveryTestChallengeOf(test)`,
+ * RLP payload, which these 105/125-byte preimages are not). Verifiers should call `recoveryTestChallengeOf(test)`,
  * which picks the version from the decoded test.
  */
 export function recoveryTestChallenge(schemeId: Hex, recoveryPk: Hex, requestId: string, payer?: Hex): Hex {
@@ -579,7 +579,7 @@ export function recoveryTestChallenge(schemeId: Hex, recoveryPk: Hex, requestId:
   return toHex(keccak_256(pre));
 }
 
-/** The challenge a decoded `ur:leaked-recovery-test` must verify against (v2 when it carries a payer). */
+/** The challenge a decoded `ur:queuebit-recovery-test` must verify against (v2 when it carries a payer). */
 export const recoveryTestChallengeOf = (
   t: Pick<RecoveryTest, "schemeId" | "recoveryPk" | "requestId" | "payer">,
 ): Hex => recoveryTestChallenge(t.schemeId, t.recoveryPk, t.requestId, t.payer);
@@ -619,13 +619,13 @@ export function decodeRecoveryTest(cbor: Uint8Array): RecoveryTest {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// ur:leaked-recovery-challenge (browser → phone: the request id a recovery test must sign; added 2026-11-06)
+// ur:queuebit-recovery-challenge (browser → phone: the request id a recovery test must sign; added 2026-11-06)
 // ---------------------------------------------------------------------------------------------------------------
 
 /**
  * The browser picks the recovery test's request id (fresh, single use) and shows it to the phone, so a test code
  * recorded earlier (or made for another browser) can never be replayed: the browser accepts only a
- * `ur:leaked-recovery-test` whose key 1 equals an id it issued and has not consumed. A phone that cannot scan this
+ * `ur:queuebit-recovery-test` whose key 1 equals an id it issued and has not consumed. A phone that cannot scan this
  * yet (older companion) chooses its own id, which such a browser refuses.
  */
 export interface RecoveryChallenge {

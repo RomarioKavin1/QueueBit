@@ -14,13 +14,13 @@ import {
   type Hex,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { NATIVE_ASSET, POOL_ABI, rootOf } from "@leaked/privacy";
+import { NATIVE_ASSET, POOL_ABI, rootOf } from "@queuebit/privacy";
 
 /**
  * The extension privacy e2e's pool (devnet-only operator stand-in): the real Privacy Pools v1 contracts (vendored
  * 0xbow sources, built by forge into contracts/out), the devnet-test commitment verifier as its ragequit verifier
  * (`contracts/test/privacy/CommitmentGroth16Verifier.sol`), and PoolPayer, deployed exactly as
- * `contracts/devnet-tests/privacy` and the `@leaked/privacy` devnet e2e do. Funding: one top-up from anvil #5 (the
+ * `contracts/devnet-tests/privacy` and the `@queuebit/privacy` devnet e2e do. Funding: one top-up from anvil #5 (the
  * privacy workstream's key) to this suite's own sub-account, which then deploys, stakes PoolPayer and acts as the
  * pool's reviewer (the ASP postman: `updateRoot`). The deployment is cached and reused while its code is on chain.
  */
@@ -30,7 +30,7 @@ const REGISTRY: Address = "0x8464135c8F25Da09e49BC8782676a84730C318bC";
 /** anvil #5 (public test key): the privacy workstream's funding key (devnet/README.md). */
 const ANVIL5: Hex = "0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba";
 /** This suite's sub-account of anvil #5 (a public, derived test key). */
-export const POSTMAN: Hex = keccak256(stringToHex("leaked/extension-e2e-privacy/v1"));
+export const POSTMAN: Hex = keccak256(stringToHex("queuebit/extension-e2e-privacy/v1"));
 // This file runs bundled from node_modules/.cache: find the repository root from wherever it runs.
 function repoRoot(): string {
   let d = dirname(fileURLToPath(import.meta.url));
@@ -43,7 +43,7 @@ function repoRoot(): string {
 }
 const ROOT = repoRoot();
 const OUT = join(ROOT, "contracts", "out") + "/";
-const CACHE = join(ROOT, "apps", "extension", "node_modules", ".cache", "leaked-extension-e2e", "privacy-pool.json");
+const CACHE = join(ROOT, "apps", "extension", "node_modules", ".cache", "queuebit-extension-e2e", "privacy-pool.json");
 const CID = "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi";
 const E = 10n ** 18n;
 

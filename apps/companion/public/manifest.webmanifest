@@ -1,7 +1,7 @@
 {
-  "name": "LEAKED Vault",
+  "name": "QueueBit Vault",
   "short_name": "Vault",
-  "description": "Approves your LEAKED wallet's big actions with a quantum-safe key. Works offline.",
+  "description": "Approves your QueueBit wallet's big actions with a quantum-safe key. Works offline.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

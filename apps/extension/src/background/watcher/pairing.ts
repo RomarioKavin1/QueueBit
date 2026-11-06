@@ -5,17 +5,17 @@ import {
   type Alert,
   type Pairing,
   type SignedAlert,
-} from "@leaked/watcher-core";
+} from "@queuebit/watcher-core";
 import type { KV } from "../../shared/kv";
 
 /**
  * Pairing with a self-hosted watcher (plan §40 §5; ux-spec §3.10 "Pair a watcher"). The watcher's pairing code is
  * the JSON `{url, topic, keyId, hmacKey}` (IMPLEMENTATION-NOTES "Watcher": `keyId` lets one watcher serve several
- * devices). The browser then reads `GET <url>/v1/alerts?since=<seq>` with `LEAKED-HMAC` request auth, and keeps an
+ * devices). The browser then reads `GET <url>/v1/alerts?since=<seq>` with `QUEUEBIT-HMAC` request auth, and keeps an
  * alert only if its envelope's HMAC verifies under the shared key, so a spoofed server cannot inject an "all clear"
  * or a fake alarm. The key never leaves storage.local; it is not a spending key.
  */
-export const WATCHER_PAIRING_KEY = "leaked:watcherPairing";
+export const WATCHER_PAIRING_KEY = "queuebit:watcherPairing";
 
 export interface PairingRecord extends Pairing {
   pairedAt: number;
@@ -51,7 +51,7 @@ export function readPairingCode(text: string): Pairing {
     p = parsePairing(text.trim());
   } catch (e) {
     throw new Error(
-      `That isn't a LEAKED watcher pairing code (${(e as Error).message.replace(/^pairing: /u, "")}). It looks like {"url", "topic", "keyId", "hmacKey"}.`,
+      `That isn't a QueueBit watcher pairing code (${(e as Error).message.replace(/^pairing: /u, "")}). It looks like {"url", "topic", "keyId", "hmacKey"}.`,
       { cause: e },
     );
   }

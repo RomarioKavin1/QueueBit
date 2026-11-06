@@ -17,9 +17,9 @@ import {
   type Hex,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { encodeTx, getProfile, roleSignerPathATx, setSignature, sigHash, signTx, txHash } from "@leaked/frames";
-import { SCHEME_ID, keygen, sign } from "@leaked/pq-signer";
-import { createFrameRpc } from "@leaked/rpc";
+import { encodeTx, getProfile, roleSignerPathATx, setSignature, sigHash, signTx, txHash } from "@queuebit/frames";
+import { SCHEME_ID, keygen, sign } from "@queuebit/pq-signer";
+import { createFrameRpc } from "@queuebit/rpc";
 import { HDKey } from "@scure/bip32";
 import { mnemonicToSeedSync } from "@scure/bip39";
 import { existsSync, readFileSync } from "node:fs";
@@ -40,7 +40,7 @@ import {
   type DecodedUr,
   type RecoveryChallenge,
   type SignRequest,
-} from "@leaked/ur";
+} from "@queuebit/ur";
 // The real companion: its clear-signing decoder and its signing worker's logic, run in Node.
 import { reviewRequestBytes } from "../../../companion/src/core/clearsign";
 import { entropyToWords, seedFromEntropy, wordsToEntropy } from "../../../companion/src/core/keys";
@@ -48,7 +48,7 @@ import { handle } from "../../../companion/src/worker/handler";
 import { pqRoleSignerAbi, roleExecutorAbi, roleSignerFactoryAbi } from "../../src/generated/contracts";
 
 /**
- * A simulated LEAKED Vault phone for the extension e2e (bundled by e2e/build-helpers.ts): the companion's own
+ * A simulated QueueBit Vault phone for the extension e2e (bundled by e2e/build-helpers.ts): the companion's own
  * decoder (`reviewRequestBytes`) and worker (`handle`) answer the extension's codes through the paste fallback, so
  * the interop under test is the real one. Also the devnet-only operator stand-ins the run needs (funding, a test
  * token, staking the Recovery signer: see `stakeRecoverySigner`).
@@ -82,7 +82,7 @@ function decode(
   throw new Error("incomplete UR");
 }
 
-/** The typed-data signature inside a `ur:leaked-signature` answer (a note key: what the note secrets derive from). */
+/** The typed-data signature inside a `ur:queuebit-signature` answer (a note key: what the note secrets derive from). */
 export function typedSignatureIn(answerText: string): Hex {
   const sig = decodeSignature(decode(answerText, UR_TYPES.signature).cbor).typedSig;
   if (!sig) throw new Error("the answer carries no typed-data signature");
@@ -96,7 +96,7 @@ export interface Phone {
   pairingText: string;
   recoveryPayer: Address;
   recoveryKeyText: string;
-  /** The phone scans the browser's `ur:leaked-recovery-challenge` and answers with a v2 test over its request id. */
+  /** The phone scans the browser's `ur:queuebit-recovery-challenge` and answers with a v2 test over its request id. */
   recoveryTestText(challengeText: string): Promise<string>;
   /** Decodes the request like the phone, signs it with the Vault (or the Recovery key) and returns the answer as text. */
   approve(
@@ -254,15 +254,15 @@ export async function newPhone(): Promise<Phone> {
 
 /**
  * The phone's reading of a tx-type 3 request (spec for the companion, BACKLOG "Companion: tx-type 3"): decode the
- * `LeakedRoleExecutor` call in key 4, refuse a non-empty `pqSig`, and hash it in the executor's EIP-712 domain
- * `{ "LeakedRoleExecutor", "1", chainId (key 2), verifyingContract (key 14) }`.
+ * `QueueBitRoleExecutor` call in key 4, refuse a non-empty `pqSig`, and hash it in the executor's EIP-712 domain
+ * `{ "QueueBitRoleExecutor", "1", chainId (key 2), verifyingContract (key 14) }`.
  */
 export function executorRequestDigest(req: SignRequest): { headline: string; digest: Hex } {
   const { functionName, args } = decodeFunctionData({ abi: roleExecutorAbi, data: req.payload });
   const a = args as readonly unknown[];
   if (a[a.length - 1] !== "0x") throw new Error("E-72: the request already carries a signature");
   const domain = {
-    name: "LeakedRoleExecutor",
+    name: "QueueBitRoleExecutor",
     version: "1",
     chainId: Number(req.chainId),
     verifyingContract: req.verifyingContract!,

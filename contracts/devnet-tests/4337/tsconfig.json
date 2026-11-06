@@ -9,7 +9,7 @@
     "types": ["node"],
     "noEmit": true,
     "paths": {
-      "@leaked/pq-signer": ["../../../packages/pq-signer/src/index.ts"]
+      "@queuebit/pq-signer": ["../../../packages/pq-signer/src/index.ts"]
     }
   },
   "include": ["*.ts"]

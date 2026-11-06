@@ -1,5 +1,5 @@
-import { SCHEME_ID, schemes } from "@leaked/pq-signer";
-import { ROLE, UR_TYPES, encodePqKey, singlePartUr, type Hex } from "@leaked/ur";
+import { SCHEME_ID, schemes } from "@queuebit/pq-signer";
+import { ROLE, UR_TYPES, encodePqKey, singlePartUr, type Hex } from "@queuebit/ur";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Address } from "viem";
 import { useNav, useStore } from "../app/state.js";
@@ -32,7 +32,7 @@ export function Welcome() {
           <span className="inline-flex h-16 w-16 items-center justify-center rounded-lg bg-vault-bg text-vault">
             <VaultIcon size={36} />
           </span>
-          <h1 className="t-display">LEAKED Vault</h1>
+          <h1 className="t-display">QueueBit Vault</h1>
           <p className="max-w-[30ch] t-body text-muted">
             This phone approves the big things. Keep it offline when you can.
           </p>
@@ -675,7 +675,7 @@ export function PairView({
     >
       {intro}
       <ol className="flex list-decimal flex-col gap-1 pl-5 t-body">
-        <li>In the browser, open LEAKED › Pair your Vault.</li>
+        <li>In the browser, open QueueBit › Pair your Vault.</li>
         <li>Hold this code up to the browser's camera.</li>
         <li>Check that the browser shows the same last 8 characters:</li>
       </ol>

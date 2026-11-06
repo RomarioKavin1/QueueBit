@@ -51,7 +51,7 @@ export function startBridge(): void {
       port = browser.runtime.connect({ name: PROVIDER_PORT });
     } catch {
       // The extension was reloaded or removed: this content script is orphaned.
-      failAll("LEAKED was updated or disabled. Reload the page.");
+      failAll("QueueBit was updated or disabled. Reload the page.");
       return null;
     }
     port.onMessage.addListener((msg: PortMessageFromSw) => {

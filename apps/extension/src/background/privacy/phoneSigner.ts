@@ -6,13 +6,13 @@ import {
   createNoteSignRequest,
   type EnvelopeSigner,
   type NoteEnvelope,
-} from "@leaked/privacy";
+} from "@queuebit/privacy";
 import type { KV } from "../../shared/kv";
 import type { PhoneAsk } from "../../shared/privacy";
 
 /**
  * The Vault `EnvelopeSigner` for a service worker that may stop at any time (plan §40 §1.4): a note envelope is
- * signed by the paired phone's fee-payment key over QR (`ur:leaked-sign-request` tx-type 2, the companion's typed-data
+ * signed by the paired phone's fee-payment key over QR (`ur:queuebit-sign-request` tx-type 2, the companion's typed-data
  * flow). Instead of holding a promise open while the user scans, signing throws `NeedsPhoneError` with the request;
  * the operation is persisted in "waiting for the phone", and the scanned answer is verified and kept in the
  * SESSION answer store (`NoteAnswers`). The operation then runs again and finds it.
@@ -38,7 +38,7 @@ export class NeedsPhoneError extends Error {
 
 export const answerKey = (d: number, k: number, attempt: number) => `ans:${d}:${k}:${attempt}`;
 
-export const NOTE_ANSWERS_KEY = (chainId: number) => `leaked:privacy:answers:${chainId}`;
+export const NOTE_ANSWERS_KEY = (chainId: number) => `queuebit:privacy:answers:${chainId}`;
 
 /** The phone's verified note signatures of the current operation, in the session KV (one record per chain). */
 export class NoteAnswers {
@@ -93,7 +93,7 @@ export function phoneAsk(
       depositIndex: e.depositIndex,
       secretIndex: e.secretIndex,
     }),
-    { payer: o.payer, origin: "LEAKED Private balance", ...(o.requestId ? { requestId: o.requestId } : {}) },
+    { payer: o.payer, origin: "QueueBit Private balance", ...(o.requestId ? { requestId: o.requestId } : {}) },
   );
   return {
     requestId: req.request.requestId,
@@ -113,7 +113,7 @@ export class PhoneAnswerError extends Error {
 }
 
 /**
- * Verifies the phone's `ur:leaked-signature` (CBOR hex) for `ask` (same request id, recovers to the paired payer over
+ * Verifies the phone's `ur:queuebit-signature` (CBOR hex) for `ask` (same request id, recovers to the paired payer over
  * the envelope digest) and keeps it in the session answers. For the determinism check (attempt 1) it must equal
  * attempt 0 in canonical form. Returns whether this answer confirmed the phone signs deterministically.
  */
@@ -130,7 +130,7 @@ export async function acceptPhoneAnswer(
       depositIndex: ask.depositIndex,
       secretIndex: ask.secretIndex,
     }),
-    { payer: o.payer, origin: "LEAKED Private balance", requestId: ask.requestId },
+    { payer: o.payer, origin: "QueueBit Private balance", requestId: ask.requestId },
   );
   const sig = await acceptNoteSignature(req, hexToBytes(answerCbor));
   let deterministic = false;

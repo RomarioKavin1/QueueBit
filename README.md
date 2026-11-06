@@ -1,9 +1,9 @@
-# LEAKED
+# QueueBit
 
-**A browser wallet whose everyday key is safe to leak.**
+**A browser wallet whose everyday key is safe to leak.** (QueueBit was formerly LEAKED, its working name.)
 
 Browser wallets keep their key in the browser, and browsers get compromised: malicious extensions, phishing, stolen
-laptops, leaked seed phrases. LEAKED assumes that will happen and limits the damage on chain:
+laptops, leaked seed phrases. QueueBit assumes that will happen and limits the damage on chain:
 
 - The **everyday key** in the browser extension can only spend within limits the account contract enforces: a daily
   USD cap, a per-payment maximum, a fee bound, and the tokens and apps you allowed. A thief with that key gets at most
@@ -33,8 +33,8 @@ alternative mempools. Privacy Pools withdrawals can pay their own gas through a 
         ▼              ▼                          ▼
  ┌─────────────────────────────────────┐   ┌──────────────────────────────────────┐
  │ EIP-8141 (Hegotá) contracts          │   │ today's chains: 4337 v0.8 + 7579      │
- │ LeakedAccount: caps, allowlists,     │   │ LeakedHotValidator · LeakedPolicyHook │
- │ timelock, freeze, scoped ERC-1271    │   │ LeakedRoleExecutor on a host account  │
+ │ QueueBitAccount: caps, allowlists,     │   │ QueueBitHotValidator · QueueBitPolicyHook │
+ │ timelock, freeze, scoped ERC-1271    │   │ QueueBitRoleExecutor on a host account  │
  │ VaultSigner / RecoverySigner (PQ),   │   └──────────────────────────────────────┘
  │ GuardianSigner, PoolPayer            │      watcher (services/watcher): alerts
  └─────────────────────────────────────┘
@@ -61,7 +61,7 @@ Components, transaction shapes (Path A / Path B), the QR protocol, privacy and t
 | [`devnet/`](devnet/) | Local EIP-8141 devnet (ethrex + Lighthouse + sidecar), deploy scripts, the BUDGET-010 sidecar, the local 4337 chain |
 | [`upstream/`](upstream/) | Upstream contributions as patch series (BUDGET-010) |
 | [`scripts/`](scripts/) | Release tooling (reproducible builds) and supply-chain checks (audit, SBOM) |
-| [`docs/`](docs/) | [Plan](docs/plan/LEAKED-implementation-plan.md), [design decisions](docs/plan/00-v4-design-decisions.md), [implementation notes](docs/plan/IMPLEMENTATION-NOTES.md), [backlog](docs/plan/BACKLOG.md), [threat model](docs/security/THREAT-MODEL.md), [release checklist](docs/release/CHECKLIST.md), [research](docs/research/) |
+| [`docs/`](docs/) | [Plan](docs/plan/QueueBit-implementation-plan.md), [design decisions](docs/plan/00-v4-design-decisions.md), [implementation notes](docs/plan/IMPLEMENTATION-NOTES.md), [backlog](docs/plan/BACKLOG.md), [threat model](docs/security/THREAT-MODEL.md), [release checklist](docs/release/CHECKLIST.md), [research](docs/research/) |
 
 ## Quickstart
 
@@ -69,7 +69,7 @@ Requirements: Node ≥ 22.12 (CI uses 26) and pnpm 10 (`corepack enable`), Found
 ~4 GB RAM (the devnet), Python 3. Rust is needed only to rebuild the committed WASM.
 
 ```sh
-git clone --recurse-submodules <this repo> && cd leaked-wallet   # or: git submodule update --init --recursive
+git clone --recurse-submodules <this repo> && cd queuebit-wallet   # or: git submodule update --init --recursive
 pnpm install --frozen-lockfile
 pnpm build
 (cd contracts && forge build)
@@ -92,8 +92,8 @@ bun run up:4337                 # optional: anvil :8546 + EntryPoint v0.8 + modu
 **3. Run the extension and the companion locally:**
 
 ```sh
-pnpm --filter @leaked/extension build:local   # then chrome://extensions → Load unpacked → apps/extension/.output/chrome-mv3
-pnpm --filter @leaked/companion dev           # or: build + preview on http://localhost:4317 (the production CSP)
+pnpm --filter @queuebit/extension build:local   # then chrome://extensions → Load unpacked → apps/extension/.output/chrome-mv3
+pnpm --filter @queuebit/companion dev           # or: build + preview on http://localhost:4317 (the production CSP)
 ```
 
 Open the companion on a phone (or a second browser window), create a Vault, and pair it from the extension's
@@ -105,12 +105,12 @@ onboarding. The devnet keys in [`devnet/README.md`](devnet/README.md) are public
 pnpm typecheck && pnpm lint && pnpm test                     # every workspace package (vitest)
 (cd contracts && forge test)                                 # FOUNDRY_PROFILE=ci for 10k fuzz runs
 contracts/script/lint-verify.sh                              # VERIFY-frame admission lint
-pnpm --filter @leaked/companion e2e                          # Playwright on the built PWA
-pnpm --filter @leaked/extension e2e                          # Playwright with the built extension (4337 + devnet flows)
+pnpm --filter @queuebit/companion e2e                          # Playwright on the built PWA
+pnpm --filter @queuebit/extension e2e                          # Playwright with the built extension (4337 + devnet flows)
 (cd contracts/devnet-tests/4337 && bun install && bun run e2e)   # 4337 backend on anvil
 # with the devnet up and deployed (and the patched sidecar for G1 (g)):
 (cd contracts/devnet-tests/g1 && bun install && bun run test)    # gate G1
-LIVE_DEVNET=1 pnpm --filter @leaked/watcher test             # watcher against the devnet
+LIVE_DEVNET=1 pnpm --filter @queuebit/watcher test             # watcher against the devnet
 ```
 
 CI runs all of this: [`ci.yml`](.github/workflows/ci.yml) on every push (unit, lint, both e2e suites, contracts, the
@@ -145,7 +145,7 @@ conventions, and the checks to run before pushing.
 
 ## Licenses
 
-LEAKED is [MIT](LICENSE). Code copied or adapted from other projects (the hegota-support codec, the SPHINCS- verifiers
+QueueBit is [MIT](LICENSE). Code copied or adapted from other projects (the hegota-support codec, the SPHINCS- verifiers
 and signer logic, the devnet compose files) is listed with its origin and license in [`THIRD_PARTY.md`](THIRD_PARTY.md).
 Notes:
 

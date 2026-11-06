@@ -3,7 +3,7 @@
 # or simply devnet/patched-sidecar/up-patched.sh. Relative paths resolve against devnet/ (the first file's directory).
 services:
   skandha-budget:
-    image: ${SKANDHA_BUDGET_IMAGE:-leaked/sidecar:budget-010}
+    image: ${SKANDHA_BUDGET_IMAGE:-queuebit/sidecar:budget-010}
     restart: unless-stopped
     profiles: ["budget"]
     depends_on:

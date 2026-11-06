@@ -56,7 +56,7 @@ function gitShort(): string {
 
 function securityHeaders(): Plugin {
   return {
-    name: "leaked-csp",
+    name: "queuebit-csp",
     transformIndexHtml: {
       order: "post",
       // Not in `vite dev` (its HMR client needs a websocket); in every built page.
@@ -94,7 +94,7 @@ function securityHeaders(): Plugin {
  */
 function serviceWorker(): Plugin {
   return {
-    name: "leaked-sw",
+    name: "queuebit-sw",
     apply: "build",
     enforce: "post",
     // writeBundle, not generateBundle: later generateBundle hooks (Vite's preload/import rewriting) still change chunk
