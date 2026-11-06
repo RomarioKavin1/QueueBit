@@ -149,6 +149,11 @@ export interface UiApi {
   /** Computes (once) and reads the account: its address, whether it exists, the setup key's balance. */
   "account:status": { req: { chainId?: number }; res: AccountStatus };
   /** Before the account exists: who can help recover it (the address is bound to them). */
+  /** Sets the guardians: at creation before the account exists, by an owner admin payment after. */
+  "account:updateGuardians": {
+    req: Signed<{ chainId?: number; guardians: `0x${string}`[]; threshold: number }>;
+    res: { entry?: ActivityEntry; status: AccountStatus };
+  };
   "account:setGuardians": {
     req: { chainId?: number; guardians: `0x${string}`[]; threshold: number };
     res: AccountStatus;

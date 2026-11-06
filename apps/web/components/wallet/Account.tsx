@@ -106,6 +106,14 @@ export function AccountTab({ nav }: { nav: Nav }) {
               onSelect: () => router.push("/start#backup"),
             },
             {
+              key: "guardians",
+              title: "Guardians",
+              body: status?.guardians?.length
+                ? `${status.guardians.length} can reset your keys if you lose your passkey.`
+                : "Who can reset your keys if you lose your passkey.",
+              onSelect: () => nav.open({ id: "guardians" }),
+            },
+            {
               key: "lock",
               title: "Lock now",
               body: lockedWith === "password" ? "Your password opens it again." : "Your passkey opens it again.",

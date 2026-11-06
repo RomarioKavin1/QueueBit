@@ -10,6 +10,7 @@ import { AccountTab } from "./Account";
 import { ActivityTab, EntryDetail } from "./Activity";
 import { Home } from "./Home";
 import { Receive } from "./Receive";
+import { Guardians } from "./Guardians";
 import { Send } from "./Send";
 import { WalletProvider } from "./state";
 import { AddToken } from "./Tokens";
@@ -25,6 +26,7 @@ export type Tab = "home" | "activity" | "account";
 export type View =
   | { id: "send"; token?: `0x${string}` }
   | { id: "receive" }
+  | { id: "guardians" }
   | { id: "entry"; entryId: string }
   | { id: "wallets" }
   | { id: "add-token" };
@@ -108,6 +110,7 @@ function Shell() {
   if (view?.id === "wallets") return <WalletsScreen nav={nav} />;
   if (view?.id === "add-token") return <AddToken nav={nav} />;
   if (view?.id === "receive") return <Receive nav={nav} />;
+  if (view?.id === "guardians") return <Guardians nav={nav} />;
   if (view?.id === "entry") return <EntryDetail nav={nav} entryId={view.entryId} />;
 
   return (

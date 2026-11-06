@@ -41,6 +41,8 @@ export function fakeChain() {
     sendDelayMs?: number;
     /** A legacy tx (the setup key's createAccount) deploys this address when it is sent. */
     deployOnLegacy?: Address;
+    /** The account has GuardianRecovery installed (isModuleInstalled). */
+    recoveryInstalled?: boolean;
   } = {};
   const k = (a: string) => a.toLowerCase();
   /** ERC-20s on the chain: metadata and balances. */
@@ -55,8 +57,9 @@ export function fakeChain() {
       functionName: string;
       args?: [Address];
     }) => {
+      if (functionName === "isModuleInstalled") return knobs.recoveryInstalled === true;
       const t = tokens.get(k(address));
-      if (!t) throw new Error("execution reverted");
+      if (!t) throw new Error(`fake chain: no ${functionName} at ${address}`);
       if (functionName === "balanceOf") return t.balances.get(k(args![0])) ?? 0n;
       if (functionName === "symbol" || functionName === "name" || functionName === "decimals") return t[functionName];
       throw new Error(`unexpected ${functionName}`);
