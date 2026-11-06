@@ -1,4 +1,4 @@
-// Regenerates the `abis.account` / `abis.roleSigner` sections and the `selectors` table of
+// Regenerates the `abis.account` / `abis.roleSigner` / `abis.policyHook` / `abis.roleExecutor` sections and the `selectors` table of
 // src/registry/leaked.descriptors.json from the forge build artifacts (contracts/out), for exactly the functions the
 // registry has display formats for (plus the role signer's frame entry points).
 //
@@ -18,9 +18,12 @@ const OUT = here("../../../contracts/out/");
 export const ARTIFACTS = {
   account: ["LeakedAccountRoles.sol/LeakedAccountRoles.json", "LeakedAccountImpl.sol/LeakedAccountImpl.json"],
   roleSigner: ["PQRoleSigner.sol/PQRoleSigner.json"],
+  // Compatible accounts (ERC-4337 + ERC-7579): the role entry points (tx-type 3) and the setters a Vault batch reaches.
+  policyHook: ["LeakedPolicyHook.sol/LeakedPolicyHook.json"],
+  roleExecutor: ["LeakedRoleExecutor.sol/LeakedRoleExecutor.json"],
 };
 /** Role-signer functions the decoder needs even though they have no display format. */
-const ALWAYS = { roleSigner: ["verifyFrame", "executePQ", "relay"], account: [] };
+const ALWAYS = { roleSigner: ["verifyFrame", "executePQ", "relay"], account: [], policyHook: [], roleExecutor: [] };
 
 export const artifactsPresent = () =>
   Object.values(ARTIFACTS)

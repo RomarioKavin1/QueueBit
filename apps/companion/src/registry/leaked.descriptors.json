@@ -1,6 +1,6 @@
 {
   "$comment": "LEAKED clear-signing registry (ERC-7730-style, bundled, never fetched). The ONLY place the companion learns ABIs, intents and token metadata. The `abis` and `selectors` sections are GENERATED from the forge artifacts by `pnpm --filter @leaked/companion abi:sync` (scripts/abi-sync.mjs); test/registry.test.ts fails on drift. Edit `formats` by hand. Sources: contracts/src/account/{ILeakedAccount,LeakedAccountRoles}.sol, contracts/src/roles/PQRoleSigner.sol; Privacy Pools core IEntrypoint.relay; ERC-20. Intent strings interpolate decoded fields only (ERC-7730 'interpolated intent': constants + decoded values, no request-supplied labels).",
-  "version": "leaked-descriptors/2026-11-06.3",
+  "version": "leaked-descriptors/2026-11-06.4",
   "units": {
     "usd": "USD amounts are uint256 with 6 decimals (10-contracts.md §10.3 conventions)",
     "usdPerToken": "USD (6 decimals) per one whole token (10**decimals base units): usd6 = amount * usdPerToken / 10**decimals (ILeakedAccount.TokenCfg)"
@@ -8,6 +8,7 @@
   "chains": {
     "1": "Ethereum",
     "1337": "LEAKED devnet",
+    "31337": "Local 4337 test chain",
     "3151908": "Hegotá devnet",
     "11155111": "Sepolia"
   },
@@ -45,6 +46,17 @@
         "decimals": 6
       }
     },
+    "31337": {
+      "$comment": "devnet/deploy addresses.anvil4337.json: test tokens (CREATE2), 18 decimals",
+      "0x78285198ed7ae004ae654f2da44338d6e0785fdf": {
+        "symbol": "USDC",
+        "decimals": 18
+      },
+      "0x814f7a72b8579040d99d0882681281851c076986": {
+        "symbol": "DAI",
+        "decimals": 18
+      }
+    },
     "11155111": {
       "0x1c7d4b196cb0c7b01d743fbc6116a902379c7238": {
         "symbol": "USDC",
@@ -58,6 +70,13 @@
       "1": "0x6818809eefce719e480a7526d76bd3e561526b46",
       "11155111": "0x34a2068192b1297f2a7f85d7d8cde66f8f0921cb"
     }
+  },
+  "aaModules": {
+    "31337": {
+      "executor": "0x94656178267d434d9103018339e5ad43a170f4b4",
+      "hook": "0x8400e96a45928a473bd18c153a7609669413bb32"
+    },
+    "$comment": "Compatible accounts (ERC-4337 + ERC-7579): the LEAKED modules per chain. A tx-type 3 request names its executor (key 14, the EIP-712 verifyingContract); calls to the hook are only decoded as settings when they go to this chain's hook. Source: devnet/deploy/addresses.anvil4337.json."
   },
   "abis": {
     "roleSigner": [
@@ -108,6 +127,30 @@
       "struct Withdrawal { address processooor; bytes data; }",
       "struct WithdrawProof { uint256[2] pA; uint256[2][2] pB; uint256[2] pC; uint256[8] pubSignals; }",
       "function relay(Withdrawal withdrawal, WithdrawProof proof, uint256 scope)"
+    ],
+    "policyHook": [
+      "function enableBunker(address account)",
+      "function freeze(address account, uint48 until)",
+      "function setCap(address account, uint256 capUsdPerDay, uint256 perTxMaxUsd, uint256 maxFeeWei, uint256 maxPrio)",
+      "function setHotKey(address account, address newHotKey)",
+      "function setRecipientMode(address account, uint8 mode)",
+      "function setSession(address account, address target, bytes4 selector, uint256 allowanceUsd, uint48 expiry)",
+      "function setTarget(address account, address target, bool allowed)",
+      "function setToken(address account, address token, bool allowed, uint8 decimals, uint256 usdPerToken)",
+      "function setTrustedVerifier(address account, address verifier, bool trusted)",
+      "function setValueVerifier(address account, address verifier, bool denied)",
+      "function unfreeze(address account)"
+    ],
+    "roleExecutor": [
+      "function recoveryCancel(address account, bytes32 opId, uint256 nonce, bytes pqSig)",
+      "function recoveryCancelVaultRotation(address account, uint256 nonce, bytes pqSig)",
+      "function recoveryStartVaultRotation(address account, bytes32 newVaultPk, uint256 nonce, bytes pqSig)",
+      "function setGuardian(address account, address guardian, bool enabled)",
+      "function setRecoveryKey(address account, bytes32 pk)",
+      "function setTimelock(address account, uint48 delay, uint256 thresholdUsd)",
+      "function vaultCancel(address account, bytes32 opId, uint256 nonce, bytes pqSig)",
+      "function vaultExec(address account, (address target, uint256 value, bytes data)[] calls, uint256 usdValue, uint256 nonce, bytes pqSig)",
+      "function vaultQueue(address account, (address target, uint256 value, bytes data)[] calls, uint8 kind, uint256 nonce, bytes pqSig) returns (bytes32 opId)"
     ]
   },
   "formats": {
@@ -767,6 +810,407 @@
           "format": "addressName"
         }
       }
+    },
+    "policyHook.setHotKey": {
+      "role": "vault",
+      "admin": true,
+      "intent": "Replace everyday key with {newHotKey}",
+      "consequence": "The old everyday key stops working.",
+      "timing": "now",
+      "fields": {
+        "newHotKey": {
+          "format": "addressName"
+        }
+      },
+      "action": "vaultSetHotKey"
+    },
+    "policyHook.setCap": {
+      "role": "vault",
+      "admin": true,
+      "action": "vaultSetCap",
+      "intent": "Change your limits",
+      "timing": "tightenNowLoosenWaits",
+      "fields": {
+        "maxPrio": {
+          "format": "gwei"
+        }
+      },
+      "changes": [
+        {
+          "field": "capUsdPerDay",
+          "label": "daily limit",
+          "format": "usd6",
+          "current": "capUsdPerDay",
+          "looser": "higher"
+        },
+        {
+          "field": "perTxMaxUsd",
+          "label": "per-payment limit",
+          "format": "usd6",
+          "current": "perTxMaxUsd",
+          "looser": "higher"
+        },
+        {
+          "field": "maxFeeWei",
+          "label": "network-fee limit per everyday payment",
+          "format": "eth",
+          "current": "maxFeeWeiPerTx",
+          "looser": "higher"
+        }
+      ]
+    },
+    "policyHook.setToken": {
+      "role": "vault",
+      "admin": true,
+      "intent": "{allowed} token {token}{priceClause}",
+      "timing": "tightenNowLoosenWaits",
+      "looserWhen": {
+        "field": "allowed",
+        "equals": true
+      },
+      "fields": {
+        "allowed": {
+          "format": "enum",
+          "labels": {
+            "true": "Allow",
+            "false": "Remove"
+          }
+        },
+        "token": {
+          "format": "tokenName"
+        },
+        "decimals": {
+          "format": "integer"
+        },
+        "usdPerToken": {
+          "format": "pinnedPrice"
+        }
+      },
+      "derived": {
+        "priceClause": {
+          "when": {
+            "field": "allowed",
+            "equals": true
+          },
+          "template": " at a pinned price of {usdPerToken}"
+        }
+      },
+      "action": "vaultSetToken"
+    },
+    "policyHook.setTarget": {
+      "role": "vault",
+      "admin": true,
+      "intent": "{allowed} {target} on your allowed list",
+      "timing": "tightenNowLoosenWaits",
+      "looserWhen": {
+        "field": "allowed",
+        "equals": true
+      },
+      "fields": {
+        "allowed": {
+          "format": "enum",
+          "labels": {
+            "true": "Put",
+            "false": "Remove"
+          }
+        },
+        "target": {
+          "format": "addressName"
+        }
+      },
+      "action": "vaultSetTarget"
+    },
+    "policyHook.setRecipientMode": {
+      "role": "vault",
+      "admin": true,
+      "intent": "{openClause}{strictClause}",
+      "consequence": "{openEffect}{strictEffect}",
+      "timing": "tightenNowLoosenWaits",
+      "looserWhen": {
+        "field": "mode",
+        "equals": 0
+      },
+      "fields": {
+        "mode": {
+          "format": "enum",
+          "labels": {
+            "0": "Any address",
+            "1": "Approved addresses only"
+          }
+        }
+      },
+      "derived": {
+        "openClause": {
+          "when": {
+            "field": "mode",
+            "equals": 0
+          },
+          "template": "Let your everyday key pay any address"
+        },
+        "strictClause": {
+          "when": {
+            "field": "mode",
+            "equals": 1
+          },
+          "template": "Only pay approved addresses"
+        },
+        "openEffect": {
+          "when": {
+            "field": "mode",
+            "equals": 0
+          },
+          "template": "Everyday payments may go to any address, still within your daily limit and per-payment maximum. This loosens your account, so it waits out the waiting period."
+        },
+        "strictEffect": {
+          "when": {
+            "field": "mode",
+            "equals": 1
+          },
+          "template": "Everyday payments may only go to addresses on your allowed list. This tightens your account, so it takes effect now."
+        }
+      },
+      "action": "vaultSetRecipientMode"
+    },
+    "policyHook.setSession": {
+      "role": "vault",
+      "admin": true,
+      "intent": "Let {target} spend up to {allowanceUsd} without asking, until {expiry}",
+      "timing": "tightenNowLoosenWaits",
+      "looserWhen": {
+        "field": "allowanceUsd",
+        "greaterThan": 0
+      },
+      "fields": {
+        "target": {
+          "format": "addressName"
+        },
+        "selector": {
+          "format": "selector"
+        },
+        "allowanceUsd": {
+          "format": "usd6"
+        },
+        "expiry": {
+          "format": "date"
+        }
+      },
+      "action": "vaultSetSession"
+    },
+    "policyHook.setValueVerifier": {
+      "role": "vault",
+      "admin": true,
+      "intent": "{denied} {verifier} for everyday-key signatures",
+      "consequence": "A blocked contract (Permit2 is blocked by default) never accepts a signature from your everyday key, so a stolen browser can't sign token permits for it.",
+      "timing": "tightenNowLoosenWaits",
+      "looserWhen": {
+        "field": "denied",
+        "equals": false
+      },
+      "fields": {
+        "denied": {
+          "format": "enum",
+          "labels": {
+            "true": "Block",
+            "false": "Unblock"
+          }
+        },
+        "verifier": {
+          "format": "addressName"
+        }
+      },
+      "action": "vaultSetValueVerifier"
+    },
+    "policyHook.setTrustedVerifier": {
+      "role": "vault",
+      "admin": true,
+      "intent": "{allowClause}{stopClause}",
+      "consequence": "A trusted contract can accept a signature (or a pre-approval) from your everyday key without asking this phone. Permit-style token contracts stay blocked regardless.",
+      "timing": "tightenNowLoosenWaits",
+      "looserWhen": {
+        "field": "trusted",
+        "equals": true
+      },
+      "fields": {
+        "verifier": {
+          "format": "addressName"
+        },
+        "trusted": {
+          "format": "enum",
+          "labels": {
+            "true": "Trust",
+            "false": "Stop trusting"
+          }
+        }
+      },
+      "derived": {
+        "allowClause": {
+          "when": {
+            "field": "trusted",
+            "equals": true
+          },
+          "template": "Allow {verifier} to accept signatures from your everyday key"
+        },
+        "stopClause": {
+          "when": {
+            "field": "trusted",
+            "equals": false
+          },
+          "template": "Stop {verifier} accepting signatures from your everyday key"
+        }
+      },
+      "action": "vaultSetTrustedVerifier"
+    },
+    "policyHook.freeze": {
+      "role": "vault",
+      "admin": true,
+      "intent": "Pause everyday spending {until}",
+      "consequence": "Everyday payments stop until the Vault resumes them.",
+      "timing": "now",
+      "action": "vaultFreeze",
+      "fields": {
+        "until": {
+          "format": "date",
+          "foreverFrom": "281474976710655",
+          "prefix": "until "
+        }
+      }
+    },
+    "policyHook.unfreeze": {
+      "role": "vault",
+      "admin": true,
+      "intent": "Resume everyday spending",
+      "consequence": "Everyday payments work again.",
+      "timing": "now",
+      "action": "vaultUnfreeze"
+    },
+    "policyHook.enableBunker": {
+      "role": "vault",
+      "admin": true,
+      "intent": "Turn on Lockdown",
+      "consequence": "Everyday spending is switched off until the Vault issues a new everyday key.",
+      "timing": "now",
+      "action": "vaultEnableBunker"
+    },
+    "roleExecutor.vaultExec": {
+      "kind": "container",
+      "role": "vault",
+      "callsField": "calls",
+      "timing": "now"
+    },
+    "roleExecutor.vaultQueue": {
+      "kind": "container",
+      "role": "vault",
+      "callsField": "calls",
+      "timing": "waitingPeriod",
+      "fields": {
+        "kind": {
+          "format": "enum",
+          "enum": "queueKind"
+        }
+      }
+    },
+    "roleExecutor.vaultCancel": {
+      "role": "vault",
+      "admin": true,
+      "intent": "Cancel scheduled change {opId}",
+      "consequence": "The scheduled change will not happen.",
+      "timing": "now",
+      "fields": {
+        "opId": {
+          "format": "shortHex"
+        }
+      },
+      "action": "vaultCancel"
+    },
+    "roleExecutor.recoveryCancel": {
+      "role": "recovery",
+      "admin": true,
+      "intent": "Cancel scheduled change {opId}",
+      "consequence": "The Recovery key stops a change the Vault scheduled.",
+      "timing": "now",
+      "fields": {
+        "opId": {
+          "format": "shortHex"
+        }
+      },
+      "action": "recoveryCancel"
+    },
+    "roleExecutor.recoveryStartVaultRotation": {
+      "role": "recovery",
+      "admin": true,
+      "intent": "Replace the Vault with the key ending …{newVaultPk}",
+      "consequence": "Replaces the Vault with a new one in 7 days. Everyday spending is paused until then. The old Vault cannot cancel this.",
+      "timing": "sevenDays",
+      "fields": {
+        "newVaultPk": {
+          "format": "keyTail"
+        }
+      },
+      "action": "recoveryStartVaultRotation"
+    },
+    "roleExecutor.recoveryCancelVaultRotation": {
+      "role": "recovery",
+      "admin": true,
+      "intent": "Stop replacing the Vault",
+      "consequence": "The current Vault stays in charge.",
+      "timing": "now",
+      "action": "recoveryCancelVaultRotation"
+    },
+    "roleExecutor.setGuardian": {
+      "role": "vault",
+      "admin": true,
+      "intent": "{enabled} Guardian {guardian}",
+      "consequence": "A Guardian can only pause your everyday spending.",
+      "timing": "now",
+      "fields": {
+        "enabled": {
+          "format": "enum",
+          "labels": {
+            "true": "Add",
+            "false": "Remove"
+          }
+        },
+        "guardian": {
+          "format": "addressName"
+        }
+      },
+      "action": "vaultSetGuardian"
+    },
+    "roleExecutor.setTimelock": {
+      "role": "vault",
+      "admin": true,
+      "intent": "Change the waiting period",
+      "timing": "tightenNowLoosenWaits",
+      "changes": [
+        {
+          "field": "delay",
+          "label": "waiting period",
+          "format": "duration",
+          "current": "timelockDelay",
+          "looser": "lower"
+        },
+        {
+          "field": "thresholdUsd",
+          "label": "instant Vault spending per day",
+          "format": "usd6",
+          "current": "timelockThresholdUsd",
+          "looser": "higher"
+        }
+      ],
+      "action": "vaultSetTimelock"
+    },
+    "roleExecutor.setRecoveryKey": {
+      "role": "vault",
+      "admin": true,
+      "intent": "Link the Recovery key ending …{pk}",
+      "consequence": "This Recovery key can replace the Vault and cancel scheduled changes.",
+      "timing": "firstInstallNowElseWaits",
+      "fields": {
+        "pk": {
+          "format": "keyTail"
+        }
+      },
+      "action": "vaultSetRecoverySigner"
     }
   },
   "typedData": {
@@ -840,6 +1284,26 @@
     "roleSigner.stake": "0x7ec6840f",
     "roleSigner.unlockStake": "0xbb9fe6bf",
     "roleSigner.verifyFrame": "0xfdac8fe1",
-    "roleSigner.withdrawStake": "0xc23a5cea"
+    "roleSigner.withdrawStake": "0xc23a5cea",
+    "policyHook.enableBunker": "0x0957704b",
+    "policyHook.freeze": "0xa7487c78",
+    "policyHook.setCap": "0xd9f1625e",
+    "policyHook.setHotKey": "0x53d2d55b",
+    "policyHook.setRecipientMode": "0x5427d288",
+    "policyHook.setSession": "0x8e169c20",
+    "policyHook.setTarget": "0xf445f287",
+    "policyHook.setToken": "0xf122931f",
+    "policyHook.setTrustedVerifier": "0xae417999",
+    "policyHook.setValueVerifier": "0xd1d79b58",
+    "policyHook.unfreeze": "0x45c8b1a6",
+    "roleExecutor.recoveryCancel": "0xdb44bd03",
+    "roleExecutor.recoveryCancelVaultRotation": "0x223f1e30",
+    "roleExecutor.recoveryStartVaultRotation": "0x4857f833",
+    "roleExecutor.setGuardian": "0xfdabd9b2",
+    "roleExecutor.setRecoveryKey": "0x25da44fe",
+    "roleExecutor.setTimelock": "0x86a9b65f",
+    "roleExecutor.vaultCancel": "0xfb81d922",
+    "roleExecutor.vaultExec": "0x8335dd23",
+    "roleExecutor.vaultQueue": "0x832e4598"
   }
 }

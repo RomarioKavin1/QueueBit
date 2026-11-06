@@ -45,15 +45,21 @@ function solidityFunctions(files: string[]): Map<string, string> {
 
 const ACCOUNT_SOURCES = ["contracts/src/account/LeakedAccountRoles.sol", "contracts/src/account/LeakedAccountImpl.sol"];
 const SIGNER_SOURCES = ["contracts/src/roles/PQRoleSigner.sol"];
+const HOOK_SOURCES = ["contracts/src/modules/LeakedPolicyHook.sol"];
+const EXECUTOR_SOURCES = ["contracts/src/modules/LeakedRoleExecutor.sol"];
 
 describe("registry vs contract sources", () => {
   const account = solidityFunctions(ACCOUNT_SOURCES);
   const signer = solidityFunctions(SIGNER_SOURCES);
   const iface = solidityFunctions(["contracts/src/interfaces/ILeakedAccountRoles.sol"]);
+  const hook = solidityFunctions(HOOK_SOURCES);
+  const executor = solidityFunctions(EXECUTOR_SOURCES);
 
   for (const [abiName, src] of [
     ["account", account],
     ["roleSigner", signer],
+    ["policyHook", hook],
+    ["roleExecutor", executor],
   ] as const) {
     for (const [id, selector] of Object.entries(SELECTORS).filter(([k]) => k.startsWith(`${abiName}.`))) {
       it(`${id} matches the Solidity source`, () => {
@@ -71,6 +77,31 @@ describe("registry vs contract sources", () => {
     const names = new Set([...iface.keys(), ...account.keys()]);
     const missing = [...names].filter((n) => /^(vault|recovery)/.test(n) && !registry.formats[`account.${n}`]);
     expect(missing).toEqual([]);
+  });
+
+  it("every setter a compatible-account Vault batch may call (`_checkShape`) has a display format", () => {
+    const src = readFileSync(repo(EXECUTOR_SOURCES[0]!), "utf8");
+    const body = /function _checkShape[\s\S]*?\n {4}}/.exec(src)![0];
+    const ids = [...body.matchAll(/(this|LeakedPolicyHook)\.(\w+)\.selector/g)].map(
+      (m) => `${m[1] === "this" ? "roleExecutor" : "policyHook"}.${m[2]}`,
+    );
+    expect(ids.length).toBeGreaterThan(10);
+    expect(ids.filter((id) => !registry.formats[id])).toEqual([]);
+  });
+
+  it("every PQ-signed executor entry point has a display format", () => {
+    const signed = [...executor.entries()].filter(([, sig]) => sig.endsWith(",bytes)")).map(([n]) => n);
+    expect(signed.sort()).toEqual(
+      [
+        "recoveryCancel",
+        "recoveryCancelVaultRotation",
+        "recoveryStartVaultRotation",
+        "vaultCancel",
+        "vaultExec",
+        "vaultQueue",
+      ].sort(),
+    );
+    expect(signed.filter((n) => !registry.formats[`roleExecutor.${n}`])).toEqual([]);
   });
 
   it("formats exist only for functions the contracts still have", () => {
@@ -94,6 +125,8 @@ describe.skipIf(!artifactsPresent())("registry vs forge artifacts (contracts/out
     };
     expect(registry.abis.account).toEqual(exp.abis.account);
     expect(registry.abis.roleSigner).toEqual(exp.abis.roleSigner);
+    expect(registry.abis.policyHook).toEqual(exp.abis.policyHook);
+    expect(registry.abis.roleExecutor).toEqual(exp.abis.roleExecutor);
     expect(SELECTORS).toEqual(exp.selectors);
   });
 });

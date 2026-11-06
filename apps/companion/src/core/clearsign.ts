@@ -12,6 +12,8 @@ import { decodeSignRequest, ROLE, TX_TYPE, type AdvisoryPolicy, type SignRequest
 import {
   decodeAbiParameters,
   decodeFunctionData,
+  encodeAbiParameters,
+  encodeFunctionData,
   hashTypedData,
   isAddressEqual,
   keccak256,
@@ -31,12 +33,14 @@ import {
   formatGwei,
   formatUnits,
   formatUsd6,
+  last8,
   shortAddress,
   shortHex,
   usdValue,
 } from "./format.js";
 import {
   NATIVE,
+  aaModules,
   abiOf,
   chainName,
   enumLabel,
@@ -60,6 +64,10 @@ import type { AccountSnapshot, AddressBookEntry, DeviceContext } from "./types.j
  *
  * The digest is recomputed here from the decoded transaction (never taken from the request), so what is displayed is
  * what is signed by construction. The signing worker runs this same function on the same bytes before it signs.
+ *
+ * Three request kinds: tx-type 6 (an EIP-8141 frame transaction of a native LEAKED account's role signer), tx-type 3
+ * (a `LeakedRoleExecutor` call of a compatible ERC-4337 + ERC-7579 account, signed over the executor's EIP-712
+ * digest) and tx-type 2 (the Privacy Pools note envelope, signed by the payer key).
  */
 
 export const DEFAULT_TIMELOCK_SECONDS = 172_800n;
@@ -68,6 +76,9 @@ const RECOVERY_ONLY_IDS = new Set([
   "account.recoveryStartVaultRotation",
   "account.recoveryCancel",
   "account.recoveryCancelVaultRotation",
+  "roleExecutor.recoveryStartVaultRotation",
+  "roleExecutor.recoveryCancel",
+  "roleExecutor.recoveryCancelVaultRotation",
 ]);
 /** What recovery mode signs (plan §20 §5): the recovery-only calls plus the permissionless finalisation. */
 const RECOVERY_MODE_IDS = new Set([...RECOVERY_ONLY_IDS, "account.recoveryFinalizeVaultRotation"]);
@@ -138,7 +149,7 @@ export interface ActionView {
 }
 
 export interface Warning {
-  code: "mismatch" | "E-74" | "direct-loosening" | "new-account" | "unknown-pool" | "browser-values";
+  code: "mismatch" | "E-74" | "direct-loosening" | "new-account" | "unknown-pool" | "unknown-module" | "browser-values";
   title: string;
   body: string;
 }
@@ -154,6 +165,10 @@ export interface StructureView {
   sequence?: bigint;
   maxFee?: string;
   profileId?: string;
+  /** tx-type 3: the `LeakedRoleExecutor` the signature is bound to (EIP-712 `verifyingContract`). */
+  executor?: Address;
+  /** tx-type 3: whether this app knows that executor as LEAKED's module on this network. */
+  knownExecutor?: boolean;
   origin?: string;
   requestId: string;
   /** The digest this phone signs, recomputed from the decoded request. */
@@ -161,9 +176,10 @@ export interface StructureView {
 }
 
 export interface Review {
-  kind: "frameTx" | "typedData";
+  /** `frameTx` (tx-type 6), `roleCall` (tx-type 3, compatible account) or `typedData` (tx-type 2). */
+  kind: "frameTx" | "roleCall" | "typedData";
   request: SignRequest;
-  /** What gets signed: the frame tx's sig hash, or the EIP-712 digest. */
+  /** What gets signed: the frame tx's sig hash, or an EIP-712 digest (the executor's, or the note envelope's). */
   digest: Hex;
   /** The PQ witness goes to this entry (frame tx). */
   sigIndex?: number;
@@ -212,11 +228,12 @@ export function reviewRequest(req: SignRequest, ctx: DeviceContext): Review {
     );
   }
   if (req.txType === TX_TYPE.typedData) return reviewTypedData(req, ctx);
+  if (req.txType === TX_TYPE.roleExecutor7579) return reviewRoleCall(req, ctx);
   if (req.txType !== TX_TYPE.frameTx) {
     reject(
       "E-76",
       "This kind of request isn't supported yet",
-      "This app signs native LEAKED accounts only. Update the app.",
+      "This app signs LEAKED accounts' Vault and Recovery approvals only. Update the app.",
     );
   }
   return reviewFrameTx(req, ctx);
@@ -226,7 +243,8 @@ export function reviewRequest(req: SignRequest, ctx: DeviceContext): Review {
 // Frame transactions
 // ---------------------------------------------------------------------------------------------------------------
 
-function reviewFrameTx(req: SignRequest, ctx: DeviceContext): Review {
+/** Keys 6 and 8: the request must be for this phone's key type and for its key (or its prepared replacement). */
+function checkKey(req: SignRequest, ctx: DeviceContext): "current" | "next" {
   if (req.schemeId?.toLowerCase() !== ctx.schemeId.toLowerCase()) {
     reject("E-70", "This request is for a key this phone doesn't hold.", "It asks for a different kind of signature.");
   }
@@ -238,7 +256,7 @@ function reviewFrameTx(req: SignRequest, ctx: DeviceContext): Review {
         ? "next"
         : undefined;
   if (!signingKey) {
-    reject(
+    return reject(
       "E-71",
       "This request is for a different Vault.",
       ctx.mode === "recovery"
@@ -246,6 +264,30 @@ function reviewFrameTx(req: SignRequest, ctx: DeviceContext): Review {
         : "Check that this phone is the Vault paired with this account (Security › Vault in the browser).",
     );
   }
+  return signingKey;
+}
+
+/** Plan §20 §5: recovery mode signs one recovery action and nothing else; the Vault never signs one. */
+function recoveryGuard(ctx: DeviceContext, actions: ActionView[]): void {
+  if (ctx.mode === "recovery") {
+    if (actions.length !== 1 || !RECOVERY_MODE_IDS.has(actions[0]!.id)) {
+      reject(
+        "E-79",
+        "Recovery mode only replaces the Vault or cancels a change.",
+        "This request asks for something else. Nothing was signed.",
+      );
+    }
+  } else if (actions.some((a) => RECOVERY_ONLY_IDS.has(a.id))) {
+    reject(
+      "E-79",
+      "This needs your Recovery key, not the Vault.",
+      "Use Recovery › Use Recovery key on a phone with your Recovery words.",
+    );
+  }
+}
+
+function reviewFrameTx(req: SignRequest, ctx: DeviceContext): Review {
+  const signingKey = checkKey(req, ctx);
   const profile: Profile | undefined = req.profileId ? profiles[req.profileId] : undefined;
   if (!profile) {
     reject("E-72", "This request uses a network format this app doesn't know.", "Update the app.");
@@ -380,21 +422,7 @@ function reviewFrameTx(req: SignRequest, ctx: DeviceContext): Review {
   }
 
   // --- recovery guard (plan §20 §5: recovery mode refuses any other selector) -------------------------------------
-  if (ctx.mode === "recovery") {
-    if (actions.length !== 1 || !RECOVERY_MODE_IDS.has(actions[0]!.id)) {
-      reject(
-        "E-79",
-        "Recovery mode only replaces the Vault or cancels a change.",
-        "This request asks for something else. Nothing was signed.",
-      );
-    }
-  } else if (actions.some((a) => RECOVERY_ONLY_IDS.has(a.id))) {
-    reject(
-      "E-79",
-      "This needs your Recovery key, not the Vault.",
-      "Use Recovery › Use Recovery key on a phone with your Recovery words.",
-    );
-  }
+  recoveryGuard(ctx, actions);
 
   const structure: StructureView = {
     chainId: req.chainId,
@@ -440,6 +468,222 @@ function maxFeeText(p: Profile, tx: FrameTx): string {
   const gas = limits + 12_000n + 475n * BigInt(tx.frames.length) + 64n * payloadBytes;
   void p;
   return formatEth(gas * tx.fees.maxFeePerGas);
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Compatible accounts (tx-type 3): a LeakedRoleExecutor role call, signed over the executor's EIP-712 digest
+// ---------------------------------------------------------------------------------------------------------------
+
+/** The executor's PQ-signed entry points and which key signs each. */
+const ROLE_CALLS: Record<string, "vault" | "recovery"> = {
+  vaultExec: "vault",
+  vaultQueue: "vault",
+  vaultCancel: "vault",
+  recoveryCancel: "recovery",
+  recoveryStartVaultRotation: "recovery",
+  recoveryCancelVaultRotation: "recovery",
+};
+/** The executor's own setters a Vault batch may call (`_checkShape`); the hook's are the `policyHook` ABI. */
+const EXECUTOR_SETTERS = new Set(["setGuardian", "setTimelock", "setRecoveryKey"]);
+
+type ExecCall = { target: Address; value: bigint; data: Hex };
+
+const CALLS_ABI = [
+  {
+    type: "tuple[]",
+    components: [
+      { name: "target", type: "address" },
+      { name: "value", type: "uint256" },
+      { name: "data", type: "bytes" },
+    ],
+  },
+] as const;
+
+/** `callsHash = keccak256(abi.encode(calls))`, as `LeakedRoleExecutor.callsHash`. */
+export function executorCallsHash(calls: readonly ExecCall[]): Hex {
+  return keccak256(encodeAbiParameters(CALLS_ABI, [calls.map((c) => ({ ...c }))]));
+}
+
+const T = (name: string, type: string) => ({ name, type });
+
+/**
+ * The digest a role key signs for an executor call (`LeakedRoleExecutor.hash*`), recomputed from the decoded call
+ * alone, in the domain `{ "LeakedRoleExecutor", "1", chainId (key 2), verifyingContract (key 14) }`. Exported for the
+ * interop tests; the request carries no digest to compare with, and none would be trusted.
+ */
+export function roleCallDigest(chainId: bigint, executor: Address, fn: string, args: Record<string, unknown>): Hex {
+  const domain = { name: "LeakedRoleExecutor", version: "1", chainId: Number(chainId), verifyingContract: executor };
+  const account = args.account as Address;
+  const nonce = args.nonce as bigint;
+  const typed = (primaryType: string, fields: { name: string; type: string }[], message: Record<string, unknown>) =>
+    hashTypedData({ domain, types: { [primaryType]: fields }, primaryType, message } as never);
+  switch (fn) {
+    case "vaultExec":
+      return typed(
+        "VaultExec",
+        [T("account", "address"), T("nonce", "uint256"), T("callsHash", "bytes32"), T("usdValue", "uint256")],
+        { account, nonce, callsHash: executorCallsHash(args.calls as ExecCall[]), usdValue: args.usdValue },
+      );
+    case "vaultQueue":
+      return typed(
+        "VaultQueue",
+        [T("account", "address"), T("nonce", "uint256"), T("callsHash", "bytes32"), T("kind", "uint8")],
+        { account, nonce, callsHash: executorCallsHash(args.calls as ExecCall[]), kind: args.kind },
+      );
+    case "vaultCancel":
+    case "recoveryCancel":
+      return typed(
+        fn === "vaultCancel" ? "VaultCancel" : "RecoveryCancel",
+        [T("account", "address"), T("nonce", "uint256"), T("opId", "bytes32")],
+        { account, nonce, opId: args.opId },
+      );
+    case "recoveryStartVaultRotation":
+      return typed("RecoveryRotate", [T("account", "address"), T("nonce", "uint256"), T("newVaultPk", "bytes32")], {
+        account,
+        nonce,
+        newVaultPk: args.newVaultPk,
+      });
+    case "recoveryCancelVaultRotation":
+      return typed("RecoveryCancelRotation", [T("account", "address"), T("nonce", "uint256")], { account, nonce });
+    default:
+      throw new Error(`not a role call: ${fn}`);
+  }
+}
+
+/** Decodes key 4 strictly: a known role entry point, canonical encoding, and an empty `pqSig`. */
+function decodeRoleCall(payload: Hex): { entry: FunctionEntry; args: Record<string, unknown> } {
+  const entry = lookup("roleExecutor", payload);
+  if (!entry || !(entry.item.name in ROLE_CALLS)) {
+    return reject(
+      "E-77",
+      "This request can't be read.",
+      "It is not a Vault or Recovery approval of a LEAKED compatible account.",
+    );
+  }
+  let args: Record<string, unknown>;
+  try {
+    args = decodeArgs(entry, payload);
+    // Canonical only: the bytes the browser relays must be exactly the call this phone decoded.
+    const again = encodeFunctionData({
+      abi: [entry.item],
+      functionName: entry.item.name,
+      args: entry.item.inputs.map((inp, i) => args[inp.name ?? `arg${i}`]),
+    } as never);
+    if (again.toLowerCase() !== payload.toLowerCase()) throw new Error("not canonical");
+  } catch {
+    return reject("E-77", "This request can't be read.", "Its call data doesn't match its type.");
+  }
+  if (args.pqSig !== "0x") reject("E-77", "This request can't be signed.", "It already carries a signature.");
+  return { entry, args };
+}
+
+function reviewRoleCall(req: SignRequest, ctx: DeviceContext): Review {
+  const signingKey = checkKey(req, ctx);
+  const executor = checksum(req.verifyingContract!);
+  const { entry, args } = decodeRoleCall(req.payload);
+  const fn = entry.item.name;
+  const account = checksum(args.account as string);
+  const digest = roleCallDigest(req.chainId, executor, fn, args);
+
+  const known = aaModules(req.chainId);
+  const knownExecutor = !!known && isAddressEqual(known.executor, executor);
+  const warnings: Warning[] = [];
+  if (!knownExecutor) {
+    warnings.push({
+      code: "unknown-module",
+      title: "Unfamiliar account module",
+      body: `This approval is for the module ${shortAddress(executor)}, which is not the LEAKED module this app knows for ${chainName(req.chainId)}. Settings changes in it can't be shown in plain words.`,
+    });
+  }
+  const r = rc(ctx, req, account);
+  if (!r.snapshot && ctx.snapshots.length > 0) {
+    warnings.push({
+      code: "new-account",
+      title: "First approval for this account on this phone",
+      body: `Account ${shortAddress(account)}. If you don't recognise it, reject.`,
+    });
+  }
+
+  const actions =
+    entry.format?.kind === "container"
+      ? renderExecutorBatch(entry, args, account, executor, knownExecutor ? known!.hook : undefined, r)
+      : [renderFormatted(entry, args, executor, r)];
+  recoveryGuard(ctx, actions);
+  // The key that signs must be the one the entry point checks (a Vault call names the Vault's key, and so on).
+  if (ROLE_CALLS[fn] !== (req.role === ROLE.recovery ? "recovery" : "vault")) {
+    reject("E-79", "This request names the wrong key for what it does.", "Start again in the browser.");
+  }
+
+  const structure: StructureView = {
+    chainId: req.chainId,
+    chainName: chainName(req.chainId),
+    account,
+    sequence: args.nonce as bigint,
+    executor,
+    knownExecutor,
+    requestId: req.requestId,
+    fingerprint: digest,
+    ...(req.origin ? { origin: req.origin } : {}),
+  };
+  const review = finish(req, ctx, "roleCall", digest, actions, warnings, structure, { needsPayerSig: false, account });
+  return signingKey === "next" ? { ...review, signingKey } : review;
+}
+
+/**
+ * A `vaultExec` / `vaultQueue` batch, routed as the executor runs it: calls to the executor itself and to the hook are
+ * settings (account first, no value: `_checkShape`), calls to the account itself are module changes, anything else is
+ * a call the account makes (a payment, a token call, an app).
+ */
+function renderExecutorBatch(
+  entry: FunctionEntry,
+  args: Record<string, unknown>,
+  account: Address,
+  executor: Address,
+  hook: Address | undefined,
+  r: RenderCtx,
+): ActionView[] {
+  const calls = (args.calls as ExecCall[]) ?? [];
+  const inner: RenderCtx = { ...r, depth: 1, queued: entry.format!.timing === "waitingPeriod" };
+  const out: ActionView[] = [];
+  if (calls.length === 0) out.push(unknownAction(r.ctx, r.chainId, account, "0x", 0n, "An empty batch"));
+  for (const c of calls) {
+    const target = checksum(c.target);
+    if (isAddressEqual(target, executor)) out.push(renderSetter("roleExecutor", target, c, account, inner));
+    else if (hook && isAddressEqual(target, hook)) out.push(renderSetter("policyHook", target, c, account, inner));
+    else if (isAddressEqual(target, account))
+      out.push(unknownAction(r.ctx, r.chainId, target, c.data, c.value, "A change to the account's own modules"));
+    else out.push(renderExternalCall(target, c.value, c.data, inner));
+  }
+  if (typeof args.kind === "number" || typeof args.kind === "bigint") {
+    out[0]?.details.push({
+      label: "Scheduled as",
+      value: enumLabel("queueKind", String(args.kind)) ?? `kind ${args.kind}`,
+    });
+  }
+  return out;
+}
+
+function renderSetter(
+  abiName: "roleExecutor" | "policyHook",
+  target: Address,
+  c: ExecCall,
+  account: Address,
+  r: RenderCtx,
+): ActionView {
+  const entry = lookup(abiName, c.data);
+  if (!entry?.format || (abiName === "roleExecutor" && !EXECUTOR_SETTERS.has(entry.item.name))) {
+    return unknownAction(r.ctx, r.chainId, target, c.data, c.value, "Unrecognised setting");
+  }
+  let args: Record<string, unknown>;
+  try {
+    args = decodeArgs(entry, c.data);
+  } catch {
+    return unknownAction(r.ctx, r.chainId, target, c.data, c.value, "Call data doesn't match its type");
+  }
+  if (c.value !== 0n || typeof args.account !== "string" || !isAddressEqual(args.account as Address, account)) {
+    return unknownAction(r.ctx, r.chainId, target, c.data, c.value, "A setting for a different account");
+  }
+  return renderFormatted(entry, args, target, r);
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -753,8 +997,14 @@ function renderField(
       return { text: toBig(raw).toString() };
     case "duration":
       return { text: formatDuration(toBig(raw)) };
-    case "date":
-      return { text: formatDate(toBig(raw)) };
+    case "date": {
+      const v = toBig(raw);
+      if (spec.foreverFrom !== undefined && v >= BigInt(spec.foreverFrom))
+        return { text: "until you resume it", detail: "no end date: until you resume it" };
+      return { text: `${spec.prefix ?? ""}${formatDate(v)}`, detail: formatDate(v) };
+    }
+    case "keyTail":
+      return { text: last8(String(raw) as Hex), detail: String(raw), mono: true };
     case "shortHex":
       return { text: shortHex(String(raw) as Hex), detail: String(raw), mono: true };
     case "selector":
@@ -817,6 +1067,9 @@ const LABELS: Record<string, string> = {
   recipient: "To",
   relayFeeBPS: "Relayer fee",
   mode: "Who everyday payments may go to",
+  maxPrio: "Priority fee limit",
+  newVaultPk: "New Vault key",
+  pk: "Recovery key",
 };
 const labelFor = (name: string) => LABELS[name] ?? name;
 
@@ -1094,7 +1347,7 @@ function finish(
     primary &&
     primary.timing.text !== "takes effect now" &&
     primary.timing.text !== "unknown" &&
-    kind === "frameTx"
+    kind !== "typedData"
   ) {
     headline += `: ${primary.timing.text}`;
   }
@@ -1109,7 +1362,12 @@ function finish(
     : undefined;
 
   for (const a of known) {
-    if (a.loosening && a.timing.waitSeconds === 0n && a.id !== "account.vaultSetRecoverySigner") {
+    if (
+      a.loosening &&
+      a.timing.waitSeconds === 0n &&
+      a.id !== "account.vaultSetRecoverySigner" &&
+      a.id !== "roleExecutor.setRecoveryKey"
+    ) {
       warnings.push({
         code: "direct-loosening",
         title: a.currentFromBrowser ? "This change may have to wait" : "This change usually has to wait",
@@ -1217,7 +1475,7 @@ function joinWords(ws: string[]): string {
  */
 export function updateSnapshots(review: Review, snapshots: AccountSnapshot[], now: number): AccountSnapshot[] {
   const account = review.structure.account;
-  if (review.kind !== "frameTx" || !account) return snapshots;
+  if (review.kind === "typedData" || !account) return snapshots;
   const chainId = Number(review.structure.chainId);
   const existing = snapshots.find((s) => s.chainId === chainId && isAddressEqual(s.account, account));
   const next: AccountSnapshot = existing
@@ -1246,7 +1504,7 @@ export function updateSnapshots(review: Review, snapshots: AccountSnapshot[], no
     }
     next.reported = reported;
   }
-  const payload = decodeAccountCalls(review);
+  const payload = review.kind === "roleCall" ? decodeRoleCallSettings(review) : decodeAccountCalls(review);
   for (const c of payload) {
     if (c.queued) continue;
     const a = c.args;
@@ -1257,11 +1515,18 @@ export function updateSnapshots(review: Review, snapshots: AccountSnapshot[], no
         next.settings.maxFeeWeiPerTx = a.maxFeeWeiPerTx as bigint;
         next.settings.maxHotFrames = Number(a.maxHotFrames);
         break;
+      case "policyHook.setCap":
+        next.settings.capUsdPerDay = a.capUsdPerDay as bigint;
+        next.settings.perTxMaxUsd = a.perTxMaxUsd as bigint;
+        next.settings.maxFeeWeiPerTx = a.maxFeeWei as bigint;
+        break;
       case "vaultSetTimelock":
+      case "roleExecutor.setTimelock":
         next.settings.timelockDelay = BigInt(a.delay as number | bigint);
         next.settings.timelockThresholdUsd = a.thresholdUsd as bigint;
         break;
       case "vaultSetToken":
+      case "policyHook.setToken":
         next.tokens[String(a.token).toLowerCase()] = {
           allowed: a.allowed as boolean,
           decimals: Number(a.decimals),
@@ -1303,7 +1568,34 @@ function decodeAccountCalls(review: Review): { name: string; args: Record<string
   return out;
 }
 
+/** The settings calls of a reviewed tx-type 3 batch (hook / executor setters for this account), for the snapshot. */
+function decodeRoleCallSettings(review: Review): { name: string; args: Record<string, unknown>; queued: boolean }[] {
+  const account = review.structure.account;
+  const executor = review.structure.executor;
+  const hook = review.structure.knownExecutor ? aaModules(review.structure.chainId)?.hook : undefined;
+  if (!account || !executor) return [];
+  const { entry, args } = decodeRoleCall(review.request.payload);
+  if (entry.format?.kind !== "container") return [];
+  const queued = entry.format.timing === "waitingPeriod";
+  const out: { name: string; args: Record<string, unknown>; queued: boolean }[] = [];
+  for (const c of (args.calls as ExecCall[]) ?? []) {
+    const abiName = isAddressEqual(c.target, executor)
+      ? "roleExecutor"
+      : hook && isAddressEqual(c.target, hook)
+        ? "policyHook"
+        : undefined;
+    const e = abiName ? lookup(abiName, c.data) : undefined;
+    if (!e) continue;
+    const a = decodeArgs(e, c.data);
+    if (typeof a.account === "string" && isAddressEqual(a.account as Address, account))
+      out.push({ name: e.id, args: a, queued });
+  }
+  return out;
+}
+
 export type { AbiFunction, FormatSpec };
 export const ACCOUNT_ABI = abiOf("account");
 export const ROLE_SIGNER_ABI = abiOf("roleSigner");
 export const ERC20_ABI = abiOf("erc20");
+export const ROLE_EXECUTOR_ABI = abiOf("roleExecutor");
+export const POLICY_HOOK_ABI = abiOf("policyHook");

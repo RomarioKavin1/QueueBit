@@ -137,7 +137,7 @@ export function ReviewScreen({
 
       <dl className="divide-y divide-line rounded-md border border-line px-3">
         {review.structure.maxFee && <Row label="Max network fee" value={review.structure.maxFee} />}
-        {primary && primary.timing.waitSeconds !== undefined && review.kind === "frameTx" && (
+        {primary && primary.timing.waitSeconds !== undefined && review.kind !== "typedData" && (
           <Row
             label="Waiting period"
             value={
@@ -161,7 +161,9 @@ export function ReviewScreen({
           <span className="ml-2 t-small font-normal text-muted">
             {review.kind === "frameTx"
               ? `sender: ${mode === "recovery" ? "Recovery" : "Vault"} signer · ${review.structure.steps} steps · ${review.structure.chainName}`
-              : review.structure.chainName}
+              : review.kind === "roleCall"
+                ? `${mode === "recovery" ? "Recovery" : "Vault"} key · compatible account · ${review.structure.chainName}`
+                : review.structure.chainName}
           </span>
         </summary>
         <dl className="divide-y divide-line">
@@ -174,6 +176,19 @@ export function ReviewScreen({
           )}
           {review.structure.account && <Row label="Account" value={review.structure.account} mono />}
           {review.structure.sequence !== undefined && <Row label="Sequence" value={`#${review.structure.sequence}`} />}
+          {review.structure.executor && (
+            <Row
+              label={review.structure.knownExecutor ? "LEAKED module" : "Module (not one this app knows)"}
+              value={review.structure.executor}
+              mono
+            />
+          )}
+          {review.kind === "roleCall" && (
+            <Row
+              label="Lane"
+              value="Compatible account: the quantum-safe signature is checked on-chain; your fee tank pays the network fee"
+            />
+          )}
           {review.structure.path && (
             <Row
               label="Lane"
@@ -509,7 +524,7 @@ function ApproveSheet({
 function SwitchNotice({ review }: { review: Review }) {
   const store = useStore();
   const v = store.vault;
-  if (!v?.next || review.kind !== "frameTx" || review.signingKey !== "next") return null;
+  if (!v?.next || review.kind === "typedData" || review.signingKey !== "next") return null;
   const k = keyState(v);
   return (
     <p className="flex items-start gap-2 t-small text-limit" data-testid="switch-notice">
@@ -524,7 +539,7 @@ function SwitchNotice({ review }: { review: Review }) {
 function BudgetNotice({ review }: { review: Review }) {
   const store = useStore();
   const v = store.vault;
-  if (!v || review.kind !== "frameTx") return null;
+  if (!v || review.kind === "typedData") return null;
   const k = keyState(v);
   const st = review.signingKey === "next" ? k.next?.status : k.status;
   if (!k.counted || !st || st.level === "ok") return null;

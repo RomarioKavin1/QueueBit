@@ -99,7 +99,7 @@ export function afterSign(
   let out: VaultRecord = { ...v, lastSignedAt: now };
   if (r.signMs > 0) out.signMs = Math.round(v.signMs ? (v.signMs + r.signMs) / 2 : r.signMs);
   if (r.logKey) out.logKey = r.logKey;
-  if (review.kind !== "frameTx") return { vault: out, promoted: false };
+  if (review.kind === "typedData") return { vault: out, promoted: false };
   if (review.signingKey === "next" && v.next) {
     const { next, usage: _old, ...rest } = out;
     out = {

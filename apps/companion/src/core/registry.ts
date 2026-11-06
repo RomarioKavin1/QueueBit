@@ -15,7 +15,10 @@ export type FieldFormat =
   | { format: "gwei"; path?: string }
   | { format: "integer"; path?: string }
   | { format: "duration"; path?: string }
-  | { format: "date"; path?: string }
+  /** `foreverFrom`: values from this one up mean "no end" (`type(uint48).max`); `prefix` goes before a real date. */
+  | { format: "date"; path?: string; foreverFrom?: string; prefix?: string }
+  /** A 32-byte quantum-safe public key, shown by its last 8 characters (as the pairing check shows it). */
+  | { format: "keyTail"; path?: string }
   | { format: "shortHex"; path?: string }
   | { format: "selector"; path?: string }
   | { format: "pinnedPrice"; path?: string }
@@ -75,6 +78,7 @@ interface RawRegistry {
   nativeCurrency: TokenInfo;
   tokens: Record<string, Record<string, TokenInfo | string>>;
   privacyPools: { entrypoints: Record<string, string> };
+  aaModules: Record<string, { executor: string; hook: string } | string>;
   abis: Record<string, string[]>;
   /** Generated with the ABIs (scripts/abi-sync.mjs): the selector each format id must decode. */
   selectors: Record<string, Hex>;
@@ -157,6 +161,12 @@ export function tokenInfo(chainId: bigint, token: Address): TokenInfo | undefine
 
 export function privacyEntrypoint(chainId: bigint): Address | undefined {
   return reg.privacyPools.entrypoints[chainId.toString()] as Address | undefined;
+}
+
+/** The LEAKED ERC-7579 modules on a compatible-account chain (tx-type 3), if this app knows them. */
+export function aaModules(chainId: bigint): { executor: Address; hook: Address } | undefined {
+  const m = reg.aaModules[chainId.toString()];
+  return typeof m === "object" ? { executor: m.executor as Address, hook: m.hook as Address } : undefined;
 }
 
 export function typedDataSpec(primaryType: string): TypedDataSpec | undefined {
