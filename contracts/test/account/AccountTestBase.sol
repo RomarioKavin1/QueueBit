@@ -123,7 +123,8 @@ abstract contract AccountTestBase is FrameSim {
             timelockDelay: DELAY,
             timelockThresholdUsd: THRESHOLD,
             ethUsdPrice: ETH_PRICE,
-            recipientMode: ILeakedAccount.RecipientMode.Open
+            recipientMode: ILeakedAccount.RecipientMode.Open,
+            tokens: new ILeakedAccount.TokenInit[](0)
         });
     }
 

@@ -98,6 +98,14 @@ contract LeakedAccountImpl is LeakedVerify, LeakedAccountBase, Initializable, UU
             revert BadAddress(recoverySigner);
         }
         if (recoverySigner != address(0)) _checkIndependentKeys(c.vault.pk, vaultSigner, c.recovery.pk, recoverySigner);
+        // Path B payer keys live on the role's own device: never the everyday key or the tank (both on the hot
+        // device, assumed leakable: a payer key alone can burn its signer's ETH with PQ-invalid transactions), and
+        // the vault's and the recovery's are distinct keys.
+        _checkPayerKey(c.vault.payerKey, c.hotKey, c.tank);
+        _checkPayerKey(c.recovery.payerKey, c.hotKey, c.tank);
+        if (c.vault.payerKey != address(0) && c.vault.payerKey == c.recovery.payerKey) {
+            revert BadAddress(c.recovery.payerKey);
+        }
         uint8 frames = c.maxHotFrames == 0 ? DEFAULT_MAX_HOT_FRAMES : c.maxHotFrames;
         uint48 delay = c.timelockDelay == 0 ? DEFAULT_TIMELOCK : c.timelockDelay;
         _checkCapBounds(c.perTxMaxUsd, c.maxFeeWeiPerTx, frames);
@@ -133,10 +141,42 @@ contract LeakedAccountImpl is LeakedVerify, LeakedAccountBase, Initializable, UU
             $.tokens[address(0)] = TokenCfg(true, 18, c.ethUsdPrice);
             emit TokenConfigured(address(0), true, 18, c.ethUsdPrice);
         }
+        _initTokens($, c, vaultSigner, recoverySigner);
         $.valueVerifiers[PERMIT2] = true;
         emit ValueVerifierSet(PERMIT2, true);
         $.recipientsOpen = c.recipientMode == RecipientMode.Open;
         emit RecipientModeSet(c.recipientMode);
+    }
+
+    /// The initial ERC-20 allowlist (`InitConfig.tokens`): what `vaultSetToken(token, true, decimals, usdPerToken)`
+    /// stores and emits, with the setter's price bounds, plus: at most `MAX_TOKENS`, no duplicates, and each token a
+    /// contract that is not the account, a role signer, the hot key or the tank. Execution-only slots (I-2).
+    function _initTokens(
+        LeakedAccountStorage.Layout storage $,
+        InitConfig calldata c,
+        address vaultSigner,
+        address recoverySigner
+    ) private {
+        uint256 n = c.tokens.length;
+        if (n > MAX_TOKENS) revert TooManyTokens();
+        for (uint256 i; i < n; ++i) {
+            TokenInit calldata t = c.tokens[i];
+            address token = t.token;
+            if (
+                token == address(0) || token == address(this) || token == vaultSigner || token == recoverySigner
+                    || token == c.hotKey || token == c.tank || token.code.length == 0
+            ) revert BadAddress(token);
+            if (t.usdPerToken == 0 || t.decimals > 36) revert BadConfig();
+            if ($.tokens[token].allowed) revert DuplicateToken(token);
+            $.tokens[token] = TokenCfg(true, t.decimals, t.usdPerToken);
+            $.tokenList.push(token);
+            emit TokenConfigured(token, true, t.decimals, t.usdPerToken);
+        }
+    }
+
+    /// A bound role's Path B payer key (0 = Path B off): never the hot key or the tank.
+    function _checkPayerKey(address payer, address hotKey, address tank) private pure {
+        if (payer != address(0) && (payer == hotKey || payer == tank)) revert BadAddress(payer);
     }
 
     /// The role signer of `role`: derived from `p` (bound mode) or the explicit address (`p` all zero).

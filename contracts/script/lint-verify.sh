@@ -10,7 +10,8 @@
 #   3. dynamic: VerifyOpcodesTest (opcodes actually executed in every VERIFY branch) must pass, not skip;
 #   4. I-2 (slot disjointness): the walker never reads the recipient policy (`recipientsOpen` / `RecipientMode` /
 #      `targets`), the mode lives in an appended execution-only slot, and the Audit I-2 tests (both recipient
-#      modes) pass: VERIFY reads only slots 0-2 and nothing a hot batch or the mode setter writes.
+#      modes) pass: VERIFY reads only slots 0-2 and nothing a hot batch or the mode setter writes; likewise nothing
+#      initialize writes for `InitConfig.tokens`, at the same VERIFY gas (InitTokensAndPayers I-2 test, both modes).
 # Run from anywhere: contracts/script/lint-verify.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -94,6 +95,17 @@ if grep -qE 'Suite result: ok\. 2 passed' <<<"$out" && [ "$(grep -cE 'Suite resu
 else
   echo "$out" | grep -E 'PASS|FAIL|Suite result' || echo "$out" | tail -20
   echo "lint-verify: Audit I-2 tests did not pass in both recipient modes"
+  fail=1
+fi
+
+# Initial tokens (`InitConfig.tokens`): what initialize writes for the list is never read by VERIFY, and VERIFY costs
+# the same gas with and without a list, in both recipient modes.
+out=$(forge test --match-path test/account/InitTokensAndPayers.t.sol --match-test 'test_I2_' 2>&1 || true)
+if [ "$(grep -cE 'Suite result: ok\. 1 passed; 0 failed' <<<"$out")" -eq 2 ]; then
+  echo "lint-verify: I-2 OK for InitConfig.tokens (Open and Strict suites, same VERIFY gas)"
+else
+  echo "$out" | grep -E 'PASS|FAIL|Suite result' || echo "$out" | tail -20
+  echo "lint-verify: InitConfig.tokens I-2 tests did not pass in both recipient modes"
   fail=1
 fi
 

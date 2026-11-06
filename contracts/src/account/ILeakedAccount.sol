@@ -42,6 +42,12 @@ pragma solidity 0.8.28;
 ///           a role signer or (a `transfer`) the token itself, in either mode; an Open-mode recipient that is not
 ///           allowlisted is also never the tank, a guardian or an allowlisted token (`ForbiddenRecipient`). The
 ///           tank's top-up path is its allowlist entry (set at initialize) and keeps working;
+///         - initial tokens (2026-11-06): `InitConfig.tokens` allowlists and prices ERC-20s at initialize (one
+///           `TokenConfigured` each, as `vaultSetToken`), so a fresh account can pay in them and register permits
+///           without a queued loosening first; execution-only slots (I-2: VERIFY never reads `tokens`/`tokenList`);
+///         - role payer keys (2026-11-06): a bound signer's `payerKey` (Path B's SECP256K1 entry, held on that role's
+///           device) is never the hot key or the tank, and the vault's and the recovery's differ (`BadAddress`);
+///           a recovery with a payer key can send Path B on the public mempool like the vault;
 ///         - `getBucket()` returns `(available, lastUpdate, cap, fullAt)`: the refill is continuous, so "frees up
 ///           at" is when the bucket is full again.
 /// @dev Paths that cannot log, by construction (the watcher must not rely on them):
@@ -106,6 +112,20 @@ interface ILeakedAccount {
         uint256 ethUsdPrice;
         /// Open (default) or Strict (recipient allowlist only).
         RecipientMode recipientMode;
+        /// Appended (2026-11-06): the initial ERC-20 allowlist with its static prices, set atomically at initialize
+        /// (as `vaultSetToken(token, true, decimals, usdPerToken)` would, without the queue: nothing existed before).
+        /// At most `MAX_TOKENS` (16), no duplicates, each token a contract (`BadAddress`: zero, the account, a role
+        /// signer, the hot key, the tank or code-less), `usdPerToken != 0` and `decimals <= 36` (`BadConfig`, the
+        /// setter's bounds). ETH is not listed here (`ethUsdPrice`). Empty = no ERC-20 (the earlier behaviour).
+        TokenInit[] tokens;
+    }
+
+    /// One entry of `InitConfig.tokens` (the `TokenCfg` a `vaultSetToken` would store).
+    struct TokenInit {
+        address token;
+        uint8 decimals;
+        /// USD (6 decimals) per one whole token (10**decimals base units).
+        uint256 usdPerToken;
     }
 
     /// The fields VERIFY reads, plus the per-tx bounds. Returned by `getHotConfig()`.
@@ -267,6 +287,8 @@ interface ILeakedAccount {
     error BadKind(uint8 kind);
     error GuardianCooldown(uint48 nextAt);
     error TooManyTokens();
+    /// `InitConfig.tokens` lists `token` twice.
+    error DuplicateToken(address token);
     error BadConfig();
     error UpgradeNotAuthorized();
 }

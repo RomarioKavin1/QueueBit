@@ -59,6 +59,9 @@ contract AccountHandler is Test {
     /// A transfer to a recipient outside the allowlist that succeeded while the mode was Strict.
     uint256 public strictViolations;
     uint256 public openPayments;
+    /// A hot payment that succeeded to a self-defeating recipient the vault never allowlisted: the account, a role
+    /// signer, the token being moved, a guardian or an allowlisted token (in either mode).
+    uint256 public forbiddenPayments;
     OpenModeVictim public victim = new OpenModeVictim();
 
     bytes32[] public ops;
@@ -178,6 +181,30 @@ contract AccountHandler is Test {
             openPayments++;
             if (strict) strictViolations++;
         }
+    }
+
+    /// ForbiddenRecipient, both modes: never the account, the vault or recovery signer, a guardian, the moved token
+    /// or another allowlisted token (the second one comes from `InitConfig.tokens`).
+    function hotForbidden(uint256 which, uint256 amount, bool eth) external nonVault {
+        _track();
+        address[] memory list = roles.getTokenList();
+        (address v, address r,,,) = roles.getRoles();
+        address[6] memory bad =
+            [address(account), v, r, guardian, address(usdc), list.length > 1 ? list[1] : address(usdc)];
+        address to = bad[bound(which, 0, 5)];
+        if (to == address(0) || account.isTarget(to)) return;
+        ILeakedAccount.Call[] memory c = new ILeakedAccount.Call[](1);
+        uint256 usd;
+        if (eth) {
+            amount = bound(amount, 1, 0.2 ether);
+            c[0] = ILeakedAccount.Call(to, amount, "");
+            usd = (amount * 3_000 * USD + 1e18 - 1) / 1e18;
+        } else {
+            amount = bound(amount, 1, 600 * USD);
+            c[0] = ILeakedAccount.Call(address(usdc), 0, abi.encodeCall(IERC20.transfer, (to, amount)));
+            usd = amount;
+        }
+        if (_hotRun(usd, c, usd)) forbiddenPayments++;
     }
 
     /// Open mode never admits anything but a plain ETH send or a token `transfer` to an arbitrary address.
@@ -508,6 +535,12 @@ contract AccountInvariantsTest is Test {
             new RoleSignerFactory(Devnet.ERC8421_WORKSHOP, TxParam.MAX_COST, IStakingRegistry(makeAddr("reg")), 1 ether);
         MockPQVerifier pqv = new MockPQVerifier(64);
         ILeakedAccount.RoleSignerParams memory none;
+        // The ERC-20 allowlist comes from InitConfig.tokens (USDC and a second priced token), not a queued op.
+        MockToken usdc = new MockToken("USDC", 6);
+        MockToken dai = new MockToken("DAI", 18);
+        ILeakedAccount.TokenInit[] memory tokens = new ILeakedAccount.TokenInit[](2);
+        tokens[0] = ILeakedAccount.TokenInit(address(usdc), 6, 1 * USD);
+        tokens[1] = ILeakedAccount.TokenInit(address(dai), 18, 1 * USD);
         // Bound vault (derived at initialize), explicit recovery (an address; the handler pranks as it).
         ILeakedAccount.InitConfig memory c = ILeakedAccount.InitConfig({
             hotKey: makeAddr("hotKeyEOA"),
@@ -526,7 +559,8 @@ contract AccountInvariantsTest is Test {
             timelockDelay: 48 hours,
             timelockThresholdUsd: 2_000 * USD,
             ethUsdPrice: 3_000 * USD,
-            recipientMode: ILeakedAccount.RecipientMode.Open
+            recipientMode: ILeakedAccount.RecipientMode.Open,
+            tokens: tokens
         });
         account = LeakedAccountImpl(
             payable(factory.createAccount(0, address(impl), abi.encodeCall(LeakedAccountImpl.initialize, (c))))
@@ -536,22 +570,21 @@ contract AccountInvariantsTest is Test {
             rsf.predictRoleSigner(0, 1, address(account), keccak256("vault"), address(pqv), makeAddr("payer"));
         (address v,,,,) = roles.getRoles();
         assertEq(v, vault, "bound vault derived at initialize");
-        MockToken usdc = new MockToken("USDC", 6);
         MockRouter router = new MockRouter();
         usdc.mint(address(account), 1e12 * USD);
         vm.deal(address(account), 1e6 ether);
 
         // allowlist usdc and alice, the guardian, and a router session through the queue
         uint48 sessionExpiry = uint48(block.timestamp + 365 days);
-        ILeakedAccount.Call[] memory q = new ILeakedAccount.Call[](6);
-        q[3] = ILeakedAccount.Call(
+        ILeakedAccount.Call[] memory q = new ILeakedAccount.Call[](5);
+        q[2] = ILeakedAccount.Call(
             address(account),
             0,
             abi.encodeCall(
                 LeakedAccountRoles.vaultSetSession, (address(usdc), IERC20.approve.selector, 1e9 * USD, sessionExpiry)
             )
         );
-        q[4] = ILeakedAccount.Call(
+        q[3] = ILeakedAccount.Call(
             address(account),
             0,
             abi.encodeCall(
@@ -559,7 +592,7 @@ contract AccountInvariantsTest is Test {
                 (address(router), MockRouter.pull.selector, 1e9 * USD, sessionExpiry)
             )
         );
-        q[5] = ILeakedAccount.Call(
+        q[4] = ILeakedAccount.Call(
             address(account),
             0,
             abi.encodeCall(
@@ -567,12 +600,9 @@ contract AccountInvariantsTest is Test {
                 (address(router), MockRouter.pullPartial.selector, 1e9 * USD, sessionExpiry)
             )
         );
-        q[0] = ILeakedAccount.Call(
-            address(account), 0, abi.encodeCall(LeakedAccountRoles.vaultSetToken, (address(usdc), true, 6, 1 * USD))
-        );
-        q[1] =
+        q[0] =
             ILeakedAccount.Call(address(account), 0, abi.encodeCall(LeakedAccountRoles.vaultSetTarget, (alice, true)));
-        q[2] = ILeakedAccount.Call(
+        q[1] = ILeakedAccount.Call(
             address(account), 0, abi.encodeCall(LeakedAccountRoles.vaultSetGuardian, (guardian, true))
         );
         vm.prank(vault);
@@ -647,6 +677,25 @@ contract AccountInvariantsTest is Test {
         assertEq(handler.openAbuseSuccesses(), 0, "Open mode admitted a non-transfer call");
         assertEq(handler.strictViolations(), 0, "Strict mode paid a non-allowlisted recipient");
         assertEq(handler.victim().pokes(), 0, "arbitrary contract's fallback ran");
+        assertEq(handler.forbiddenPayments(), 0, "a hot payment reached a self-defeating recipient");
+    }
+
+    /// The initial allowlist (`InitConfig.tokens`) is in force from block one and only role paths change it.
+    function test_handler_initTokensAndForbiddenReachable() public {
+        address[] memory list = roles.getTokenList();
+        assertEq(list.length, 2);
+        assertTrue(account.getToken(list[1]).allowed);
+        for (uint256 w; w < 6; ++w) {
+            handler.hotForbidden(w, 5 * USD, false);
+            handler.hotForbidden(w, 0.001 ether, true);
+        }
+        handler.vaultRecipientMode(true);
+        for (uint256 w; w < 6; ++w) {
+            handler.hotForbidden(w, 5 * USD, false);
+        }
+        assertEq(handler.forbiddenPayments(), 0);
+        handler.hotTransfer(5 * USD);
+        assertEq(handler.hotCount(), 1, "an allowlisted payment from the initial token list works");
     }
 
     /// The Open-mode handlers reach success (payments) and the mode can be tightened and re-opened.

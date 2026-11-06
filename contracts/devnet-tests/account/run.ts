@@ -94,6 +94,7 @@ const initCfg = {
   timelockThresholdUsd: 100n * USD,
   ethUsdPrice: ETH_PRICE,
   recipientMode: 0, // Open
+  tokens: [] as { token: Address; decimals: number; usdPerToken: bigint }[], // InitConfig.tokens
 };
 const initData = encodeFunctionData({ abi: implArt.abi, functionName: "initialize", args: [initCfg] });
 const salt = keccak256(stringToHex(`leaked-devnet-${Date.now()}`));
