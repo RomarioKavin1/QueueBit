@@ -16,6 +16,8 @@ Each entry is tagged with its source. Remove an entry when it lands, and cite th
 - [ ] Encrypt the activity log (it stores amounts and recipients in clear) (companion review).
 - [ ] Cross-origin navigation as an exfil channel: document the limitation, or add a navigation guard (companion review).
 
+- [ ] leanSphincs-s usage guard (if the experimental scheme is enabled): a per-key signature counter in companion storage, incremented on every returned `sign` (retries count); exported with the key metadata. A restored seed has unknown usage and counts as "exceeded". Warn at 50%, require rotation at 90%, refuse at 100% via `PQScheme.budgetStatus`. Rotation = a fresh `chainScope` label → a new VaultSigner clone (leanSphincs-s review, 7449363).
+
 ## Contracts
 - [ ] Mirror the account's Open recipient mode and initialize-derived vault binding in the 7579 modules (module review).
 - [ ] `registerPermit` covers ERC-2612 only; add typed registration for EIP-3009 and Permit2 (account audit).
