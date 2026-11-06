@@ -355,7 +355,7 @@ function Var({ children }: { children: ReactNode }) {
 
 function Cite({ n }: { n: number }) {
   return (
-    <a href={`#ref-${n}`} className="font-mono text-[11px] text-blue no-underline hover:underline">
+    <a href={`#ref-${n}`} className="font-mono text-[12px] text-blue no-underline hover:underline">
       [{n}]
     </a>
   );
@@ -374,13 +374,13 @@ function Rails() {
   ];
   return (
     <div className="mt-6 [text-align:left]">
-      <p className="mono-label text-[11px] text-ink-3">Table 1 · By the wallet you start from</p>
+      <p className="mono-label text-[12px] text-ink-3">Table 1 · By the wallet you start from</p>
       <dl className="mt-2 border-t border-ink">
         {rows.map(([a, b, c]) => (
           <div key={a} className="border-b border-rule py-2.5">
             <dt className="flex items-baseline justify-between gap-4 text-[0.95rem] leading-snug font-medium">
               <span>{a}</span>
-              <span className="mono-label shrink-0 text-[11px] text-blue">{c} address</span>
+              <span className="mono-label shrink-0 text-[12px] text-blue">{c} address</span>
             </dt>
             <dd className="mt-1 text-[0.9rem] leading-[1.6] text-ink-2">{b}</dd>
           </div>
@@ -472,7 +472,7 @@ function BackMatter() {
         <ol className="space-y-2 text-[0.88rem] leading-[1.6] text-ink-2">
           {refs.map((r, i) => (
             <li key={r} id={`ref-${i + 1}`} className="grid scroll-mt-20 grid-cols-[2.6ch_1fr] gap-2">
-              <span className="font-mono text-[11px] leading-[2.1] text-blue">[{i + 1}]</span>
+              <span className="font-mono text-[12px] leading-[2.1] text-blue">[{i + 1}]</span>
               <span>{r}</span>
             </li>
           ))}
@@ -486,7 +486,7 @@ function Footer() {
   return (
     <footer className="mx-auto max-w-[1600px] px-5 pb-10 sm:px-10">
       <DitherBand label="QueueBit" />
-      <div className="mono-label mt-4 flex flex-wrap justify-between gap-3 text-[11px] text-ink-3">
+      <div className="mono-label mt-4 flex flex-wrap justify-between gap-3 text-[12px] text-ink-3">
         <span>MIT licensed</span>
         <span>Set in EB Garamond and Departure Mono. Figures drawn in code.</span>
       </div>

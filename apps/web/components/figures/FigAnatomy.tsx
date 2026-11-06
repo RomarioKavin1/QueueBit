@@ -117,7 +117,7 @@ export function FigAnatomy() {
   );
 }
 
-/** One layer as a slab: a light top, and dithered sides for its thickness. */
+/** One layer as a slab: a light top, and tinted sides for its thickness. */
 function Slab({ z, on }: { z: number; on: boolean }) {
   const tone = useTone();
   const top = pts(P(0, 0, z), P(S, 0, z), P(S, S, z), P(0, S, z));

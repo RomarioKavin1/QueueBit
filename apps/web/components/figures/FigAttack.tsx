@@ -245,7 +245,7 @@ function TreePanel({ tc, intro }: { tc: number; intro: number }) {
   );
 }
 
-/** The attack: a dithered band sweeping across the panel. */
+/** The attack: a tinted band sweeping across the panel. */
 function Sweep({ x }: { x: number }) {
   const tone = useTone();
   if (x < -30 || x > W + 30) return null;

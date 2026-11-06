@@ -12,9 +12,9 @@ import {
 } from "react";
 
 /**
- * The figure kit. Every plate is drawn as SVG from geometry, and every tone inside it is an ordered (Bayer) dither
- * rather than a gradient or an alpha fill: the plates read like printed line art, not like a UI. A plate's clock only
- * runs while it is on screen; with reduced motion it rests on its explanatory final frame.
+ * The figure kit. Every plate is drawn as SVG from geometry in the manual's one blue, filled only with its flat light
+ * tints (never gradients): the plates read like printed line art, not like a UI. A plate's clock only runs while it
+ * is on screen; with reduced motion it rests on its explanatory final frame.
  */
 
 // ---- time ---------------------------------------------------------------------------------------------------------
@@ -109,8 +109,8 @@ function useVisibleClock(ref: React.RefObject<HTMLElement | null>, still: boolea
 // ---- plate --------------------------------------------------------------------------------------------------------
 
 /**
- * A figure plate: crop marks at the corners (the print sheet's registration), the drawing, and the paper caption
- * below it ("Figure n." in bold, then the sentence).
+ * A figure plate: the drawing on a faint dot grid, tagged FIG_00n down the left edge and [ TITLE ] down the right, with
+ * the full caption kept for screen readers (the surrounding text carries it for everyone else).
  */
 export function Plate({
   n,
@@ -119,7 +119,6 @@ export function Plate({
   caption,
   className = "",
   label,
-  scroll = false,
 }: {
   n: number;
   title: string;
@@ -128,8 +127,6 @@ export function Plate({
   className?: string;
   /** Accessible description of what the animation shows. */
   label: string;
-  /** Wide drawings keep a legible minimum width on phones and scroll sideways inside the plate. */
-  scroll?: boolean;
 }) {
   const ref = useRef<HTMLElement>(null);
   const reduced = useReducedMotion();
@@ -144,10 +141,8 @@ export function Plate({
         <span aria-hidden className="fig-tag absolute top-3 right-2.5">
           {`[ ${title.replace(/\.$/u, "")} ]`}
         </span>
-        <div role="img" aria-label={label} className={scroll ? "-mx-1 overflow-x-auto px-1 pb-1" : undefined}>
-          <div className={scroll ? "min-w-[620px]" : undefined}>
-            <ClockContext.Provider value={{ t, still: reduced, uid }}>{children}</ClockContext.Provider>
-          </div>
+        <div role="img" aria-label={label}>
+          <ClockContext.Provider value={{ t, still: reduced, uid }}>{children}</ClockContext.Provider>
         </div>
       </div>
       <figcaption id={`${uid}-cap`} className="sr-only">
@@ -244,7 +239,7 @@ export function Label({
   opacity?: number;
   /** Small caps (labels); false for formulas and hex, whose case carries meaning. */
   caps?: boolean;
-  /** A paper patch behind the text, so a label stays legible over lines and dither. */
+  /** A paper patch behind the text, so a label stays legible over lines and fills. */
   knockout?: boolean;
 }) {
   const { uid } = usePlate();
@@ -330,7 +325,7 @@ export function Readout({
         ))}
       </span>
       {unit && (
-        <span aria-hidden className="font-mono text-[0.7rem] tracking-[0.06em] text-ink-2 uppercase">
+        <span aria-hidden className="font-mono text-[12px] tracking-[0.06em] text-ink-2 uppercase">
           {unit}
         </span>
       )}
