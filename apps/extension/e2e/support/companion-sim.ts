@@ -26,6 +26,7 @@ import {
   TX_TYPE,
   UR_TYPES,
   UrReceiver,
+  decodeSignature,
   encodePqKey,
   encodeSignature,
   singlePartUr,
@@ -72,6 +73,13 @@ function decode(
     if (r.status === "error") throw r.error;
   }
   throw new Error("incomplete UR");
+}
+
+/** The typed-data signature inside a `ur:leaked-signature` answer (a note key: what the note secrets derive from). */
+export function typedSignatureIn(answerText: string): Hex {
+  const sig = decodeSignature(decode(answerText, UR_TYPES.signature).cbor).typedSig;
+  if (!sig) throw new Error("the answer carries no typed-data signature");
+  return sig;
 }
 
 export interface Phone {

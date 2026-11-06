@@ -85,7 +85,8 @@ function PrivacyBody({ view, reload }: { view: PrivacyView; reload: () => void }
       <Card className="bg-surface">
         <p className="t-body">
           Powered by Privacy Pools (0xbow). Deposits are public and are reviewed by the pool&apos;s reviewer before they
-          can be spent. Your spending key for this balance lives on your phone, not in this browser.
+          can be spent. Your spending keys for this balance live on your phone, not in this browser, which keeps only
+          what is public about each note (enough to show the balance after you unlock).
         </p>
         <details className="mt-2">
           <summary className="t-small cursor-pointer text-muted underline underline-offset-2">What to know</summary>
@@ -262,7 +263,7 @@ function AmountForm({
           description={
             kind === "shield"
               ? "Needs your phone (the note key), and a Vault approval for the payment unless it fits your daily limit as an everyday payment."
-              : `Up to ${eth(max)} in one move. It goes to a fresh address made for this withdrawal (your phone can recover it).`
+              : `Up to ${eth(max)} in one move. Your phone signs twice (the note's key, then its change note's key); it goes to a fresh address made for this withdrawal (your phone can recover it).`
           }
         />
         {kind === "unshield" && (
@@ -293,7 +294,7 @@ function steps(op: PrivacyOp): TimelineStep[] {
           ["In the pool", ["done"]],
         ]
       : [
-          ["Phone signs the change note key", ["preparing", "phone"]],
+          ["Phone signs the note key, then the change note key", ["preparing", "phone"]],
           ["Prove on this computer", ["proving"]],
           ["Send via the fee payer", ["submitted"]],
           ["Arrived", ["done"]],

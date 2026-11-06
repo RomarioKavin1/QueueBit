@@ -1,9 +1,12 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Page, Worker } from "@playwright/test";
-import { createPublicClient, http, parseEther, type Address } from "viem";
+import { createPublicClient, http, parseEther, type Address, type Hex } from "viem";
+import { KeyringController } from "../src/background/keyring";
+import { MemoryKV } from "../src/shared/kv";
 import { localDeployment } from "../src/generated/contracts";
 import {
+  PASSWORD,
   activateFromOnboarding,
   companion,
   expect,
@@ -26,10 +29,12 @@ import {
  * (tx-type 2 for the note keys).
  *
  * Shield → sync → withdraw: Move to private (phone signs the note key, once more for the one-time determinism check;
- * the deposit is a Vault payment) → the reviewer approves → sync → Move to public (phone signs the change note key)
- * → proof in the offscreen document → PoolPayer withdrawal through the BUDGET-010 sidecar (:14340) → the money arrives
- * at the fresh address. Then a queued Vault loosening → the light-mode watcher raises the alert (list, badge,
- * notification) and its deep link opens Pending at that change.
+ * the deposit is a Vault payment) → the reviewer approves → sync → Move to public (phone signs the note's key, then the
+ * change note's key) → proof in the offscreen document → PoolPayer withdrawal through the BUDGET-010 sidecar (:14340)
+ * → the money arrives at the fresh address. Then the leaked-hot-key PoC: the password (so the everyday seed) plus a
+ * copy of storage.local decrypts to public note data only, never a note signature, so a withdrawal cannot be built
+ * without the phone (plan §00: private spends are vault-approved only). Then a queued Vault loosening → the
+ * light-mode watcher raises the alert (list, badge, notification) and its deep link opens Pending at that change.
  */
 const RPC = "http://localhost:8545";
 const SIDECAR = "http://localhost:14340/rpc";
@@ -59,8 +64,8 @@ async function ready(): Promise<string | undefined> {
   return undefined;
 }
 
-/** The phone's part of a note-key request on the Private balance page. */
-async function phoneSignsNoteKey(page: Page, phone: Phone, purpose: string) {
+/** The phone's part of a note-key request on the Private balance page; returns the signature it gave. */
+async function phoneSignsNoteKey(page: Page, phone: Phone, purpose: string): Promise<Hex> {
   const op = page.getByTestId("privacy-op");
   await expect(op).toHaveAttribute("data-step", "phone", { timeout: 120_000 });
   await expect(page.getByTestId("privacy-phone")).toHaveAttribute("data-purpose", purpose);
@@ -71,6 +76,34 @@ async function phoneSignsNoteKey(page: Page, phone: Phone, purpose: string) {
   expect(answer.mismatch).toEqual([]);
   await op.getByTestId("scan-back").click();
   await pasteCode(page, answer.text);
+  return (await companion()).typedSignatureIn(answer.text);
+}
+
+/**
+ * `EncryptedStorage`'s format (packages/privacy/src/host/storage.ts), decrypted here as the attacker would: `v1:` +
+ * base64(iv ‖ AES-256-GCM ciphertext) with the full storage key as associated data.
+ */
+async function decryptStoreValue(rawKey: Uint8Array, fullKey: string, stored: string): Promise<string> {
+  expect(stored.startsWith("v1:")).toBe(true);
+  const blob = new Uint8Array(Buffer.from(stored.slice(3), "base64"));
+  const key = await crypto.subtle.importKey("raw", rawKey as Uint8Array<ArrayBuffer>, { name: "AES-GCM" }, false, [
+    "decrypt",
+  ]);
+  const pt = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: blob.subarray(0, 12), additionalData: new TextEncoder().encode(fullKey) },
+    key,
+    blob.subarray(12),
+  );
+  return new TextDecoder().decode(pt);
+}
+
+type StorageDump = Record<string, unknown>;
+async function dumpStorage(sw: Worker, area: "local" | "session"): Promise<StorageDump> {
+  return sw.evaluate(async (a) => {
+    const c = (globalThis as unknown as { chrome: { storage: Record<string, { get(k: null): Promise<StorageDump> }> } })
+      .chrome;
+    return c.storage[a]!.get(null);
+  }, area);
 }
 
 /** The Vault hand-off page for the deposit payment. */
@@ -136,7 +169,7 @@ test("M6: shield → sync → withdraw via PoolPayer to a fresh address; the wat
   await page.getByRole("button", { name: "Move to private" }).click();
   await page.getByLabel("Amount (ETH)").fill("0.1");
   await page.getByRole("button", { name: "Continue with phone" }).click();
-  await phoneSignsNoteKey(page, phone, "deposit-key");
+  const depositSig = await phoneSignsNoteKey(page, phone, "deposit-key");
   await phoneSignsNoteKey(page, phone, "check");
   const op = page.getByTestId("privacy-op");
   await expect(op).toHaveAttribute("data-step", "paying", { timeout: 120_000 });
@@ -163,7 +196,10 @@ test("M6: shield → sync → withdraw via PoolPayer to a fresh address; the wat
   await page.getByLabel("Amount (ETH)").fill("0.05");
   await shot("app-privacy-unshield-form", page);
   await page.getByRole("button", { name: "Continue with phone" }).click();
-  await phoneSignsNoteKey(page, phone, "withdraw-key");
+  // Two approvals: the note being spent (its key is never kept), then the change note (kept until the move is done).
+  const noteSig = await phoneSignsNoteKey(page, phone, "note-key");
+  expect(noteSig).toBe(depositSig); // the same envelope, deterministic: the phone re-derives, the browser never stores
+  const changeSig = await phoneSignsNoteKey(page, phone, "withdraw-key");
   await expect(op).toHaveAttribute("data-step", /proving|submitted|done/u, { timeout: 120_000 });
   if ((await op.getAttribute("data-step")) === "proving") await shot("app-privacy-proving", page);
   await expect(op).toHaveAttribute("data-step", /submitted|done/u, { timeout: 300_000 });
@@ -177,8 +213,53 @@ test("M6: shield → sync → withdraw via PoolPayer to a fresh address; the wat
   expect(received < parseEther("0.05")).toBe(true); // the network fee came out of the withdrawal, at cost
   await expect(page.getByTestId("privacy-received")).not.toHaveText("0 ETH");
   await shot("app-privacy-withdrawn", page);
-  // The change note (0.05 ETH) is found again from the kept phone signature: no new scan.
+  // The change note (0.05 ETH) is in the public ledger (its commitment is the pool's new leaf): no new scan.
   await expect(page.getByTestId("privacy-available")).toHaveText("0.05 ETH", { timeout: 120_000 });
+  await page.getByRole("button", { name: "Sync now" }).click();
+  await expect(page.getByTestId("privacy-sync")).toHaveAttribute("data-status", "idle", { timeout: 120_000 });
+  await expect(page.getByTestId("privacy-available")).toHaveText("0.05 ETH");
+
+  // ---- PoC (THREAT-MODEL "leaked hot key"): the password + a copy of storage.local cannot build a withdrawal ----
+  const local = await dumpStorage(serviceWorker, "local");
+  const session = await dumpStorage(serviceWorker, "session");
+  // The spend keys left the session when the withdrawal finished; storage.local never had them under any key.
+  expect(session["leaked:privacy:answers:1337"]).toBeUndefined();
+  expect(Object.keys(local).filter((k) => /ans:|sig:/u.test(k))).toEqual([]);
+  const ppKeys = Object.keys(local).filter((k) => k.startsWith("pp:1337:0:"));
+  expect(ppKeys.map((k) => k.slice("pp:1337:0:".length).split(":")[0]).sort()).toEqual(["ledger", "state"]);
+  // The attacker unlocks a copy of the keyring with the password: that is the everyday seed, and the store key.
+  const copy = new MemoryKV();
+  for (const [k, v] of Object.entries(local)) await copy.set(k, v);
+  const attacker = new KeyringController(copy, new MemoryKV());
+  await attacker.unlock(PASSWORD);
+  const raw = await attacker.deriveStorageKey("privacy-pools:1337");
+  const plaintexts: string[] = [];
+  for (const k of ppKeys) plaintexts.push(await decryptStoreValue(raw, k, local[k] as string));
+  const everything = JSON.stringify(local) + "\n" + plaintexts.join("\n");
+  for (const sig of [depositSig, noteSig, changeSig]) {
+    const r = sig.slice(2, 66); // the same in every encoding of the signature (r ‖ s ‖ v, r ‖ lowS, compact)
+    expect(everything).not.toContain(r);
+    expect(everything).not.toContain(Buffer.from(r, "hex").toString("base64"));
+  }
+  // The decrypted state and ledger hold decimal field elements and 20-byte addresses: no 32-byte-or-longer hex
+  // string (a key, a signature) at all. (storage.local itself holds the deposit calldata, hence the plaintexts.)
+  expect(plaintexts.join("\n")).not.toMatch(/0x[0-9a-fA-F]{64,}/u);
+  const ledgerText = plaintexts.find((t) => t.includes('"secretIndex"'))!;
+  expect(ledgerText).not.toMatch(/"nullifier"|"salt"|"signature"/u);
+  const ledger = JSON.parse(ledgerText) as Array<{ secretIndex: number; value: string; status: string }>;
+  // They can read the balance (the change note, 0.05 ETH, approved) …
+  expect(ledger.find((n) => n.secretIndex === 1)).toMatchObject({ value: `${parseEther("0.05")}n` });
+  expect(Object.keys(ledger[0]!).sort()).toEqual([
+    "commitment",
+    "depositIndex",
+    "label",
+    "nullifierHash",
+    "precommitment",
+    "secretIndex",
+    "status",
+    "value",
+  ]);
+  console.log(`[privacy e2e] PoC: storage.local decrypts to ${plaintexts.length} values (state, ledger); no spend key`);
   // The proof was made in the offscreen document's Worker, and its time measured for the next estimate.
   const proofMs = await serviceWorker.evaluate(async () => {
     const s = (

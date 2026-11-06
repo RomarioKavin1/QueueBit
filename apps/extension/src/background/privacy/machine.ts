@@ -4,9 +4,9 @@ import type { PhoneAsk, PrivacyOp, PrivacyStep } from "../../shared/privacy";
 /**
  * The private-balance operation state machine (plan §40 §1.5, ux-spec §3.11), pure: the service worker feeds it
  * events and persists the result; the page renders it. Shield: preparing → phone (the note key) → paying (an
- * everyday payment or a Vault approval of the deposit) → done. Unshield: preparing → phone (the change note's key)
+ * everyday payment or a Vault approval of the deposit) → done. Unshield: preparing → phone (the note's key, then the change note's key)
  * → proving → submitted (alt mempool) → done. Any step → failed with a plain reason; `retry` marks failures where
- * trying again is safe and needs no new phone approval when the signature is already kept.
+ * trying again is safe and needs no new phone approval while the signatures are still in the session (same unlock).
  */
 export type PrivacyEvent =
   | { type: "needs-phone"; phone: PhoneAsk }
@@ -21,7 +21,7 @@ export type PrivacyEvent =
   | { type: "withdrawn"; receivedWei: string }
   | { type: "failed"; error: NonNullable<PrivacyOp["error"]> }
   | { type: "retry" }
-  /** The service worker restarted while proving (nothing was sent yet): prepare again from the kept signatures. */
+  /** The service worker restarted while proving (nothing was sent yet): prepare again from the session's signatures. */
   | { type: "restart" };
 
 const FINAL: readonly PrivacyStep[] = ["done", "failed"];
@@ -286,7 +286,9 @@ export function stepCopy(op: PrivacyOp, estimateMs?: number): { title: string; b
             ? "One more scan of the same request, once: LEAKED checks that your phone signs note keys the same way every time."
             : shield
               ? "Your phone signs the key of this deposit's private note. Nothing is sent to the network and no money moves."
-              : "Your phone signs the key of the note that keeps your change. That signature is what lets this withdrawal be spent; the browser never holds it on its own.",
+              : op.phone?.purpose === "note-key"
+                ? "Your phone signs the key of the note you're moving. That key is what spends it; this browser never keeps it, so every withdrawal asks."
+                : "Your phone signs the key of the note that keeps your change (it also makes the fresh address). Kept only until this withdrawal is done.",
       };
     case "paying":
       return op.deposit?.route === "vault"

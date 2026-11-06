@@ -4,6 +4,7 @@ import {
   getAddress,
   hexToBytes,
   hexToString,
+  parseEther,
   toFunctionSelector,
   toHex,
   type Address,
@@ -14,13 +15,22 @@ import { decodeSignRequest, encodeSignature } from "@leaked/ur";
 import {
   ENTRYPOINT_ABI,
   EncryptedStorage,
+  buildNoteEnvelope,
+  canonicalRS,
+  commitmentOf,
   createSignatureSecretManager,
   importStorageKey,
-  memoryBackend,
+  noteFromPublic,
+  refreshPublicNotes,
   rootOf,
+  senderKeyFromSignature,
+  unconfirmedDeposit,
   type HostProvider,
   type PoolState,
+  type PublicNote,
 } from "@leaked/privacy";
+import { KeyringController } from "../../src/background/keyring";
+import { MemoryKV } from "../../src/shared/kv";
 import {
   failureFor,
   isFinal,
@@ -34,7 +44,9 @@ import {
   type PrivacyEvent,
 } from "../../src/background/privacy/machine";
 import {
+  NOTE_ANSWERS_KEY,
   NeedsPhoneError,
+  NoteAnswers,
   acceptPhoneAnswer,
   answerKey,
   phoneAsk,
@@ -53,6 +65,19 @@ const ENTRYPOINT: Address = "0x2222222222222222222222222222222222222222";
 const PAYER_KEY: Hex = "0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6"; // anvil #9, public
 const payer = privateKeyToAccount(PAYER_KEY);
 
+/** The phone's side of a note-key request: decode, sign the typed data with the paired payer, encode the answer. */
+const answer = async (a: ReturnType<typeof phoneAsk>) => {
+  const req = decodeSignRequest(hexToBytes(a.cbor));
+  const typed = JSON.parse(hexToString(req.payload));
+  const message = {
+    depositIndex: BigInt(typed.message.depositIndex),
+    secretIndex: BigInt(typed.message.secretIndex),
+  };
+  return toHex(
+    encodeSignature({ requestId: req.requestId, typedSig: await payer.signTypedData({ ...typed, message }) }),
+  );
+};
+const opts = { chainId: 1337, entrypoint: ENTRYPOINT, payer: payer.address };
 const run = (op: PrivacyOp, events: PrivacyEvent[]) => events.reduce((o, e, i) => transition(o, e, T + i + 1), op);
 const ask = {
   requestId: "r",
@@ -203,30 +228,12 @@ describe("state machine", () => {
   });
 });
 
-describe("phone-backed note signer (survives a service-worker restart)", () => {
-  const store = async () =>
-    new EncryptedStorage({
-      backend: memoryBackend(),
-      namespace: "pp:1337:0:",
-      key: await importStorageKey(new Uint8Array(32).fill(3)),
-    });
-  const answer = async (a: ReturnType<typeof phoneAsk>) => {
-    const req = decodeSignRequest(hexToBytes(a.cbor));
-    const typed = JSON.parse(hexToString(req.payload));
-    const message = {
-      depositIndex: BigInt(typed.message.depositIndex),
-      secretIndex: BigInt(typed.message.secretIndex),
-    };
-    return toHex(
-      encodeSignature({ requestId: req.requestId, typedSig: await payer.signTypedData({ ...typed, message }) }),
-    );
-  };
-  const opts = { chainId: 1337, entrypoint: ENTRYPOINT, payer: payer.address };
+describe("phone-backed note signer (survives a service-worker restart; signatures only in the session)", () => {
+  const answers = () => new NoteAnswers(new MemoryKV(), 1337);
 
-  it("asks the phone (tx-type 2 for the paired payer), keeps the verified answer, then derives without asking", async () => {
-    const s = await store();
-    const mk = () =>
-      createSignatureSecretManager({ signer: phoneSigner(s), chainId: 1337n, entrypoint: ENTRYPOINT, cache: s });
+  it("asks the phone (tx-type 2 for the paired payer), keeps the verified answer for the session, then derives", async () => {
+    const a = answers();
+    const mk = () => createSignatureSecretManager({ signer: phoneSigner(a), chainId: 1337n, entrypoint: ENTRYPOINT });
     const e1 = await mk()
       .getDepositSecrets(0)
       .catch((e) => e);
@@ -236,32 +243,42 @@ describe("phone-backed note signer (survives a service-worker restart)", () => {
     const req = decodeSignRequest(hexToBytes(a1.cbor));
     expect(req.txType).toBe(2);
     expect(getAddress(req.payer!)).toBe(payer.address);
-    expect(await acceptPhoneAnswer(s, a1, await answer(a1), opts)).toEqual({ deterministic: false });
+    expect(await acceptPhoneAnswer(a, a1, await answer(a1), opts)).toEqual({ deterministic: false });
     // The one-time determinism check asks again (attempt 1), compared with the first answer.
     const e2 = await mk()
       .getDepositSecrets(0)
       .catch((e) => e);
     expect(e2).toMatchObject({ attempt: 1 });
     const a2 = phoneAsk(e2, { ...opts, purpose: "check" });
-    expect(await acceptPhoneAnswer(s, a2, await answer(a2), opts)).toEqual({ deterministic: true });
+    expect(await acceptPhoneAnswer(a, a2, await answer(a2), opts)).toEqual({ deterministic: true });
     const secrets = await mk().getDepositSecrets(0);
     expect(secrets.precommitment).toBeTypeOf("bigint");
-    // Once checked, later sessions use the kept signature: no phone at all.
+    // Within the session (a service-worker restart included) the answer is found again without the phone …
     const later = createSignatureSecretManager({
-      signer: phoneSigner(s),
+      signer: phoneSigner(a),
       chainId: 1337n,
       entrypoint: ENTRYPOINT,
-      cache: s,
       verifyDeterminism: false,
     });
     expect(await later.getDepositSecrets(0)).toEqual(secrets);
+    // … and once the operation ends or the wallet locks, the phone is needed again.
+    await a.clear();
+    await expect(later.getDepositSecrets(1)).rejects.toBeInstanceOf(NeedsPhoneError);
+    await expect(
+      createSignatureSecretManager({
+        signer: phoneSigner(a),
+        chainId: 1337n,
+        entrypoint: ENTRYPOINT,
+        verifyDeterminism: false,
+      }).getDepositSecrets(0),
+    ).rejects.toBeInstanceOf(NeedsPhoneError);
   });
 
   it("refuses an answer for another request, from another phone, or signed differently the second time", async () => {
-    const s = await store();
+    const a0 = answers();
     const a = phoneAsk(new NeedsPhoneError(0, 1, 0), { ...opts, purpose: "withdraw-key" });
     const other = phoneAsk(new NeedsPhoneError(0, 1, 0), { ...opts, purpose: "withdraw-key" });
-    await expect(acceptPhoneAnswer(s, a, await answer(other), opts)).rejects.toThrow(/different request/u);
+    await expect(acceptPhoneAnswer(a0, a, await answer(other), opts)).rejects.toThrow(/different request/u);
     const foreign = privateKeyToAccount("0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a");
     const req = decodeSignRequest(hexToBytes(a.cbor));
     const typed = JSON.parse(hexToString(req.payload));
@@ -271,24 +288,186 @@ describe("phone-backed note signer (survives a service-worker restart)", () => {
         typedSig: await foreign.signTypedData({ ...typed, message: { depositIndex: 0n, secretIndex: 1n } }),
       }),
     );
-    await expect(acceptPhoneAnswer(s, a, wrong, opts)).rejects.toThrow(/expected the vault payer/u);
-    expect(await s.get(answerKey(0, 1, 0))).toBeNull();
+    await expect(acceptPhoneAnswer(a0, a, wrong, opts)).rejects.toThrow(/expected the vault payer/u);
+    expect(await a0.get(0, 1, 0)).toBeUndefined();
     // Attempt 1 that differs from attempt 0: the phone is not deterministic.
-    await s.set(
-      answerKey(0, 1, 0),
-      await payer.signTypedData({ ...typed, message: { depositIndex: 0n, secretIndex: 9n } }),
-    );
+    await a0.set(0, 1, 0, await payer.signTypedData({ ...typed, message: { depositIndex: 0n, secretIndex: 9n } }));
     const check = { ...a, attempt: 1, purpose: "check" as const };
-    const e = await acceptPhoneAnswer(s, check, await answer(check), opts).catch((x) => x);
+    const e = await acceptPhoneAnswer(a0, check, await answer(check), opts).catch((x) => x);
     expect(e.name).toBe("NonDeterministicSignerError");
   });
 
-  it("locked store: nothing is readable (the wallet lock drops its key)", async () => {
-    const s = await store();
-    s.lock();
-    await expect(
-      phoneSigner(s).signEnvelope({ message: { depositIndex: 0n, secretIndex: 0n } } as never),
-    ).rejects.toThrow(/locked/u);
+  it("the answer never touches storage.local: only the session KV, under its own key", async () => {
+    const session = new MemoryKV();
+    const a = new NoteAnswers(session, 1337);
+    const ask = phoneAsk(new NeedsPhoneError(0, 0, 0), { ...opts, purpose: "deposit-key" });
+    await acceptPhoneAnswer(a, ask, await answer(ask), opts);
+    expect(Object.keys((await session.get<Record<string, string>>(NOTE_ANSWERS_KEY(1337)))!)).toEqual([
+      answerKey(0, 0, 0),
+    ]);
+    await a.clear();
+    expect(await session.get(NOTE_ANSWERS_KEY(1337))).toBeUndefined();
+  });
+});
+
+describe("PoC: the everyday seed + a copy of storage.local cannot withdraw (plan §00: no pool spend key in the hot side)", () => {
+  /**
+   * Replays what the service worker persists for a deposit and a withdrawal: the public ledger and pool state in the
+   * seed-keyed encrypted store (storage.local), the phone's signatures in the session answers. Then plays the
+   * attacker of THREAT-MODEL "leaked hot key": the mnemonic (so the seed-derived store key) and every byte of
+   * storage.local, no phone, no session. The attacker can read the balance and cannot build a note to prove with.
+   */
+  it("storage.local decrypts to public note data only; no signature, nullifier or salt; proving needs the phone", async () => {
+    const local = new MemoryKV();
+    const session = new MemoryKV();
+    const keyring = new KeyringController(local, session, { scrypt: { N: 2 ** 10, r: 8, p: 1 } });
+    const { mnemonic } = await keyring.create("correct-horse-battery");
+    const chainId = 1337;
+    const openStore = async (kr: KeyringController) => {
+      const raw = await kr.deriveStorageKey(`privacy-pools:${chainId}`);
+      return new EncryptedStorage({
+        backend: {
+          get: async (k) => (await local.get<string>(k)) ?? null,
+          set: (k, v) => local.set(k, v),
+          remove: (k) => local.remove(k),
+        },
+        namespace: `pp:${chainId}:0:`,
+        key: await importStorageKey(raw),
+      });
+    };
+
+    // The wallet, unlocked, with the phone: a deposit (d=0) and a withdrawal spending it into change note (0, 1).
+    const store = await openStore(keyring);
+    const answers = new NoteAnswers(session, chainId);
+    const secrets = createSignatureSecretManager({
+      signer: phoneSigner(answers),
+      chainId: BigInt(chainId),
+      entrypoint: ENTRYPOINT,
+      verifyDeterminism: false,
+    });
+    const phone = async (d: number, k: number) => {
+      const ask = phoneAsk(new NeedsPhoneError(d, k, 0), {
+        ...opts,
+        purpose: k === 0 ? "deposit-key" : "withdraw-key",
+      });
+      await acceptPhoneAnswer(answers, ask, await answer(ask), opts);
+    };
+    await phone(0, 0);
+    await phone(0, 1);
+    const s0 = await secrets.getDepositSecrets(0);
+    const s1 = await secrets.getSecrets(0, 1);
+    const label = 42n;
+    const c0 = commitmentOf(parseEther("0.1"), label, s0.precommitment);
+    const c1 = commitmentOf(parseEther("0.05"), label, s1.precommitment);
+    const state: PoolState = {
+      pool: ENTRYPOINT,
+      fromBlock: 0n,
+      syncedTo: 9n,
+      leaves: [c0, c1],
+      root: rootOf([c0, c1]),
+      deposits: [
+        {
+          depositor: ENTRYPOINT,
+          commitment: c0,
+          label,
+          value: parseEther("0.1"),
+          precommitment: s0.precommitment,
+          blockNumber: 1n,
+        },
+      ],
+      withdrawals: [
+        {
+          processooor: ENTRYPOINT,
+          value: parseEther("0.05"),
+          spentNullifier: s0.nullifierHash,
+          newCommitment: c1,
+          blockNumber: 2n,
+        },
+      ],
+      ragequits: [],
+    };
+    const ser = (v: unknown) => JSON.stringify(v, (_k, x) => (typeof x === "bigint" ? `${x}n` : x));
+    const { ledger, current } = refreshPublicNotes({
+      ledger: [
+        unconfirmedDeposit(0, s0),
+        {
+          depositIndex: 0,
+          secretIndex: 1,
+          precommitment: s1.precommitment,
+          nullifierHash: s1.nullifierHash,
+          value: parseEther("0.05"),
+          label,
+          commitment: c1,
+          status: "pending",
+        },
+      ],
+      state,
+      aspLabels: [label],
+    });
+    await store.set(`state:${ENTRYPOINT.toLowerCase()}`, ser(state));
+    await store.set(`ledger:${ENTRYPOINT.toLowerCase()}`, ser(ledger));
+    expect(current[0]).toMatchObject({ secretIndex: 1, value: parseEther("0.05"), status: "approved" });
+    await answers.clear(); // the withdrawal is done: the spend keys leave the session
+    await keyring.lock();
+
+    // ---- the attacker: the mnemonic and a byte-for-byte copy of storage.local ----
+    const copy = new MemoryKV();
+    const dump: Record<string, unknown> = {};
+    for (const k of (local as unknown as { map: Map<string, unknown> }).map.keys()) {
+      dump[k] = await local.get(k);
+      await copy.set(k, dump[k]);
+    }
+    const attacker = new KeyringController(copy, new MemoryKV(), { scrypt: { N: 2 ** 10, r: 8, p: 1 } });
+    await attacker.unlock("correct-horse-battery");
+    expect(await attacker.withMnemonic((m) => m)).toBe(mnemonic); // the hot seed is theirs
+    const theirStore = await openStore(attacker);
+    const plaintexts: string[] = [];
+    for (const k of Object.keys(dump)) {
+      if (!k.startsWith(`pp:${chainId}:0:`)) continue;
+      plaintexts.push((await theirStore.get(k.slice(`pp:${chainId}:0:`.length)))!);
+    }
+    expect(plaintexts).toHaveLength(2); // the pool state and the ledger, nothing else
+    const everything = JSON.stringify(dump) + plaintexts.join("\n");
+    // No phone signature anywhere (any form), no nullifier or salt of either note, no sender key.
+    for (const d of [0, 1]) {
+      for (const att of [0, 1]) {
+        const sig = await answers.get(d, 0, att);
+        expect(sig).toBeUndefined();
+      }
+    }
+    const sig0 = await payer.signTypedData(
+      buildNoteEnvelope({ chainId: 1337n, entrypoint: ENTRYPOINT, depositIndex: 0, secretIndex: 0 }),
+    );
+    const sig1 = await payer.signTypedData(
+      buildNoteEnvelope({ chainId: 1337n, entrypoint: ENTRYPOINT, depositIndex: 0, secretIndex: 1 }),
+    );
+    for (const sig of [sig0, sig1]) {
+      expect(everything).not.toContain(sig.slice(2, 66)); // r
+      expect(everything).not.toContain(toHex(canonicalRS(sig)).slice(2));
+    }
+    for (const secret of [s0.nullifier, s0.salt, s1.nullifier, s1.salt]) {
+      expect(everything).not.toContain(secret.toString());
+      expect(everything).not.toContain(secret.toString(16));
+    }
+    expect(everything).not.toContain(senderKeyFromSignature(sig1).slice(2));
+    expect(Object.keys(dump).some((k) => /:(ans|sig):/u.test(k))).toBe(false);
+    // They can read the balance …
+    const theirLedger = JSON.parse(
+      plaintexts.find((t) => t.includes('"secretIndex"'))!,
+      (_k, x) => (typeof x === "string" && /^\d+n$/u.test(x) ? BigInt(x.slice(0, -1)) : x),
+    ) as PublicNote[];
+    const theirView = refreshPublicNotes({ ledger: theirLedger, state, aspLabels: [label] });
+    expect(theirView.current[0]!.value).toBe(parseEther("0.05"));
+    // … and cannot spend: a Note needs the secret manager, whose only source is the phone.
+    const noPhone = createSignatureSecretManager({
+      signer: phoneSigner(new NoteAnswers(new MemoryKV(), chainId)),
+      chainId: BigInt(chainId),
+      entrypoint: ENTRYPOINT,
+      verifyDeterminism: false,
+    });
+    await expect(noteFromPublic(theirView.current[0]!, noPhone)).rejects.toBeInstanceOf(NeedsPhoneError);
+    // Guessing the preimages is the circuit's job to refuse: zero preimages do not rebuild the pool's leaf.
+    expect(commitmentOf(parseEther("0.05"), label, commitmentOf(0n, 0n, 0n))).not.toBe(c1);
   });
 });
 

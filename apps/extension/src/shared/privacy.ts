@@ -44,7 +44,8 @@ export interface PhoneAsk {
   secretIndex: number;
   /** 0 = the first signature; 1 = the one-time check that the phone signs the same way twice. */
   attempt: number;
-  purpose: "deposit-key" | "withdraw-key" | "check";
+  /** `note-key`: the key of the note being spent; `withdraw-key`: the change note's key (also the fresh recipient). */
+  purpose: "deposit-key" | "note-key" | "withdraw-key" | "check";
 }
 
 export interface PrivacyOp {
@@ -60,6 +61,10 @@ export interface PrivacyOp {
   phoneCount: number;
   deposit?: {
     depositIndex: number;
+    /** Public once deposited (`Deposited.precommitment`); the ledger entry is made from it when the payment lands. */
+    precommitment?: string;
+    /** `Poseidon(nullifier)`: public when the note is spent; lets the sync follow the spend without the phone. */
+    nullifierHash?: string;
     tx: { to: Hex; data: Hex; valueWei: string };
     route?: "hot" | "vault";
     activityId?: string;

@@ -12,10 +12,12 @@ import {
   isolationKeyFor,
   networkTransport,
   readPoolPayerRules,
+  refreshPublicNotes,
   withdrawalClients,
   type HostProvider,
   type Note,
   type Prover,
+  type PublicNote,
   type StorageBackend,
 } from "@leaked/privacy";
 import { findNetwork, getNetwork } from "../../shared/chains";
@@ -30,12 +32,17 @@ import type { SettingsStore } from "../settings";
 import type { VaultFlow } from "../vault";
 import { PrivacyConfigStore, poolOrderAsp, validatePrivacyConfig, type PrivacyConfigInput } from "./config";
 import { failureFor, isFinal, newOp, proofEstimate, transition, type PrivacyEvent } from "./machine";
-import { NeedsPhoneError, acceptPhoneAnswer, phoneAsk, phoneSigner } from "./phoneSigner";
+import { NeedsPhoneError, NoteAnswers, acceptPhoneAnswer, phoneAsk, phoneSigner } from "./phoneSigner";
 
 export const PRIVACY_STATE_KEY = (chainId: number) => `leaked:privacy:${chainId}`;
 const HISTORY = 20;
 
-/** Persisted per chain (public data only: amounts, indices, hashes; note secrets live in the encrypted store). */
+/**
+ * Persisted per chain in storage.local (public data only: amounts, indices, hashes). The note LEDGER (public note
+ * data: precommitments, commitments, labels, values, nullifier hashes; never a nullifier, secret or signature) and the
+ * pool state live in the seed-keyed encrypted store; the phone's signatures (the spend keys) only in the session
+ * answers (`NoteAnswers`).
+ */
 export interface PrivacyRecord {
   account?: Address;
   /** Deposits this browser knows it made: discovery stops there, so a refresh never asks the phone. */
@@ -53,6 +60,8 @@ const EMPTY: PrivacyRecord = { depositsMade: 0, sync: { status: "idle" }, histor
 
 export interface PrivacyDeps {
   kv: KV;
+  /** chrome.storage.session: the phone's note signatures of the operation in progress live here and nowhere else. */
+  session: KV;
   keyring: KeyringController;
   plans: AccountPlans;
   payments: Payments;
@@ -73,15 +82,21 @@ const kvBackend = (kv: KV): StorageBackend => ({
   remove: (k) => kv.remove(k),
 });
 
+type Ctx = Awaited<ReturnType<PrivacyController["context"]>>;
+
 /**
  * The private balance (plan §40 §1, ux-spec §3.11) in the service worker. Every operation is a persisted state
  * machine (`machine.ts`) advanced by `run`, which is safe to call again after a service-worker restart: it re-derives
  * everything from storage and the chain, and resumes a withdrawal that was already sent by its hash.
  *
  * Rules kept here:
- *  - the browser holds no pool spend key: note secrets come from the paired phone's signatures over clear-signed
- *    note envelopes (QR, tx-type 2) and are kept only in an encrypted store whose key (HKDF from the seed, not any
- *    signing key) is dropped on lock, which also makes the secret manager forget (BACKLOG, privacy package);
+ *  - the browser holds no pool spend key (plan §00 "private spends are vault-approved only"): note secrets come from
+ *    the paired phone's signatures over clear-signed note envelopes (QR, tx-type 2). A signature is the note's spend
+ *    key, so it is kept only in `chrome.storage.session` for the operation that needs it (dropped on lock, when the
+ *    operation ends, and when the browser closes), and the secret manager has no persistent cache. The balance is
+ *    shown from a PUBLIC ledger (`PublicNote`: no preimages) in the seed-keyed encrypted store, refreshed against
+ *    the synced pool with no phone; a withdrawal re-asks the phone for the note being spent and for its change note.
+ *    Someone with the everyday seed and a copy of storage.local can read the balance, not move it;
  *  - a withdrawal always needs a phone approval (its change note is new) and goes to a fresh address through PoolPayer
  *    at cost: no fee choice exists anywhere (plan §40 §7);
  *  - the withdrawal's node calls run on their own circuit (`withdrawalClients`: a fresh Anon-RPC isolation key, or
@@ -91,6 +106,7 @@ export class PrivacyController {
   readonly config: PrivacyConfigStore;
   private readonly now: () => number;
   private readonly stores = new Map<number, EncryptedStorage>();
+  private readonly answers = new Map<number, NoteAnswers>();
   private readonly running = new Map<number, Promise<void>>();
 
   constructor(private readonly d: PrivacyDeps) {
@@ -118,7 +134,7 @@ export class PrivacyController {
     return op;
   }
 
-  /** The note-secret store for `chainId`, unlocked with the seed-derived key (wallet must be unlocked). */
+  /** The public ledger + pool-state store for `chainId`, unlocked with the seed-derived key (wallet unlocked). */
   private async store(chainId: number): Promise<EncryptedStorage> {
     let s = this.stores.get(chainId);
     if (!s) {
@@ -136,9 +152,43 @@ export class PrivacyController {
     return s;
   }
 
-  /** Wallet locked: drop every store key; each secret manager subscribed to its store forgets its signatures. */
+  private noteAnswers(chainId: number): NoteAnswers {
+    let a = this.answers.get(chainId);
+    if (!a) {
+      a = new NoteAnswers(this.d.session, chainId);
+      this.answers.set(chainId, a);
+    }
+    return a;
+  }
+
+  /** Wallet locked: drop every store key and every phone signature of the session. */
   lock(): void {
     for (const s of this.stores.values()) s.lock();
+    for (const a of this.answers.values()) void a.clear().catch(() => undefined);
+  }
+
+  // ---------------------------------------------------------------------------------------------- ledger ----
+
+  /** The public note ledger of `pool` (encrypted store, key `ledger:<pool>`): bigints as `<n>n` strings. */
+  private async ledger(store: EncryptedStorage, pool: Address): Promise<PublicNote[]> {
+    const s = await store.get(`ledger:${pool.toLowerCase()}`);
+    if (!s) return [];
+    return JSON.parse(s, (_k, x) => (typeof x === "string" && /^\d+n$/u.test(x) ? BigInt(x.slice(0, -1)) : x));
+  }
+
+  private async saveLedger(store: EncryptedStorage, pool: Address, ledger: readonly PublicNote[]): Promise<void> {
+    await store.set(
+      `ledger:${pool.toLowerCase()}`,
+      JSON.stringify(ledger, (_k, x) => (typeof x === "bigint" ? `${x}n` : x)),
+    );
+  }
+
+  /** Appends (or replaces) one public note in the ledger. */
+  private async recordNote(ctx: Ctx, note: PublicNote): Promise<void> {
+    const cur = (await this.ledger(ctx.store, ctx.cfg.pool)).filter(
+      (n) => !(n.depositIndex === note.depositIndex && n.secretIndex === note.secretIndex),
+    );
+    await this.saveLedger(ctx.store, ctx.cfg.pool, [...cur, note]);
   }
 
   // ---------------------------------------------------------------------------------------------- context ----
@@ -161,11 +211,12 @@ export class PrivacyController {
     const provider = this.provider(chainId);
     const store = await this.store(chainId);
     const rec = await this.record(chainId);
+    const answers = this.noteAnswers(chainId);
+    // No `cache`: a signature is a spend key and must never reach the seed-keyed store (see the class comment).
     const secrets = createSignatureSecretManager({
-      signer: phoneSigner(store),
+      signer: phoneSigner(answers),
       chainId: BigInt(chainId),
       entrypoint: cfg.entrypoint,
-      cache: store,
       verifyDeterminism: rec.deterministicPayer?.toLowerCase() !== payer.toLowerCase(),
     });
     const holder: { client?: PrivacyPoolsV1Client } = {};
@@ -183,7 +234,7 @@ export class PrivacyController {
       storage: store,
     }));
     await client.loadState().catch(() => undefined);
-    return { cfg, plan, payer, provider, store, client, secrets, timed };
+    return { cfg, plan, payer, provider, store, answers, client, secrets, timed };
   }
 
   private timedProver() {
@@ -259,8 +310,8 @@ export class PrivacyController {
     const before = await this.config.get(input.chainId);
     await this.config.set(cfg);
     if (!before || before.pool.toLowerCase() !== cfg.pool.toLowerCase()) {
-      // Another pool: its history, balance and deposit count start over (the encrypted note keys stay: they are
-      // per Entrypoint, so they cannot be confused).
+      // Another pool: its history, balance and deposit count start over (the ledger is per pool, so it cannot be
+      // confused).
       const rec = await this.record(input.chainId);
       await this.save(input.chainId, { ...EMPTY, history: rec.history, proofMs: rec.proofMs });
     }
@@ -269,14 +320,14 @@ export class PrivacyController {
 
   // ---------------------------------------------------------------------------------------------- sync ----
 
-  /** Root-checked note sync with progress, then the balance from the kept note keys (never a phone scan). */
+  /** Root-checked note sync with progress, then the balance from the public ledger (never a phone scan). */
   async sync(chainId: number): Promise<PrivacyView> {
     const ctx = await this.context(chainId);
     await this.syncWith(chainId, ctx);
     return this.view(chainId);
   }
 
-  private async syncWith(chainId: number, ctx: Awaited<ReturnType<PrivacyController["context"]>>) {
+  private async syncWith(chainId: number, ctx: Ctx): Promise<PublicNote[]> {
     const fromBlock = ctx.client.state ? ctx.client.state.syncedTo + 1n : BigInt(ctx.cfg.deployBlock);
     await this.save(chainId, { sync: { status: "syncing", fromBlock: fromBlock.toString(), at: this.now() } });
     let lastWrite = 0;
@@ -303,9 +354,13 @@ export class PrivacyController {
       });
       throw e;
     }
-    const rec = await this.record(chainId);
-    const { notes } = await ctx.client.notes({ maxDeposits: rec.depositsMade });
-    const sum = (s: Note["status"]) => notes.filter((n) => n.status === s).reduce((a, n) => a + n.value, 0n);
+    const { ledger, current: notes } = refreshPublicNotes({
+      ledger: await this.ledger(ctx.store, ctx.cfg.pool),
+      state: ctx.client.state!,
+      aspLabels: ctx.client.aspLabels!,
+    });
+    await this.saveLedger(ctx.store, ctx.cfg.pool, ledger);
+    const sum = (s: PublicNote["status"]) => notes.filter((n) => n.status === s).reduce((a, n) => a + n.value, 0n);
     await this.save(chainId, {
       account: ctx.plan.address,
       sync: {
@@ -317,12 +372,14 @@ export class PrivacyController {
       balance: {
         approvedWei: sum("approved").toString(),
         pendingWei: sum("pending").toString(),
-        notes: notes.map((n) => ({
-          depositIndex: n.depositIndex,
-          secretIndex: n.secretIndex,
-          valueWei: n.value.toString(),
-          status: n.status,
-        })),
+        notes: notes
+          .filter((n) => n.status !== "unconfirmed")
+          .map((n) => ({
+            depositIndex: n.depositIndex,
+            secretIndex: n.secretIndex,
+            valueWei: n.value.toString(),
+            status: n.status as NoteView["status"],
+          })),
         syncedTo: ctx.client.state!.syncedTo.toString(),
         at: this.now(),
       },
@@ -351,7 +408,7 @@ export class PrivacyController {
     if (!op || op.id !== opId || op.step !== "phone" || !op.phone) throw new Error("Nothing is waiting for the phone.");
     const ctx = await this.context(chainId);
     try {
-      const { deterministic } = await acceptPhoneAnswer(ctx.store, op.phone, signature, {
+      const { deterministic } = await acceptPhoneAnswer(ctx.answers, op.phone, signature, {
         chainId,
         entrypoint: ctx.cfg.entrypoint,
         payer: ctx.payer,
@@ -390,6 +447,9 @@ export class PrivacyController {
         type: "failed",
         error: { code: "cancelled", message: "Cancelled. Nothing was sent.", retry: false },
       });
+    await this.noteAnswers(chainId)
+      .clear()
+      .catch(() => undefined);
     return this.view(chainId);
   }
 
@@ -445,7 +505,14 @@ export class PrivacyController {
             chainId,
             entrypoint: ctx.cfg.entrypoint,
             payer: ctx.payer,
-            purpose: e.attempt > 0 ? "check" : cur.kind === "shield" ? "deposit-key" : "withdraw-key",
+            purpose:
+              e.attempt > 0
+                ? "check"
+                : cur.kind === "shield"
+                  ? "deposit-key"
+                  : e.secretIndex === cur.withdraw?.secretIndex
+                    ? "withdraw-key"
+                    : "note-key",
           }),
         });
         return;
@@ -454,15 +521,19 @@ export class PrivacyController {
     }
   }
 
-  private async advanceShield(chainId: number, ctx: Awaited<ReturnType<PrivacyController["context"]>>) {
+  private async advanceShield(chainId: number, ctx: Ctx) {
     let op = (await this.record(chainId)).op!;
     if (op.step === "preparing" && !op.deposit) {
       await this.syncWith(chainId, ctx);
-      const dep = await ctx.client.prepareDeposit(BigInt(op.amountWei));
+      // The next index is the count of deposits this browser made: one phone signature, no discovery scan.
+      const rec = await this.record(chainId);
+      const dep = await ctx.client.prepareDeposit(BigInt(op.amountWei), { depositIndex: rec.depositsMade });
       op = await this.apply(chainId, {
         type: "deposit-ready",
         deposit: {
           depositIndex: dep.depositIndex,
+          precommitment: dep.precommitment.toString(),
+          nullifierHash: dep.nullifierHash.toString(),
           tx: { to: dep.tx.to, data: dep.tx.data, valueWei: dep.tx.value.toString() },
         },
       });
@@ -532,25 +603,38 @@ export class PrivacyController {
     }
   }
 
-  private async paid(chainId: number, ctx: Awaited<ReturnType<PrivacyController["context"]>>, txHash?: Hex) {
-    const op = (await this.record(chainId)).op!;
+  private async paid(chainId: number, ctx: Ctx, txHash?: Hex) {
     const rec = await this.record(chainId);
-    await this.save(chainId, { depositsMade: Math.max(rec.depositsMade, op.deposit!.depositIndex + 1) });
+    const dep = rec.op!.deposit!;
+    // The deposit's public entry: the sync fills value/label/commitment from the pool's `Deposited` event.
+    if (dep.precommitment && dep.nullifierHash)
+      await this.recordNote(ctx, {
+        depositIndex: dep.depositIndex,
+        secretIndex: 0,
+        precommitment: BigInt(dep.precommitment),
+        nullifierHash: BigInt(dep.nullifierHash),
+        value: 0n,
+        label: 0n,
+        commitment: 0n,
+        status: "unconfirmed",
+      });
+    await this.save(chainId, { depositsMade: Math.max(rec.depositsMade, dep.depositIndex + 1) });
     await this.apply(chainId, { type: "paid", ...(txHash ? { txHash } : {}) });
+    await ctx.answers.clear().catch(() => undefined); // the deposit key is not needed any more this session
     await this.syncWith(chainId, ctx).catch(() => undefined);
   }
 
-  private async advanceUnshield(chainId: number, ctx: Awaited<ReturnType<PrivacyController["context"]>>) {
+  private async advanceUnshield(chainId: number, ctx: Ctx) {
     const op = (await this.record(chainId)).op!;
     const net = getNetwork(chainId);
     if (op.step === "submitted" && op.withdraw?.hash) return this.waitWithdrawal(chainId, ctx);
 
     const notes = await this.syncWith(chainId, ctx);
     const amount = BigInt(op.amountWei);
-    const note = notes
+    const pub = notes
       .filter((n) => n.status === "approved" && n.value >= amount)
       .sort((a, b) => (a.value < b.value ? -1 : 1))[0];
-    if (!note) {
+    if (!pub) {
       const best = notes.filter((n) => n.status === "approved").reduce((m, n) => (n.value > m ? n.value : m), 0n);
       throw new Error(
         best === 0n
@@ -561,10 +645,14 @@ export class PrivacyController {
     if (!op.withdraw)
       await this.apply(chainId, {
         type: "withdraw-ready",
-        depositIndex: note.depositIndex,
-        secretIndex: note.secretIndex + 1,
+        depositIndex: pub.depositIndex,
+        secretIndex: pub.secretIndex + 1,
         circuit: "direct",
       });
+    // The note's own key (one phone approval; checked against the pool), then the change note's (another, which
+    // also derives the fresh recipient). Both come from the session answers after a restart in the same session.
+    const note: Note = await ctx.client.noteFor(pub);
+    const change = await ctx.client.changeSecrets(note);
 
     // The withdrawal's own circuit: a fresh isolation key when Anon-RPC is available, else direct (devnet).
     const anon = await this.d.anonStatus(chainId).catch(() => ({ available: false, reason: "" }));
@@ -590,8 +678,6 @@ export class PrivacyController {
       timeoutMs: 240_000,
     });
 
-    // The change note's key first (one phone approval): it also derives the fresh recipient.
-    await ctx.secrets.senderKey(note.depositIndex, note.secretIndex + 1);
     await this.apply(chainId, { type: "proving", at: this.now() });
     const out = await ctx.client.withdrawViaPoolPayer({
       note,
@@ -615,11 +701,20 @@ export class PrivacyController {
         void this.apply(chainId, { type: "mempool", status: s }).catch(() => undefined);
       },
     });
-    await this.finishWithdrawal(chainId, ctx, out.sender);
+    await this.finishWithdrawal(chainId, ctx, out.sender, {
+      depositIndex: note.depositIndex,
+      secretIndex: note.secretIndex + 1,
+      precommitment: change.precommitment,
+      nullifierHash: change.nullifierHash,
+      value: note.value - amount,
+      label: note.label,
+      commitment: out.changeCommitment,
+      status: "pending",
+    });
   }
 
   /** A withdrawal sent before a restart: poll the alt mempool by its hash. */
-  private async waitWithdrawal(chainId: number, ctx: Awaited<ReturnType<PrivacyController["context"]>>) {
+  private async waitWithdrawal(chainId: number, ctx: Ctx) {
     const op = (await this.record(chainId)).op!;
     const w = op.withdraw!;
     const clients = withdrawalClients({ nodeUrl: getNetwork(chainId).rpcUrl, sidecarUrl: ctx.cfg.sidecarUrl });
@@ -645,13 +740,15 @@ export class PrivacyController {
     throw e;
   }
 
-  private async finishWithdrawal(
-    chainId: number,
-    ctx: Awaited<ReturnType<PrivacyController["context"]>>,
-    recipient: Address,
-  ) {
+  /**
+   * `change`: the change note's public data when this run proved the withdrawal (its secrets were in memory). After a
+   * restart the sync still finds the change note from the `Withdrawn` event, keyless until its next spend re-keys it.
+   */
+  private async finishWithdrawal(chainId: number, ctx: Ctx, recipient: Address, change?: PublicNote) {
+    if (change) await this.recordNote(ctx, change).catch(() => undefined);
     const received = await ctx.provider.getBalance(recipient).catch(() => 0n);
     await this.apply(chainId, { type: "withdrawn", receivedWei: received.toString() });
+    await ctx.answers.clear().catch(() => undefined); // the spend keys of this withdrawal leave memory
     await this.syncWith(chainId, ctx).catch(() => undefined);
   }
 }

@@ -142,6 +142,7 @@ export class Wallet {
       this.payments && this.vault
         ? new PrivacyController({
             kv: env.local,
+            session: env.session,
             keyring: this.keyring,
             plans: this.plans,
             payments: this.payments,
