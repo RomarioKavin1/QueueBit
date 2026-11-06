@@ -1,6 +1,6 @@
 {
   "$comment": "LEAKED clear-signing registry (ERC-7730-style, bundled, never fetched). The ONLY place the companion learns ABIs, intents and token metadata. The `abis` and `selectors` sections are GENERATED from the forge artifacts by `pnpm --filter @leaked/companion abi:sync` (scripts/abi-sync.mjs); test/registry.test.ts fails on drift. Edit `formats` by hand. Sources: contracts/src/account/{ILeakedAccount,LeakedAccountRoles}.sol, contracts/src/roles/PQRoleSigner.sol; Privacy Pools core IEntrypoint.relay; ERC-20. Intent strings interpolate decoded fields only (ERC-7730 'interpolated intent': constants + decoded values, no request-supplied labels).",
-  "version": "leaked-descriptors/2026-11-06.2",
+  "version": "leaked-descriptors/2026-11-06.3",
   "units": {
     "usd": "USD amounts are uint256 with 6 decimals (10-contracts.md §10.3 conventions)",
     "usdPerToken": "USD (6 decimals) per one whole token (10**decimals base units): usd6 = amount * usdPerToken / 10**decimals (ILeakedAccount.TokenCfg)"
@@ -93,6 +93,7 @@
       "function vaultSetFeePolicy(uint256 maxPriorityFeePerGas, bool selfPay, address tank)",
       "function vaultSetGuardian(address guardian, bool enabled)",
       "function vaultSetHotKey(address newHotKey)",
+      "function vaultSetRecipientMode(uint8 mode)",
       "function vaultSetRecoverySigner(address newRecoverySigner)",
       "function vaultSetSession(address target, bytes4 selector, uint256 allowanceUsd, uint48 expiry)",
       "function vaultSetTarget(address target, bool allowed)",
@@ -392,6 +393,56 @@
       "fields": {
         "newHotKey": {
           "format": "addressName"
+        }
+      }
+    },
+    "account.vaultSetRecipientMode": {
+      "role": "vault",
+      "admin": true,
+      "intent": "{openClause}{strictClause}",
+      "consequence": "{openEffect}{strictEffect}",
+      "timing": "tightenNowLoosenWaits",
+      "looserWhen": {
+        "field": "mode",
+        "equals": 0
+      },
+      "fields": {
+        "mode": {
+          "format": "enum",
+          "labels": {
+            "0": "Any address",
+            "1": "Approved addresses only"
+          }
+        }
+      },
+      "derived": {
+        "openClause": {
+          "when": {
+            "field": "mode",
+            "equals": 0
+          },
+          "template": "Let your everyday key pay any address"
+        },
+        "strictClause": {
+          "when": {
+            "field": "mode",
+            "equals": 1
+          },
+          "template": "Only pay approved addresses"
+        },
+        "openEffect": {
+          "when": {
+            "field": "mode",
+            "equals": 0
+          },
+          "template": "Everyday payments may go to any address, still within your daily limit and per-payment maximum. This loosens your account, so it waits out the waiting period."
+        },
+        "strictEffect": {
+          "when": {
+            "field": "mode",
+            "equals": 1
+          },
+          "template": "Everyday payments may only go to addresses on your allowed list. This tightens your account, so it takes effect now."
         }
       }
     },
@@ -772,6 +823,7 @@
     "account.vaultSetFeePolicy": "0xe2909d4e",
     "account.vaultSetGuardian": "0x0a98eed4",
     "account.vaultSetHotKey": "0xbf147947",
+    "account.vaultSetRecipientMode": "0x1e7baa4c",
     "account.vaultSetRecoverySigner": "0xc23fa856",
     "account.vaultSetSession": "0x07271ff4",
     "account.vaultSetTarget": "0x25b1b3cd",

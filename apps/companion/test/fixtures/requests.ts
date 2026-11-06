@@ -247,3 +247,12 @@ export function trustVerifier(): Built {
   const set = acct("vaultSetTrustedVerifier", ["0x5555555555555555555555555555555555555555", true]);
   return wrap(acct("vaultQueue", [[call(ACCOUNT, set)], 1]), { policy: POLICY });
 }
+
+/** Recipient mode (`RecipientMode` Open = 0, Strict = 1): Strict is instant, Open is a queued loosening. */
+export function recipientMode(mode: "open" | "strict", queued = mode === "open"): Built {
+  const set = acct("vaultSetRecipientMode", [mode === "open" ? 0 : 1]);
+  return wrap(queued ? acct("vaultQueue", [[call(ACCOUNT, set)], 1]) : set, {
+    policy: POLICY,
+    intent: { action: "vaultSetRecipientMode", summary: mode === "open" ? "Pay anyone" : "Approved only" },
+  });
+}

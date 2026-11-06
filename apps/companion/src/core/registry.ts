@@ -51,8 +51,9 @@ export interface FormatSpec {
   bindTo?: string;
   fields?: Record<string, FieldFormat>;
   changes?: ChangeSpec[];
-  looserWhen?: { field: string; equals?: boolean; greaterThan?: number };
-  derived?: Record<string, { when: { field: string; equals: boolean }; template: string }>;
+  /** `equals` matches a decoded bool or a small integer (an enum, e.g. `RecipientMode.Open` = 0). */
+  looserWhen?: { field: string; equals?: boolean | number; greaterThan?: number };
+  derived?: Record<string, { when: { field: string; equals: boolean | number }; template: string }>;
   compare?: { recipient?: string; amount?: string; token?: string };
 }
 

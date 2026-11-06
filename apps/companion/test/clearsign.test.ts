@@ -22,6 +22,7 @@ import {
   lockdown,
   lyingWithdrawal,
   noteKeys,
+  recipientMode,
   recovery,
   rotation,
   unknownCall,
@@ -171,6 +172,29 @@ describe("other actions", () => {
     );
     expect(r.admin).toBeDefined();
     expect(r.actions[0]!.loosening).toBe(true);
+  });
+  it("recipient mode: 'pay any address' is a queued loosening, 'approved only' an instant tightening", () => {
+    const open = reviewRequestBytes(recipientMode("open").cbor, ctx());
+    expect(open.unknown).toBe(false);
+    expect(open.mismatch).toEqual([]);
+    expect(open.headline).toBe("Let your everyday key pay any address: takes effect after a 48-hour waiting period");
+    expect(open.actions[0]!.loosening).toBe(true);
+    expect(open.admin?.consequence).toMatch(/any address, still within your daily limit/);
+    const strict = reviewRequestBytes(recipientMode("strict").cbor, ctx());
+    expect(strict.unknown).toBe(false);
+    expect(strict.headline).toBe("Only pay approved addresses");
+    expect(strict.admin?.sentence).toMatch(
+      /^Only pay approved addresses: takes effect now\. Everyday payments may only go/,
+    );
+    expect(strict.actions[0]!.loosening).toBeUndefined();
+    expect(strict.actions[0]!.details).toContainEqual({
+      label: "Who everyday payments may go to",
+      value: "Approved addresses only",
+    });
+    expect(strict.warnings.map((w) => w.code)).not.toContain("direct-loosening");
+    // Sent directly (not queued), loosening is refused on chain: the phone says so before signing.
+    const direct = reviewRequestBytes(recipientMode("open", false).cbor, ctx());
+    expect(direct.warnings.map((w) => w.code)).toContain("direct-loosening");
   });
   it("Privacy Pools note keys (typed data) are signed by the payer key", () => {
     const r = reviewRequestBytes(noteKeys().cbor, ctx());

@@ -32,7 +32,9 @@ function solidityFunctions(files: string[]): Map<string, string> {
           const type = p
             .split(/\s+/)[0]!
             .replace(/^Call(?=\[)/, "(address,uint256,bytes)")
-            .replace(/^address payable$/, "address");
+            .replace(/^address payable$/, "address")
+            // Enums are uint8 in the ABI.
+            .replace(/^RecipientMode$/, "uint8");
           return type;
         });
       out.set(m[1]!, `${m[1]}(${params.join(",")})`);
@@ -64,7 +66,10 @@ describe("registry vs contract sources", () => {
   }
 
   it("every vault/recovery entry point of the account has a display format", () => {
-    const missing = [...iface.keys()].filter((n) => /^(vault|recovery)/.test(n) && !registry.formats[`account.${n}`]);
+    // Both the interface and the implementation: a function added to the roles module but not (yet) to the
+    // interface (vaultSetRecipientMode was) must not reach the phone as an unknown step.
+    const names = new Set([...iface.keys(), ...account.keys()]);
+    const missing = [...names].filter((n) => /^(vault|recovery)/.test(n) && !registry.formats[`account.${n}`]);
     expect(missing).toEqual([]);
   });
 

@@ -807,6 +807,7 @@ const LABELS: Record<string, string> = {
   withdrawnValue: "Amount",
   recipient: "To",
   relayFeeBPS: "Relayer fee",
+  mode: "Who everyday payments may go to",
 };
 const labelFor = (name: string) => LABELS[name] ?? name;
 
