@@ -1,4 +1,4 @@
-/* @ts-self-types="./leaked_groth16.d.ts" */
+/* @ts-self-types="./queuebit_groth16.d.ts" */
 
 /**
  * A parsed proving key, kept in WASM memory between proofs.
@@ -121,7 +121,7 @@ function __wbg_get_imports() {
     };
     return {
         __proto__: null,
-        "./leaked_groth16_bg.js": import0,
+        "./queuebit_groth16_bg.js": import0,
     };
 }
 
@@ -253,7 +253,7 @@ async function __wbg_init(module_or_path) {
     }
 
     if (module_or_path === undefined) {
-        module_or_path = new URL('leaked_groth16_bg.wasm', import.meta.url);
+        module_or_path = new URL('queuebit_groth16_bg.wasm', import.meta.url);
     }
     const imports = __wbg_get_imports();
 

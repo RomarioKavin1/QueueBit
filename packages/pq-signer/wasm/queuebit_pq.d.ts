@@ -18,7 +18,7 @@ export function keygenFromSeeds(sk_seed: Uint8Array, pk_seed: Uint8Array): Uint8
 export function leanKeygenFromMaster(master: Uint8Array, role: number, chain_scope: string): Uint8Array;
 
 /**
- * Keygen from an explicit 32-byte seed `S` at the LEAKED tier (b = 13): upstream `lssk keygen --tier light`.
+ * Keygen from an explicit 32-byte seed `S` at the QueueBit tier (b = 13): upstream `lssk keygen --tier light`.
  */
 export function leanKeygenFromSeed(seed: Uint8Array): Uint8Array;
 

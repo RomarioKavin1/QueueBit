@@ -1,4 +1,4 @@
-/* @ts-self-types="./leaked_pq.d.ts" */
+/* @ts-self-types="./queuebit_pq.d.ts" */
 
 /**
  * role: 1 = vault, 2 = recovery. Returns the 64-byte secret key (last 32 bytes = public key).
@@ -64,7 +64,7 @@ export function leanKeygenFromMaster(master, role, chain_scope) {
 }
 
 /**
- * Keygen from an explicit 32-byte seed `S` at the LEAKED tier (b = 13): upstream `lssk keygen --tier light`.
+ * Keygen from an explicit 32-byte seed `S` at the QueueBit tier (b = 13): upstream `lssk keygen --tier light`.
  * @param {Uint8Array} seed
  * @returns {Uint8Array}
  */
@@ -332,7 +332,7 @@ function __wbg_get_imports() {
     };
     return {
         __proto__: null,
-        "./leaked_pq_bg.js": import0,
+        "./queuebit_pq_bg.js": import0,
     };
 }
 
@@ -529,7 +529,7 @@ async function __wbg_init(module_or_path) {
     }
 
     if (module_or_path === undefined) {
-        module_or_path = new URL('leaked_pq_bg.wasm', import.meta.url);
+        module_or_path = new URL('queuebit_pq_bg.wasm', import.meta.url);
     }
     const imports = __wbg_get_imports();
 
