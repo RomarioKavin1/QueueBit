@@ -37,7 +37,7 @@ function requestMap(): Map<number, unknown> {
   ]);
 }
 
-describe("leaked-sign-request", () => {
+describe("queuebit-sign-request", () => {
   it("round-trips every field", () => {
     const r = fullRequest();
     expect(decodeSignRequest(encodeSignRequest(r))).toEqual(r);
@@ -231,7 +231,7 @@ describe("leaked-sign-request", () => {
   });
 });
 
-describe("leaked-signature", () => {
+describe("queuebit-signature", () => {
   it("round-trips a Path B response", () => {
     const s = signatureResponse();
     expect(decodeSignature(encodeSignature(s))).toEqual(s);
@@ -263,7 +263,7 @@ describe("leaked-signature", () => {
   });
 });
 
-describe("leaked-pq-key", () => {
+describe("queuebit-pq-key", () => {
   it("round-trips a Vault key with its payer address", () => {
     const k = { schemeId: C13_SCHEME_ID, pk: hex(bytes(32, 5)), role: ROLE.vault, payer: hex(bytes(20, 6)) } as const;
     expect(decodePqKey(encodePqKey(k))).toEqual(k);
@@ -292,7 +292,7 @@ describe("leaked-pq-key", () => {
   });
 });
 
-describe("leaked-recovery-test", () => {
+describe("queuebit-recovery-test", () => {
   const pk = hex(bytes(32, 8));
   const t = {
     requestId: randomUuid(),
@@ -338,7 +338,7 @@ describe("leaked-recovery-test", () => {
     expect(() => encodeRecoveryTest({ ...t, schemeId: LEAN_SPHINCS_S_SCHEME_ID })).toThrow(/4164/);
   });
   it("pins the v2 challenge construction", () => {
-    // keccak256("LEAKED recovery test v2" ‖ C13_SCHEME_ID ‖ 0x00…00 ‖ uuid 00000000-0000-4000-8000-000000000000 ‖
+    // keccak256("QueueBit recovery test v2" ‖ C13_SCHEME_ID ‖ 0x00…00 ‖ uuid 00000000-0000-4000-8000-000000000000 ‖
     // 0x00…01 (20 bytes)), cross-checked with Foundry: cast keccak $(cast concat-hex …)
     expect(
       recoveryTestChallenge(
@@ -347,14 +347,14 @@ describe("leaked-recovery-test", () => {
         "00000000-0000-4000-8000-000000000000",
         `0x${"00".repeat(19)}01`,
       ),
-    ).toMatchInlineSnapshot(`"0x0e2bf91a90016079730e3afde08e0fc0561479c6bb7bd30ddea9d8dda88d3932"`);
+    ).toMatchInlineSnapshot(`"0x5c0aa95c3b288a73a75cee8708509b1b7b425ddbe886307b3864e6b86c174b02"`);
   });
   it("pins the challenge construction", () => {
-    // keccak256("LEAKED recovery test v1" ‖ C13_SCHEME_ID ‖ 0x00…00 ‖ uuid 00000000-0000-4000-8000-000000000000),
-    // cross-checked with Foundry: cast keccak 0x4c45414b4544…
+    // keccak256("QueueBit recovery test v1" ‖ C13_SCHEME_ID ‖ 0x00…00 ‖ uuid 00000000-0000-4000-8000-000000000000),
+    // cross-checked with Foundry: cast keccak 0x5175657565426974…
     expect(
       recoveryTestChallenge(C13_SCHEME_ID, `0x${"00".repeat(32)}`, "00000000-0000-4000-8000-000000000000"),
-    ).toMatchInlineSnapshot(`"0xf1ab680240a01229baa1edd0d029b0b5c6fc7c89dd1d70d2da6f5d0bb52e8f55"`);
+    ).toMatchInlineSnapshot(`"0x3b845031bd4c206b21531c353adf08cb068b4409df816d655f85c9903bcf2495"`);
   });
 });
 
