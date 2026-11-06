@@ -6,6 +6,7 @@ import { Address, Field, Notice, Primary, Screen, Secondary, Title, Working } fr
 import { engine } from "@/lib/engine/client";
 import { signProof } from "@/lib/proof";
 import { Row, Section } from "./bits";
+import { Identicon } from "./Identicon";
 import { errText, useWallet } from "./state";
 import type { Nav } from "./Wallet";
 
@@ -90,7 +91,13 @@ export function Guardians({ nav }: { nav: Nav }) {
             disabled={same || (deployed && lockedWith === "password" && !pw)}
             onClick={() => void save()}
           >
-            {list.length ? `Save ${list.length} guardian${list.length > 1 ? "s" : ""}` : "Remove all guardians"}
+            {same
+              ? list.length
+                ? "No changes"
+                : "Add a guardian first"
+              : list.length
+                ? `Save ${list.length} guardian${list.length > 1 ? "s" : ""}`
+                : "Remove all guardians"}
           </Primary>
         )
       }
@@ -107,21 +114,23 @@ export function Guardians({ nav }: { nav: Nav }) {
 
       <Section title={`Guardians · ${list.length}`}>
         {list.length === 0 ? (
-          <p className="text-[1rem] text-ink-3">None yet. Add a friend&rsquo;s wallet, or another account of yours.</p>
+          <p className="text-[1rem] text-ink-3">None yet. Add at least one below.</p>
         ) : (
           <ul className="border-t border-ink">
             {list.map((g) => {
               const live = current?.find((c) => c.address.toLowerCase() === g.toLowerCase());
               return (
-                <li key={g} className="flex items-center justify-between gap-4 border-b border-rule py-3">
-                  <div className="min-w-0">
+                <li key={g} className="flex items-center gap-3 border-b border-rule py-3">
+                  <Identicon address={g} size={36} />
+                  <div className="min-w-0 flex-1">
                     <Address value={g} className="block truncate text-[1rem]" />
                     <span className="mono-label text-[11px] text-ink-3">
-                      {live ? (live.active ? "Active" : deployed ? "Pending" : "At creation") : "New"}
+                      {live ? (live.active ? "Active" : deployed ? "Pending" : "At creation") : "New, not saved"}
                     </span>
                   </div>
                   <button
                     type="button"
+                    aria-label={`Remove ${g}`}
                     onClick={() => remove(g)}
                     className="mono-label h-10 shrink-0 border border-rule bg-paper px-3 active:bg-paper-3"
                   >
@@ -134,17 +143,22 @@ export function Guardians({ nav }: { nav: Nav }) {
         )}
       </Section>
 
-      <div className="mt-6 flex items-end gap-2">
-        <div className="min-w-0 flex-1">
-          <Field
-            label="Add a guardian"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && add()}
-            placeholder="0x…"
-          />
+      <div className="mt-8">
+        <Field
+          label="Guardian address"
+          hint="A friend's wallet, or another account of yours. Not this account."
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && add()}
+          placeholder="0x…"
+          autoComplete="off"
+          spellCheck={false}
+        />
+        <div className="mt-3">
+          <Secondary onClick={add} disabled={!draft.trim()}>
+            Add guardian
+          </Secondary>
         </div>
-        <Secondary onClick={add}>Add</Secondary>
       </div>
 
       {list.length > 0 && (
