@@ -1,0 +1,3 @@
+# wasm/ is committed (deterministic; CI rebuilds and diffs it). Regenerate with `pnpm build:wasm`.
+dist/
+rust/target/

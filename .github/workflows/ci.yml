@@ -191,6 +191,46 @@ jobs:
           git diff --exit-code -- wasm/
           test -z "$(git status --porcelain -- wasm/)" # no new untracked files either
 
+  lean-sphincs-wasm:
+    # @queuebit/lean-sphincs (leanVM leanSPHINCS for the post-quantum everyday key): same committed-wasm pattern as
+    # pq-signer-wasm. The vitest suite (typescript job) checks it against native lean-pq 0.7.0 vectors.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: rust toolchain (pinned by packages/lean-sphincs/rust/rust-toolchain.toml)
+        working-directory: packages/lean-sphincs/rust
+        run: rustup show
+      - name: cargo cache (registry, git deps and wasm-bindgen-cli; not target/)
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            ~/.cargo/bin/wasm-bindgen
+            ~/.cargo/bin/wasm-bindgen-test-runner
+          key: cargo-lean-${{ runner.os }}-${{ env.WASM_BINDGEN_VERSION }}-${{ hashFiles('packages/lean-sphincs/rust/Cargo.lock', 'packages/lean-sphincs/rust/rust-toolchain.toml') }}
+      - name: wasm-bindgen-cli
+        run: |
+          if [ "$(wasm-bindgen --version 2>/dev/null | awk '{print $2}')" != "$WASM_BINDGEN_VERSION" ]; then
+            cargo install wasm-bindgen-cli --version "$WASM_BINDGEN_VERSION" --locked --force
+          fi
+      - name: rust tests
+        working-directory: packages/lean-sphincs/rust
+        run: cargo test --release --locked
+      - name: rebuild wasm and diff
+        working-directory: packages/lean-sphincs
+        run: |
+          bash scripts/build-wasm.sh
+          git diff --exit-code -- wasm/
+          test -z "$(git status --porcelain -- wasm/)" # no new untracked files either
+
   groth16-wasm:
     # @queuebit/groth16 (the MIT Groth16 engine): same committed-wasm pattern as pq-signer-wasm, plus the snarkjs and
     # on-chain (forge) cross-checks, which must run here (GROTH16_REQUIRE_FORGE) rather than silently skip.
