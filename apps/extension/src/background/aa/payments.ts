@@ -49,6 +49,13 @@ import {
  * the exact signed bytes simulated (`eth_call handleOps` + the account's `execute` from the EntryPoint) and only then
  * sent with `eth_sendUserOperation`. The account pays its own network fee from its balance, bounded by the hook's
  * `maxFeeWei` (the native account's fee tank plays that role there); the fee tank only relays Vault approvals.
+ *
+ * What the bundler is trusted with (and not): it sees only signed, simulated ops, so it cannot change what they do
+ * or make the account pay more than `maxFeeWei` per op (the validator re-checks the bounds). It can refuse, delay
+ * or hold an op (no `validUntil` on this backend: the op stays valid until its nonce is used by another one), and
+ * it can mis-estimate gas: too little verification gas fails our `handleOps` simulation; too little call gas is
+ * floored by our own estimate (below); too much is bounded by the prefund check. Vault approvals never go through
+ * it (the fee tank relays them as plain transactions), so a bundler cannot censor a cancel.
  */
 
 export interface AaIo {
@@ -90,6 +97,9 @@ export interface AaPrepared {
 
 const ETH: Address = "0x0000000000000000000000000000000000000000";
 const GWEI = 1_000_000_000n;
+
+/** The least `callGasLimit` we accept for an op whose execute we measured at `ownCallGas` (×1.2 + 30k headroom). */
+export const callGasFloor = (ownCallGas: bigint): bigint => (ownCallGas * 12n) / 10n + 30_000n;
 
 export const aaNetwork = (chainId: number): (Network & { aa: AaDeployment; bundlerUrl: string }) | undefined => {
   const n = findNetwork(chainId);
@@ -372,17 +382,21 @@ export class AaPayments {
       maxPriorityFeePerGas: prio,
       signature: "0x",
     };
-    // 1. The account's own execution (hook preCheck/postCheck included), as the EntryPoint calls it.
+    // 1. The account's own execution (hook preCheck/postCheck included), as the EntryPoint calls it. Its gas is also
+    //    our own floor for `callGasLimit`: the EntryPoint does not revert when the call runs out of gas, it marks the
+    //    op failed and the account still pays the prefund, so a bundler that under-estimates must not set the limit.
     let verdict: SimulationVerdict = { admitted: true, bodyOk: true };
+    let ownCallGas = 0n;
     try {
-      await client.call({ account: net.aa.entryPoint, to: plan.address, data: callData });
+      ownCallGas = await client.estimateGas({ account: net.aa.entryPoint, to: plan.address, data: callData });
     } catch (e) {
       verdict = fail(decodeRevert(revertData(e)) ?? "the account refused it");
     }
-    // 2. Gas from the bundler.
+    // 2. Gas from the bundler (never below our own measurement, with the bundler's usual headroom).
     try {
       const g = await this.d.io.bundler(plan.chainId).estimate(op, net.aa.entryPoint);
-      op = { ...op, ...g };
+      const floor = callGasFloor(ownCallGas);
+      op = { ...op, ...g, callGasLimit: g.callGasLimit > floor ? g.callGasLimit : floor };
     } catch (e) {
       const reason = e instanceof BundlerError ? (decodeRevert(e.data) ?? e.message) : (e as Error).message;
       return { op, hash: "0x", verdict: verdict.bodyOk ? fail(reason) : verdict, feeWei: 0n, maxCostWei: 0n };

@@ -9,7 +9,15 @@ import {
   type Hex,
 } from "viem";
 import { describe, expect, it } from "vitest";
-import { aaInitFor, aaSalt, bootstrapInitCode, encodeHookInit } from "../../src/background/aa/config";
+import {
+  aaAccountAddress,
+  aaInitFor,
+  aaSalt,
+  bootstrapInitCode,
+  encodeHookInit,
+  predictAaAccount,
+} from "../../src/background/aa/config";
+import { callGasFloor } from "../../src/background/aa/payments";
 import {
   buildAaVaultAction,
   execCallsHash,
@@ -228,5 +236,29 @@ describe("LeakedRoleExecutor requests (tx-type 3)", () => {
     const [, calls] = args as unknown as [Address, Array<{ target: Address; data: Hex }>];
     expect(calls[0]!.target.toLowerCase()).toBe(DEP.executor);
     expect(decodeFunctionData({ abi: roleExecutorAbi, data: calls[0]!.data }).functionName).toBe("setRecoveryKey");
+  });
+});
+
+describe("the account address is computed locally", () => {
+  const INIT: Hex = "0x1234";
+  const SALT = aaSalt(a(0xa0), PK, undefined, 31337);
+  const fake = (answer: Address) => ({ readContract: async () => answer }) as never;
+
+  it("CREATE2 of MSAProxy ‖ (impl, initializeAccount(initCode)) from the factory; the RPC's getAddress must agree", async () => {
+    const local = aaAccountAddress(DEP, SALT, INIT);
+    expect(local).toMatch(/^0x[0-9a-fA-F]{40}$/u);
+    expect(aaAccountAddress({ ...DEP, msaImpl: a(9) }, SALT, INIT)).not.toBe(local);
+    expect(aaAccountAddress(DEP, SALT, "0x5678")).not.toBe(local);
+    await expect(predictAaAccount(fake(local.toLowerCase() as Address), DEP, SALT, INIT)).resolves.toBe(local);
+  });
+
+  it("an RPC that answers another address fails closed", async () => {
+    await expect(predictAaAccount(fake(a(0xbad)), DEP, SALT, INIT)).rejects.toThrow(/doesn't match/u);
+  });
+});
+
+describe("the bundler's gas estimate", () => {
+  it("callGasLimit is never below our own measurement of execute (×1.2 + 30k)", () => {
+    expect(callGasFloor(100_000n)).toBe(150_000n);
   });
 });

@@ -45,6 +45,7 @@ export async function render() {
   const validator = strip(art("LeakedHotValidator.sol", "LeakedHotValidator").abi);
   const executor = strip(art("LeakedRoleExecutor.sol", "LeakedRoleExecutor").abi);
   const msaFactory = strip(art("MSAFactory.sol", "MSAFactory").abi);
+  const msaProxy = art("MSAProxy.sol", "MSAProxy").bytecode.object;
   const bootstrap = strip(art("Bootstrap.sol", "Bootstrap").abi);
   const tokens = (d) =>
     d?.tokens
@@ -120,6 +121,9 @@ export const roleExecutorAbi = ${j(executor)} as const;
 
 /** Reference ERC-7579 \`MSAFactory\`: \`createAccount(salt, initCode)\`, \`getAddress(salt, initCode)\`. */
 export const msaFactoryAbi = ${j(msaFactory)} as const;
+
+/** \`type(MSAProxy).creationCode\`: MSAFactory's CREATE2 init code is this ‖ abi.encode(implementation, initializeAccount(initCode)). */
+export const msaProxyCreationCode = ${j(msaProxy)} as const;
 
 /** Reference ERC-7579 \`Bootstrap\`: \`initMSA(validators, executors, hook, fallbacks)\`. */
 export const msaBootstrapAbi = ${j(bootstrap)} as const;

@@ -53,6 +53,8 @@ import { SettingsStore } from "./settings";
 
 /** How long the recovery-test code this browser shows stays valid. */
 export const RECOVERY_CHALLENGE_TTL_MS = 30 * 60_000;
+/** "Tokens you'll spend": a price below the preset's ÷ this is refused (it would loosen the limit by that factor). */
+export const MIN_PRESET_PRICE_RATIO = 100;
 
 export interface WalletEnv {
   local: KV;
@@ -812,8 +814,16 @@ export class Wallet {
     const list: TokenChoice[] = [];
     for (const t of req.tokens) {
       if (!isAddress(t.token)) throw new Error("Not a token address.");
-      if (!Number.isFinite(t.usd) || t.usd <= 0 || t.usd > 1_000_000)
+      if (!Number.isFinite(t.usd) || t.usd <= 0 || t.usd > 1_000_000 || Math.round(t.usd * 1e6) < 1)
         throw new Error(`Set a price above $0 for ${t.symbol}.`);
+      // A price far below the real one loosens the daily limit by the same factor (the account counts the token at
+      // this price). The floor is loose on purpose (prices drift); the page warns well before it.
+      const preset = net.tokenPresets.find((p) => p.token.toLowerCase() === t.token.toLowerCase());
+      if (preset && t.usd < preset.usd / MIN_PRESET_PRICE_RATIO) {
+        throw new Error(
+          `$${t.usd} for ${t.symbol} is under 1% of the $${preset.usd} LEAKED suggests. At that price your daily limit would let ${Math.round(preset.usd / t.usd)}× more ${t.symbol} through. Use a price close to the real one.`,
+        );
+      }
       if (this.env.io) {
         const d = await this.env.io
           .publicClient(net.chainId)

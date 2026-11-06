@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { isAddress, type Address } from "viem";
 import { AnimatedUr, UR_TYPES, singlePartUr } from "@leaked/ur";
-import { NETWORKS, getNetwork } from "../../shared/chains";
+import { NETWORKS, getNetwork, type TokenPreset } from "../../shared/chains";
 import type { WalletState } from "../../shared/types";
 import type { PairPreview } from "../../shared/views";
 import {
@@ -613,6 +613,22 @@ function Network({ headingRef, state, go }: StepProps & { state: WalletState }) 
 const usdText = (v: number) => `$${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`;
 
 /**
+ * The price is what the account counts the token at, so a price far from the real one changes what the daily limit
+ * means: too low lets more through (the dangerous way), too high blocks payments early. Warn at 2× either way; the
+ * service worker refuses below 1/100 of the preset.
+ */
+export function priceWarning(preset: TokenPreset, price: number): string | undefined {
+  if (!(price > 0) || !(preset.usd > 0)) return undefined;
+  if (price * 2 <= preset.usd) {
+    return `That's below the ${usdText(preset.usd)} LEAKED suggests: ${preset.symbol} would count for less, so your daily limit lets about ${Math.round(preset.usd / price)}× more ${preset.symbol} through. Use the real price unless you mean that.`;
+  }
+  if (price >= preset.usd * 2) {
+    return `That's above the ${usdText(preset.usd)} LEAKED suggests: your daily limit would be reached with about ${Math.round(price / preset.usd)}× fewer ${preset.symbol} than its real value.`;
+  }
+  return undefined;
+}
+
+/**
  * The tokens the account allows from the first day, with the static price LEAKED counts them at toward the daily
  * limit. The price is pinned by the account (never read from an API), so the user confirms it in plain words; it can
  * be changed later with the Vault (Limits).
@@ -687,6 +703,11 @@ function Tokens({ headingRef, state, go }: StepProps & { state: WalletState }) {
                       value={r.price}
                       onChange={(v) => setRows(rows.map((x, j) => (j === i ? { ...x, price: v } : x)))}
                     />
+                    {priceWarning(r.preset, price) && (
+                      <div data-testid={`token-${r.preset.symbol}-warning`}>
+                        <RiskBanner level="limit" title={priceWarning(r.preset, price)!} />
+                      </div>
+                    )}
                   </div>
                 )}
               </li>

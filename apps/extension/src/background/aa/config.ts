@@ -1,5 +1,16 @@
-import { encodeAbiParameters, encodeFunctionData, keccak256, type Address, type Hex, type PublicClient } from "viem";
-import { msaBootstrapAbi, msaFactoryAbi } from "../../generated/contracts";
+import {
+  concatHex,
+  encodeAbiParameters,
+  encodeFunctionData,
+  getContractAddress,
+  isAddressEqual,
+  keccak256,
+  parseAbi,
+  type Address,
+  type Hex,
+  type PublicClient,
+} from "viem";
+import { msaBootstrapAbi, msaFactoryAbi, msaProxyCreationCode } from "../../generated/contracts";
 import type { AaDeployment } from "../../shared/chains";
 import {
   ACCOUNT_DEFAULTS,
@@ -169,14 +180,41 @@ export function aaSalt(hotKey: Address, vaultPk: Hex, recoveryPk: Hex | undefine
 const replacer = (_k: string, v: unknown) => (typeof v === "bigint" ? `${v.toString()}n` : v);
 const reviver = (_k: string, v: unknown) => (typeof v === "string" && /^\d+n$/u.test(v) ? BigInt(v.slice(0, -1)) : v);
 
-/** `MSAFactory.getAddress(salt, initCode)` (eth_call: the proxy creation code lives in the factory). */
+const msaAbi = parseAbi(["function initializeAccount(bytes data)"]);
+
+/**
+ * The account address computed here, as the native backend does (`predictAccount`): CREATE2 from the factory with
+ * `type(MSAProxy).creationCode ‖ abi.encode(msaImpl, initializeAccount(initCode))`, i.e. exactly what
+ * `MSAFactory.createAccount` deploys. The RPC is not trusted for the one number the user funds.
+ */
+export function aaAccountAddress(dep: AaDeployment, salt: Hex, initCode: Hex): Address {
+  const init = encodeFunctionData({ abi: msaAbi, functionName: "initializeAccount", args: [initCode] });
+  const bytecode = concatHex([
+    msaProxyCreationCode,
+    encodeAbiParameters([{ type: "address" }, { type: "bytes" }], [dep.msaImpl, init]),
+  ]);
+  return getContractAddress({ opcode: "CREATE2", from: dep.factory, salt, bytecode });
+}
+
+/**
+ * The local CREATE2 address, cross-checked with `MSAFactory.getAddress(salt, initCode)`: a factory that would create
+ * the account elsewhere (another proxy, another implementation) or an RPC that answers another address fails closed,
+ * before an address is ever shown.
+ */
 export async function predictAaAccount(client: PublicClient, dep: AaDeployment, salt: Hex, initCode: Hex) {
-  return (await client.readContract({
+  const local = aaAccountAddress(dep, salt, initCode);
+  const onChain = (await client.readContract({
     address: dep.factory,
     abi: msaFactoryAbi,
     functionName: "getAddress",
     args: [salt, initCode],
   })) as Address;
+  if (!isAddressEqual(onChain, local)) {
+    throw new Error(
+      "The network's answer for your account address doesn't match the one LEAKED computed. Nothing was shown or sent; check the network's RPC and try again.",
+    );
+  }
+  return local;
 }
 
 export function buildAaPlan(
