@@ -656,8 +656,16 @@ export class Wallet {
         "The Recovery key on the phone doesn't match the one scanned. Start the recovery setup again.",
       );
     }
+    // A test that names a Recovery payer address (key 6) must name the one the pairing code carried, if any.
+    if (t.payer && setup.recovery?.payer && t.payer.toLowerCase() !== setup.recovery.payer.toLowerCase()) {
+      throw new VaultError(
+        "E-23",
+        "The Recovery key's fee-payment address on the phone doesn't match the one scanned. Start the recovery setup again.",
+      );
+    }
     const scheme = schemeById(t.schemeId);
-    const challenge = recoveryTestChallenge(t.schemeId, t.recoveryPk, t.requestId);
+    // v1 challenge, or v2 when the test carries the payer (the witness then covers that address too).
+    const challenge = recoveryTestChallenge(t.schemeId, t.recoveryPk, t.requestId, t.payer);
     if (!scheme || !t.ok || !scheme.verify(hexToBytes(t.recoveryPk), hexToBytes(challenge), hexToBytes(t.witness))) {
       throw new VaultError("E-62", "The test signature didn't check out. Run the test again on the phone.");
     }
