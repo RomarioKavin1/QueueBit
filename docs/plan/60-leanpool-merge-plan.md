@@ -26,7 +26,10 @@ The target is the QueueBit repo. The product stays a browser extension.
 | P5 extension | done, partial on 7.3/7.4 | Security row (set up → queued Vault approval → Finish after the timelock), payments lane with safe fallback (never pays twice), activity steps, stuck flag, batch root/proof hash and the audit command in details. Not built: an in-extension STARK verifier (the node CLI verifies; the extension shows the hash). Lane choice lives in payments, not `lanes.ts`. |
 | P6 companion | done | clear-signs `vaultSetPQHotSigner`; interop test with the extension's request |
 | P7 live + docs | done | `contracts/devnet-tests/leanpool` PASS on chain 1337 with the queued install; the extension's own code on the public devnet up to the queued approval (`test/devnet/leanpool.public.test.ts`); THREAT-MODEL §8.1, ARCHITECTURE, research page |
-| Not done | open | C6 (LeanAccount copy, `osaka` profile), L3 gas table in `bench/` and moving `DirectPQWallet`, N5 compose service + 7.6 Playwright case: BACKLOG |
+| 7.6 browser case | done | `e2e/leanpool.public.e2e.ts`: the Security flow in Chromium with the built extension, on the public devnet |
+| L3 gas table | done | `bench/results/LEANPOOL-GAS.md`, measured receipts only |
+| C6, `DirectPQWallet` | decided: not ported | QueueBit has its own account; an undeployed second account model (LeanAccount, KeystoreValidator) would be dead code. `DirectPQWallet` benchmarks LeanPool v1's scheme, which QueueBit doesn't use; its number is cited in the gas table. Both stay in the LeanPool repo for the ERC-8286 track. |
+| N5 compose service | open | the Dockerfile exists; adding it to `devnet/docker-compose.yml` needs a machine with docker to verify (BACKLOG) |
 
 The task tables below are the plan as written; option H's tasks are the ones built, with the amendments above.
 

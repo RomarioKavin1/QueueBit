@@ -79,8 +79,9 @@ Each entry is tagged with its source. Remove an entry when it lands, and cite th
 - [ ] Release checklist (`docs/release/CHECKLIST.md`): audits, the circom artifact legal review, BUDGET-010 upstream, key ceremonies, 4337 mainnet addresses.
 
 ## LeanPool (quantum-safe everyday key, 2026-11-06)
-- [ ] Local devnet: a `leanpool-node` service in `devnet/docker-compose.yml` (written as a Dockerfile; not added to the compose stack because it could not be run here) and a Playwright case for the Security › Quantum-safe flow.
+- [ ] Local devnet: a `leanpool-node` service in `devnet/docker-compose.yml` (the Dockerfile exists; not added to the compose stack because it could not be run here). The Playwright case runs against the public devnet (`e2e/leanpool.public.e2e.ts`).
+- [ ] A public LeanPool node for the shared builds (and `VITE_QUEUEBIT_LEANPOOL_URL` in their build): until then the Security row says the quantum-safe key isn't available.
 - [ ] Retire the ECDSA everyday key for accounts that only want the quantum-safe one (a "PQ-only" hot tier), once the LeanPool liveness story is good enough.
 - [ ] More than one aggregator per signer (today: one, immutable; switching = a new signer through the Vault).
 - [ ] leanVM 0.9.0 (`ed7d2b9`) migration, together with the node and the scheme label.
-- [ ] The LeanAccount / KeystoreValidator track (ERC-8286 frame validator: passkeys, weighted multisig) from LeanPool.
+- [ ] The LeanAccount / KeystoreValidator track (ERC-8286 frame validator: passkeys, weighted multisig) from LeanPool, if QueueBit adopts ERC-8286 validators (not ported as dead code; see the plan's status).
