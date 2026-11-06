@@ -56,3 +56,10 @@ Each entry is tagged with its source. Remove an entry when it lands, and cite th
 - [ ] A separate small PR: a sensible default `precompiles` list in the sidecar.
 - [ ] Post the PQ benchmark write-up to ethresear.ch (user).
 - [ ] Watcher: alerts for vault actions pending in the alt mempool; Privacy Pools events.
+
+## Release / hardening (M7 repository part, 2026-11-06)
+- [ ] Extension: implement the reproducible release build behind `scripts/release/extension.sh` (`release:build` in `apps/extension/package.json`; contract in `scripts/release/README.md`), then run `verify-reproducible.mjs` with `REQUIRE_ALL=1` in `release.yml`.
+- [ ] `packages/privacy/src/pp/sync.ts` and `packages/privacy/test/guardrails.test.ts` are not prettier-formatted at HEAD `a8551fd`, so `pnpm lint` fails from a clean clone; and at HEAD `apps/extension/e2e/support/companion-sim.ts` fails `pnpm typecheck` (`recoveryTest` now takes `challenge`, `50abf8c`). Both are fixed in the extension/privacy workstreams' pending changes; check after they land.
+- [ ] `cargo audit`: `RUSTSEC-2024-0388` (`derivative` unmaintained, transitive via arkworks in `packages/groth16/rust`); informational, track an arkworks bump.
+- [ ] First green run of the nightly `devnet` workflow on a GitHub runner (written and linted locally; the compose stack is amd64-native there, but the run itself is unverified).
+- [ ] Release checklist (`docs/release/CHECKLIST.md`): audits, the circom artifact legal review, BUDGET-010 upstream, key ceremonies, 4337 mainnet addresses.
