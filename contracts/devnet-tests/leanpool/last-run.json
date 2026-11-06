@@ -1,5 +1,5 @@
 {
-  "startedAt": "2026-11-06T13:48:53.100Z",
+  "startedAt": "2026-11-06T14:56:22.084Z",
   "run": "LeanPool PQ everyday key, public devnet",
   "node": {
     "url": "http://127.0.0.1:8711",
@@ -9,54 +9,60 @@
       "bonded": "10000000000000000",
       "min": "10000000000000000"
     },
-    "block": "4400"
+    "block": "5074"
   },
   "keys": {
-    "hot": "0x2849c75013a25130e8d55B3a6b113f6dE5Ab0e86",
-    "tank": "0x58674034e4Dda6FA3e4EFF8a182D672d20A18277",
-    "vaultPayer": "0x2637618948D24731a0688456C04a0256d78A3e49",
-    "recipient": "0x661aC833D7B77C8298E0399c6D22702b225bAf18",
-    "vaultPk": "0x33f8b4af6f543654e41e785e67d8d695d53fe1d2c424e2eeab96bc294328f985",
-    "leanSphincsVk": "0x9b4b6f46ee20d5870947160b9f265b1e12821258189bb98e29621c24bdcad6b9"
+    "hot": "0xe63162c2A0fcb2437240f7F0D5144E17da035aA5",
+    "tank": "0xd5fb1C36f71361E35642517FACfeEcE8C01273E5",
+    "vaultPayer": "0x12bbd351c7938Ae45EEa861a4A48F0b161f34DF6",
+    "recipient": "0xDEb79cb21b02f056D2Eb974d3B224FeA0420f4Fb",
+    "vaultPk": "0x304d68aebf611c5562038b356c0a3a3257f5ab7d615e1168a4b2a797662bdcaa",
+    "leanSphincsVk": "0xc3227fe15f2980932feb84f2b13db22b766942a8360145270f13d9edc8cc2349"
   },
   "account": {
-    "address": "0x26905DFa39111B4b52F528917dd91C049e5D5825",
-    "createTx": "0xc1a52cc229d66817519f24d87ccba0c33dd31675866601a7225efbdeebc6463d",
-    "vaultSigner": "0x4819c8d0932A4fa08A0297d1b8C73d9e6566d52C",
-    "vaultCloneTx": "0x849d5d0dc46c55f55acc4b8367e59f368def30b08847168316bc2eb6e09d7e79"
+    "address": "0x2Fb762124AABc1eF602741507Eb42B3592f78745",
+    "createTx": "0xd34c01def52d43c1595c144aaf8348b3a304b4b835198f5498edaf4f7d0ea445",
+    "vaultSigner": "0xC535E4908446268b644B5357C8737C62fa415337",
+    "vaultCloneTx": "0xcadbb94059184978b3c4a9e82cc898676a539c03cdbb0f7f9816170e83ede881"
   },
   "hotSigner": {
-    "address": "0x69F4F1982964695bB67D1e403891ee8a4BF2Ef3C",
-    "createTx": "0x3497a918b7a5b328910301a2271f6119d7d5d67b6270152cdd825ea841920b4b",
+    "address": "0x78BB392652d6E86DAD412aca2e2b3Fba0e3984c7",
+    "createTx": "0x96eeb1f368228f8b5c294946f27e0d74613cfaa939aa0d5889a08d3c28fc2a1f",
     "createGas": "452994",
     "args": {
-      "account": "0x26905DFa39111B4b52F528917dd91C049e5D5825",
+      "account": "0x2Fb762124AABc1eF602741507Eb42B3592f78745",
       "registry": "0x65a64Ab43aB280b7Ed0c4be422eC044D60a0225F",
       "aggregator": "0xa6A1FB01Feb13c4FF1B9c415e4C365F4499A95dF",
-      "vk": "0x9b4b6f46ee20d5870947160b9f265b1e12821258189bb98e29621c24bdcad6b9",
+      "vk": "0xc3227fe15f2980932feb84f2b13db22b766942a8360145270f13d9edc8cc2349",
       "maxFee": "10000000000000000"
     },
     "balance": "50000000000000000"
   },
   "install": {
-    "label": "Vault: vaultSetPQHotSigner",
-    "hash": "0x459691956e8d9a8d4f4e79b07f9b9619c8173d86f890cf2a2949fef8080aaaa4",
-    "block": "4410",
-    "gasUsed": "282544",
-    "c13SignMs": 22269
+    "queued": {
+      "label": "Vault: vaultQueue(vaultSetPQHotSigner)",
+      "hash": "0x0336f601ea689d3ce03b02fb513c7116925be4591bdd94657d281c610e2134d9",
+      "block": "5083",
+      "gasUsed": "596561",
+      "c13SignMs": 10834,
+      "opId": "0x0f10086ecbd60df7d672dafe62fd9f0940cec7bf78d792e35506239ea4ce3134",
+      "eta": 1793980632
+    },
+    "directCallWithoutQueue": "RPC Request failed.",
+    "executeQueued": "0xc4411502af5e1ea550a6bee7f1f49fb9720b2f75496e16845b3e874acf9b1f4f"
   },
   "pqPayment": {
-    "poolId": "0x9fc795672577ba139cadd1abe45d957ad53329f2f0760b482c7b7d845db741b6",
-    "txHash": "0x42810126a9135048df98094746e3b2072e9232ef4812a9cd4840c44ca5e66659",
-    "explorer": "https://explorer.altmempool.wtf/tx/0x42810126a9135048df98094746e3b2072e9232ef4812a9cd4840c44ca5e66659?node=https%3A%2F%2Faltmempool.forshtat.com%2Frpc",
+    "poolId": "0xaec159a7e89f0714a7b3dfb9e5e5af40e494cb557bf88e17892b1f54f89bd78e",
+    "txHash": "0x84a29e24f8877eb2772d400f1cd748f052acc11742b76fbdd8eec429b3b0d2f7",
+    "explorer": "https://explorer.altmempool.wtf/tx/0x84a29e24f8877eb2772d400f1cd748f052acc11742b76fbdd8eec429b3b0d2f7?node=https%3A%2F%2Faltmempool.forshtat.com%2Frpc",
     "stages": [
       "pooled",
       "posted",
       "mined"
     ],
-    "block": "4414",
-    "payer": "0x69f4f1982964695bb67d1e403891ee8a4bf2ef3c",
-    "gasUsed": "344849",
+    "block": "5688",
+    "payer": "0x78bb392652d6e86dad412aca2e2b3fba0e3984c7",
+    "gasUsed": "344861",
     "verifyGas": "61449",
     "frames": [
       {
@@ -71,10 +77,10 @@
       }
     ],
     "batch": {
-      "root": "0xcef3aaa08ecaed4831f1429b3b181c6996d7bbae1984c9e8a638e15b47aa9531",
-      "postTx": "0x31cb8be87b49922b36d4c890422aad9dfa657277a0e850f16b760359a398406d",
-      "block": "4412",
-      "ring": 0
+      "root": "0x837cc2e17ff3b647dce20dbb307f4284d7cd75a85dffb1f8824920bba505f5b4",
+      "postTx": "0x7187ce6b4b46b6c7d1c81a457fe170493bdcc2d8b622e03536c38d4b243ffbdf",
+      "block": "5685",
+      "ring": 2
     },
     "canonicalMempoolOnTheSameTx": {
       "canonicalMempoolValid": false,
@@ -83,24 +89,24 @@
     },
     "leanSphincs": {
       "signatureBytes": 4276,
-      "signMs": 101,
+      "signMs": 65,
       "onChainSignatureBytes": 0
     },
     "recipientReceived": "1000000000000000",
     "bucketDebitedUsd6": "3000000",
-    "minedFrom": "0x69f4f1982964695bb67d1e403891ee8a4bf2ef3c"
+    "minedFrom": "0x78bb392652d6e86dad412aca2e2b3fba0e3984c7"
   },
   "overLimit": {
     "amountWei": "3000000000000000",
-    "refusedBy": "Invalid Transaction: Invalid frame transaction: VERIFY frame 0 (target 0x26905dfa39111b4b52f528917dd91c049e5d5825, 89 bytes of code) failed: RevertOpcode",
+    "refusedBy": "Invalid Transaction: Invalid frame transaction: VERIFY frame 0 (target 0x2fb762124aabc1ef602741507eb42b3592f78745, 89 bytes of code) failed: RevertOpcode",
     "signed": false
   },
   "stark": {
-    "proofHash": "0x0793feb016e792a4874a227fc46e0f47ae325d5d5eb015b0828327c0e9ebaa91",
-    "onChainProofHash": "0x0793feb016e792a4874a227fc46e0f47ae325d5d5eb015b0828327c0e9ebaa91",
+    "proofHash": "0x646f21f9f9080bf757d8f7561a7ae0b9d676c6d314cde23b7e24d86e7dfc5a5c",
+    "onChainProofHash": "0x646f21f9f9080bf757d8f7561a7ae0b9d676c6d314cde23b7e24d86e7dfc5a5c",
     "verdict": "VALID",
-    "why": "1 signatures proven by a 194992-byte recursive STARK whose claims rebuild the posted root"
+    "why": "1 signatures proven by a 196016-byte recursive STARK whose claims rebuild the posted root"
   },
-  "finishedAt": "2026-11-06T13:51:32.658Z",
+  "finishedAt": "2026-11-06T15:58:24.433Z",
   "passed": true
 }

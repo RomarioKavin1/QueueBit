@@ -31,6 +31,20 @@
 | Over-limit payment ($9 > $8) | refused by the pre-check, never signed |
 | Batch STARK | 194,992 bytes, proved in 63 s, hash `0x0793feb0…aa91` attached; `verify-batch`: **VALID** |
 
+### Re-run with the queued install (after review)
+
+Installing the signer is now loosening, so the Vault queues it and anyone executes it after the timelock (1 h here).
+Account `0x2Fb762124AABc1eF602741507Eb42B3592f78745`, signer `0x78BB392652d6E86DAD412aca2e2b3Fba0e3984c7`:
+
+| Step | Evidence |
+|---|---|
+| Vault queues `vaultSetPQHotSigner` (Path B) | `0x0336f601ea689d3ce03b02fb513c7116925be4591bdd94657d281c610e2134d9`, block 5083, op `0x0f10086e…` |
+| Executed after the timelock, by anyone | `0xc4411502af5e1ea550a6bee7f1f49fb9720b2f75496e16845b3e874acf9b1f4f` |
+| Quantum-safe everyday payment | [`0x84a29e24…`](https://explorer.altmempool.wtf/tx/0x84a29e24f8877eb2772d400f1cd748f052acc11742b76fbdd8eec429b3b0d2f7?node=https%3A%2F%2Faltmempool.forshtat.com%2Frpc), block 5688: VERIFY 61,449 gas, 0 signature bytes on-chain |
+| Same tx, canonical mempool | refused: `StorageReadNonSender` |
+| Over-limit payment | refused before signing |
+| Batch STARK | `0x646f21f9…` attached; `verify-batch`: **VALID** |
+
 ## LeanPool's original explainer
 
 The rest of this page is LeanPool's own design write-up as of `53732b1`, kept for its reasoning and its earlier live
