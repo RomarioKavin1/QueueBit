@@ -6,7 +6,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "QueueBit",
     short_name: "QueueBit",
     description: "A wallet whose account is quantum-safe, with sessions for the sites you use.",
-    start_url: "/",
+    start_url: "/start",
     scope: "/",
     display: "standalone",
     background_color: "#fbfbfb",

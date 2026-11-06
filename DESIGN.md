@@ -27,6 +27,11 @@ typography:
     fontWeight: 400
     lineHeight: 0.86
     letterSpacing: "0.01em"
+  screen-title:
+    fontFamily: "EB Garamond"
+    fontSize: "1.65rem"
+    fontWeight: 500
+    lineHeight: 1.2
   headline:
     fontFamily: "EB Garamond, Georgia, serif"
     fontSize: "1.12rem"
@@ -197,6 +202,7 @@ A near-white sheet, near-black ink, one electric blue for every line, and flat l
 
 ### Hierarchy
 - **Wordmark** (Departure Mono 400, clamp(3.4rem, 9vw, 8.4rem), line-height 0.86, uppercase, manual blue): the QUEUEBIT title across two columns of the hero. Used once per surface.
+- **Screen title** (EB Garamond 500, 1.65rem, 1.2): the one heading of an app screen (onboarding, unlock, the account). App screens are single-column and read at arm's length on a phone, so their title carries more than a landing section heading.
 - **Headline** (EB Garamond 500, 1.12rem, 1.4, left-aligned): section headings, preceded by a two-digit mono section number (01 to 06) in blue. Headings are deliberately small; the plates carry the scale.
 - **Lede** (EB Garamond 400, 1.05rem, 1.6): the hero promise and the report line (the latter at 500), right-aligned in the hero's third column on desktop.
 - **Body** (EB Garamond 400, fluid 0.94 to 1.03rem, line-height 1.85, justified with hyphenation and pretty wrapping, 1.4em between paragraphs): all running text. Measure is set by the column, roughly 55 to 70 characters.
@@ -238,6 +244,7 @@ Character: a typed command in a ruled box.
 - **Hover:** border and fill turn manual blue, text turns paper (200ms colour transition); the arrow nudges 2px right (300ms, ease-out).
 - **Focus:** the shared focus ring.
 - There is one action on the landing. Never add a second filled or bordered button beside it.
+- **App primary (onboarding and other app screens):** the same square button resting in its "on" state, manual-blue fill with paper label, full width, 48px tall, pinned in a bottom action bar above the safe area. Touch screens have no hover, so the action is shown filled. A secondary choice is a ruled paper button or a dotted-underline text button beneath it.
 
 ### Links
 - Body links underline in a 1px dotted line offset 0.2em, turning solid on hover. Citations are mono [n] in blue with no underline until hover.
