@@ -28,6 +28,7 @@ import {
 } from "./keyring";
 import { AccountError, AccountService, type LeanIo } from "./lean/account";
 import { readGuardians, readKeys, readRecoveries } from "./lean/keys";
+import { quoteLegacy } from "./lean/legacy";
 import { planMigration, readMigrationSource, readSafe, runMigration, type MigrationPlan } from "./lean/migrate";
 import { OwnerKey, type PqKey } from "./lean/owner";
 import {
@@ -677,7 +678,11 @@ export class Wallet {
     const imported = req.keys.map((k) => privateKeyToAccount(k).address);
     let address = req.address;
     if (address !== undefined && !isAddress(address, { strict: false })) throw new Error("That isn't an address.");
-    if (req.kind === "eoa") {
+    if (req.kind === "eoa" && req.external) {
+      if (!address) throw new Error("Connect the wallet to move from.");
+      if (req.keys.length) throw new Error("A connected wallet signs for itself: don't import its key too.");
+      if (req.keepAddress) throw new Error("Keeping the address needs the wallet's key (EIP-7702); move it instead.");
+    } else if (req.kind === "eoa") {
       const from = imported[0];
       if (!from) throw new Error("Import the address's private key.");
       if (address && address.toLowerCase() !== from.toLowerCase())
@@ -900,6 +905,35 @@ export class Wallet {
       return this.migrationView(chainId, plan, safe ? { owners: safe.owners, threshold: safe.threshold } : undefined);
     },
     "migrate:run": (req) => this.runMigration(req),
+    "migrate:calls": async (req) => {
+      const { chainId, plan } = await this.migrationPlan({ ...req, external: true, keys: [] });
+      if (plan.mode !== "move") throw new Error("A connected wallet can only move into a new account.");
+      const transfers = plan.calls.slice(0, -1).map((c) => ({
+        to: c.to,
+        valueWei: (c.value ?? 0n).toString(),
+        data: c.data ?? ("0x" as Hex),
+      }));
+      return { chainId, source: plan.source, destination: plan.destination, calls: transfers };
+    },
+    "migrate:sweep": async (req) => {
+      const { chainId, plan } = await this.migrationPlan({ ...req, external: true, keys: [] });
+      if (plan.mode !== "move") throw new Error("A connected wallet can only move into a new account.");
+      const last = plan.calls[plan.calls.length - 1]!;
+      const client = this.env.io!.publicClient(chainId);
+      const q = await quoteLegacy(client, plan.source, { ...last, value: 0n });
+      // The wallet may price the fee a little above the quote: hold back 30% more than the quoted fee.
+      const reserve = (q.fee * 13n) / 10n;
+      const balance = await client.getBalance({ address: plan.source });
+      if (balance <= reserve) throw new Error("There isn't enough ETH left to pay the fee of the last step.");
+      return {
+        to: last.to,
+        valueWei: (balance - reserve).toString(),
+        data: last.data ?? ("0x" as Hex),
+        gas: q.gas.toString(),
+        gasPrice: q.gasPrice.toString(),
+        leftoverWei: (reserve - q.fee).toString(),
+      };
+    },
 
     "privacy:view": async ({ chainId }) => this.priv().view(await this.chainOr(chainId)),
     "privacy:sync": async ({ chainId }) => this.priv().sync(await this.chainOr(chainId)),

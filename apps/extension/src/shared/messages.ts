@@ -47,6 +47,21 @@ export interface MigrationRequest {
   keepAddress?: boolean;
   /** The EOA's key; a Safe's owner keys; a smart account's owner key. */
   keys: `0x${string}`[];
+  /**
+   * EOA only: the address's own wallet (an injected EIP-1193 wallet) signs and sends the move, so no key is imported.
+   * `address` is then required and `keys` is empty.
+   */
+  external?: boolean;
+}
+
+/** A transaction an external wallet sends for a move (JSON-safe: wei and gas as decimal strings). */
+export interface ExternalCall {
+  to: `0x${string}`;
+  valueWei: string;
+  data: `0x${string}`;
+  /** Suggested legacy gas and price, so the fee stays inside what the sweep left for it. */
+  gas?: string;
+  gasPrice?: string;
 }
 
 export interface UiApi {
@@ -101,6 +116,16 @@ export interface UiApi {
   // ---- move to quantum-safe ----
   "migrate:preview": { req: MigrationRequest; res: MigrationPreview };
   "migrate:run": { req: MigrationRequest; res: { hashes: `0x${string}`[] } };
+  /**
+   * An EOA move its own wallet sends (`external: true`): the token transfers, in order. The ETH goes last, from
+   * `migrate:sweep`, once the transfers have landed (they spend some of it on fees).
+   */
+  "migrate:calls": {
+    req: MigrationRequest;
+    res: { chainId: number; source: `0x${string}`; destination: `0x${string}`; calls: ExternalCall[] };
+  };
+  /** The move's last transaction: the rest of the ETH to the account (creating it), less the fee and a margin. */
+  "migrate:sweep": { req: MigrationRequest; res: ExternalCall & { leftoverWei: string } };
 
   // ---- Private balance (ux-spec §3.11, plan §40 §1) ----
   "privacy:view": { req: { chainId?: number }; res: PrivacyView };
