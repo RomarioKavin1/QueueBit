@@ -45,7 +45,10 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       fetch(req)
         .then((res) => {
-          if (res.ok) void caches.open(SHELL).then((c) => c.put(req, res.clone()));
+          if (res.ok) {
+            const copy = res.clone(); // before the page reads the body
+            void caches.open(SHELL).then((c) => c.put(req, copy));
+          }
           return res;
         })
         .catch(async () => (await caches.match(req)) ?? (await caches.match("/")) ?? Response.error()),
