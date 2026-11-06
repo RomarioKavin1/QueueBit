@@ -8,19 +8,19 @@ Each entry is tagged with its source. Remove an entry when it lands, and cite th
 - [x] `parseSimFrames`: decided fail closed, a frame without any outcome counts as failed (M1 review; e2f1298).
 - [ ] Postmessage channel nonce against co-installed extensions (M0 review, deferred).
 - [x] Embedded-frame requests show the top-level page (`location.ancestorOrigins`, read by the content script) (M0 review; e2f1298).
-- [x] Recovery bootstrap (contracts side; `0f7a63b`, G1 (e) `c4a03b3`): decided a Recovery payer key, derived through the existing `recovery.payerKey` (≠ hot key, tank, vault payer); Path B from the public mempool shown on the devnet. Companion/extension still need to pair and pass it (notes). Original: a C13 Recovery signer has no payer key, so it can only use Path A on the staked lane, and it can only stake with a transaction it signs itself. Decide: stake from `msg.value` in `createRoleSigner`, or a Recovery payer key in the companion (E-78 refuses Path B in recovery mode today). The extension e2e stakes it through ethrex's private builder hook (devnet-only stand-in) (extension M4).
-- [ ] Companion registry: re-sync `abi:sync` for `vaultSetRecipientMode` (the phone shows it as an unknown step today) (extension M4).
+- [x] Recovery bootstrap (contracts side; `0f7a63b`, G1 (e) `c4a03b3`): decided a Recovery payer key, derived through the existing `recovery.payerKey` (≠ hot key, tank, vault payer); Path B from the public mempool shown on the devnet. Companion side done in `5cd9faf` (ur v2 recovery-test) and `16a8c71` (Recovery fee key, Path-B signing). Original: a C13 Recovery signer has no payer key, so it can only use Path A on the staked lane, and it can only stake with a transaction it signs itself. Decide: stake from `msg.value` in `createRoleSigner`, or a Recovery payer key in the companion (E-78 refuses Path B in recovery mode today). The extension e2e stakes it through ethrex's private builder hook (devnet-only stand-in) (extension M4).
+- [x] Companion registry: re-sync `abi:sync` for `vaultSetRecipientMode` (the phone shows it as an unknown step today) (extension M4). `538f22a`; the extension's vault-interop test must flip its `phoneKnows: false` case.
 - [x] `InitConfig.tokens` at initialize (`0f7a63b`; deploy/ABIs `2bba64d`). Original: `InitConfig` has no token list, so a fresh account has no allowed ERC-20 and an ERC-2612 pre-approval needs a ≥ 1 h queued `vaultSetToken` first; consider tokens at initialize (extension M3).
 - [ ] Extension: Pending scans `Queued` logs from block 0 (devnet only; needs a cursor), Vault-signer top-up UI, guardian freeze deep link, hot-key rotation e2e (extension M4).
 - [ ] Wire the watcher light mode (`@leaked/watcher-core`) and the privacy tab (`@leaked/privacy` + `@leaked/groth16`) into the extension.
 
 ## Companion
-- [ ] Manual, verified PWA update (no silent `skipWaiting` + `claim`); show the build id prominently (companion review).
-- [ ] A passphrase strength check beyond 8 characters; avoid `autoComplete="current-password"` password-manager sync (companion review).
-- [ ] Encrypt the activity log (it stores amounts and recipients in clear) (companion review).
-- [ ] Cross-origin navigation as an exfil channel: document the limitation, or add a navigation guard (companion review).
+- [x] Manual, verified PWA update (no silent `skipWaiting` + `claim`); show the build id prominently (companion review). `16a8c71`.
+- [x] A passphrase strength check beyond 8 characters; avoid `autoComplete="current-password"` password-manager sync (companion review). `16a8c71` (zxcvbn-ts).
+- [x] Encrypt the activity log (it stores amounts and recipients in clear) (companion review). `16a8c71`.
+- [x] Cross-origin navigation as an exfil channel: document the limitation, or add a navigation guard (companion review). `16a8c71` (both).
 
-- [ ] leanSphincs-s usage guard (if the experimental scheme is enabled): a per-key signature counter in companion storage, incremented on every returned `sign` (retries count); exported with the key metadata. A restored seed has unknown usage and counts as "exceeded". Warn at 50%, require rotation at 90%, refuse at 100% via `PQScheme.budgetStatus`. Rotation = a fresh `chainScope` label → a new VaultSigner clone (leanSphincs-s review, 7449363).
+- [x] leanSphincs-s usage guard (`16a8c71`; the count is not exported: a restore counts as exceeded instead) (if the experimental scheme is enabled): a per-key signature counter in companion storage, incremented on every returned `sign` (retries count); exported with the key metadata. A restored seed has unknown usage and counts as "exceeded". Warn at 50%, require rotation at 90%, refuse at 100% via `PQScheme.budgetStatus`. Rotation = a fresh `chainScope` label → a new VaultSigner clone (leanSphincs-s review, 7449363).
 
 ## Contracts
 - [x] Mirror the account's Open recipient mode and initialize-derived vault binding in the 7579 modules (module review). `9dbb5a7` (hook RecipientMode, executor binds pk/verifier/sigLength), `fd2573c` (anvil e2e).

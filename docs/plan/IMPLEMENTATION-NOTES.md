@@ -1200,3 +1200,57 @@ on the devnet (hot 45,750, Path B 36,213, Path A 151,701). Forge: 884 pass, 3 sk
   (3 hosts × 2 modes), invariants `rolesIndependent` and forbidden recipients; anvil 4337 e2e green.
 - **Watcher**: `packages/watcher-core/src/generated/abi.ts` regenerated (new errors only; no event changed).
   `services/watcher/test/devnet.live.test.ts` encodes `InitConfig` and must add `tokens: []`.
+
+## Companion follow-ups: Recovery fee key, leanSphincs-s guard, updates, log, navigation (2026-11-06)
+
+Commits `538f22a` (registry), `5cd9faf` (`@leaked/ur`), `16a8c71` (companion). Unit 161, e2e 14 (the 7 earlier ones
+plus `e2e/followups.e2e.ts`) on the built PWA; screenshots `apps/companion/docs/screenshots/` retaken (new: 02b, 02c,
+13b, 17–21).
+
+- **Registry.** `vaultSetRecipientMode` is clear-signed: Open = "Let your everyday key pay any address" (loosening;
+  queued, else the direct-loosening warning), Strict = "Only pay approved addresses" (instant). `looserWhen`/`derived`
+  accept an enum value. The drift test now also scans `LeakedAccountRoles.sol` (the function was in the roles module but
+  not in `ILeakedAccountRoles`, so the old check missed it). **Extension:** `test/unit/vault-interop.test.ts` still
+  expects `phoneKnows: false` (unknown step) for "Strict recipients" and now fails on `review.unknown`; flip it.
+  `InitConfig.tokens`: the phone never signs `initialize` (the tank sends `createAccount`), so there is nothing to
+  decode there; no `initialize` descriptor was added on purpose (it would make an unsignable call look signable).
+- **`@leaked/ur` (backward compatible).** A pq-key may carry key 4 `payer` for role 2. `ur:leaked-recovery-test` gains
+  optional key 6 `payer`; with it the witness signs `keccak256("LEAKED recovery test v2" ‖ schemeId ‖ pk ‖ requestId ‖
+  payer)` (cross-checked with `cast keccak`); without it v1 is unchanged. Verify with `recoveryTestChallengeOf(test)`
+  (the extension did so in `0f2caf5`). `KNOWN_SIG_LENGTHS` gains leanSphincs-s (4,164).
+- **Recovery fee key.** BIP-32 `m/44'/60'/8141'/1'/0'` of the Recovery words (hardened, apart from the Vault's
+  `m/44'/60'/8141'/0/0`: independent even if one mnemonic were reused). Shown in the ceremony's pq-key (with the pk),
+  carried in every recovery-test code, held in the worker's recovery session and wiped with it. Recovery mode signs
+  entry 1 of a Path-B tx over the same sig hash (`v‖r‖s`), exactly as the Vault does; E-78 only refuses a fee slot that
+  names another key. `test/recovery-interop.test.ts` builds the request with the extension's own `signRequest` over
+  `roleSignerPathBTx` (the G1 (e) shape) and checks the answer the way the extension pre-verifies it.
+- **leanSphincs-s** (Settings › Experimental, off by default; the choice and the pq-signer warning text with an
+  "I understand" box at create and restore). Counter per key (per pk) in `VaultRecord.usage`: sealed with the seed's
+  AES key (AAD `leaked-companion/usage/v1/<pk>`) plus a plaintext hint for the screens; the worker enforces
+  `max(sealed, hint)`, refuses an unopenable counter, increments on every signature it returns (retries count; a
+  failed self-check returns nothing and is not counted), and the UI stores the new count before it shows the QR.
+  Restored = unknown = exceeded. Levels from `budgetStatus`: warn ≥ 50 % (Home banner, approve-sheet note), ≥ 90 %
+  approvals need a prepared replacement, ≥ 100 % refused (E-73), in the UI gate and again in the worker.
+  `estimatedSecurityBits` is shown on Key health, labelled an estimate. Rotation (Key health › Replace the key): key
+  #n+1 = `chainScope "any-n"` from the same words (nothing new to back up), its pairing code, then the browser's
+  Replace the Vault + Recovery approval (7 days). A request naming the new pk signs with it and promotes it (old pk
+  retired; the seed stays AAD-bound to the first pk via `sealedFor`). Restore asks for the key number. Not done:
+  exporting the count with the key metadata (no import path exists; a restore counts as exceeded instead).
+- **Updates (trust model).** No `skipWaiting` at install, no `clients.claim`. `sw.js` carries the SHA-256 of every
+  precached file (taken in `writeBundle`, from the files as written) and the build id = hash over them; install fails
+  on any mismatch (e2e: a tampered digest never installs). The worker serves the build the user last approved (a
+  record in a meta cache) even after the browser activates a newer worker, until "Update now" (sheet shows build X →
+  Y, commit · file hash). Limits: the origin is trusted for code, as for any web app: a malicious `sw.js` can ignore all
+  of this; what the user gets is no silent swap and a build id to compare with a published one. The first new-style
+  worker over an old cached build keeps serving the old one ("previous") until approved.
+- **Passphrase.** zxcvbn-ts 4.2.0 (MIT, `@zxcvbn-ts/core` + `language-common` 4.1.3 + `language-en` 4.1.1, lazily
+  loaded chunk, ~850 KB gzip, precached): score ≤ 1 blocked, 2 warned. Passphrase fields use `autocomplete="off"` plus
+  the 1Password/LastPass/Bitwarden/Dashlane opt-outs: `new-password` invites a generated-and-synced copy, and a cloud
+  copy plus this phone's storage opens the key; there is no username field for save heuristics.
+- **Activity log.** Sealed box per entry (X25519 + HKDF-SHA256 + AES-GCM) to a log key whose secret is wrapped like the
+  seed (`logkey` blob); entries are appended without the passphrase, read in the worker after it (Settings ›
+  Activity). Older plaintext logs are re-sealed at the first unlock; Vaults made earlier get a log key at their next
+  signature. Without a Vault (Recovery tools only) nothing is logged. Visible without the passphrase: the count.
+- **Navigation.** `src/navGuard.ts`, imported first: cancels cross-origin navigations of the window (Navigation API)
+  and replaces `window.open`. A speed bump, not a boundary (no CSP directive covers navigation since `navigate-to` was
+  dropped; DNS prefetch and other side channels remain); the boundary is still that secrets live only in the worker.
