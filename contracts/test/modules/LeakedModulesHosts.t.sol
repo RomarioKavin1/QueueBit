@@ -11,6 +11,7 @@ import {LeakedPolicyHook} from "../../src/modules/LeakedPolicyHook.sol";
 import {LeakedHotValidator} from "../../src/modules/LeakedHotValidator.sol";
 import {LeakedRoleExecutor} from "../../src/modules/LeakedRoleExecutor.sol";
 import {IERC7579AccountView, IAccount4337 as IAccountValidate} from "./hosts/HostInterfaces.sol";
+import {ILeakedModules} from "../../src/modules/interfaces/ILeakedModules.sol";
 import {LeakedModulesBase} from "./LeakedModulesBase.sol";
 
 contract PermitToken is ERC20Permit {
@@ -193,6 +194,27 @@ abstract contract LeakedModulesHostsTest is LeakedModulesBase {
         _expectValidationRevert(
             _op(_single(account, 0.01 ether, "")), abi.encodeWithSelector(NotAllowed.selector, account, bytes4(0))
         );
+    }
+
+    /// Account delta-review analogue (`9b918a3`): an Open-mode payee contract reentering from `receive` cannot run a
+    /// ready queued op mid-batch (`Reentrancy`), cannot write policy, and refunding cannot net the debit below the
+    /// static value.
+    function test_recipientMode_openPayeeReentry() public {
+        if (!_open()) return;
+        Call[] memory up =
+            _hookCall(abi.encodeCall(LeakedPolicyHook.setCap, (account, 2000e6, PER_TX, MAX_FEE_WEI, MAX_PRIO)));
+        bytes32 opId = _vaultQueue(up, 1);
+        vm.warp(block.timestamp + 48 hours);
+        ReentrantPayee payee = new ReentrantPayee(executor, hook, account, opId, up);
+        uint256 before = _available();
+        _submitOk(_op(_single(address(payee), 0.1 ether, "")));
+        assertEq(payee.execErr(), abi.encodeWithSelector(Reentrancy.selector), "queued op mid-batch");
+        assertEq(payee.writeErr(), abi.encodeWithSelector(Unauthorized.selector), "policy write");
+        assertEq(address(payee).balance, 0, "refunded");
+        assertEq(before - _available(), 300e6, "debited the static value despite the refund");
+        (,, uint256 cap) = hook.getBucket(account);
+        assertEq(cap, CAP, "the queued loosening did not run");
+        executor.executeQueued(account, opId, up); // still runnable afterwards, outside the batch
     }
 
     function _setModeCall(RecipientMode m) internal view returns (Call[] memory) {
@@ -844,6 +866,37 @@ abstract contract LeakedModulesHostsTest is LeakedModulesBase {
     function _createAccountSalted(ExecutorInit memory xi) internal returns (address) {
         // Fresh modules so the second account gets its own host deployment and address.
         return _createAccount(_host(), _hookInit(), xi);
+    }
+}
+
+/// An Open-mode payee that reenters from `receive`: runs a ready queued op, writes policy, refunds the payment.
+contract ReentrantPayee {
+    LeakedRoleExecutor internal immutable X;
+    LeakedPolicyHook internal immutable H;
+    address internal immutable A;
+    bytes32 internal immutable OP;
+    ILeakedModules.Call[] internal calls;
+    bytes public execErr;
+    bytes public writeErr;
+
+    constructor(LeakedRoleExecutor x, LeakedPolicyHook h, address a, bytes32 op, ILeakedModules.Call[] memory c) {
+        (X, H, A, OP) = (x, h, a, op);
+        for (uint256 i; i < c.length; ++i) {
+            calls.push(c[i]);
+        }
+    }
+
+    receive() external payable {
+        try X.executeQueued(A, OP, calls) {}
+        catch (bytes memory e) {
+            execErr = e;
+        }
+        try H.setRecipientMode(A, ILeakedModules.RecipientMode.Open) {}
+        catch (bytes memory e) {
+            writeErr = e;
+        }
+        (bool ok,) = A.call{value: msg.value}("");
+        require(ok, "refund");
     }
 }
 
