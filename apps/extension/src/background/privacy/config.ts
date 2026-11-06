@@ -10,6 +10,7 @@ import {
   type PoolState,
 } from "@leaked/privacy";
 import { decodeFunctionResult, encodeFunctionData, parseAbi, toFunctionSelector } from "viem";
+import { LOCAL_DEVNET } from "../../shared/build";
 import { findNetwork } from "../../shared/chains";
 import type { KV } from "../../shared/kv";
 import type { PrivacyNetworkConfig } from "../../shared/privacy";
@@ -25,8 +26,9 @@ export function privacyEditable(chainId: number, localDevnet: boolean): boolean 
   return localDevnet && chainId === 1337;
 }
 
+/** The network's staked lane; the package's localhost default only in a local-devnet build (none ships to a store). */
 export function defaultSidecarUrl(chainId: number): string {
-  return findNetwork(chainId)?.stakedSidecarUrl ?? DEFAULT_SIDECAR_URL;
+  return findNetwork(chainId)?.stakedSidecarUrl ?? (LOCAL_DEVNET ? DEFAULT_SIDECAR_URL : "");
 }
 
 export class PrivacyConfigError extends Error {
@@ -67,6 +69,7 @@ export async function validatePrivacyConfig(
   if (!/^\d{1,12}$/u.test(input.deployBlock.trim())) throw new PrivacyConfigError("The start block must be a number.");
   const deployBlock = BigInt(input.deployBlock.trim());
   const sidecarUrl = (input.sidecarUrl?.trim() || defaultSidecarUrl(input.chainId)).replace(/\/+$/u, "");
+  if (!sidecarUrl) throw new PrivacyConfigError("Enter the fee payer's node URL (this network has no default).");
   if (!/^https?:\/\/[^\s]+$/u.test(sidecarUrl))
     throw new PrivacyConfigError("The fee payer's node URL must be http(s).");
   const head = await p.getBlockNumber();

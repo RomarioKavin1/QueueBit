@@ -5,7 +5,11 @@ import { getNetwork } from "../../src/shared/chains";
 import { MemoryKV } from "../../src/shared/kv";
 import { priceWarning } from "../../src/pages/app/Onboarding";
 
-vi.mock("../../src/shared/build", () => ({ BUILD: { localDevnet: true, designGallery: false } }));
+vi.mock("../../src/shared/build", () => ({
+  LOCAL_DEVNET: true,
+  DESIGN_GALLERY: false,
+  BUILD: { localDevnet: true, designGallery: false },
+}));
 
 /**
  * "Tokens you'll spend": the price is what the account counts the token at, so a price far below the real one

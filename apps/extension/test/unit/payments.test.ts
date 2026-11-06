@@ -9,7 +9,11 @@ import { MemoryKV } from "../../src/shared/kv";
 import type { AccountStatus } from "../../src/shared/views";
 
 // Chain 1337 with the devnet/deploy contracts, as in a local-devnet build (the plan needs a deployment to exist).
-vi.mock("../../src/shared/build", () => ({ BUILD: { localDevnet: true, designGallery: false } }));
+vi.mock("../../src/shared/build", () => ({
+  LOCAL_DEVNET: true,
+  DESIGN_GALLERY: false,
+  BUILD: { localDevnet: true, designGallery: false },
+}));
 
 const CHAIN = 1337;
 const USD = 1_000_000n;

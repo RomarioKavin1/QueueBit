@@ -30,10 +30,12 @@ jobs:
           node-version: "26"
           # No dependency cache on the release path: a fresh, lockfile-verified install.
       - run: pnpm install --frozen-lockfile
-      - name: reproducibility (two clean builds per target)
-        run: node scripts/release/verify-reproducible.mjs
+      - name: reproducibility (two clean builds per target, the extension included)
+        run: REQUIRE_ALL=1 node scripts/release/verify-reproducible.mjs
       - name: release build
         run: node scripts/release/build.mjs --out "$RUNNER_TEMP/release"
+      - name: Web Store package check (permissions, justifications, zip)
+        run: node apps/extension/scripts/store-package.mjs "$RUNNER_TEMP/release"
       - name: summary
         run: |
           {

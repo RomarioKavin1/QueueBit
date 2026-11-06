@@ -510,9 +510,18 @@ describe("pool-order reviewer list (devnet ASP)", () => {
 });
 
 describe("privacy network config", () => {
-  const base = { chainId: 1337, entrypoint: ENTRYPOINT, pool: ENTRYPOINT, poolPayer: ENTRYPOINT, deployBlock: "10" };
+  const base = {
+    chainId: 1337,
+    entrypoint: ENTRYPOINT,
+    pool: ENTRYPOINT,
+    poolPayer: ENTRYPOINT,
+    deployBlock: "10",
+    sidecarUrl: "http://localhost:14340/rpc",
+  };
   const p = { getBlockNumber: async () => 100n } as unknown as HostProvider;
   it("plain-language refusals before any chain read is trusted", async () => {
+    // A non-local-devnet build has no localhost default for the fee payer's node (none ships to a store).
+    await expect(validatePrivacyConfig({ ...base, sidecarUrl: "" }, p, 1)).rejects.toThrow(/no default/u);
     await expect(validatePrivacyConfig({ ...base, pool: "0x12" }, p, 1)).rejects.toThrow(/The pool isn't an address/u);
     await expect(validatePrivacyConfig({ ...base, deployBlock: "ten" }, p, 1)).rejects.toThrow(/must be a number/u);
     await expect(validatePrivacyConfig({ ...base, sidecarUrl: "ftp://x" }, p, 1)).rejects.toThrow(/http\(s\)/u);

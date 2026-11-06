@@ -15,7 +15,11 @@ import { Wallet } from "../../src/background/wallet";
 import { local4337Deployment, roleExecutorAbi } from "../../src/generated/contracts";
 import { MemoryKV } from "../../src/shared/kv";
 
-vi.mock("../../src/shared/build", () => ({ BUILD: { localDevnet: true, designGallery: false } }));
+vi.mock("../../src/shared/build", () => ({
+  LOCAL_DEVNET: true,
+  DESIGN_GALLERY: false,
+  BUILD: { localDevnet: true, designGallery: false },
+}));
 
 const RUN = process.env.LOCAL_4337 === "1";
 const RPC = "http://localhost:8546";

@@ -17,7 +17,7 @@ import { useAsync, useTheme, useWalletState } from "../lib/hooks";
 import { call } from "../lib/api";
 import { UnlockForm } from "../common/Unlock";
 import { PopupApp } from "../popup/PopupApp";
-import { BUILD } from "../../shared/build";
+import { DESIGN_GALLERY } from "../../shared/build";
 import { Alerts } from "./Alerts";
 import { Gallery } from "./Gallery";
 import { Limits } from "./Limits";
@@ -90,7 +90,7 @@ export function AppMain() {
     );
   }
   // The component gallery is a development tool: production builds do not route to it (UX review M1).
-  if (route === "design" && BUILD.designGallery) return <Gallery />;
+  if (route === "design" && DESIGN_GALLERY) return <Gallery />;
 
   const go = (s: Step) => {
     location.hash = `#onboarding/${s}`;

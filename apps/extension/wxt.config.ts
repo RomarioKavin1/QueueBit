@@ -15,6 +15,8 @@ const PP_ARTIFACTS = ["withdraw.wasm", "withdraw.zkey", "withdraw.vkey"];
 // Host permissions cover only the fixed RPCs (plan §30 §2.5: no <all_urls>, no dapp-supplied RPC URLs). A
 // local-devnet build (VITE_LEAKED_LOCAL_DEVNET=1: e2e, development) also reaches the devnet fork on localhost.
 const LOCAL_DEVNET = process.env.VITE_LEAKED_LOCAL_DEVNET === "1";
+// The design gallery (app.html#design): development and screenshot builds only (src/shared/build.ts).
+const DESIGN = process.env.VITE_LEAKED_DESIGN === "1";
 const RPC_HOSTS = [
   "https://altmempool.forshtat.com/*",
   "https://ethereum-sepolia-rpc.publicnode.com/*",
@@ -31,8 +33,13 @@ export default defineConfig({
       for (const f of PP_ARTIFACTS) files.push({ absoluteSrc: join(CIRCUITS, f), relativeDest: `pp-circuits/${f}` });
     },
   },
-  vite: () => ({
+  vite: (env) => ({
     plugins: [tailwindcss()],
+    // Build flags as literals, so production folds the devnet and gallery branches away (src/shared/build.ts).
+    define: {
+      __LEAKED_LOCAL_DEVNET__: JSON.stringify(LOCAL_DEVNET),
+      __LEAKED_DESIGN__: JSON.stringify(DESIGN || env.mode === "development"),
+    },
     // The offscreen prover Worker is an ES module (it imports the WASM engine and the privacy package).
     worker: { format: "es" },
     // Workspace packages resolve to their TypeScript sources (same convention as the root vitest config).

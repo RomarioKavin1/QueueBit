@@ -1,6 +1,6 @@
 import { DEVNET_1337 } from "@leaked/rpc";
 import { local4337Deployment, localDeployment, type LocalToken } from "../generated/contracts";
-import { BUILD } from "./build";
+import { LOCAL_DEVNET } from "./build";
 
 /**
  * The fixed network table (plan §30 §8). Sites cannot add networks (`wallet_addEthereumChain` is refused), so a
@@ -108,7 +108,7 @@ const localTokens = (t: { tokens?: LocalToken[] } | null): TokenPreset[] =>
       }))
     : [];
 
-const devnet: Network = BUILD.localDevnet
+const devnet: Network = LOCAL_DEVNET
   ? {
       chainId: DEVNET_1337.chainId,
       name: "Local devnet",
@@ -156,7 +156,7 @@ const devnet: Network = BUILD.localDevnet
  * Chain 31337: a local anvil with EntryPoint v0.8 at its canonical address, the LEAKED 7579 modules and a minimal
  * bundler (`devnet/deploy`: `bun run up:4337`). The compatible-account backend runs here exactly as on Sepolia.
  */
-const local4337: Network | undefined = BUILD.localDevnet
+const local4337: Network | undefined = LOCAL_DEVNET
   ? {
       chainId: 31337,
       name: "Local 4337 test chain",

@@ -8,7 +8,7 @@ import { OffscreenClient, chromeOffscreen } from "../background/offscreen";
 import { alertUrl, notificationFor } from "../background/watcher/alerts";
 import { EngineError } from "../background/engine";
 import { ProviderRpcError, serializeError } from "../shared/errors";
-import { BUILD } from "../shared/build";
+import { LOCAL_DEVNET } from "../shared/build";
 import { schemes } from "@leaked/pq-signer";
 import {
   PROVIDER_PORT,
@@ -33,7 +33,7 @@ export default defineBackground({
     const ports = new Map<Browser.runtime.Port, string>();
     // @leaked/pq-signer instantiated its WASM (initSync from the embedded bytes, no fetch) when this module loaded.
     // A local-devnet build exposes that fact for the e2e, which also checks no .wasm was ever fetched.
-    if (BUILD.localDevnet) {
+    if (LOCAL_DEVNET) {
       (globalThis as { __leakedPq?: unknown }).__leakedPq = {
         schemes: Object.values(schemes).map((x) => x.name),
         rejectsGarbage: !schemes.c13.verify(new Uint8Array(32), new Uint8Array(32), new Uint8Array(3688)),

@@ -6,7 +6,11 @@ import { AaPayments, aaNetwork, callGasFloor } from "../../src/background/aa/pay
 import type { AccountChainState } from "../../src/background/policy";
 import { USD } from "../../src/background/account";
 
-vi.mock("../../src/shared/build", () => ({ BUILD: { localDevnet: true, designGallery: false } }));
+vi.mock("../../src/shared/build", () => ({
+  LOCAL_DEVNET: true,
+  DESIGN_GALLERY: false,
+  BUILD: { localDevnet: true, designGallery: false },
+}));
 
 /**
  * `AaPayments.prepare` against a fake node and bundler: the signed op's gas limits come from the bundler, except that

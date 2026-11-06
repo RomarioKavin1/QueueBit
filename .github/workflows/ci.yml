@@ -270,7 +270,8 @@ jobs:
         run: ./script/lint-verify.sh
 
   release-reproducible:
-    # The companion's static bundle must be byte-identical across two clean builds (scripts/release/README.md).
+    # The companion's static bundle and the extension zip must be byte-identical across two clean builds
+    # (scripts/release/README.md).
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -283,5 +284,5 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: build the companion twice and compare
-        run: node scripts/release/verify-reproducible.mjs companion
+      - name: build the companion and the extension twice and compare
+        run: REQUIRE_ALL=1 node scripts/release/verify-reproducible.mjs

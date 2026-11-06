@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Release hook for the browser extension (apps/extension). PLACEHOLDER: the extension's reproducible build is owned by
-# the extension workstream (plan 30-extension.md §9 item 5, M7); this file fixes the interface the release driver
-# (build.mjs, verify-reproducible.mjs) relies on. See scripts/release/README.md "Extension hook".
+# Release hook for the browser extension (apps/extension; plan 30-extension.md §9 item 5, extension M7). This file fixes
+# the interface the release driver (build.mjs, verify-reproducible.mjs) relies on; the build itself is
+# apps/extension/scripts/release-build.mjs. See scripts/release/README.md "Extension hook".
 #
 #   scripts/release/extension.sh <out-dir>
 #
@@ -15,8 +15,8 @@
 #   exit 0 built · 3 not implemented (the driver reports "skipped") · anything else = failure
 #   No network access, no dependence on the checkout path, the user, the locale or the time zone.
 #
-# Implementation: delegates to `pnpm --filter @leaked/extension run release:build <out-dir>` once that script exists
-# in apps/extension/package.json.
+# Implementation: delegates to `pnpm --filter @leaked/extension run release:build <out-dir>` (exit 3 only if that
+# script were removed from apps/extension/package.json).
 set -euo pipefail
 OUT="${1:?usage: extension.sh <out-dir>}"
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"

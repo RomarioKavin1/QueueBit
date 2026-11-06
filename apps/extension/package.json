@@ -1,6 +1,6 @@
 {
   "name": "@leaked/extension",
-  "version": "0.0.0",
+  "version": "0.7.0",
   "private": true,
   "description": "LEAKED browser extension (Chromium MV3): everyday key, provider, onboarding",
   "license": "MIT",
@@ -18,7 +18,8 @@
     "icons": "node scripts/render-icons.mjs",
     "gen:contracts": "node scripts/gen-contracts.mjs",
     "build:local": "VITE_LEAKED_LOCAL_DEVNET=1 wxt build",
-    "test:devnet": "LOCAL_DEVNET=1 VITE_LEAKED_LOCAL_DEVNET=1 vitest run test/devnet"
+    "test:devnet": "LOCAL_DEVNET=1 VITE_LEAKED_LOCAL_DEVNET=1 vitest run test/devnet",
+    "release:build": "node scripts/release-build.mjs"
   },
   "dependencies": {
     "@leaked/frames": "workspace:*",

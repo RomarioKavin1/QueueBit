@@ -1,13 +1,22 @@
 /**
- * Build flavour, fixed at build time (Vite replaces `import.meta.env.*`).
+ * Build flavour, fixed at build time.
  *  - `VITE_LEAKED_LOCAL_DEVNET=1`: chain 1337 is the local devnet fork (devnet/) with the devnet/deploy contracts.
  *    Used by the e2e suite and local development.
  *  - The design gallery (`app.html#design`) exists in development and when `VITE_LEAKED_DESIGN=1` (screenshots);
  *    production builds do not ship it.
+ * The extension build (wxt.config.ts) replaces `__LEAKED_LOCAL_DEVNET__` / `__LEAKED_DESIGN__` with literals, so a
+ * production bundle folds every `BUILD.*` branch away and carries no devnet or gallery code (checked by
+ * scripts/release-check.mjs). Outside that build (vitest, scripts) the flags come from `import.meta.env`.
  */
+declare const __LEAKED_LOCAL_DEVNET__: boolean | undefined;
+declare const __LEAKED_DESIGN__: boolean | undefined;
+
 const env = (import.meta as unknown as { env?: Record<string, string | boolean | undefined> }).env ?? {};
 
-export const BUILD = {
-  localDevnet: env.VITE_LEAKED_LOCAL_DEVNET === "1",
-  designGallery: env.DEV === true || env.VITE_LEAKED_DESIGN === "1",
-} as const;
+/** Use these (not `BUILD.*`) in a branch that must vanish from a production bundle: the bundler inlines them. */
+export const LOCAL_DEVNET: boolean =
+  typeof __LEAKED_LOCAL_DEVNET__ === "boolean" ? __LEAKED_LOCAL_DEVNET__ : env.VITE_LEAKED_LOCAL_DEVNET === "1";
+export const DESIGN_GALLERY: boolean =
+  typeof __LEAKED_DESIGN__ === "boolean" ? __LEAKED_DESIGN__ : env.DEV === true || env.VITE_LEAKED_DESIGN === "1";
+
+export const BUILD = { localDevnet: LOCAL_DEVNET, designGallery: DESIGN_GALLERY } as const;

@@ -16,7 +16,11 @@ import type { VaultActionRequest } from "../../src/background/vaultActions";
 import { MemoryKV } from "../../src/shared/kv";
 
 // Chain 1337 with the devnet/deploy contracts, as in a local-devnet build.
-vi.mock("../../src/shared/build", () => ({ BUILD: { localDevnet: true, designGallery: false } }));
+vi.mock("../../src/shared/build", () => ({
+  LOCAL_DEVNET: true,
+  DESIGN_GALLERY: false,
+  BUILD: { localDevnet: true, designGallery: false },
+}));
 
 /**
  * Interop with apps/companion (plan §30 §6.1): every request the extension builds must decode in the companion's

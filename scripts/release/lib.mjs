@@ -4,6 +4,7 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
+import { crc32, deflateRawSync, inflateRawSync } from "node:zlib";
 import { fileURLToPath } from "node:url";
 
 export const ROOT = fileURLToPath(new URL("../../", import.meta.url));
@@ -94,4 +95,100 @@ export function deterministicTar(dir, mtime, files = walk(dir)) {
   }
   blocks.push(Buffer.alloc(1024));
   return Buffer.concat(blocks);
+}
+
+/** MS-DOS date/time (UTC, 2-second resolution, clamped to 1980-01-01) for a zip entry. */
+function dosTime(epoch) {
+  const d = new Date(Math.max(epoch, 315532800) * 1000);
+  return {
+    time: (d.getUTCHours() << 11) | (d.getUTCMinutes() << 5) | (d.getUTCSeconds() >> 1),
+    date: ((d.getUTCFullYear() - 1980) << 9) | ((d.getUTCMonth() + 1) << 5) | d.getUTCDate(),
+  };
+}
+
+/**
+ * A zip of `dir` (or of `files` relative to it) with fixed metadata: entries in byte order, no directory entries, no
+ * extra fields, no comment, mtime = `mtime` (UTC), unix mode 0644, deflate at level 9 (Node's bundled zlib: the
+ * Node version is a determinism input, as for the rest of the build) or stored when deflate does not help. The same
+ * inputs give the same bytes on every OS.
+ */
+export function deterministicZip(dir, mtime, files = walk(dir)) {
+  const { time, date } = dosTime(mtime);
+  const local = [];
+  const central = [];
+  let offset = 0;
+  for (const f of files) {
+    const data = readFileSync(join(dir, f));
+    const name = Buffer.from(f, "utf8");
+    const deflated = deflateRawSync(data, { level: 9 });
+    const method = deflated.length < data.length ? 8 : 0;
+    const body = method === 8 ? deflated : data;
+    const crc = crc32(data);
+    const utf8 = /[^\x20-\x7e]/u.test(f) ? 0x0800 : 0;
+    const h = Buffer.alloc(30);
+    h.writeUInt32LE(0x04034b50, 0);
+    h.writeUInt16LE(20, 4);
+    h.writeUInt16LE(utf8, 6);
+    h.writeUInt16LE(method, 8);
+    h.writeUInt16LE(time, 10);
+    h.writeUInt16LE(date, 12);
+    h.writeUInt32LE(crc, 14);
+    h.writeUInt32LE(body.length, 18);
+    h.writeUInt32LE(data.length, 22);
+    h.writeUInt16LE(name.length, 26);
+    h.writeUInt16LE(0, 28);
+    local.push(h, name, body);
+    const c = Buffer.alloc(46);
+    c.writeUInt32LE(0x02014b50, 0);
+    c.writeUInt16LE((3 << 8) | 20, 4); // made by: unix, zip 2.0
+    c.writeUInt16LE(20, 6);
+    c.writeUInt16LE(utf8, 8);
+    c.writeUInt16LE(method, 10);
+    c.writeUInt16LE(time, 12);
+    c.writeUInt16LE(date, 14);
+    c.writeUInt32LE(crc, 16);
+    c.writeUInt32LE(body.length, 20);
+    c.writeUInt32LE(data.length, 24);
+    c.writeUInt16LE(name.length, 28);
+    c.writeUInt32LE((0o100644 << 16) >>> 0, 38);
+    c.writeUInt32LE(offset, 42);
+    central.push(c, name);
+    offset += 30 + name.length + body.length;
+    if (offset > 0xffffffff || files.length > 0xffff) throw new Error("zip: zip64 is not supported");
+  }
+  const cd = Buffer.concat(central);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(files.length, 8);
+  end.writeUInt16LE(files.length, 10);
+  end.writeUInt32LE(cd.length, 12);
+  end.writeUInt32LE(offset, 16);
+  return Buffer.concat([...local, cd, end]);
+}
+
+/** The entries of a zip (central directory order) as { name, data }; checks each entry's CRC. Stored or deflated only. */
+export function readZip(zip) {
+  const eocd = zip.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
+  if (eocd < 0) throw new Error("zip: no end of central directory");
+  const n = zip.readUInt16LE(eocd + 10);
+  let p = zip.readUInt32LE(eocd + 16);
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    if (zip.readUInt32LE(p) !== 0x02014b50) throw new Error("zip: bad central directory entry");
+    const method = zip.readUInt16LE(p + 10);
+    const crc = zip.readUInt32LE(p + 16);
+    const csize = zip.readUInt32LE(p + 20);
+    const nameLen = zip.readUInt16LE(p + 28);
+    const skip = zip.readUInt16LE(p + 30) + zip.readUInt16LE(p + 32);
+    const off = zip.readUInt32LE(p + 42);
+    const name = zip.subarray(p + 46, p + 46 + nameLen).toString("utf8");
+    const start = off + 30 + zip.readUInt16LE(off + 26) + zip.readUInt16LE(off + 28);
+    const body = zip.subarray(start, start + csize);
+    if (method !== 0 && method !== 8) throw new Error(`zip: ${name}: unsupported method ${method}`);
+    const data = method === 8 ? inflateRawSync(body) : Buffer.from(body);
+    if (crc32(data) !== crc) throw new Error(`zip: ${name}: CRC mismatch`);
+    out.push({ name, data });
+    p += 46 + nameLen + skip;
+  }
+  return out;
 }

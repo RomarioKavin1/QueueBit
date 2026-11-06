@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BUILD } from "../../shared/build";
+import { LOCAL_DEVNET } from "../../shared/build";
 import { Button, Card, RiskBanner, TextField } from "../../ui";
 import { call, UiCallError } from "../lib/api";
 import { useAsync } from "../lib/hooks";
@@ -72,7 +72,7 @@ export function PrivateConnectionSection({ chainId, enabled }: { chainId: number
 export function PrivacyNetworkSection({ chainId }: { chainId: number }) {
   const view = useAsync(() => call("privacy:view", { chainId }), [chainId]);
   const cfg = view.data?.config;
-  const editable = BUILD.localDevnet && chainId === 1337;
+  const editable = LOCAL_DEVNET && chainId === 1337;
   const [open, setOpen] = useState(false);
   const [f, setF] = useState({ entrypoint: "", pool: "", poolPayer: "", deployBlock: "", sidecarUrl: "" });
   const [error, setError] = useState<string | null>(null);

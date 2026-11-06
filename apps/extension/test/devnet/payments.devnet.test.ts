@@ -14,7 +14,11 @@ import { Wallet } from "../../src/background/wallet";
 import { accountFactoryAbi, localDeployment } from "../../src/generated/contracts";
 import { MemoryKV } from "../../src/shared/kv";
 
-vi.mock("../../src/shared/build", () => ({ BUILD: { localDevnet: true, designGallery: false } }));
+vi.mock("../../src/shared/build", () => ({
+  LOCAL_DEVNET: true,
+  DESIGN_GALLERY: false,
+  BUILD: { localDevnet: true, designGallery: false },
+}));
 
 const RUN = process.env.LOCAL_DEVNET === "1";
 const FUNDER: Hex = "0x4bbbf85ce3377467afe5d46f804f221813b2bb87f24d81f60f1fcdbf7cbf4356"; // anvil #7
