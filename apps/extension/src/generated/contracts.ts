@@ -197,6 +197,17 @@ export const accountAbi = [
   },
   {
     type: "error",
+    name: "DuplicateToken",
+    inputs: [
+      {
+        name: "token",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+  },
+  {
+    type: "error",
     name: "ERC1967InvalidImplementation",
     inputs: [
       {
@@ -1960,6 +1971,28 @@ export const accountAbi = [
             name: "recipientMode",
             type: "uint8",
             internalType: "enum ILeakedAccount.RecipientMode",
+          },
+          {
+            name: "tokens",
+            type: "tuple[]",
+            internalType: "struct ILeakedAccount.TokenInit[]",
+            components: [
+              {
+                name: "token",
+                type: "address",
+                internalType: "address",
+              },
+              {
+                name: "decimals",
+                type: "uint8",
+                internalType: "uint8",
+              },
+              {
+                name: "usdPerToken",
+                type: "uint256",
+                internalType: "uint256",
+              },
+            ],
           },
         ],
       },
@@ -3891,8 +3924,8 @@ export const localDeployment: {
   testVault: `0x${string}`;
 } | null = {
   chainId: 1337,
-  accountImpl: "0x399E76c5a058c32c1fC44727aA491F6594Bdc556",
-  accountImplInitCodeHash: "0x0a7a3a9ee6c0e6c07edf094fa8abb130f25bd983634cd569cf14655bbbc64f51",
+  accountImpl: "0xF9e611c4c168b6Ab6A41E6fe4a6e52e8D2fceeC9",
+  accountImplInitCodeHash: "0x6f913bd79dbeca914c385e727e291551d9ea808582777bfcf2713fb54dd02099",
   rolesModule: "0x0DA4a2e6FABac2EEb55dC3cfa48a8aEed2bAEefc",
   factory: "0x12e7A64982e85868C345165bD149d6bE55fcA345",
   c13Verifier: "0xf67f51B70d6e751db52E9Ab8C20e5430dBB04715",

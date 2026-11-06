@@ -198,6 +198,17 @@ export const frameAccountAbi = [
   },
   {
     type: "error",
+    name: "DuplicateToken",
+    inputs: [
+      {
+        name: "token",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+  },
+  {
+    type: "error",
     name: "ERC1967InvalidImplementation",
     inputs: [
       {
@@ -221,6 +232,17 @@ export const frameAccountAbi = [
     type: "error",
     name: "FeeTooHigh",
     inputs: [],
+  },
+  {
+    type: "error",
+    name: "ForbiddenRecipient",
+    inputs: [
+      {
+        name: "to",
+        type: "address",
+        internalType: "address",
+      },
+    ],
   },
   {
     type: "error",
@@ -446,6 +468,11 @@ export const frameAccountAbi = [
         internalType: "address",
       },
     ],
+  },
+  {
+    type: "error",
+    name: "SameRoleKey",
+    inputs: [],
   },
   {
     type: "error",
@@ -1405,6 +1432,17 @@ export const moduleAbi = [
   },
   {
     type: "error",
+    name: "DuplicateToken",
+    inputs: [
+      {
+        name: "token",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+  },
+  {
+    type: "error",
     name: "FeeTooHigh",
     inputs: [],
   },
@@ -1601,6 +1639,11 @@ export const moduleAbi = [
   {
     type: "error",
     name: "RotationPending",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "SameRoleKey",
     inputs: [],
   },
   {
