@@ -53,6 +53,22 @@ export default async function globalSetup(): Promise<() => void> {
     return undefined;
   });
   const conditions = ["source", ...defaultServerConditions];
+  // The privacy e2e's pool deployer / reviewer stand-in (e2e/support/privacy-pool.ts), bundled the same way.
+  await build({
+    configFile: false,
+    logLevel: "warn",
+    root: fileURLToPath(new URL("..", import.meta.url)),
+    resolve: { conditions },
+    ssr: { noExternal: true, resolve: { conditions, externalConditions: ["source"] } },
+    build: {
+      ssr: fileURLToPath(new URL("./support/privacy-pool.ts", import.meta.url)),
+      outDir: `${HELPERS_OUT}pool/`,
+      emptyOutDir: true,
+      target: "node22",
+      minify: false,
+      rollupOptions: { output: { entryFileNames: "privacy-pool.mjs", format: "es" } },
+    },
+  });
   await build({
     configFile: false,
     logLevel: "warn",
@@ -62,7 +78,7 @@ export default async function globalSetup(): Promise<() => void> {
     build: {
       ssr: fileURLToPath(new URL("./support/companion-sim.ts", import.meta.url)),
       outDir: HELPERS_OUT,
-      emptyOutDir: true,
+      emptyOutDir: false,
       target: "node22",
       minify: false,
       rollupOptions: { output: { entryFileNames: "companion-sim.mjs", format: "es" } },

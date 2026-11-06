@@ -193,6 +193,16 @@ export const HourglassIcon = (p: IconProps) => (
     <path d="M6 2h12M6 22h12M7 2v4a5 5 0 0 0 10 0V2M7 22v-4a5 5 0 0 1 10 0v4" />
   </Icon>
 );
+export const ShieldIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
+  </Icon>
+);
+export const BellIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+  </Icon>
+);
 
 /** The LEAKED mark (same drawing as the toolbar icon). */
 export function LogoMark({ size = 24, title }: { size?: number; title?: string }) {

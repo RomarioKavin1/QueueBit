@@ -15,7 +15,18 @@ export const KIND = { spend: 0, loosen: 1, upgrade: 2, migrate: 3 } as const;
 export type VaultRole = "vault" | "recovery";
 
 export type VaultActionRequest =
-  | { type: "send"; calls: Array<{ target: Address; value: string; data: Hex }>; usd6: string }
+  | {
+      type: "send";
+      calls: Array<{ target: Address; value: string; data: Hex }>;
+      usd6: string;
+      /**
+       * Gas for the body step when the calls are heavier than a transfer (a Privacy Pools deposit inserts into a
+       * Poseidon tree): decimal strings, bounded by `MAX_ROLE_BODY`. The simulation still has the last word.
+       */
+      body?: { execution: string; state: string };
+      /** What the payment is for, when the extension itself asks (e.g. "Deposit 0.1 ETH into your private balance"). */
+      label?: string;
+    }
   | { type: "setLimits"; dailyUsd: number; perPaymentUsd: number }
   | { type: "setRecipientMode"; mode: "open" | "strict" }
   | { type: "setToken"; token: Address; allowed: boolean; decimals: number; usdPerToken: string; symbol?: string }
@@ -87,8 +98,9 @@ export function buildVaultAction(account: Address, req: VaultActionRequest, cur:
       const calls: Call[] = req.calls.map((c) => ({ target: c.target, value: BigInt(c.value), data: c.data }));
       const usd = BigInt(req.usd6);
       const first = calls[0] ? callShape(calls[0]) : undefined;
-      const what =
-        first?.kind === "eth-transfer"
+      const what = req.label
+        ? req.label.slice(0, 80)
+        : first?.kind === "eth-transfer"
           ? `Send ${ethText(first.amount)} to ${short(first.recipient)}`
           : first?.kind === "token-transfer"
             ? `Send tokens to ${short(first.recipient)}`

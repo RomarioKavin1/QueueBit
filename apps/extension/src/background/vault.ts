@@ -39,6 +39,7 @@ import {
 } from "@leaked/ur";
 import { accountAbi, pqRoleSignerAbi, pqVerifierAbi, roleExecutorAbi } from "../generated/contracts";
 import { AaVault } from "./aa/vault";
+import { DeployBlocks } from "./deployBlock";
 import { findNetwork, type Network } from "../shared/chains";
 import { StorageKeys, type KV } from "../shared/kv";
 import {
@@ -76,6 +77,22 @@ export const REQUEST_TTL_MS = 10 * 60_000;
 export const MISMATCH_GIVE_UP_MS = 15 * 60_000;
 /** Role-signer body limits (G1 ROLE_BODY); the signer's `maxFee` bounds the worst case. */
 const ROLE_BODY = { execution: 700_000n, state: 400_000n };
+/** The most a request may ask for its body step (a deposit into a Poseidon tree needs ~1–2M on the devnet). */
+export const MAX_ROLE_BODY = { execution: 4_000_000n, state: 3_000_000n };
+
+/** The body limits for a request: ROLE_BODY, or a send's own (larger) hint within MAX_ROLE_BODY. */
+export function roleBodyFor(req: VaultActionRequest): { execution: bigint; state: bigint } {
+  if (req.type !== "send" || !req.body) return ROLE_BODY;
+  const pick = (v: string, min: bigint, max: bigint) => {
+    if (!/^\d{1,9}$/u.test(v)) throw new VaultError("bad-request", "Bad gas limit for the payment.");
+    const n = BigInt(v);
+    return n < min ? min : n > max ? max : n;
+  };
+  return {
+    execution: pick(req.body.execution, ROLE_BODY.execution, MAX_ROLE_BODY.execution),
+    state: pick(req.body.state, ROLE_BODY.state, MAX_ROLE_BODY.state),
+  };
+}
 const GWEI = 1_000_000_000n;
 const ZERO: Address = "0x0000000000000000000000000000000000000000";
 
@@ -172,7 +189,10 @@ const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 
 export class VaultFlow {
   readonly aa: AaVault;
+  readonly deployBlocks: DeployBlocks;
+
   constructor(private readonly d: VaultDeps) {
+    this.deployBlocks = new DeployBlocks(d.kv);
     this.aa = new AaVault((c) => d.io.publicClient(c), d.keyring);
   }
 
@@ -443,7 +463,7 @@ export class VaultFlow {
                 functionName: "executePQ",
                 args: [0n, plan.address, built.data],
               }),
-              ...ROLE_BODY,
+              ...roleBodyFor(req),
             },
           })
         : roleSignerPathATx(profile, {
@@ -454,7 +474,7 @@ export class VaultFlow {
                 functionName: "relay",
                 args: [plan.address, built.data],
               }),
-              ...ROLE_BODY,
+              ...roleBodyFor(req),
             },
           });
 
@@ -918,10 +938,15 @@ export class VaultFlow {
     const client = this.d.io.publicClient(chainId);
     const code = await client.getCode({ address: plan.address });
     if (!code || code === "0x") return [];
+    // `Queued` logs from the account's deployment block, not block 0 (BACKLOG, extension M4).
+    const fromBlock =
+      (await this.deployBlocks
+        .get(chainId, plan.address, client, plan.activation ? { activationTx: plan.activation.txHash } : undefined)
+        .catch(() => undefined)) ?? 0n;
     if (plan.backend === "4337") {
       const records = await this.list();
       const block = await client.getBlock({ blockTag: "latest" });
-      return (await this.aa.queue(chainId, plan.address))
+      return (await this.aa.queue(chainId, plan.address, fromBlock))
         .map((q) => {
           const rec = records.find((r) => r.opId?.toLowerCase() === q.opId.toLowerCase());
           return {
@@ -942,7 +967,7 @@ export class VaultFlow {
       address: plan.address,
       abi: accountAbi,
       eventName: "Queued",
-      fromBlock: 0n,
+      fromBlock,
     });
     const records = await this.list();
     const block = await client.getBlock({ blockTag: "latest" });

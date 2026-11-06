@@ -10,7 +10,7 @@ import { startVault } from "./vaultStart";
  * state, a countdown per change, "Send now" once it matured (permissionless `executeQueued`, sent by the fee tank),
  * and cancel with the Vault or the Recovery key. Vault approvals still confirming are listed under In progress.
  */
-export function Pending() {
+export function Pending({ highlight }: { highlight?: string } = {}) {
   const q = useAsync(() => call("vault:queue", {}), []);
   const reqs = useAsync(() => call("vault:list"), []);
   const signers = useAsync(() => call("vault:signers", {}), []);
@@ -63,6 +63,7 @@ export function Pending() {
             <QueuedCard
               key={op.opId}
               op={op}
+              highlighted={!!highlight && op.opId.toLowerCase() === highlight.toLowerCase()}
               now={Math.max(now, op.chainNow)}
               busy={busy}
               hasRecovery={hasRecovery}
@@ -104,6 +105,7 @@ function countdown(seconds: number): string {
 
 function QueuedCard({
   op,
+  highlighted,
   now,
   busy,
   hasRecovery,
@@ -112,6 +114,7 @@ function QueuedCard({
   onCancel,
 }: {
   op: QueuedView;
+  highlighted?: boolean;
   now: number;
   busy: string | null;
   hasRecovery: boolean;
@@ -124,7 +127,13 @@ function QueuedCard({
   const pct = total > 0 ? Math.min(100, Math.max(0, Math.round(((total - Math.max(left, 0)) / total) * 100))) : 0;
   const when = new Date(op.eta * 1000).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" });
   return (
-    <Card tone="vault" as="article" data-testid="queued-op" data-op={op.opId}>
+    <Card
+      tone="vault"
+      as="article"
+      data-testid="queued-op"
+      data-op={op.opId}
+      {...(highlighted ? { "data-highlighted": "1", className: "ring-2 ring-vault" } : {})}
+    >
       <div className="flex items-start gap-3">
         <span className="mt-0.5 text-vault" aria-hidden="true">
           <HourglassIcon size={20} />

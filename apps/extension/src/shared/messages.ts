@@ -5,6 +5,10 @@ import type { AccountStatus, SendPreview, PairPreview, PolicyView, SignerView } 
 import type { QueuedView, VaultRequestRecord } from "../background/vault";
 import type { VaultActionRequest } from "../background/vaultActions";
 import type { Approval, BalanceResult, KnownSite, OriginPermission, Settings, SetupState, WalletState } from "./types";
+import type { AlertRecord } from "../background/watcher/alerts";
+import type { PairingView } from "../background/watcher/pairing";
+import type { AnonStatus } from "./offscreen";
+import type { PrivacyNetworkConfig, PrivacyOp, PrivacyView } from "./privacy";
 
 /**
  * Typed message passing (plan §30 §2.3).
@@ -91,6 +95,46 @@ export interface UiApi {
   "vault:signers": { req: { chainId?: number }; res: SignerView[] };
   /** The next everyday key's address (for "Replace everyday key"). */
   "security:nextEverydayKey": { req: undefined; res: { index: number; address: `0x${string}` } };
+
+  // ---- Private balance (ux-spec §3.11, plan §40 §1) ----
+  "privacy:view": { req: { chainId?: number }; res: PrivacyView };
+  /** Root-checked note sync (progress is written to storage as it goes). */
+  "privacy:sync": { req: { chainId?: number }; res: PrivacyView };
+  /** Starts Move to private (shield) or Move to public (unshield, to a fresh address via PoolPayer). */
+  "privacy:start": { req: { chainId?: number; kind: PrivacyOp["kind"]; amountWei: string }; res: PrivacyView };
+  /** The phone's scanned `ur:leaked-signature` (CBOR hex) for the operation's note-key request. */
+  "privacy:answer": { req: { chainId?: number; opId: string; signature: `0x${string}` }; res: PrivacyView };
+  "privacy:retry": { req: { chainId?: number; opId: string }; res: PrivacyView };
+  "privacy:cancel": { req: { chainId?: number; opId: string }; res: PrivacyView };
+  "privacy:dismiss": { req: { chainId?: number }; res: PrivacyView };
+  /** Advance the operation (after its Vault payment was approved on the hand-off page). */
+  "privacy:run": { req: { chainId?: number }; res: PrivacyView };
+  "privacy:saveConfig": {
+    req: {
+      chainId?: number;
+      entrypoint: string;
+      pool: string;
+      poolPayer: string;
+      deployBlock: string;
+      sidecarUrl?: string;
+    };
+    res: PrivacyNetworkConfig;
+  };
+  /** Settings › Private connection: whether Anon-RPC can be used on the network, and why not. */
+  "privacy:connection": { req: { chainId?: number }; res: AnonStatus & { enabled: boolean } };
+
+  // ---- Alerts (watcher light mode + a paired self-hosted watcher; plan §30 §6.5, §40 §5) ----
+  "alerts:list": { req: undefined; res: AlertRecord[] };
+  "alerts:read": { req: { ids?: string[] }; res: AlertRecord[] };
+  /** Check now (also what the 60 s alarm does). */
+  "alerts:poll": { req: undefined; res: { added: number } };
+  "watcher:status": {
+    req: { chainId?: number };
+    res: { lastPollAt?: number; lastError?: string; cursor?: string; paired?: PairingView };
+  };
+  /** A self-hosted watcher's pairing code `{url, topic, keyId, hmacKey}`; `confirm: false` only checks it. */
+  "watcher:pair": { req: { text: string; confirm: boolean }; res: PairingView };
+  "watcher:unpair": { req: undefined; res: null };
 }
 
 export type UiType = keyof UiApi;

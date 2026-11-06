@@ -22,9 +22,12 @@
   },
   "dependencies": {
     "@leaked/frames": "workspace:*",
+    "@leaked/groth16": "workspace:*",
     "@leaked/pq-signer": "workspace:*",
+    "@leaked/privacy": "workspace:*",
     "@leaked/rpc": "workspace:*",
     "@leaked/ur": "workspace:*",
+    "@leaked/watcher-core": "workspace:*",
     "@noble/hashes": "2.4.0",
     "@scure/bip32": "2.4.0",
     "@scure/bip39": "2.4.0",
@@ -35,6 +38,7 @@
     "viem": "2.57.16"
   },
   "devDependencies": {
+    "@fatsolutions/privacy-pools-core-circuits": "1.0.5",
     "@playwright/test": "1.64.1",
     "@tailwindcss/vite": "4.3.3",
     "@types/node": "26.6.6",

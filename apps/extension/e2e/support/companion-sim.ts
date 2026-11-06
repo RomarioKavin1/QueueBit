@@ -87,7 +87,11 @@ export interface Phone {
   approve(
     requestText: string,
     mode?: "vault" | "recovery",
-  ): Promise<{ text: string; headline: string; mismatch: string[] }>;
+    opts?: {
+      /** The user confirms an "Unrecognised call" on the phone (the companion's unknown-action flow). */
+      allowUnknown?: boolean;
+    },
+  ): Promise<{ text: string; headline: string; mismatch: string[]; unknown: boolean; kind: string }>;
   /** Operator bootstrap only (`stakeRecoverySigner`): a raw C13 signature by the Recovery key over `digest`. */
   approveRaw(digest: Hex): Promise<Hex>;
 }
@@ -156,7 +160,16 @@ export async function newPhone(): Promise<Phone> {
       const ch = decode(challengeText, UR_TYPES.recoveryChallenge).decoded.value as RecoveryChallenge;
       if (ch.recoveryPk.toLowerCase() !== recoveryPk.toLowerCase()) throw new Error("challenge for another key");
       await loadRecovery();
-      const t = await handle({ op: "recoveryTest", requestId: ch.requestId }, () => undefined);
+      // The worker signs over the scanned challenge (companion: `challenge {requestId, recoveryPk, expiresAt}`; the
+      // earlier worker took `requestId` alone: both are passed so the stand-in follows the companion in either state).
+      const t = await handle(
+        {
+          op: "recoveryTest",
+          challenge: { requestId: ch.requestId, recoveryPk: ch.recoveryPk, expiresAt: Date.now() + 10 * 60_000 },
+          requestId: ch.requestId,
+        } as never,
+        () => undefined,
+      );
       await handle({ op: "recoveryWipe" }, () => undefined);
       if (t.op !== "recoveryTest") throw new Error("recoveryTest");
       return parts(UR_TYPES.recoveryTest, t.cbor);
@@ -169,7 +182,7 @@ export async function newPhone(): Promise<Phone> {
         kp.secretKey.fill(0);
       }
     },
-    async approve(requestText, mode = "vault") {
+    async approve(requestText, mode = "vault", opts = {}) {
       const { cbor, decoded } = decode(requestText, UR_TYPES.signRequest);
       const req = decoded.value as SignRequest;
       if (req.txType === TX_TYPE.roleExecutor7579) {
@@ -190,13 +203,16 @@ export async function newPhone(): Promise<Phone> {
             ),
             headline,
             mismatch: [],
+            unknown: false,
+            kind: "roleCall",
           };
         } finally {
           kp.secretKey.fill(0);
         }
       }
       const review = reviewRequestBytes(cbor, ctx(mode));
-      if (review.unknown) throw new Error(`the phone does not recognise this request: ${review.headline}`);
+      if (review.unknown && !opts.allowUnknown)
+        throw new Error(`the phone does not recognise this request: ${review.headline}`);
       if (mode === "recovery") await loadRecovery();
       const r = await handle(
         {
@@ -205,12 +221,18 @@ export async function newPhone(): Promise<Phone> {
           ...(mode === "vault" ? { sealed: created.sealed, vaultPk: created.vaultPk, passphrase: PASS } : {}),
           requestCbor: cbor,
           expectDigest: review.digest,
-          allowUnknown: false,
+          allowUnknown: !!opts.allowUnknown && !!review.unknown,
         },
         () => undefined,
       );
       if (r.op !== "sign") throw new Error("sign");
-      return { text: parts(UR_TYPES.signature, r.signatureCbor), headline: review.headline, mismatch: review.mismatch };
+      return {
+        text: parts(UR_TYPES.signature, r.signatureCbor),
+        headline: review.headline,
+        mismatch: review.mismatch,
+        unknown: !!review.unknown,
+        kind: review.kind,
+      };
     },
   };
 }

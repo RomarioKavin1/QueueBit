@@ -1,16 +1,30 @@
 import { useEffect, useState, type ReactNode } from "react";
 import type { WalletState } from "../../shared/types";
-import { HomeIcon, HourglassIcon, LockIcon, LogoMark, SettingsIcon, Spinner, VaultIcon } from "../../ui";
+import {
+  BellIcon,
+  HomeIcon,
+  HourglassIcon,
+  LockIcon,
+  LogoMark,
+  SettingsIcon,
+  ShieldIcon,
+  Spinner,
+  VaultIcon,
+} from "../../ui";
+import { browser, type Browser } from "wxt/browser";
 import { cx } from "../../ui/cx";
 import { useAsync, useTheme, useWalletState } from "../lib/hooks";
 import { call } from "../lib/api";
 import { UnlockForm } from "../common/Unlock";
 import { PopupApp } from "../popup/PopupApp";
 import { BUILD } from "../../shared/build";
+import { Alerts } from "./Alerts";
 import { Gallery } from "./Gallery";
 import { Limits } from "./Limits";
 import { Onboarding, type Step } from "./Onboarding";
 import { Pending } from "./Pending";
+import { Privacy } from "./Privacy";
+import { SettingsScreen } from "../popup/Settings";
 import { Security } from "./Security";
 import { VaultHandoff } from "./VaultHandoff";
 
@@ -52,11 +66,20 @@ export function AppMain() {
   const { state } = useWalletState();
   useTheme(state?.settings.theme);
   const hash = useHash();
-  const [, route = "", sub = ""] = /^#([^/?]*)\/?([^?]*)/u.exec(hash) ?? [];
+  const [, route = "", sub = "", query = ""] = /^#([^/?]*)\/?([^?]*)\??(.*)$/u.exec(hash) ?? [];
+  const back = new URLSearchParams(query).get("back");
 
   useEffect(() => {
     document.title =
-      route === "onboarding" ? "Set up LEAKED" : route === "vault" ? "Approve on your phone · LEAKED" : "LEAKED";
+      route === "onboarding"
+        ? "Set up LEAKED"
+        : route === "vault"
+          ? "Approve on your phone · LEAKED"
+          : route === "privacy"
+            ? "Private balance · LEAKED"
+            : route === "alerts"
+              ? "Alerts · LEAKED"
+              : "LEAKED";
   }, [route]);
 
   if (!state) {
@@ -94,9 +117,21 @@ export function AppMain() {
   }
   const page =
     route === "vault" ? (
-      <VaultHandoff id={sub} onDone={(to) => (location.hash = to === "pending" ? "#pending" : "#home")} />
+      <VaultHandoff
+        id={sub}
+        {...(back === "privacy" ? { backLabel: "Back to private balance" } : {})}
+        onDone={(to) => (location.hash = to === "pending" ? "#pending" : back === "privacy" ? "#privacy" : "#home")}
+      />
     ) : route === "pending" ? (
-      <Pending />
+      <Pending {...(sub ? { highlight: sub } : {})} />
+    ) : route === "privacy" ? (
+      <Privacy />
+    ) : route === "alerts" ? (
+      <Alerts />
+    ) : route === "settings" ? (
+      <div className="-m-6">
+        <SettingsScreen state={state} onBack={() => (location.hash = "#home")} />
+      </div>
     ) : route === "security" ? (
       <Security state={state} />
     ) : route === "limits" ? (
@@ -111,16 +146,37 @@ export function AppMain() {
   return <Shell route={route}>{page}</Shell>;
 }
 
+/** Unread alerts (the rail's count mirrors the toolbar badge, ux-spec §2.2). */
+function useUnreadAlerts(route: string): number {
+  const list = useAsync(
+    async () => (await call("alerts:list").catch(() => [])).filter((r) => !r.readAt && !r.retracted).length,
+    [route],
+  );
+  const { reload } = list;
+  useEffect(() => {
+    const on = (changes: Record<string, Browser.storage.StorageChange>, area: string) => {
+      if (area === "local" && "leaked:alerts" in changes) void reload();
+    };
+    browser.storage.onChanged.addListener(on);
+    return () => browser.storage.onChanged.removeListener(on);
+  }, [reload]);
+  return list.data ?? 0;
+}
+
 function Shell({ route, children }: { route: string; children: ReactNode }) {
   const queued = useAsync(
     async () => (await call("vault:queue", {}).catch(() => [])).filter((q) => q.state === "pending").length,
     [route],
   );
+  const unread = useUnreadAlerts(route);
   const items: Array<{ id: string; label: string; icon: ReactNode }> = [
     { id: "home", label: "Home", icon: <HomeIcon size={18} /> },
-    { id: "limits", label: "Limits", icon: <SettingsIcon size={18} /> },
+    { id: "limits", label: "Limits", icon: <VaultIcon size={18} /> },
     { id: "pending", label: `Pending${queued.data ? ` (${queued.data})` : ""}`, icon: <HourglassIcon size={18} /> },
+    { id: "alerts", label: `Alerts${unread ? ` (${unread})` : ""}`, icon: <BellIcon size={18} /> },
     { id: "security", label: "Security", icon: <LockIcon size={18} /> },
+    { id: "privacy", label: "Private balance", icon: <ShieldIcon size={18} /> },
+    { id: "settings", label: "Settings", icon: <SettingsIcon size={18} /> },
   ];
   const current = route === "" || route === "activity" ? "home" : route;
   return (

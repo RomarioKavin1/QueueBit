@@ -7,6 +7,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { test as base, chromium, expect, type BrowserContext, type Page, type Worker } from "@playwright/test";
 import { HELPERS_OUT } from "./build-helpers";
 import type * as SimModule from "./support/companion-sim";
+import type * as PoolModule from "./support/privacy-pool";
 
 const here = dirname(fileURLToPath(import.meta.url));
 export const EXTENSION_PATH = join(here, "..", ".output", "chrome-mv3");
@@ -77,6 +78,13 @@ export function companion(): Promise<Sim> {
   return sim;
 }
 export type Phone = Awaited<ReturnType<Sim["newPhone"]>>;
+
+let pool: Promise<typeof PoolModule> | undefined;
+/** The privacy e2e's pool deployer and reviewer stand-in (bundled by e2e/build-helpers.ts). */
+export function privacyPool(): Promise<typeof PoolModule> {
+  pool ??= import(pathToFileURL(`${HELPERS_OUT}pool/privacy-pool.mjs`).href) as Promise<typeof PoolModule>;
+  return pool;
+}
 
 /** Paste a code into the page's scanner (the camera's fallback, ux-spec E-20). */
 export async function pasteCode(page: Page, text: string): Promise<void> {

@@ -1,7 +1,19 @@
 import { useState, type ReactNode } from "react";
+import { browser } from "wxt/browser";
 import { isAddress, type Address } from "viem";
 import type { WalletState } from "../../shared/types";
-import { Button, Card, RecoveryIcon, RiskBanner, Sheet, Skeleton, TextField, VaultIcon, WalletIcon } from "../../ui";
+import {
+  BellIcon,
+  Button,
+  Card,
+  RecoveryIcon,
+  RiskBanner,
+  Sheet,
+  Skeleton,
+  TextField,
+  VaultIcon,
+  WalletIcon,
+} from "../../ui";
 import { cx } from "../../ui/cx";
 import { formatUsd } from "../../ui/format";
 import { call, UiCallError } from "../lib/api";
@@ -9,7 +21,7 @@ import { useAsync } from "../lib/hooks";
 import { eth } from "../lib/money";
 import { startVault } from "./vaultStart";
 
-type SheetKind = "pause" | "rotate" | "lockdown" | "guardian" | null;
+type SheetKind = "pause" | "rotate" | "lockdown" | "guardian" | "watcher" | null;
 
 /**
  * Security center (ux-spec §3.10): status of the three tiers and the Guardian, and the protective actions, each a
@@ -18,6 +30,7 @@ type SheetKind = "pause" | "rotate" | "lockdown" | "guardian" | null;
 export function Security({ state }: { state: WalletState }) {
   const status = useAsync(() => call("account:status", {}), []);
   const signers = useAsync(() => call("vault:signers", {}), []);
+  const watcher = useAsync(() => call("watcher:status", {}), []);
   const [sheet, setSheet] = useState<SheetKind>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -132,7 +145,37 @@ export function Security({ state }: { state: WalletState }) {
             </Button>
           }
         />
-        <Row icon={<span aria-hidden="true">◇</span>} tone="brand" name="Alerts" value="In-browser (always on)" />
+        <Row
+          icon={<BellIcon size={20} />}
+          tone="brand"
+          name="Alerts"
+          value={
+            watcher.data?.paired
+              ? `In-browser (always on) · paired with ${new URL(watcher.data.paired.url).host}${watcher.data.paired.lastError ? ` · last read failed: ${watcher.data.paired.lastError}` : ""}`
+              : "In-browser (always on, while the browser is open)"
+          }
+          action={
+            watcher.data?.paired ? (
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() =>
+                  run(async () => {
+                    await call("watcher:unpair");
+                    await watcher.reload();
+                    setBusy(false);
+                  })
+                }
+              >
+                Unpair
+              </Button>
+            ) : (
+              <Button size="sm" variant="secondary" onClick={() => setSheet("watcher")}>
+                Pair a watcher
+              </Button>
+            )
+          }
+        />
       </section>
 
       <section aria-labelledby="actions-h" className="flex flex-col gap-2">
@@ -240,6 +283,14 @@ export function Security({ state }: { state: WalletState }) {
             Start Lockdown with Vault
           </Button>
         </SheetButtons>
+      </Sheet>
+      <Sheet open={sheet === "watcher"} title="Pair a watcher" onClose={() => setSheet(null)}>
+        <WatcherPairing
+          onDone={async () => {
+            setSheet(null);
+            await watcher.reload();
+          }}
+        />
       </Sheet>
       <Sheet open={sheet === "guardian"} title="Guardian" onClose={() => setSheet(null)}>
         <GuardianForm address={guardian} name={guardianName} onAddress={setGuardian} onName={setGuardianName} />
@@ -371,6 +422,95 @@ function Action({ name, note, button }: { name: string; note: string; button?: R
         <p className="t-small text-muted">{note}</p>
       </div>
       {button}
+    </div>
+  );
+}
+
+/**
+ * Pairing a self-hosted watcher (ux-spec §3.10): its pairing code `{url, topic, keyId, hmacKey}` (paste it, or the
+ * text under its QR). LEAKED asks Chrome for access to that one site, then reads its alerts and checks each one's
+ * signature with the shared key, so a fake server can't send "all clear".
+ */
+function WatcherPairing({ onDone }: { onDone: () => void | Promise<void> }) {
+  const [text, setText] = useState("");
+  const [preview, setPreview] = useState<{ url: string; topic: string; keyId: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="flex flex-col gap-3">
+      <p className="t-body">
+        A watcher you run yourself sends alerts when this browser is closed. It holds no keys: it only reads the chain.
+        Alerts never include amounts or addresses.
+      </p>
+      <label className="t-strong" htmlFor="watcher-code">
+        Pairing code
+      </label>
+      <textarea
+        id="watcher-code"
+        data-testid="watcher-code"
+        rows={4}
+        className="t-mono w-full rounded-md border border-line bg-bg p-2 text-[12px]"
+        placeholder='{"url": "https://…", "topic": "…", "keyId": "…", "hmacKey": "…"}'
+        value={text}
+        onChange={(e) => {
+          setText(e.target.value);
+          setPreview(null);
+          setError(null);
+        }}
+      />
+      {preview && (
+        <Card className="bg-surface" data-testid="watcher-preview">
+          <p className="t-body">
+            Watcher at <strong>{new URL(preview.url).host}</strong>, topic {preview.topic}, key {preview.keyId}.
+          </p>
+        </Card>
+      )}
+      {error && <RiskBanner level="danger" title={error} />}
+      <div className="flex gap-2">
+        {!preview ? (
+          <Button
+            block
+            loading={busy}
+            disabled={!text.trim()}
+            onClick={async () => {
+              setBusy(true);
+              setError(null);
+              try {
+                setPreview(await call("watcher:pair", { text, confirm: false }));
+              } catch (e) {
+                setError(e instanceof UiCallError ? e.message : "That code didn't work.");
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            Check code
+          </Button>
+        ) : (
+          <Button
+            block
+            loading={busy}
+            onClick={async () => {
+              setBusy(true);
+              setError(null);
+              try {
+                // Chrome asks the user to let LEAKED reach this one site (optional host permission).
+                const origin = `${new URL(preview.url).origin}/*`;
+                const granted = await browser.permissions.request({ origins: [origin] }).catch(() => false);
+                if (!granted) throw new UiCallError("LEAKED needs permission to reach your watcher's site.");
+                await call("watcher:pair", { text, confirm: true });
+                await onDone();
+              } catch (e) {
+                setError(e instanceof UiCallError ? e.message : "Couldn't pair.");
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            Pair
+          </Button>
+        )}
+      </div>
     </div>
   );
 }

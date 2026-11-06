@@ -8,6 +8,11 @@ export interface Settings {
   /** Auto-lock after this many idle minutes (plan §30 §2.4 default 15). */
   autoLockMinutes: number;
   theme: Theme;
+  /**
+   * Private connection (Anon-RPC, ux-spec §3.13): default on. Where no Anon-RPC worker exists (the devnet) or this
+   * build has none, requests go direct whatever this says, and Settings explains why.
+   */
+  anonRpc: boolean;
 }
 
 export const AUTO_LOCK_CHOICES = [1, 5, 15, 30, 60, 240];
@@ -16,6 +21,7 @@ export const DEFAULT_SETTINGS: Settings = {
   selectedChainId: DEFAULT_CHAIN_ID,
   autoLockMinutes: 15,
   theme: "system",
+  anonRpc: true,
 };
 
 /** A quantum-safe key a phone showed the browser (`ur:leaked-pq-key`). */

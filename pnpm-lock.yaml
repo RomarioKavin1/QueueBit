@@ -138,15 +138,24 @@ importers:
       '@leaked/frames':
         specifier: workspace:*
         version: link:../../packages/frames
+      '@leaked/groth16':
+        specifier: workspace:*
+        version: link:../../packages/groth16
       '@leaked/pq-signer':
         specifier: workspace:*
         version: link:../../packages/pq-signer
+      '@leaked/privacy':
+        specifier: workspace:*
+        version: link:../../packages/privacy
       '@leaked/rpc':
         specifier: workspace:*
         version: link:../../packages/rpc
       '@leaked/ur':
         specifier: workspace:*
         version: link:../../packages/ur
+      '@leaked/watcher-core':
+        specifier: workspace:*
+        version: link:../../packages/watcher-core
       '@noble/hashes':
         specifier: 2.4.0
         version: 2.4.0
@@ -172,6 +181,9 @@ importers:
         specifier: 2.57.16
         version: 2.57.16(typescript@6.0.3)(zod@4.6.7)
     devDependencies:
+      '@fatsolutions/privacy-pools-core-circuits':
+        specifier: 1.0.5
+        version: 1.0.5
       '@playwright/test':
         specifier: 1.64.1
         version: 1.64.1

@@ -7,6 +7,7 @@ import { call, UiCallError } from "../lib/api";
 import { useAsync } from "../lib/hooks";
 import { eth } from "../lib/money";
 import { ResetSheet } from "../common/Unlock";
+import { PrivacyNetworkSection, PrivateConnectionSection } from "../common/PrivacySettings";
 
 export function SettingsScreen({ state, onBack }: { state: WalletState; onBack: () => void }) {
   const [resetOpen, setResetOpen] = useState(false);
@@ -62,6 +63,19 @@ export function SettingsScreen({ state, onBack }: { state: WalletState; onBack: 
           <Button variant="secondary" icon={<LockIcon size={18} />} onClick={() => void call("keyring:lock")}>
             Lock now
           </Button>
+        </section>
+
+        <PrivateConnectionSection chainId={s.selectedChainId} enabled={s.anonRpc} />
+        <PrivacyNetworkSection chainId={s.selectedChainId} />
+
+        <section className="flex flex-col gap-2" aria-labelledby="alerts-h">
+          <h2 id="alerts-h" className="t-small font-semibold tracking-wide text-muted uppercase">
+            Alerts
+          </h2>
+          <p className="t-small text-muted">
+            In-browser alerts are always on while the browser is open. Pair a self-hosted watcher in Security to get
+            them when it is closed. Alerts never include amounts or addresses.
+          </p>
         </section>
 
         <section className="flex flex-col gap-2" aria-labelledby="tank-h">

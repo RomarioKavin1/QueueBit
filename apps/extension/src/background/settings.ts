@@ -35,6 +35,10 @@ export class SettingsStore {
       if (!(["system", "light", "dark"] as Theme[]).includes(patch.theme)) throw new Error("Unknown theme");
       next.theme = patch.theme;
     }
+    if (patch.anonRpc !== undefined) {
+      if (typeof patch.anonRpc !== "boolean") throw new Error("Unknown private-connection setting");
+      next.anonRpc = patch.anonRpc;
+    }
     await this.kv.set(StorageKeys.settings, next);
     return next;
   }

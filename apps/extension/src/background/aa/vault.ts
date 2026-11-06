@@ -316,7 +316,8 @@ export class AaVault {
   }
 
   /** `Queued` ops of the account from the executor's logs, with their state. */
-  async queue(chainId: number, account: Address) {
+  /** `fromBlock`: the account's deployment block (its modules cannot have queued anything earlier). */
+  async queue(chainId: number, account: Address, fromBlock = 0n) {
     const dep = this.dep(chainId);
     const c = this.client(chainId);
     const logs = await c.getContractEvents({
@@ -324,7 +325,7 @@ export class AaVault {
       abi: roleExecutorAbi,
       eventName: "Queued",
       args: { account } as never,
-      fromBlock: 0n,
+      fromBlock,
     });
     const out: Array<{ opId: Hex; kind: number; eta: number; state: number }> = [];
     for (const l of logs) {

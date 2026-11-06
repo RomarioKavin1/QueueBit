@@ -13,7 +13,16 @@ import { usePoll } from "../lib/hooks";
  * the phone, then the camera (or paste) for the phone's signature, which the service worker verifies locally,
  * simulates and only then sends.
  */
-export function VaultHandoff({ id, onDone }: { id: string; onDone: (to: string) => void }) {
+export function VaultHandoff({
+  id,
+  onDone,
+  backLabel,
+}: {
+  id: string;
+  onDone: (to: string) => void;
+  /** Where "back" goes when the hand-off was opened from another flow (e.g. the private balance's deposit). */
+  backLabel?: string;
+}) {
   const [rec, setRec] = useState<VaultRequestRecord | null | undefined>(undefined);
   const [phase, setPhase] = useState<"show" | "scan" | "verifying">("show");
   const [error, setError] = useState<{ code?: string; message: string } | null>(null);
@@ -189,12 +198,20 @@ export function VaultHandoff({ id, onDone }: { id: string; onDone: (to: string) 
         </>
       )}
 
-      {rec.status !== "waiting" && <Outcome rec={rec} onDone={onDone} />}
+      {rec.status !== "waiting" && <Outcome rec={rec} onDone={onDone} {...(backLabel ? { backLabel } : {})} />}
     </div>
   );
 }
 
-function Outcome({ rec, onDone }: { rec: VaultRequestRecord; onDone: (to: string) => void }) {
+function Outcome({
+  rec,
+  onDone,
+  backLabel = "Back to wallet",
+}: {
+  rec: VaultRequestRecord;
+  onDone: (to: string) => void;
+  backLabel?: string;
+}) {
   const map: Record<string, { level: "info" | "vault" | "limit" | "danger"; title: string; body?: string }> = {
     sending: {
       level: "vault",
@@ -243,7 +260,7 @@ function Outcome({ rec, onDone }: { rec: VaultRequestRecord; onDone: (to: string
           </Button>
         )}
         <Button variant="secondary" onClick={() => onDone("home")}>
-          Back to wallet
+          {backLabel}
         </Button>
       </div>
     </div>

@@ -1,3 +1,5 @@
+import { hkdf } from "@noble/hashes/hkdf.js";
+import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, hexToBytes, utf8ToBytes } from "@noble/hashes/utils.js";
 import { HDKey } from "@scure/bip32";
 import { generateMnemonic, mnemonicToSeedSync, validateMnemonic } from "@scure/bip39";
@@ -273,6 +275,22 @@ export class KeyringController {
       } finally {
         everyday.fill(0);
         feeTank.fill(0);
+      }
+    });
+  }
+
+  /**
+   * A 32-byte storage key for one purpose (`label`), derived from the seed with HKDF-SHA256 (unlocked only). It is
+   * not any signing key: exporting the everyday or fee-tank key does not reveal it (the private balance's encrypted
+   * store, plan §40 §1.2 "a separate key"). Stable across password changes; the caller zeroes it after import.
+   */
+  async deriveStorageKey(label: string): Promise<Uint8Array> {
+    return this.withMnemonic((mnemonic) => {
+      const seed = mnemonicToSeedSync(mnemonic);
+      try {
+        return hkdf(sha256, seed, utf8ToBytes("leaked.storage-key.v1"), utf8ToBytes(label), 32);
+      } finally {
+        seed.fill(0);
       }
     });
   }

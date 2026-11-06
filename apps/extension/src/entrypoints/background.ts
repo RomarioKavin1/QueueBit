@@ -4,6 +4,8 @@ import { chromeApprovalWindows, chromeKV } from "../background/chrome";
 import { KeyringError } from "../background/keyring";
 import { getBalance, nodeClient, publicClient, readRpc, sidecarClient } from "../background/rpc";
 import { PaymentsError, Wallet } from "../background/wallet";
+import { OffscreenClient, chromeOffscreen } from "../background/offscreen";
+import { alertUrl, notificationFor } from "../background/watcher/alerts";
 import { EngineError } from "../background/engine";
 import { ProviderRpcError, serializeError } from "../shared/errors";
 import { BUILD } from "../shared/build";
@@ -17,6 +19,11 @@ import {
 } from "../shared/messages";
 
 const AUTOLOCK_ALARM = "leaked:autolock";
+/** The watcher light mode's poll (plan §40 §5: every 60 s while the browser runs). */
+const WATCHER_ALARM = "leaked:watcher";
+/** A timelock / pause deadline the watcher knows about (`WatcherCore.alarms()`): woken exactly then. */
+const DEADLINE_ALARM = "leaked:watcher:deadline";
+const NOTIFICATION_PREFIX = "leaked-alert:";
 
 export default defineBackground({
   type: "module",
@@ -43,6 +50,30 @@ export default defineBackground({
       async openApp(hash) {
         await browser.tabs.create({ url: browser.runtime.getURL(`/app.html${hash}`) });
       },
+      offscreen: new OffscreenClient(chromeOffscreen()),
+      alertsUi: {
+        async notify(r) {
+          const n = notificationFor(r.alert);
+          await browser.notifications.create(`${NOTIFICATION_PREFIX}${r.alert.id}`, {
+            type: "basic",
+            iconUrl: browser.runtime.getURL("/icon/128.png"),
+            title: n.title,
+            message: n.message,
+            priority: n.priority,
+            requireInteraction: n.requireInteraction,
+            silent: n.silent,
+            buttons: [{ title: n.buttonTitle }],
+          });
+        },
+        async badge(b) {
+          await browser.action.setBadgeText({ text: b.text });
+          if (b.text) await browser.action.setBadgeBackgroundColor({ color: b.color });
+        },
+        async wakeAt(when) {
+          if (when > Date.now()) await browser.alarms.create(DEADLINE_ALARM, { when });
+        },
+      },
+      watcherFetch: (url, init) => fetch(url, { ...init, cache: "no-store", credentials: "omit" }),
       emit(event, data, origin) {
         for (const [port, portOrigin] of ports) {
           if (origin !== undefined && portOrigin !== origin) continue;
@@ -127,12 +158,36 @@ export default defineBackground({
         void wallet.autoLockCheck();
         // Pending payments are also polled here, so a status survives the popup closing and SW restarts.
         void wallet.payments?.refreshPending().catch(() => undefined);
+        void resumePrivacy();
+      } else if (alarm.name === WATCHER_ALARM || alarm.name === DEADLINE_ALARM) {
+        void wallet.pollAlerts().catch(() => undefined);
       }
     });
     void browser.alarms.get(AUTOLOCK_ALARM).then((a) => {
       // Chrome 120+: 30 s is the minimum period (plan §30 §2.4).
       if (!a) void browser.alarms.create(AUTOLOCK_ALARM, { periodInMinutes: 0.5 });
     });
+    void browser.alarms.get(WATCHER_ALARM).then((a) => {
+      if (!a) void browser.alarms.create(WATCHER_ALARM, { periodInMinutes: 1, delayInMinutes: 0.5 });
+    });
+
+    // An alert's notification (or its button) opens the full app at the alert's deep link (ux-spec §2.3).
+    const openAlert = async (notificationId: string) => {
+      if (!notificationId.startsWith(NOTIFICATION_PREFIX)) return;
+      const id = notificationId.slice(NOTIFICATION_PREFIX.length);
+      const rec = (await wallet.alerts.list()).find((r) => r.alert.id === id);
+      const url = (rec ? alertUrl(rec.alert) : "/app.html#alerts") as `/app.html${string}`;
+      await browser.tabs.create({ url: browser.runtime.getURL(url) });
+      await browser.notifications.clear(notificationId);
+      await wallet.handleUi("alerts:read", { ids: [id] }).catch(() => undefined);
+    };
+    browser.notifications.onClicked.addListener((nid) => void openAlert(nid));
+    browser.notifications.onButtonClicked.addListener((nid) => void openAlert(nid));
+
+    const resumePrivacy = async () => {
+      if (!wallet.privacy) return;
+      await wallet.privacy.rehydrate(Object.keys(await wallet.plans.all()).map(Number)).catch(() => undefined);
+    };
 
     browser.runtime.onInstalled.addListener(({ reason }) => {
       if (reason === "install") void browser.tabs.create({ url: browser.runtime.getURL("/app.html#onboarding") });
@@ -141,6 +196,7 @@ export default defineBackground({
     // A pending approval in storage.session at startup means the previous SW instance died mid-approval.
     void wallet.approvals.resumeAfterRestart();
     void wallet.payments?.rehydrate().catch(() => undefined);
+    void resumePrivacy();
   },
 });
 

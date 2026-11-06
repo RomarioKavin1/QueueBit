@@ -5,6 +5,7 @@ import type { WalletState } from "../../shared/types";
 import {
   ActivityIcon,
   AppsIcon,
+  BellIcon,
   Button,
   ChevronDownIcon,
   ExternalIcon,
@@ -15,6 +16,7 @@ import {
   MoreIcon,
   SendIcon,
   SettingsIcon,
+  ShieldIcon,
   Spinner,
   VaultIcon,
 } from "../../ui";
@@ -119,6 +121,12 @@ function Unlocked({ state, close, initialTab }: { state: WalletState; close: () 
             { label: "Security", icon: <LockIcon size={18} />, onSelect: () => (openFullApp("#security"), close()) },
             { label: "Limits", icon: <VaultIcon size={18} />, onSelect: () => (openFullApp("#limits"), close()) },
             { label: "Pending", icon: <HourglassIcon size={18} />, onSelect: () => (openFullApp("#pending"), close()) },
+            { label: "Alerts", icon: <BellIcon size={18} />, onSelect: () => (openFullApp("#alerts"), close()) },
+            {
+              label: "Private balance",
+              icon: <ShieldIcon size={18} />,
+              onSelect: () => (openFullApp("#privacy"), close()),
+            },
             { label: "Settings", icon: <SettingsIcon size={18} />, onSelect: () => setScreen("settings") },
             { label: "Lock now", icon: <LockIcon size={18} />, onSelect: () => void call("keyring:lock") },
             {

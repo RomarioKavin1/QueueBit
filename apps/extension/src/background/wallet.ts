@@ -50,6 +50,13 @@ import {
 } from "./router";
 import type { Call } from "./routing";
 import { SettingsStore } from "./settings";
+import { BUILD } from "../shared/build";
+import { anonStatusFor } from "../shared/offscreen";
+import type { OffscreenClient } from "./offscreen";
+import { PrivacyController } from "./privacy/controller";
+import { AlertStore, badgeFor, type AlertRecord } from "./watcher/alerts";
+import { WatcherLight, type LightClient } from "./watcher/light";
+import { PairingStore, pairingView, readPairedWatcher, readPairingCode, type WatcherFetch } from "./watcher/pairing";
 
 /** How long the recovery-test code this browser shows stays valid. */
 export const RECOVERY_CHALLENGE_TTL_MS = 30 * 60_000;
@@ -70,6 +77,16 @@ export interface WalletEnv {
   openApp?(hash: string): Promise<void>;
   keyring?: KeyringOptions;
   now?: () => number;
+  /** The offscreen document (the withdraw prover). */
+  offscreen?: OffscreenClient;
+  /** Alerts surface: OS notification, toolbar badge, a wake-up at the next deadline (plan §30 §6.5). */
+  alertsUi?: {
+    notify(r: AlertRecord): Promise<void>;
+    badge(b: { text: string; color: string }): Promise<void>;
+    wakeAt(whenMs: number): Promise<void>;
+  };
+  /** A paired self-hosted watcher is read with this (needs the watcher's host permission). */
+  watcherFetch?: WatcherFetch;
 }
 
 /**
@@ -85,6 +102,10 @@ export class Wallet {
   readonly activity: ActivityStore;
   readonly payments: Payments | undefined;
   readonly vault: VaultFlow | undefined;
+  readonly privacy: PrivacyController | undefined;
+  readonly alerts: AlertStore;
+  readonly pairing: PairingStore;
+  readonly watcher: WatcherLight | undefined;
   private readonly now: () => number;
 
   constructor(private readonly env: WalletEnv) {
@@ -115,6 +136,130 @@ export class Wallet {
           now: this.now,
         })
       : undefined;
+    this.alerts = new AlertStore(env.local, this.now);
+    this.pairing = new PairingStore(env.local, this.now);
+    this.privacy =
+      this.payments && this.vault
+        ? new PrivacyController({
+            kv: env.local,
+            keyring: this.keyring,
+            plans: this.plans,
+            payments: this.payments,
+            vault: this.vault,
+            activity: this.activity,
+            settings: this.settings,
+            prover: () => {
+              if (!env.offscreen) throw new Error("The prover isn't available in this context.");
+              return env.offscreen.prover();
+            },
+            anonStatus: async (chainId) => anonStatusFor(chainId, { harnessBundled: false }),
+            localDevnet: BUILD.localDevnet,
+            now: this.now,
+          })
+        : undefined;
+    const io = env.io;
+    this.watcher =
+      io && this.vault
+        ? new WatcherLight({
+            kv: env.local,
+            deployBlocks: this.vault.deployBlocks,
+            client: (chainId) => io.publicClient(chainId) as unknown as LightClient,
+            plan: (chainId) => this.plans.get(chainId),
+            roles: async (chainId) => {
+              const plan = await this.plans.get(chainId);
+              const g = (await this.settings.getSetup()).guardian;
+              return {
+                ...(plan?.vaultSigner ? { vault: plan.vaultSigner } : {}),
+                ...(plan?.recoverySigner ? { recovery: plan.recoverySigner } : {}),
+                guardians: g ? [g.address] : [],
+              };
+            },
+            initiated: (chainId) => this.initiatedBy(chainId),
+            now: this.now,
+          })
+        : undefined;
+  }
+
+  /**
+   * What this browser started on `chainId` (its Vault requests and payments): the watcher downgrades those to info
+   * ("you did this"). Anything else stays unknown, so a change nobody here asked for is urgent.
+   */
+  private async initiatedBy(chainId: number) {
+    const ops = new Set<string>();
+    const hashes = new Set<string>();
+    for (const r of (await this.vault?.list()) ?? []) {
+      if (r.chainId !== chainId) continue;
+      if (r.opId) ops.add(r.opId.toLowerCase());
+      if (r.hash) hashes.add(r.hash.toLowerCase());
+    }
+    for (const e of await this.activity.list()) {
+      if (e.chainId !== chainId) continue;
+      hashes.add(e.hash.toLowerCase());
+      if (e.txHash) hashes.add(e.txHash.toLowerCase());
+    }
+    return (ref: { txHash?: Hex; opId?: Hex }) =>
+      (ref.opId && ops.has(ref.opId.toLowerCase())) || (ref.txHash && hashes.has(ref.txHash.toLowerCase()))
+        ? true
+        : undefined;
+  }
+
+  /**
+   * One watcher round (the 60 s alarm, a deadline alarm, or "Check now"): the light mode on every chain with an
+   * account, then a paired self-hosted watcher; new alerts are stored, notified and counted on the badge.
+   */
+  async pollAlerts(): Promise<{ added: number }> {
+    const added: AlertRecord[] = [];
+    let nextDeadline: number | undefined;
+    if (this.watcher) {
+      for (const key of Object.keys(await this.plans.all())) {
+        const chainId = Number(key);
+        try {
+          const r = await this.watcher.poll(chainId);
+          added.push(...(await this.alerts.add(r.alerts, "browser")));
+          if (r.nextDeadline !== undefined) nextDeadline = Math.min(nextDeadline ?? Infinity, r.nextDeadline);
+        } catch {
+          // the error is kept in the watcher state (Security › Alerts shows it); the next alarm retries
+        }
+      }
+    }
+    const p = await this.pairing.get();
+    if (p && this.env.watcherFetch) {
+      try {
+        const r = await readPairedWatcher(p, this.env.watcherFetch, Math.floor(this.now() / 1000));
+        added.push(...(await this.alerts.add(r.alerts, "watcher")));
+        await this.alerts.retract(r.retracted);
+        await this.pairing.update({
+          since: r.since,
+          lastOkAt: this.now(),
+          ...(r.rejected
+            ? { lastError: `${r.rejected} alert(s) had a bad signature and were ignored` }
+            : { lastError: undefined }),
+        });
+      } catch (e) {
+        await this.pairing.update({ lastError: (e as Error).message });
+      }
+    }
+    const ui = this.env.alertsUi;
+    if (ui) {
+      // The badge first: it must not wait on the OS notification service.
+      await ui.badge(badgeFor(await this.alerts.list())).catch(() => undefined);
+      for (const r of added) await ui.notify(r).catch(() => undefined);
+      if (nextDeadline !== undefined) await ui.wakeAt(nextDeadline * 1000).catch(() => undefined);
+    }
+    return { added: added.length };
+  }
+
+  private async refreshBadge(): Promise<void> {
+    await this.env.alertsUi?.badge(badgeFor(await this.alerts.list())).catch(() => undefined);
+  }
+
+  private async chainOr(chainId?: number): Promise<number> {
+    return chainId ?? (await this.settings.get()).selectedChainId;
+  }
+
+  private priv(): PrivacyController {
+    if (!this.privacy) throw new Error("Private balance is not available in this context.");
+    return this.privacy;
   }
 
   private vf(): VaultFlow {
@@ -253,7 +398,12 @@ export class Wallet {
 
   async autoLockCheck(): Promise<void> {
     const { autoLockMinutes } = await this.settings.get();
-    if (await this.keyring.autoLockIfIdle(autoLockMinutes)) await this.emitAccountsToAll([]);
+    if (await this.keyring.autoLockIfIdle(autoLockMinutes)) {
+      this.privacy?.lock();
+      await this.emitAccountsToAll([]);
+    }
+    // A lock from elsewhere (session cleared, browser restart): the private-balance store must not stay open.
+    else if (!(await this.keyring.isUnlocked())) this.privacy?.lock();
   }
 
   private async emitAccountsToAll(accounts: Address[]): Promise<void> {
@@ -1089,6 +1239,7 @@ export class Wallet {
     },
     "keyring:lock": async () => {
       await this.keyring.lock();
+      this.privacy?.lock();
       await this.emitAccountsToAll([]);
       return null;
     },
@@ -1103,6 +1254,10 @@ export class Wallet {
       await this.settings.clearSetup();
       await this.plans.clear();
       await this.activity.clear();
+      this.privacy?.lock();
+      await this.alerts.clear();
+      await this.pairing.remove();
+      await this.refreshBadge();
       return null;
     },
     "settings:update": async (patch) => {
@@ -1204,6 +1359,8 @@ export class Wallet {
           .catch(() => undefined);
       }
       void this.trackSoon();
+      // A private-balance deposit waits on this approval.
+      void this.privacy?.run(r.chainId);
       return r;
     },
     "vault:cancel": async ({ id }) => {
@@ -1222,6 +1379,62 @@ export class Wallet {
     "security:nextEverydayKey": async () => {
       const index = (await this.keyring.everydayIndex()) + 1;
       return { index, address: await this.keyring.everydayAt(index) };
+    },
+
+    "privacy:view": async ({ chainId }) => this.priv().view(await this.chainOr(chainId)),
+    "privacy:sync": async ({ chainId }) => this.priv().sync(await this.chainOr(chainId)),
+    "privacy:start": async ({ chainId, kind, amountWei }) => {
+      if (kind !== "shield" && kind !== "unshield") throw new Error("Unknown private-balance operation.");
+      return this.priv().start(await this.chainOr(chainId), kind, amountWei);
+    },
+    "privacy:answer": async ({ chainId, opId, signature }) =>
+      this.priv().answerPhone(await this.chainOr(chainId), opId, signature),
+    "privacy:retry": async ({ chainId, opId }) => this.priv().retry(await this.chainOr(chainId), opId),
+    "privacy:cancel": async ({ chainId, opId }) => this.priv().cancel(await this.chainOr(chainId), opId),
+    "privacy:dismiss": async ({ chainId }) => this.priv().dismiss(await this.chainOr(chainId)),
+    "privacy:run": async ({ chainId }) => {
+      const id = await this.chainOr(chainId);
+      void this.priv().run(id);
+      return this.priv().view(id);
+    },
+    "privacy:saveConfig": async (req) => {
+      const chainId = await this.chainOr(req.chainId);
+      if (!BUILD.localDevnet || chainId !== 1337)
+        throw new Error("Private-balance contracts are fixed on this network.");
+      return this.priv().saveConfig({ ...req, chainId });
+    },
+    "privacy:connection": async ({ chainId }) => {
+      const id = await this.chainOr(chainId);
+      return { ...anonStatusFor(id, { harnessBundled: false }), enabled: (await this.settings.get()).anonRpc };
+    },
+
+    "alerts:list": () => this.alerts.list(),
+    "alerts:read": async ({ ids }) => {
+      const r = await this.alerts.markRead(ids);
+      await this.refreshBadge();
+      return r;
+    },
+    "alerts:poll": () => this.pollAlerts(),
+    "watcher:status": async ({ chainId }) => {
+      const st = await this.watcher?.state(await this.chainOr(chainId));
+      const p = await this.pairing.get();
+      return {
+        ...(st?.lastPollAt ? { lastPollAt: st.lastPollAt } : {}),
+        ...(st?.lastError ? { lastError: st.lastError } : {}),
+        ...(st?.cursor ? { cursor: st.cursor } : {}),
+        ...(p ? { paired: pairingView(p) } : {}),
+      };
+    },
+    "watcher:pair": async ({ text, confirm }) => {
+      const p = readPairingCode(text);
+      if (!confirm) return { url: p.url, topic: p.topic, keyId: p.keyId, pairedAt: 0 };
+      const rec = await this.pairing.set(p);
+      void this.pollAlerts();
+      return pairingView(rec);
+    },
+    "watcher:unpair": async () => {
+      await this.pairing.remove();
+      return null;
     },
   };
 
