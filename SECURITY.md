@@ -3,9 +3,9 @@
 ## Status: unaudited
 
 QueueBit has had **no external audit** of any component: contracts, the post-quantum signer and verifier, the browser
-extension, the vault companion, the Groth16 engine or the watcher. It runs on local devnets and anvil only. Do not use
+extension, the LeanPool node, the Groth16 engine or the watcher. It runs on devnets only. Do not use
 it with funds you are not prepared to lose. The threat model, including what is known to be missing, is
-[`docs/security/THREAT-MODEL.md`](docs/security/THREAT-MODEL.md) (§11 lists the open gaps).
+[`docs/security/THREAT-MODEL.md`](docs/security/THREAT-MODEL.md) (§10 lists the open gaps).
 
 ## Reporting a vulnerability
 
@@ -33,14 +33,14 @@ We follow coordinated disclosure. There is no bug bounty yet.
 
 In scope:
 
-- `contracts/src/**`: the frame-native account, role signers, guardian, the ERC-7579 modules, PoolPayer. Especially
-  anything that lets a leaked **hot key** exceed its on-chain bound (THREAT-MODEL §3), bypasses a timelock, lets anyone
-  but the Vault or Recovery change policy, or makes VERIFY-frame code inadmissible or griefable.
+- `contracts/src/**`: LeanAccount, the keystore, the hook, guardian recovery, the factory, DepsRegistry, PoolPayer.
+  Especially anything that lets a **session key** exceed its on-chain bounds (THREAT-MODEL §4), lets anyone but the
+  owner (or guardians, after the delay) change keys or policy, or makes VERIFY-frame code inadmissible or griefable.
+- `packages/account`: anything that makes the SDK build or sign a different tx than the user approved.
+- `services/leanpool-node`: accepting a dependency whose signature does not verify, or posting a root for one.
 - `packages/pq-signer` (signing, key generation, the C13 and leanSphincs-s implementations) and the vendored
   verifiers' integration (`C13Verifier`, the adapters).
-- `packages/frames`, `packages/ur`, `packages/rpc`: codec and signature-hash errors, UR decoding (anything that makes
-  the phone display one thing and sign another).
-- `apps/companion`: key storage, the signing worker, the no-network guarantee, the update path.
+- `packages/frames`, `packages/ur`, `packages/rpc`: codec and signature-hash errors.
 - `apps/extension`: key storage, origin attribution, policy pre-checks that are looser than the chain, the approval
   windows.
 - `packages/groth16`, `packages/privacy`: bogus proofs, note-secret derivation, linkability through the RPC path.
@@ -54,7 +54,7 @@ Out of scope:
 - Third-party code we pin (submodules in `contracts/lib/`, npm and crates dependencies, the upstream sidecar, the
   ethrex devnet images), unless our integration of it is the problem. Report upstream issues upstream; tell us if we
   are affected.
-- Known gaps listed in THREAT-MODEL §11 and `docs/plan/BACKLOG.md` (reports that show they are worse than described
+- Known gaps listed in THREAT-MODEL §10 and `docs/plan/BACKLOG.md` (reports that show they are worse than described
   are welcome).
-- The design limits stated in the threat model (for example: a leaked hot key can spend the remaining daily cap; a
-  compromised Recovery key can take over the Vault after 7 days).
+- The design limits stated in the threat model (for example: the owner key's approvals trust its LeanPool aggregator;
+  a session key can burn the account's ETH on fees; an EIP-7702-migrated EOA's ECDSA key keeps working).

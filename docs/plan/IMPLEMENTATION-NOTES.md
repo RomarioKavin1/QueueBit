@@ -1535,3 +1535,21 @@ A/B). Evidence and LeanPool's original write-up: `docs/research/leanpool.md`.
   an answer is followed by its own id (the pre-witness tx hash) and never re-sent; a node refusal is shown. Nonce lanes
   1–8 (EIP-8250); speed-up/cancel are refused for PQ payments; after ~6 blocks they show as taking longer.
 - **Forge fmt.** Forge 1.7.x formats differently from CI's pinned 1.3.5: format only touched files, with 1.3.5.
+
+## LeanAccount rebuild (2026-11-06)
+
+QueueBit's account is now LeanAccount ([`70-leanaccount-rebuild.md`](70-leanaccount-rebuild.md)). Notes from the port:
+
+- **foundry on osaka.** The passkey path calls P256VERIFY (0x100), which Forge models from osaka on; the whole repo
+  moved, since the old account (whose TSTORE behaviour pinned cancun) is gone.
+- **VERIFY never reads the clock.** ERC-7562 bans TIMESTAMP in validation (the sidecar refused the first live session
+  tx with "payer uses banned opcode: TIMESTAMP"). Key expiry is re-checked in execution (`executionContext`, the
+  hook's `ExpiredKey`); `pruneExpired` lets anyone delete an expired key. `lint-verify.sh` enforces it.
+- **State gas.** On the devnet a payment to a fresh address costs ~281k state gas and the hook's first records more;
+  a session tx needs ~300k execution headroom plus a state allowance, and the account must hold the tx's maximum cost
+  (every limit × the max fee) or the producer keeps skipping it.
+- **Newer Foundry vs CI.** Foundry 1.7 lints on build and cannot parse standalone Yul (`[lint] ignore`); `forge fmt`
+  differs between 1.3.5 (CI) and 1.7: format with 1.3.5. At HEAD before this change `forge fmt --check` already reported
+  diffs in vendored files (backlog).
+- **SDK parity.** `contracts/test/account/SdkParity.t.sol` pins `@queuebit/account`'s predicted address, MultiSend bytes
+  and SafeTx hash against the real factory and a real Safe v1.4.1, and runs a 2-of-2 Safe migration end to end.

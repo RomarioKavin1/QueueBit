@@ -208,40 +208,20 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### Bundled into the vault companion build (`apps/companion/dist`)
+### The vault companion (removed 2026-11-06)
 
-The PWA build redistributes these npm packages inside its JavaScript bundle (their licences ship in `node_modules`):
-`@ngraveio/bc-ur` 2.0.0-beta.9 (MIT), `cbor2` (MIT), `jsqr` 1.4.0 (**Apache-2.0**, no NOTICE file), `qrcode` 1.5.4
-(MIT), `@scure/bip32`/`@scure/bip39`, `@noble/hashes`/`@noble/curves` (MIT), `viem` (MIT), `react`/`react-dom` (MIT).
-No third-party source was copied into `packages/ur` or `apps/companion`. Data taken from other projects: the Privacy
-Pools `PrivacyPoolNote` EIP-712 domain and types and the 0xbow entrypoint addresses (from `kohaku`
-`privacy-pools/src/account/signature-keys.ts` and `config.ts`, as cited in plan §40 §1.3–1.4), used as constants in
-`apps/companion/src/registry/queuebit.descriptors.json`. The companion's icons are original.
+The companion app (`apps/companion`) was removed with the Vault in the LeanAccount rebuild
+(`docs/plan/70-leanaccount-rebuild.md`); nothing it bundled ships any more.
 
-### Contracts M7 (ERC-4337 / ERC-7579 backend)
+### Contracts M7 (ERC-4337 / ERC-7579 backend, removed 2026-11-06)
 
-No third-party source was copied into `contracts/src/modules`. The minimal ERC-4337/7579 interfaces in
-`src/modules/interfaces/IERC7579Modules.sol` are written from the ERC texts (struct and selector layouts are
-standard-defined); `QueueBitHotValidator` uses OpenZeppelin's `ERC7739Utils` from the existing `lib/openzeppelin-contracts`.
-ModuleKit (`rhinestonewtf/modulekit`, AGPL/GPL, unmaintained since 2026-09) is **not** used: the test harness in
-`contracts/test/modules` re-implements the ModuleKit pattern without its code.
-
-Foundry submodules added for the tests only (test hosts and the EntryPoint; never imported by `src/`), pinned in
-`contracts/foundry.lock`:
+The 4337 / 7579 modules and their test hosts were removed in the LeanAccount rebuild, with the submodules only they
+used (`account-abstraction`, `erc7579-implementation`, `erc7579-safe7579-dep`, `sentinellist`, `safe7579`,
+`checknsignatures`, `kernel`). One submodule stays:
 
 | Submodule (`contracts/lib/`) | Upstream @ pin | License | Used for |
 |---|---|---|---|
-| `account-abstraction` | `eth-infinitism/account-abstraction` tag `v0.8.0` @ `4cbc060` | GPL-3.0 (core); some interfaces MIT | `SimpleAccount` relayer in tests; `deployments/ethereum/EntryPoint.json` initcode, deployed as-is (test + anvil e2e) |
-| `erc7579-implementation` | `erc7579/erc7579-implementation` @ `99cbd34` | MIT | reference `MSAAdvanced`, `MSAFactory`, `Bootstrap` |
-| `erc7579-safe7579-dep` | same repo @ `16138d1` (Safe7579's lockfile pin) | MIT | types/`AccountBase` imported by Safe7579 |
-| `sentinellist` | `rhinestonewtf/sentinellist` `v1.0.0` @ `6dff696` | MIT | MSA / Safe7579 dependency |
-| `safe7579` | `rhinestonewtf/safe7579` @ `9f507f3` | GPL-3.0 | Safe7579 adapter + launchpad |
-| `safe-smart-account` | `safe-global/safe-smart-account` `v1.4.1` @ `bf943f8` | LGPL-3.0-only | `Safe` singleton, `SafeProxyFactory` |
-| `checknsignatures` | `rhinestonewtf/checknsignatures` @ `f8389c1` (Safe7579's lockfile pin) | MIT | Safe7579 dependency |
-| `kernel` | `zerodevapp/kernel` tag `v3.3` @ `cd697c7` (with its own `lib/solady`, `lib/ExcessivelySafeCall`) | MIT | Kernel v3.3 + `KernelFactory` |
-
-Test-only shims in `contracts/test/modules/hosts/HostArtifacts.sol` subclass `MSAAdvanced` and `Safe7579` to override
-`entryPoint()` (both hard-code the v0.7 address); no upstream file is modified.
+| `safe-smart-account` | `safe-global/safe-smart-account` `v1.4.1` @ `bf943f8` | LGPL-3.0-only | `Safe`, `SafeProxyFactory`, `MultiSendCallOnly`, `CompatibilityFallbackHandler`: compiled through `test/account/fixtures/SafeImports.sol` and deployed by `devnet/deploy` on devnets only, as the Safe → LeanAccount migration fixture; never part of the account |
 
 ## `@queuebit/privacy` (privacy milestones P1–P3, P7 core)
 
@@ -359,15 +339,19 @@ the following restrictions:
 
 ## LeanPool (the post-quantum everyday key)
 
-Ported from LeanPool ([`LeoFranklin015/Queue-bit`](https://github.com/LeoFranklin015/Queue-bit), branch `leanpool`,
-`main` @ `53732b1`), MIT, Copyright (c) 2026 the LeanPool authors (the same team). Plan:
-`docs/plan/60-leanpool-merge-plan.md`.
+Ported from LeanPool ([`LeoFranklin015/Queue-bit`](https://github.com/LeoFranklin015/Queue-bit)), MIT, Copyright (c)
+2026 the LeanPool authors (the same team): the registry from `main` @ `53732b1` (plan
+`docs/plan/60-leanpool-merge-plan.md`), the account stack, SDK and devnet scripts from branch `leanpool-migration` @
+`0b30f1a` (plan `docs/plan/70-leanaccount-rebuild.md`).
 
 | Where in this repo | Origin | License | What was taken |
 |---|---|---|---|
 | `contracts/src/leanpool/DepsRegistry.sol` | LeanPool `contracts/src/v2/DepsRegistry.sol` | MIT | Verbatim below an added provenance header |
 | `contracts/src/leanpool/LeanPoolMerkle.sol` | LeanPool `contracts/src/MerkleLib.sol` | MIT | Sorted-pair Merkle verification (the v1-only `leaf` dropped) |
-| `contracts/src/roles/LeanPoolHotSigner.sol` (VERIFY body) | LeanPool `contracts/src/v2/LeanWallet8288.sol` | MIT | Triple checks, witness layout and ring read, inside QueueBit's role-signer clone pattern |
+| `contracts/src/account/*.sol` | LeanPool `contracts/src/account/*.sol` | MIT | The LeanAccount stack, verbatim apart from the MerkleLib import (`LeanPoolMerkle as MerkleLib`) and `forge fmt` |
+| `contracts/test/account/*` | LeanPool `contracts/test/account/*`, `contracts/src/fixtures/LegacyAccount.sol` | MIT | Tests and the migration fixtures (`ERC1967Proxy` / `MockERC20` renamed `LegacyERC1967Proxy` / `TestToken`) |
+| `packages/account` | LeanPool `ts/account/{sdk,migrate,webauthn}.ts`, `ts/v2/deps.ts` (envelope) | MIT | Rewritten on `@queuebit/frames` / `@queuebit/rpc`, browser-safe; the Safe adapter is new |
+| `contracts/devnet-tests/leanpool-account/src` | LeanPool `ts/{core,v2,account}`, `ts/scripts/probe-7702.ts` | MIT | The SDK as it ran the recorded devnet runs, its live scripts and unit tests (config adapted to this repo) |
 
 `@queuebit/lean-sphincs` compiles [`leanEthereum/leanVM`](https://github.com/leanEthereum/leanVM) `crates/signatures`
 @ `a39758de10f35c7b34023d061cc05dfc0b36d43a` (a Cargo git dependency, MIT OR Apache-2.0, used under MIT) into its

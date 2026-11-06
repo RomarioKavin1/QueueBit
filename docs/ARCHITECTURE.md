@@ -1,172 +1,101 @@
 # Architecture
 
-How the pieces of QueueBit fit together and how data moves between them. The binding design is
-[`plan/00-v4-design-decisions.md`](plan/00-v4-design-decisions.md); the build specs are the four section files in
-[`plan/sections/`](plan/sections/); what the code actually does, with measurements, is
-[`plan/IMPLEMENTATION-NOTES.md`](plan/IMPLEMENTATION-NOTES.md). What each key can and cannot do is
-[`security/THREAT-MODEL.md`](security/THREAT-MODEL.md). If this page disagrees with the code, the code wins.
+QueueBit is one account, **LeanAccount**, and the browser extension that drives it. Every transaction is an EIP-8141
+frame transaction; the account's validator decides which signatures count, so the signature scheme is a module choice,
+not a protocol change. This replaced the earlier QueueBitAccount (Vault, capped hot key, timelock, phone companion):
+[`plan/70-leanaccount-rebuild.md`](plan/70-leanaccount-rebuild.md) records the decision and what was removed.
 
 ## 1. Components
 
-```
- ┌─────────────────────────── Browser (Chromium MV3): apps/extension ───────────────────────────┐
- │ inpage provider (EIP-1193 + EIP-6963) ⇄ content script ⇄ service worker                      │
- │ service worker: keyring (hot key, fee-tank key), router, FrameEngine (@queuebit/frames),       │
- │   4337 engine (viem account-abstraction), policy pre-checks, typed-data classifier            │
- │ app.html (full tab): onboarding, Vault QR display + camera scan                              │
- │ offscreen.html: Anon-RPC harness, the Privacy Pools prover (@queuebit/groth16 WASM)            │
- └──────────┬─────────────────────────────────┬────────────────────────────┬────────────────────┘
-            │ public mempool (ethrex)         │ ERC-8421 alt mempool       │ ERC-4337 bundler
-            │ hot txs, Vault Path B           │ (sidecar) Path A, PoolPayer│ (pre-Hegotá chains)
- ┌──────────▼─────────────────────────────────▼──────────┐ ┌──────────────▼─────────────────────┐
- │ Frame-native (EIP-8141, Hegotá): contracts/src         │ │ ERC-4337 v0.8 + ERC-7579 modules   │
- │  QueueBitAccount (UUPS proxy → QueueBitAccountImpl,        │ │  on a host account (MSA, Safe7579, │
- │    QueueBitAccountRoles): hot path, RollingCap, policy,  │ │  Kernel):                          │
- │    timelock, freeze, scoped ERC-1271                   │ │  QueueBitHotValidator (type 1)       │
- │  PQRoleSigner clones (VaultSigner, RecoverySigner)     │ │  QueueBitPolicyHook (type 4)         │
- │    via RoleSignerFactory, C13Verifier                  │ │  QueueBitRoleExecutor (type 2)       │
- │  GuardianSigner (freeze only) · PoolPayer (privacy)    │ │  C13Verifier                       │
- └───────────────────────────────▲────────────────────────┘ └────────────────────────────────────┘
-                                 │ ur:queuebit-sign-request / ur:queuebit-signature (BC-UR, animated QR)
- ┌───────────────────────────────┴─────────── Vault companion (separate device): apps/companion ┐
- │ offline PWA (CSP connect-src 'none'); @queuebit/pq-signer (Rust → WASM, SPHINCS- C13);          │
- │ decodes and clear-signs every request itself; holds the Vault PQ key and its payer key;       │
- │ Recovery is a separate seed (offline ceremony)                                               │
- └──────────────────────────────────────────────────────────────────────────────────────────────┘
-   services/watcher (self-hosted alerts) and the extension's light mode read the chain, never sign.
-```
-
-| Package | Role |
-|---|---|
-| `contracts/` | Foundry. Account, role signers, guardian, factories, 7579 modules, PQ verifier adapters (vendored SPHINCS- verifiers), PoolPayer. `test/frame/` simulates EIP-8141 frames (`FrameSim`); `devnet-tests/` run the real stack on the devnet or anvil. |
-| `packages/frames` | Profile-driven EIP-8141 codec and signature hash, pinned vectors per network profile. Shared by the extension and the companion. |
-| `packages/pq-signer` | SPHINCS- C13 (default) and leanSphincs-s (experimental) in Rust, compiled to a committed, reproducible WASM; TS API `keygen` / `sign` / `verify`. |
-| `packages/ur` | The BC-UR types of the QR protocol (strict deterministic CBOR). |
-| `packages/rpc` | JSON-RPC transports for ethrex, the sidecar and bundlers; rejection-reason mapping. |
-| `packages/privacy` | Privacy Pools v1 client (sync, notes, deposit, withdraw), host adapters, the frame-paymaster broadcaster, the Vault envelope signer over QR. |
-| `packages/groth16` | MIT Groth16 (BN254) prover for circom circuits, arkworks → committed WASM; replaces GPL snarkjs at runtime. |
-| `packages/lean-sphincs` | leanVM leanSPHINCS (rev `a39758d`, the one lean-pq 0.7.0 binds) in Rust → committed, reproducible WASM; byte-compatible with the LeanPool node. |
-| `services/leanpool-node` | The LeanPool node: native leanSPHINCS intake, EIP-8288 gossip, batching, `DepsRegistry` roots, witness delivery, background recursive STARKs, `verify-batch`. |
-| `packages/watcher-core` | Pure TS alert rules over account events and receipts (used by the service and the extension's light mode). |
-| `services/watcher` | Node service: polls a node, applies `watcher-core`, delivers alerts (SSE, HMAC webhook, ntfy). |
-| `apps/extension` | WXT + viem MV3 wallet. |
-| `apps/companion` | The vault device PWA. |
-| `bench/` | PQ verifier benchmark harness and published table. |
-| `devnet/` | Local EIP-8141 devnet (ethrex + Lighthouse + sidecar), deploy scripts, the BUDGET-010 patched sidecar, the local 4337 chain. |
-| `upstream/` | Our upstream contributions as patch series (the BUDGET-010 sidecar PR). |
-
-## 2. Keys and roles
-
-The hot key and the fee-tank key live in the extension; the Vault key (post-quantum) and its secp256k1 payer key live
-on the companion; the Recovery key is a separate offline seed; Guardians are third-party secp256k1 keys that can only
-pause. The account enforces the hot key's bound on chain (rolling 24 h USD cap, per-transaction max, fee bound,
-priced token allowlist, Vault-approved targets); loosening anything is timelocked; Recovery can cancel any queued Vault
-action and rotate the Vault in 7 days. Full table: THREAT-MODEL §2.
-
-The role signers are **separate senders**: each `PQRoleSigner` clone is its own contract account with its own nonce,
-stake and mempool reputation, and the only address the account accepts `vault*` / `recovery*` calls from. A throttled
-or banned role signer never affects the account's hot lane.
-
-## 3. Frame transaction paths (EIP-8141)
-
-Every frame tx is built by the FrameEngine, **simulated first** (`ethrex_simulateFrameTransaction`), and sent only if
-the simulation is canonical-mempool valid, frame-0 gas is within budget and the maximum cost is within the account's
-fee bound. A tx that fails simulation is never offered to the mempool.
-
-| Flow | Frames | Signatures | Mempool |
-|---|---|---|---|
-| **Hot payment** | `[VERIFY(account, verifyFrame()), pay(fee-tank EOA), SENDER(account, hotExecute(...))]` | hot key (secp256k1), tank key | public (`eth_sendRawTransaction`) |
-| **Quantum-safe everyday payment** (LeanPool, optional) | `[VERIFY 0x3 (signer, EIP-8288 triple), SENDER(signer, execute(...) → account.hotExecuteFrom)]` | `[ARBITRARY witness (root, ring, proof), filled by the LeanPool node]`; the leanSPHINCS signature goes to the node only | ERC-8421 alt mempool, through the LeanPool node |
-| **Vault, Path B** (default) | `[VERIFY(roleSigner, verifyFrame(0)), SENDER(roleSigner, executePQ(0, account, roleCalldata))]` | `[0]` PQ witness (ARBITRARY, 3,688 B for C13), `[1]` the Vault payer key (secp256k1) | public |
-| **Vault, Path A** | `[VERIFY(roleSigner, verifyFrame(0)) with the PQ check inside, SENDER(roleSigner, relay(account, roleCalldata))]` | `[0]` PQ witness only | ERC-8421 sidecar, role signer staked |
-| **Recovery** | as the Vault paths, through the RecoverySigner, with the Recovery payer key on Path B | | public / alt |
-| **Guardian freeze** | `GuardianSigner` → `account.guardianFreeze` | guardian key | public |
-
-**Path B** keeps VERIFY cheap: it checks only that entry 1 was signed by the pinned payer key over the transaction's
-signature hash and that the single SENDER frame is `executePQ` to itself. The PQ signature (over the same signature
-hash) is verified in execution. A forged PQ witness therefore gets mined with a reverted SENDER frame and changes
-nothing; it costs the payer the fee.
-
-**Path A** verifies the PQ signature inside VERIFY, so the tx is valid or invalid before inclusion, but C13's ~105k
-gas verification does not fit the flat 100k `MAX_VERIFY_GAS` of today's mempools. It needs a staked entity and a
-sidecar implementing ERC-8421 BUDGET-010 per-entity budgets: `upstream/skandha-budget-010` is our patch, run as
-`devnet/patched-sidecar` (`:14340`). leanSphincs-s (46,899 gas VERIFY) is the documented option for Path A under the
-stock 100k budget; it is experimental and has no formal proof.
-
-**Quantum-safe everyday payments** (plan `60-leanpool-merge-plan.md`, ported from LeanPool) give the everyday tier an
-optional post-quantum key without putting a PQ signature on-chain. The extension derives a leanVM leanSPHINCS key
-(`@queuebit/lean-sphincs`, WASM) from the recovery phrase, signs the frame tx's signature hash and sends `{raw, sig}`
-to a LeanPool node (`services/leanpool-node`). The node verifies it natively, batches it (EIP-8288 wrappers), posts
-the batch's Merkle root into the signer's ring in `DepsRegistry`, fills the witness and delivers the tx to its
-sidecar; in the background it proves the batch with a recursive STARK and attaches its hash. The account's
-`LeanPoolHotSigner` (a clone, its own sender) checks inclusion in VERIFY (61k gas measured) and spends through
-`hotExecuteFrom`, which shares `hotExecute`'s body: same bucket, limits, allowlists, freeze. The Vault installs it with
-`vaultSetPQHotSigner` (instant). Before sending, the extension checks the payment exactly as an ECDSA everyday tx
-(simulated, never sent: ethrex refuses `eth_call` from a contract), so a payment the account would refuse is never
-signed. Trust: THREAT-MODEL §8.1.
-
-VERIFY-reachable code obeys the devnet's admission rules (no banned opcodes, no logs, no transient storage, no
-writes, no storage outside the sender): `contracts/script/lint-verify.sh` checks the bytecode, the source and the
-opcodes executed in every VERIFY branch; gate G1 checks the traces on the devnet.
-
-## 4. The ERC-4337 / ERC-7579 backend (before Hegotá)
-
-On chains without EIP-8141 the same policy runs as modules on a host account: `QueueBitHotValidator` validates hot
-userOps, `QueueBitPolicyHook` enforces the cap, targets, freeze and the fee bound in pre/post checks, and
-`QueueBitRoleExecutor` takes Vault and Recovery calls authenticated by a PQ signature over an EIP-712 digest. Everyday
-userOps go to a bundler (EntryPoint v0.8); Vault actions are `QueueBitRoleExecutor` calls relayed as plain transactions
-by the fee tank (the PQ check runs in execution). The QR request is `ur:queuebit-sign-request` tx-type 3: the executor
-calldata with an empty signature, from which the phone recomputes the digest. The account address differs from the
-frame-native one (each host derives its own). Host compatibility and the review fixes: THREAT-MODEL §6. Locally:
-`devnet/deploy` `up-4337.ts` (anvil + EntryPoint v0.8 + the modules + a minimal bundler).
-
-## 5. The companion QR protocol
-
-The browser and the phone share no network; everything crosses as animated BC-UR QR codes (strict, canonical CBOR;
-unknown keys, non-canonical bytes and control/bidi characters are rejected). Types (`packages/ur`):
-
-| UR | Direction | Contents |
+| Component | Where | Role |
 |---|---|---|
-| `ur:queuebit-pq-key` | phone → browser | pairing: scheme id, public key, role, payer address |
-| `ur:queuebit-sign-request` | browser → phone | request id, chain, tx type (frame tx · PP note envelope · 4337 executor call), the exact bytes to sign, advisory intent (key 11) and policy (key 12) |
-| `ur:queuebit-signature` | phone → browser | request id, PQ witness, payer signature (Path B) or typed signature |
-| `ur:queuebit-recovery-challenge` / `ur:queuebit-recovery-test` | browser → phone → browser | the Recovery key test, bound to a browser-chosen request id |
+| `LeanAccount` | `contracts/src/account/LeanAccount.sol` | ERC-8286 + ERC-7579 account, contract-dispatched: `verify` (VERIFY frame) asks an installed frame validator for an approval and approves execution only if every SENDER frame targets the account; SENDER frames call `execute` (single/batch, revert-all or try). UUPS, all state in one ERC-7201 namespace. |
+| `KeystoreValidator` | `contracts/src/account/KeystoreValidator.sol` | Frame validator (module type 11) holding each account's keys and policy (§2). Reads only storage keyed by the account (ERC-7562 STO-021), so the account needs no stake. |
+| `SpendingLimitHook` | `contracts/src/account/SpendingLimitHook.sol` | ERC-7579 hook around `execute`: daily ETH and token caps for session keys, and key expiry (VERIFY cannot read the clock). |
+| `GuardianRecovery` | `contracts/src/account/GuardianRecovery.sol` | ERC-7579 executor: guardians approve a key reset; after a delay anyone executes it; the account cancels with an admin action. |
+| `WebAuthn`, `SessionRules`, `FrameOps` | `contracts/src/account/` | P256VERIFY passkey check; what a session call may do (shared by keystore and hook); the shared EIP-8141 introspection helpers (`FrameHelperHub`). |
+| `LeanAccountFactory` | `contracts/src/account/LeanAccountFactory.sol` | EIP-1167 clones at CREATE2 addresses bound to the full initial configuration. |
+| `DepsRegistry` | `contracts/src/leanpool/DepsRegistry.sol` | LeanPool: bonded aggregators post batch roots into a small ring per account; the keystore reads the account's own entry. |
+| LeanPool node | `services/leanpool-node` | Verifies leanSPHINCS signatures natively, batches them (EIP-8288 wrappers and dependencies), posts the root, fills each tx's witness, delivers it to the alt mempool; proves a recursive STARK per batch in the background and serves it by its on-chain hash. |
+| `@queuebit/account` | `packages/account` | The SDK: keys, sessions, tx building and signing for every signer kind, submission, migration rails, the Safe adapter. Browser-safe. |
+| Extension | `apps/extension` | The wallet: seed, owner key (leanSPHINCS WASM in the offscreen document), session and setup keys, dapp provider, sessions, keys and recovery, Move to PQ, privacy. |
+| Watcher | `packages/watcher-core`, `services/watcher` | Alerts on key, policy, session and recovery events. |
+| `PoolPayer` | `contracts/src/privacy/PoolPayer.sol` | At-cost paymaster for Privacy Pools withdrawals (§6). |
 
-The phone never trusts the browser's description: it decodes the bytes itself, recomputes the signature hash, renders
-the calls from its own registry (`apps/companion/src/registry`, ABI sections generated from `contracts/out`), and
-refuses unknown steps unless the user explicitly overrides. The advisory intent is compared with the decoded calls and
-a mismatch demotes "Approve" to "Approve anyway". The signing worker decodes the same bytes again and refuses unless
-its digest equals the displayed one. The browser checks the returned witness against the on-chain public key before
-broadcasting. The PWA has no network access at all (CSP `connect-src 'none'`); its service worker installs an update
-only if every file matches the SHA-256 table in `sw.js` (the same digests the release tooling publishes:
-`scripts/release/README.md`).
+## 2. Keys, roles and policy
+
+| Kind | Checked by | Typical role |
+|---|---|---|
+| **PQ** (leanVM leanSPHINCS) | inclusion of `keccak(0x10 ‖ SIG_HASH ‖ vk)` in a root the named aggregator posted (LeanPool) | owner: ADMIN + SPEND |
+| **ECDSA**, **P256** | the protocol's own signature entries (EIP-8141 SIGPARAM) | session keys, device keys |
+| **PASSKEY** | WebAuthn with P256VERIFY (0x100), challenge = SIG_HASH | spend or admin |
+| **EIP712** | `ecrecover` of typed data `LeanAccountTx(sigHash, Call[] calls)`, whose calls must equal the tx's executions | a browser wallet (MetaMask) as a session key |
+
+Each key has a weight, roles (ADMIN, SPEND, SESSION) and an optional expiry. An execution that targets the account, the
+keystore or any installed module is an **admin action** (adminThreshold of ADMIN weight, plus a PQ admin signer when
+`requirePQ` is on); anything else **spends** (spendThreshold of SPEND weight). A lone **SESSION** key may spend only to
+its allowlisted targets, within a per-tx ETH cap (summed over the tx) and per-token caps; on a token with a cap only
+`transfer`/`transferFrom`; approvals, permits, NFT transfers and the other known asset-moving selectors are refused
+(`SessionRules`). Daily caps and expiry are enforced in execution by the hook. After every key or policy change the
+keystore checks that the thresholds are still reachable by permanent keys and that `requirePQ` keeps a PQ admin.
+
+## 3. Transaction shapes
+
+```
+owner (PQ):     [VERIFY(account.verify(keystore, LEANPOOL_DEPS ‖ triples ‖ entries)), SENDER(account.execute(…))…]
+                signatures [ARBITRARY witness (root, ring, proofs) ← filled by the LeanPool node after posting]
+session (ECDSA):[VERIFY(…), SENDER(…)]   signatures [SECP256K1 entry over SIG_HASH]
+EIP-712/passkey:[VERIFY(…), SENDER(…)]   signatures [ARBITRARY abi.encode(keyId, signature | assertion)]
+```
+
+Every entry has an empty `msg`, so it is elided from the signature hash: signers sign independently and the witness is
+filled in later without changing the hash. VERIFY stays within the 100k unstaked budget (owner ~70-80k, EIP-712 ~87k,
+measured live). VERIFY never reads the clock (ERC-7562 bans TIMESTAMP): key expiry is re-checked in execution
+(`KeystoreValidator.executionContext`), and `pruneExpired` lets anyone delete an expired key. These txs read storage
+outside the sender, so the canonical mempool refuses them (`StorageReadNonSender`) and the ERC-8421 alt mempool admits
+them unstaked. On this devnet new state costs state gas (a payment to a fresh address ~281k), and the account must
+hold the tx's maximum cost.
+
+## 4. Creating an account
+
+The extension derives the owner key and computes the counterfactual address (`predictAccount`, the factory's CREATE2
+of the clone, salted by the whole initial configuration). A setup key (secp256k1, from the same seed) sends
+`factory.createAccount{value}(salt, init)`: policy (thresholds, `requirePQ`, the aggregator), keys, hook, optional
+guardians.
+
+## 5. Move to PQ (migration)
+
+| From | Rail | Address |
+|---|---|---|
+| EOA | `moveCalls`: each ERC-20 to the counterfactual address, then `createAccount` with the rest of the ETH (`sweepValue`) | new |
+| EOA, EIP-7702 | one type-4 tx: authorization to the LeanAccount implementation + `initialize` as a self-call (a delegated EOA accepts initialize only from itself). The ECDSA key keeps working until EIP-7851. | same |
+| UUPS smart account | `upgradeCall`: `self.upgradeToAndCall(LeanAccount, initialize(…))` | same |
+| Safe v1.4.1 | `multiSendSafeTx(moveCalls)`: one DELEGATECALL into MultiSendCallOnly; owners sign the EIP-712 `SafeTx`; `execTransaction` | new |
+
+`readSource` inspects an address (code kind, ERC-1967 implementation, UUPS, balances) and `saPlan` / `eoa7702Plan`
+choose. `contracts/test/account/SdkParity.t.sol` runs a 2-of-2 Safe migration end to end against the SDK's bytes.
 
 ## 6. Privacy (Privacy Pools v1)
 
 `@queuebit/privacy` syncs a Privacy Pools v1 pool fail-closed (every event's root recomputed and checked against the
-on-chain root), keeps notes in encrypted storage, and derives note secrets from Vault signatures over an EIP-712
-envelope (`ur:queuebit-sign-request` tx-type 2), so notes are recoverable from the Vault. Withdrawals have two modes:
-the 0xbow relayer, or the **frame paymaster**: a fresh default-code EOA sender and PoolPayer, in the shape
-`[only_verify(fresh EOA), pay(PoolPayer.verify), DEFAULT settle, DEFAULT refund()]`. PoolPayer checks the proof and the
-shape read-only in `pay`, fronts the gas, is repaid from the withdrawal at cost (no margin), and refunds the rest.
-Proofs come from `@queuebit/groth16` in the offscreen document. Reads go through Anon-RPC with a per-account isolation key
-(a fresh one per withdrawal). Engineering rules from plan §40.7: no operated pool, no fees, PoolPayer handed off.
+on-chain root), keeps notes in encrypted storage, and derives note secrets from signatures over an EIP-712 envelope
+by a payer key the extension derives from the seed. Withdrawals have two modes: the 0xbow relayer, or the **frame
+paymaster**: a fresh default-code EOA sender and PoolPayer, in the shape `[only_verify(fresh EOA), pay(PoolPayer.verify),
+DEFAULT settle, DEFAULT refund()]`. PoolPayer checks the proof and the shape read-only in `pay`, fronts the gas, is
+repaid from the withdrawal at cost (no margin), and refunds the rest. Proofs come from `@queuebit/groth16` in the
+offscreen document.
 
 ## 7. Watcher
 
-`services/watcher` (and the extension's light mode, via `@queuebit/watcher-core`) follows the account's events and the
-receipts of its frame transactions, `confirmations` blocks deep, with reorg handling. Some outcomes leave no log (an
-over-cap hot batch reverts its SENDER frame), so the watcher also reads the blocks' transactions whose sender is a
-watched account. Alerts (large payment, queued loosening, Guardian pause, Vault rotation, repeated blocked payments)
-are delivered over an authenticated SSE stream, an HMAC-signed webhook or ntfy (title and body only).
+`services/watcher` (and the extension's light mode, via `@queuebit/watcher-core`) follows an account's events: keys
+added, removed or updated, policy changes, sessions and their caps, session spends near a cap, guardian recovery
+proposals (with their ready time) and cancellations, module changes and upgrades. Alerts go out over an authenticated
+SSE stream, an HMAC-signed webhook or ntfy.
 
 ## 8. Networks
 
-| Network | Backend | Status |
-|---|---|---|
-| Local devnet, chain 1337 (`devnet/`) | frame-native | all flows, gate G1 |
-| Public alt-mempool devnet (chain 1337) | frame-native | same images; no `EXPIRY_VERIFIER` code |
-| Hegotá devnet (3151908) | frame-native | not yet wired |
-| anvil 31337 (`devnet/deploy/up-4337.ts`) | 4337 + 7579 | all flows |
-| Sepolia, mainnet | 4337 + 7579 | disabled until audited, recorded module addresses (`docs/release/CHECKLIST.md` §6) |
-| Mainnet, frame-native | | after Hegotá activates on mainnet |
+| Network | Status |
+|---|---|
+| Local devnet, chain 1337 (`devnet/`) | all flows (`devnet/deploy` + a LeanPool node) |
+| Public alt-mempool devnet, chain 1337 | the LeanAccount stack, sessions, migration and recovery runs recorded in `contracts/devnet-tests/leanpool-account/deployments/` |
+| Mainnet | after EIP-8141 (Hegotá) activates |

@@ -1,5 +1,10 @@
 # LeanPool in QueueBit: the quantum-safe everyday key
 
+> **Superseded (2026-11-06).** The hot signer described here (`LeanPoolHotSigner`, `hotExecuteFrom`) was removed when
+> LeanAccount became QueueBit's account: the keystore takes LeanPool approvals directly for the PQ owner key
+> ([`../plan/70-leanaccount-rebuild.md`](../plan/70-leanaccount-rebuild.md), [`../ARCHITECTURE.md`](../ARCHITECTURE.md)).
+> The LeanPool node, the leanSPHINCS WASM signer and DepsRegistry described below are unchanged.
+
 *Ported from LeanPool (`LeoFranklin015/Queue-bit`, `main` @ `53732b1`) on 2026-11-06. Plan and decisions:
 [`../plan/60-leanpool-merge-plan.md`](../plan/60-leanpool-merge-plan.md). Trust: THREAT-MODEL §8.1.*
 

@@ -1,6 +1,8 @@
 # Merge plan: LeanPool into QueueBit
 
-Status: in progress on branch `feat/leanpool` (2026-11-06). Revised after a Fable adversarial review.
+Status: **superseded** by [`70-leanaccount-rebuild.md`](70-leanaccount-rebuild.md) (2026-11-06): option H (the hot
+signer next to the Vault) was built and then removed; LeanAccount is now the account. Kept as the record of the
+comparison and the compatibility analysis. Revised after a Fable adversarial review.
 
 **Decisions taken** (the recommended defaults, recorded here so they can be revisited):
 - D2 = **H**: the PQ everyday key through LeanPool; the Vault stays on Paths A/B.
