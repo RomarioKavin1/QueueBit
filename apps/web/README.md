@@ -26,6 +26,8 @@ const status = await engine().call("account:status", {});
 - **Dapp requests:** `engine().provider(origin, method, params)` runs EIP-1193 requests as a site would. A request
   that needs a decision raises an `approval` event; the extension would open its approval window here.
 
+Hosting it yourself (a server, HTTPS, the LeanPool node): [`SELF-HOSTING.md`](SELF-HOSTING.md).
+
 ## Run it
 
 ```sh

@@ -42,6 +42,9 @@ const config: NextConfig = {
     // The packages' sources import siblings as `./x.js` (NodeNext style) for files that are `./x.ts`.
     cfg.resolve.extensionAlias = { ...cfg.resolve.extensionAlias, ".js": [".ts", ".tsx", ".js"] };
     cfg.plugins ??= [];
+    // Reown AppKit's ethers adapter → Coinbase's CDP SDK references optional x402 payment packages that aren't
+    // installed and that QueueBit never calls: skip them.
+    cfg.plugins.push(new webpack.IgnorePlugin({ resourceRegExp: /^@x402\// }));
     cfg.plugins.push(
       new webpack.DefinePlugin({
         __QUEUEBIT_LOCAL_DEVNET__: JSON.stringify(LOCAL_DEVNET),

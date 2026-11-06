@@ -83,7 +83,8 @@ export interface KeysView {
 
 export interface MigrationPreview {
   kind: "eoa" | "safe" | "smart-account";
-  mode: "move" | "7702-delegate" | "7702-initialize" | "safe-move" | "account-upgrade" | "account-move";
+  mode:
+    "move" | "7702-delegate" | "7702-initialize" | "safe-move" | "safe-upgrade" | "account-upgrade" | "account-move";
   source: Address;
   destination: Address;
   ethWei: string;

@@ -6,7 +6,9 @@ import { formatEther, formatUnits, isHex } from "viem";
 import { english, mnemonicToAccount, privateKeyToAccount } from "viem/accounts";
 import { engine, EngineCallError } from "@/lib/engine/client";
 import type { NetworkInfo } from "@/lib/engine/protocol";
-import { connect, discoverWallets, sendAndWait, type Injected } from "@/lib/injected";
+import type { SafeMove } from "@queuebit/extension/src/shared/messages";
+import { connect, sendAndWait, type Injected } from "@/lib/injected";
+import { useConnectedWallet } from "@/lib/wallets";
 import { PasskeyError, createPasskey, passkeySecret, passkeySupport, type PasskeySecret } from "@/lib/passkey";
 import {
   Address,
@@ -17,6 +19,7 @@ import {
   Primary,
   Screen,
   Secondary,
+  Steps,
   TextButton,
   Title,
   WordGrid,
@@ -40,7 +43,16 @@ type Screen =
   | { id: "unlock" }
   | { id: "passkey" }
   | { id: "phrase-choose" }
-  | { id: "lock"; path: "phrase-new" | "phrase-restore" | "migrate"; mnemonic?: string }
+  | {
+      id: "lock";
+      path: "phrase-new" | "phrase-restore" | "migrate";
+      mnemonic?: string;
+      /** Move in: what was picked or connected before the owner is created. */
+      source?: Source;
+      safe?: `0x${string}`;
+    }
+  | { id: "safe-address" }
+  | { id: "migrate-kind" }
   | { id: "restore" }
   | { id: "words"; words: string[]; mode: "new" | "backup" }
   | { id: "confirm"; words: string[]; mode: "new" | "backup" }
@@ -50,6 +62,8 @@ type Screen =
   | { id: "preview"; source: Source }
   | { id: "moving"; source: Source }
   | { id: "backup-auth" }
+  | { id: "move-in" }
+  | { id: "safe"; address?: `0x${string}` }
   | { id: "ready" }
   /** Hand over to the wallet (/wallet). */
   | { id: "wallet" };
@@ -96,6 +110,10 @@ export function Onboarding() {
   const commit = useCallback((s: Screen) => setStack([s]), []);
   const back = useCallback(() => setStack((st) => (st.length > 1 ? st.slice(0, -1) : st)), []);
   const canBack = stack.length > 1;
+  /** Onboarding's move-in: the source is picked first, then the wallet (owner) it moves into is created. */
+  const [needWallet, setNeedWallet] = useState(false);
+  const afterSource = (source: Source) =>
+    needWallet ? go({ id: "lock", path: "migrate", source }) : go({ id: "preview", source });
 
   // The phone's back gesture walks the same stack.
   const depth = useRef(1);
@@ -198,8 +216,8 @@ export function Onboarding() {
               {
                 key: "migrate",
                 title: "Move from your current wallet",
-                body: "Bring MetaMask or another wallet across.",
-                onSelect: () => go({ id: "lock", path: "migrate" }),
+                body: "Bring MetaMask, another wallet address, or a Safe across.",
+                onSelect: () => go({ id: "migrate-kind" }),
               },
             ]}
           />
@@ -209,10 +227,17 @@ export function Onboarding() {
     case "unlock":
       return (
         <Unlock
-          onDone={(pw) => (
-            (secret.current = pw),
-            commit(fromWallet.current ? { id: "backup-auth" } : { id: "wallet" })
-          )}
+          onDone={(pw, next) => {
+            secret.current = pw;
+            if (next === "move-in") {
+              commit({ id: "ready" });
+              go({ id: "move-in" });
+            } else commit(fromWallet.current ? { id: "backup-auth" } : { id: "wallet" });
+          }}
+          onNewWallet={async () => {
+            await engine().call("keyring:reset");
+            commit({ id: "choose" });
+          }}
         />
       );
 
@@ -268,7 +293,11 @@ export function Onboarding() {
           {...meta}
           prf={prf}
           onBack={canBack ? back : undefined}
-          intro={path === "migrate" ? "First, a new wallet to move into." : "How you open the wallet on this phone."}
+          intro={
+            path === "migrate"
+              ? "Last step before the move: the quantum-safe account it moves into. Your passkey creates its owner key and opens it on this phone."
+              : "How you open the wallet on this phone."
+          }
           passkeyAllowed={path !== "phrase-restore"}
           onLocked={async (lock) => {
             if (path === "phrase-restore") {
@@ -282,7 +311,10 @@ export function Onboarding() {
               commit({ id: "words", words: (m ?? "").split(" "), mode: "new" });
             } else {
               await createWallet(lock, false);
-              commit({ id: "source" });
+              setNeedWallet(false);
+              if (screen.safe) commit({ id: "safe", address: screen.safe });
+              else if (screen.source) commit({ id: "preview", source: screen.source });
+              else commit({ id: "ready" });
             }
           }}
         />
@@ -323,7 +355,7 @@ export function Onboarding() {
           onWallet={async (w) => {
             if (!net) throw new Error("The network isn't ready yet.");
             const address = await connect(w, net);
-            go({ id: "preview", source: { kind: "wallet", wallet: w, address } });
+            afterSource({ kind: "wallet", wallet: w, address });
           }}
         />
       );
@@ -332,16 +364,13 @@ export function Onboarding() {
       return (
         <SourcePhrase
           onBack={back}
-          onNext={(key, address) => go({ id: "preview", source: { kind: "key", key, address, via: "phrase" } })}
+          onNext={(key, address) => afterSource({ kind: "key", key, address, via: "phrase" })}
         />
       );
 
     case "src-key":
       return (
-        <SourceKey
-          onBack={back}
-          onNext={(key, address) => go({ id: "preview", source: { kind: "key", key, address, via: "key" } })}
-        />
+        <SourceKey onBack={back} onNext={(key, address) => afterSource({ kind: "key", key, address, via: "key" })} />
       );
 
     case "preview":
@@ -366,9 +395,78 @@ export function Onboarding() {
         />
       );
 
+    case "migrate-kind":
+      return (
+        <Screen onBack={back} method="Move in">
+          <Title sub="Everything in it moves to a new quantum-safe account: every token, then the ETH.">
+            What are you moving?
+          </Title>
+          <Choices
+            items={[
+              {
+                key: "eoa",
+                title: "A wallet address",
+                body: "MetaMask or any other wallet (an EOA): connect it, or paste its phrase or private key once.",
+                onSelect: () => (setNeedWallet(true), go({ id: "source" })),
+              },
+              {
+                key: "safe",
+                title: "A smart account (Safe)",
+                body: "Upgraded in place: same address, funds stay. Its owners sign one Safe transaction in their own wallet.",
+                onSelect: () => (setNeedWallet(true), go({ id: "safe-address" })),
+              },
+            ]}
+          />
+        </Screen>
+      );
+
+    case "move-in":
+      return (
+        <Screen onBack={back} method="Move in">
+          <Title sub="Everything in it moves to your quantum-safe account: every token, then the ETH.">
+            Move funds in
+          </Title>
+          <Choices
+            items={[
+              {
+                key: "eoa",
+                title: "From a wallet address",
+                body: "MetaMask or any other wallet: connect it, or paste its secret phrase or private key once.",
+                onSelect: () => go({ id: "source" }),
+              },
+              {
+                key: "safe",
+                title: "From a Safe",
+                body: "Upgraded in place: same address, funds stay. Its owners sign one Safe transaction in their own wallet.",
+                onSelect: () => go({ id: "safe" }),
+              },
+            ]}
+          />
+        </Screen>
+      );
+
+    case "safe-address":
+      return <SafeAddress onBack={back} onNext={(safe) => go({ id: "lock", path: "migrate", safe })} />;
+
+    case "safe":
+      return (
+        <SafeMoveIn
+          net={net}
+          initial={screen.address}
+          onBack={canBack ? back : () => commit({ id: "ready" })}
+          onDone={() => commit({ id: "ready" })}
+        />
+      );
+
     case "ready":
       if (fromWallet.current) return <ToWallet />;
-      return <Ready onBackup={() => go({ id: "backup-auth" })} onOpen={() => commit({ id: "wallet" })} />;
+      return (
+        <Ready
+          onBackup={() => go({ id: "backup-auth" })}
+          onOpen={() => commit({ id: "wallet" })}
+          onMoveIn={() => go({ id: "move-in" })}
+        />
+      );
 
     case "wallet":
       return <ToWallet />;
@@ -532,25 +630,31 @@ function PasskeyCreate({
   );
 }
 
-function Unlock({ onDone }: { onDone: (secret: string | null) => void }) {
+function Unlock({
+  onDone,
+  onNewWallet,
+}: {
+  onDone: (secret: string | null, next?: "move-in") => void;
+  onNewWallet: () => Promise<void>;
+}) {
   const method = useLockMethod();
   const [chosen, setMode] = useState<LockMethod | null>(null);
   const mode: LockMethod = chosen ?? method ?? "passkey";
   const [pw, setPw] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const unlock = async (how: LockMethod) => {
+  const unlock = async (how: LockMethod, next?: "move-in") => {
     setBusy(true);
     setErr(null);
     try {
       if (how === "passkey") {
         const p = await askPasskey();
         await engine().call("keyring:unlockWithPasskey", { entropy: p.entropy });
-        onDone(null);
+        onDone(null, next);
         return;
       }
       await engine().call("keyring:unlock", { password: pw });
-      onDone(pw);
+      onDone(pw, next);
     } catch (e) {
       setErr(
         e instanceof EngineCallError && e.reason === "wrong-password" ? "That didn't open the wallet." : errText(e),
@@ -591,6 +695,29 @@ function Unlock({ onDone }: { onDone: (secret: string | null) => void }) {
           onKeyDown={(e) => e.key === "Enter" && void unlock("password")}
         />
       )}
+      <div className="mt-8">
+        <Choices
+          items={[
+            {
+              key: "move-in",
+              title: "Move funds in",
+              body: "From MetaMask or another wallet address, or from a Safe. Unlocks first, then moves into this wallet.",
+              onSelect: () => void unlock(mode, "move-in"),
+              disabled: busy || (mode === "password" && !pw),
+            },
+            {
+              key: "new",
+              title: "Create a new wallet instead",
+              body: "Removes this wallet from this device. Its money stays on chain; its passkey or words bring it back.",
+              onSelect: () => {
+                if (confirm("Remove this wallet from this device and start a new one?"))
+                  void onNewWallet().catch((e) => setErr(errText(e)));
+              },
+              disabled: busy,
+            },
+          ]}
+        />
+      </div>
       {err && <Notice tone="error">{err}</Notice>}
     </Screen>
   );
@@ -816,30 +943,26 @@ function SourceChoice({
   onKey: () => void;
   onWallet: (w: Injected) => Promise<void>;
 }) {
-  const [wallets, setWallets] = useState<Injected[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  useEffect(() => {
-    void discoverWallets().then(setWallets);
-  }, []);
-  const w = wallets?.[0];
+  const connected = useConnectedWallet();
   return (
     <Screen method="Move in" step={2} of={4}>
       <VSource />
-      <Title sub="Your new wallet is ready. Which one do we move from?">Where are your funds?</Title>
+      <Title sub="Connect it, or paste its secret phrase or key once.">Which wallet are you moving from?</Title>
       <Choices
         items={[
-          ...(w
+          ...(connected.address
             ? [
                 {
                   key: "wallet",
-                  title: `Connect ${w.name}`,
-                  body: "It signs the move. Nothing to paste.",
+                  title: `Move from ${connected.address.slice(0, 6)}…${connected.address.slice(-4)}`,
+                  body: "The connected wallet signs the move. Nothing to paste.",
                   onSelect: async () => {
                     setBusy(true);
                     setErr(null);
                     try {
-                      await onWallet(w);
+                      await onWallet(await connected.get());
                     } catch (e) {
                       setErr(errText(e));
                     } finally {
@@ -864,12 +987,13 @@ function SourceChoice({
           },
         ]}
       />
-      {wallets !== null && !w && (
-        <Notice>
-          To connect a wallet instead of pasting, open this page in your wallet app&rsquo;s browser (MetaMask, Rabby,
-          Coinbase Wallet).
-        </Notice>
-      )}
+      <div className="mt-6">
+        <Secondary onClick={connected.open}>
+          {connected.address
+            ? `Connected ${connected.address.slice(0, 6)}…${connected.address.slice(-4)} · change`
+            : "Connect a wallet"}
+        </Secondary>
+      </div>
       {busy && (
         <p className="mt-4 flex items-center gap-3 mono-label text-ink-3">
           <Working /> Waiting for your wallet
@@ -1187,7 +1311,7 @@ function ToWallet() {
   );
 }
 
-function Ready({ onBackup, onOpen }: { onBackup: () => void; onOpen: () => void }) {
+function Ready({ onBackup, onOpen, onMoveIn }: { onBackup: () => void; onOpen: () => void; onMoveIn: () => void }) {
   const [status, setStatus] = useState<Awaited<ReturnType<typeof readStatus>> | null>(null);
   const [backedUp, setBackedUp] = useState<boolean | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -1227,20 +1351,184 @@ function Ready({ onBackup, onOpen }: { onBackup: () => void; onOpen: () => void 
           <Row k="Signatures left" v={status.ownerSignaturesLeft.toLocaleString("en-US")} />
         </dl>
       )}
-      {backedUp === false && (
+      {status && (
         <div className="mt-8">
           <Choices
             items={[
               {
-                key: "backup",
-                title: "Back up your 24 words",
-                body: "Lose the phone without them, lose the wallet.",
-                onSelect: onBackup,
+                key: "move-in",
+                title: "Move funds in",
+                body: "From MetaMask or another wallet address, or from a Safe.",
+                onSelect: onMoveIn,
               },
+              ...(backedUp === false
+                ? [
+                    {
+                      key: "backup",
+                      title: "Back up your 24 words",
+                      body: "Lose the phone without them, lose the wallet.",
+                      onSelect: onBackup,
+                    },
+                  ]
+                : []),
             ]}
           />
         </div>
       )}
+      {err && <Notice tone="error">{err}</Notice>}
+    </Screen>
+  );
+}
+
+/**
+ * A Safe moves in with one Safe transaction its owners sign in their own wallet (EIP-712 SafeTx). Each connected
+ * account that is an owner signs; switch accounts in the wallet to add owners until the threshold is met, then a
+ * connected owner sends it.
+ */
+function SafeAddress({ onBack, onNext }: { onBack: () => void; onNext: (safe: `0x${string}`) => void }) {
+  const [address, setAddress] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+  const next = () => {
+    const a = address.trim();
+    if (!isHex(a) || a.length !== 42) return setErr("A Safe address is 0x + 40 characters.");
+    onNext(a as `0x${string}`);
+  };
+  return (
+    <Screen method="Move in · Safe" onBack={onBack} actions={<Primary onClick={next}>Continue</Primary>}>
+      <Title sub="It becomes your quantum-safe account at the same address. Its owners sign one Safe transaction in their own wallet.">
+        Which Safe?
+      </Title>
+      <Field label="Safe address" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="0x…" />
+      {err && <Notice tone="error">{err}</Notice>}
+    </Screen>
+  );
+}
+
+function SafeMoveIn({
+  net,
+  initial,
+  onBack,
+  onDone,
+}: {
+  net?: NetworkInfo;
+  initial?: `0x${string}`;
+  onBack: () => void;
+  onDone: () => void;
+}) {
+  const [address, setAddress] = useState(initial ?? "");
+  const [move, setMove] = useState<SafeMove | null>(null);
+  const [sigs, setSigs] = useState<{ owner: `0x${string}`; signature: `0x${string}` }[]>([]);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [done, setDone] = useState<`0x${string}` | null>(null);
+  const connected = useConnectedWallet();
+  const run = async (label: string, fn: () => Promise<void>) => {
+    setBusy(label);
+    setErr(null);
+    try {
+      await fn();
+    } catch (e) {
+      setErr(errText(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+  const wallet = async () => {
+    const w = await connected.get();
+    if (!net) throw new Error("The network isn't ready yet.");
+    return { w, from: await connect(w, net) };
+  };
+  const read = () =>
+    run("Reading the Safe", async () => {
+      const a = address.trim();
+      if (!isHex(a) || a.length !== 42) throw new Error("A Safe address is 0x + 40 characters.");
+      setMove(await engine().call("migrate:safeTx", { address: a as `0x${string}` }));
+      setSigs([]);
+    });
+  useEffect(() => {
+    if (initial) void read();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initial]);
+  const sign = () =>
+    run("Waiting for your wallet", async () => {
+      if (!move) return;
+      const { w, from } = await wallet();
+      if (!move.owners.some((o) => o.toLowerCase() === from.toLowerCase()))
+        throw new Error(`${from} isn't an owner of this Safe. Switch to an owner account in your wallet.`);
+      if (sigs.some((s) => s.owner.toLowerCase() === from.toLowerCase()))
+        throw new Error("This owner already signed. Switch to another owner account in your wallet.");
+      const signature = (await w.provider.request({
+        method: "eth_signTypedData_v4",
+        params: [from, move.typedData],
+      })) as `0x${string}`;
+      setSigs((x) => [...x, { owner: from, signature }]);
+    });
+  const send = () =>
+    run("Upgrading the Safe", async () => {
+      if (!move) return;
+      const call = await engine().call("migrate:safeExec", { safe: move.safe, tx: move.tx, signatures: sigs });
+      const { w, from } = await wallet();
+      setDone(await sendAndWait(w, from, call));
+    });
+  const ready = move !== null && sigs.length >= move.threshold;
+  return (
+    <Screen
+      method="Move in · Safe"
+      onBack={onBack}
+      actions={
+        done ? (
+          <Primary onClick={onDone}>Back to my account</Primary>
+        ) : !move ? (
+          <Primary busy={busy !== null} busyLabel={busy ?? ""} onClick={() => void read()}>
+            Read the Safe
+          </Primary>
+        ) : ready ? (
+          <Primary busy={busy !== null} busyLabel={busy ?? ""} onClick={() => void send()}>
+            Upgrade the Safe
+          </Primary>
+        ) : (
+          <Primary busy={busy !== null} busyLabel={busy ?? ""} onClick={() => void sign()}>
+            Sign as an owner ({sigs.length} of {move.threshold})
+          </Primary>
+        )
+      }
+    >
+      <Title sub="One Safe transaction turns it into your quantum-safe account: same address, every token and all the ETH stay.">
+        Upgrade a Safe
+      </Title>
+      {!move && (
+        <Field label="Safe address" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="0x…" />
+      )}
+      {move && (
+        <>
+          <dl className="border-t border-ink">
+            <Row k="Safe" v={`${move.safe.slice(0, 6)}…${move.safe.slice(-4)}`} />
+            <Row k="Owners" v={`${move.threshold} of ${move.owners.length} must sign`} />
+            <Row k="Signed" v={`${sigs.length} of ${move.threshold}`} />
+            {move.destination.toLowerCase() === move.safe.toLowerCase() ? (
+              <Row k="Address" v="Stays the same" />
+            ) : (
+              <Row k="Moves to" v={`${move.destination.slice(0, 6)}…${move.destination.slice(-4)}`} />
+            )}
+          </dl>
+          <div className="mt-6">
+            <Steps items={move.steps} />
+          </div>
+          {!done && (
+            <div className="mt-6">
+              <Secondary onClick={connected.open}>
+                {connected.address
+                  ? `Owner ${connected.address.slice(0, 6)}…${connected.address.slice(-4)} · switch`
+                  : "Connect a Safe owner"}
+              </Secondary>
+            </div>
+          )}
+          {!ready && move.threshold > 1 && sigs.length > 0 && (
+            <Notice>Switch to another owner account in your wallet, then sign again.</Notice>
+          )}
+        </>
+      )}
+      {done && <Notice>Upgraded. Transaction {done.slice(0, 10)}…</Notice>}
       {err && <Notice tone="error">{err}</Notice>}
     </Screen>
   );

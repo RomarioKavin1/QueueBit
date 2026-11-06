@@ -14,6 +14,9 @@
   "dependencies": {
     "@queuebit/extension": "workspace:*",
     "@queuebit/rpc": "workspace:*",
+    "@reown/appkit": "1.8.24",
+    "@reown/appkit-adapter-ethers": "1.8.24",
+    "ethers": "6.17.0",
     "next": "16.4.3",
     "qrcode": "1.5.4",
     "react": "19.3.1",
