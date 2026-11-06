@@ -62,8 +62,16 @@ export type {
   SyncOptions,
   WithdrawEvent,
 } from "./pp/sync.js";
-export { discoverNotes, spendable } from "./pp/notes.js";
-export type { DiscoveryResult, Note, NoteStatus } from "./pp/notes.js";
+export {
+  NoteKeyMismatchError,
+  discoverNotes,
+  noteFromPublic,
+  publicNoteOf,
+  refreshPublicNotes,
+  spendable,
+  unconfirmedDeposit,
+} from "./pp/notes.js";
+export type { DiscoveryResult, Note, NoteStatus, PublicNote, PublicNoteStatus } from "./pp/notes.js";
 export {
   ArtifactHashMismatchError,
   ProofSelfCheckError,

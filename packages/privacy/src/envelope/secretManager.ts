@@ -45,6 +45,11 @@ export interface SignatureSecretManagerOptions {
    * Encrypted cache of envelope signatures (the "userSecrets" slice, §1.4 item 2): an `EncryptedStorage` whose key
    * is released by a vault approval. Without it every derivation is a QR round trip. A cache with `onLock` (an
    * `EncryptedStorage`) makes its `lock()` call `forget()`: locking the store also drops the in-memory signatures.
+   *
+   * A signature IS the note's spend key (`deriveNoteSecrets`, `senderKeyFromSignature`): a cache whose key the hot
+   * side can derive on its own (the wallet seed, a password) hands every note to whoever holds that side. Keep public
+   * note data in such a store instead (`PublicNote`, `refreshPublicNotes`) and leave this undefined, or key it by a
+   * vault approval only.
    */
   cache?: Storage & { onLock?(f: () => void): () => void };
 }

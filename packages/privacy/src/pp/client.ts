@@ -1,10 +1,11 @@
 import { decodeFunctionResult, encodeFunctionData, type Address, type Hex } from "viem";
 import type { HostProvider, Storage } from "../host/types.js";
+import type { NoteSecrets } from "../envelope/envelope.js";
 import type { SecretManager } from "../envelope/secretManager.js";
 import { assertWithdrawMode } from "../guardrails.js";
 import { ENTRYPOINT_ABI, POOL_ABI } from "./abi.js";
 import { NATIVE_ASSET, type Withdrawal } from "./crypto.js";
-import { discoverNotes, type DiscoveryResult, type Note } from "./notes.js";
+import { discoverNotes, noteFromPublic, type DiscoveryResult, type Note, type PublicNote } from "./notes.js";
 import type { Prover, ProveResult } from "./prover.js";
 import {
   SyncIntegrityError,
@@ -136,9 +137,26 @@ export class PrivacyPoolsV1Client {
     return discoverNotes({ secrets: this.c.secrets, state, aspLabels: asp, ...o });
   }
 
-  /** The next deposit: its precommitment comes from one vault envelope signature `(d, 0)`. */
-  async prepareDeposit(value: bigint): Promise<{ tx: DepositTx; depositIndex: number; precommitment: bigint }> {
-    const { nextDepositIndex } = await this.notes();
+  /** The spendable note of a public ledger entry: one vault signature, checked against the pool (`noteFromPublic`). */
+  noteFor(pub: PublicNote): Promise<Note> {
+    return noteFromPublic(pub, this.c.secrets);
+  }
+
+  /** The change note's secrets for a spend of `note` (the same signature `prove` uses; public parts go to the ledger). */
+  changeSecrets(note: Note): Promise<NoteSecrets> {
+    return this.c.secrets.getSecrets(note.depositIndex, note.secretIndex + 1);
+  }
+
+  /**
+   * The next deposit: its precommitment comes from one vault envelope signature `(d, 0)`. A wallet that keeps a
+   * public ledger passes `depositIndex` (how many deposits it made) so nothing else is derived; without it the
+   * index comes from a full discovery (a vault signature per deposit).
+   */
+  async prepareDeposit(
+    value: bigint,
+    o: { depositIndex?: number } = {},
+  ): Promise<{ tx: DepositTx; depositIndex: number; precommitment: bigint; nullifierHash: bigint }> {
+    const nextDepositIndex = o.depositIndex ?? (await this.notes()).nextDepositIndex;
     const s = await this.c.secrets.getDepositSecrets(nextDepositIndex);
     const p = this.c.provider;
     const [cfg, used] = await Promise.all([
@@ -160,6 +178,7 @@ export class PrivacyPoolsV1Client {
       tx: buildDepositTx(this.c.entrypoint, value, s.precommitment),
       depositIndex: nextDepositIndex,
       precommitment: s.precommitment,
+      nullifierHash: s.nullifierHash,
     };
   }
 

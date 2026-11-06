@@ -208,7 +208,8 @@ export function applyPoolLogs(
           value: ev.args._value,
           blockNumber: l.blockNumber,
         });
-        if (!allLeaves.has(ev.args._commitment)) throw new SyncIntegrityError(`ragequit ${id} commitment is not a leaf`);
+        if (!allLeaves.has(ev.args._commitment))
+          throw new SyncIntegrityError(`ragequit ${id} commitment is not a leaf`);
         break;
     }
   }
