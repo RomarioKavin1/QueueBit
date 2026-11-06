@@ -18,7 +18,8 @@ import { NATIVE_ASSET, POOL_ABI, rootOf } from "@leaked/privacy";
 
 /**
  * The extension privacy e2e's pool (devnet-only operator stand-in): the real Privacy Pools v1 contracts (vendored
- * 0xbow sources, built by forge into contracts/out) and PoolPayer, deployed exactly as
+ * 0xbow sources, built by forge into contracts/out), the devnet-test commitment verifier as its ragequit verifier
+ * (`contracts/test/privacy/CommitmentGroth16Verifier.sol`), and PoolPayer, deployed exactly as
  * `contracts/devnet-tests/privacy` and the `@leaked/privacy` devnet e2e do. Funding: one top-up from anvil #5 (the
  * privacy workstream's key) to this suite's own sub-account, which then deploys, stakes PoolPayer and acts as the
  * pool's reviewer (the ASP postman: `updateRoot`). The deployment is cached and reused while its code is on chain.
@@ -54,6 +55,8 @@ export interface PoolDeployment {
   pool: Address;
   poolPayer: Address;
   deployBlock: string;
+  /** The pool's RAGEQUIT_VERIFIER: the commitment-circuit verifier (devnet-test contract), so a public exit verifies. */
+  ragequitVerifier: Address;
 }
 
 function artifact(name: string) {
@@ -65,7 +68,9 @@ function artifact(name: string) {
   };
 }
 
-export const artifactsReady = () => existsSync(`${OUT}PoolPayer.sol/PoolPayer.json`);
+export const artifactsReady = () =>
+  existsSync(`${OUT}PoolPayer.sol/PoolPayer.json`) &&
+  existsSync(`${OUT}CommitmentGroth16Verifier.sol/CommitmentGroth16Verifier.json`);
 
 const nonces = new Map<Address, number>();
 async function send(key: Hex, to: Address | null, data: Hex = "0x", value = 0n, gas?: bigint) {
@@ -114,7 +119,14 @@ const hasCode = async (a: Address) => ((await pub.getCode({ address: a })) ?? "0
 export async function ensurePool(): Promise<PoolDeployment> {
   if (existsSync(CACHE)) {
     const c = JSON.parse(readFileSync(CACHE, "utf8")) as PoolDeployment;
-    if ((await hasCode(c.entrypoint)) && (await hasCode(c.pool)) && (await hasCode(c.poolPayer))) return c;
+    if (
+      c.ragequitVerifier &&
+      (await hasCode(c.entrypoint)) &&
+      (await hasCode(c.pool)) &&
+      (await hasCode(c.poolPayer)) &&
+      (await hasCode(c.ragequitVerifier))
+    )
+      return c;
   }
   const sub = privateKeyToAccount(POSTMAN).address;
   const bal = await pub.getBalance({ address: sub });
@@ -126,7 +138,9 @@ export async function ensurePool(): Promise<PoolDeployment> {
   const impl = await deploy("Entrypoint");
   const ep = artifact("Entrypoint").abi;
   const proxy = await deploy("ERC1967Proxy", [impl.address, call(ep, "initialize", [sub, sub])]);
-  const pool = await deploy("PrivacyPoolSimple", [proxy.address, verifier.address, verifier.address], {
+  // Deployed after the Entrypoint so that it keeps its nonce-4 address on a fresh devnet (the companion registry).
+  const commitment = await deploy("CommitmentGroth16Verifier");
+  const pool = await deploy("PrivacyPoolSimple", [proxy.address, verifier.address, commitment.address], {
     PoseidonT3: t3.address,
     PoseidonT4: t4.address,
   });
@@ -159,6 +173,7 @@ export async function ensurePool(): Promise<PoolDeployment> {
     pool: pool.address,
     poolPayer: payer.address,
     deployBlock: pool.block.toString(),
+    ragequitVerifier: commitment.address,
   };
   mkdirSync(dirname(CACHE), { recursive: true });
   writeFileSync(CACHE, JSON.stringify(d, null, 2));

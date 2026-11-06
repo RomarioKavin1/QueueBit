@@ -1,9 +1,11 @@
-import { getAddress, parseGwei, type Address, type Hex } from "viem";
+import { decodeFunctionResult, encodeFunctionData, getAddress, parseGwei, type Address, type Hex } from "viem";
 import { getProfile } from "@leaked/frames";
 import {
   EncryptedStorage,
   FramePaymasterBroadcaster,
+  POOL_ABI,
   PrivacyPoolsV1Client,
+  buildRagequitTx,
   createHostProvider,
   createSignatureSecretManager,
   directNetwork,
@@ -11,6 +13,7 @@ import {
   importStorageKey,
   isolationKeyFor,
   networkTransport,
+  ragequitInputs,
   readPoolPayerRules,
   refreshPublicNotes,
   withdrawalClients,
@@ -18,6 +21,7 @@ import {
   type Note,
   type Prover,
   type PublicNote,
+  type RagequitProver,
   type StorageBackend,
 } from "@leaked/privacy";
 import { findNetwork, getNetwork } from "../../shared/chains";
@@ -68,8 +72,8 @@ export interface PrivacyDeps {
   vault: VaultFlow;
   activity: ActivityStore;
   settings: SettingsStore;
-  /** The offscreen document's prover. */
-  prover: () => Prover;
+  /** The offscreen document's prover (withdrawals, and the commitment circuit for the public exit). */
+  prover: () => Prover & RagequitProver;
   anonStatus: (chainId: number) => Promise<AnonStatus>;
   localDevnet: boolean;
   now?: () => number;
@@ -399,13 +403,29 @@ export class PrivacyController {
 
   // ---------------------------------------------------------------------------------------------- operations ----
 
-  async start(chainId: number, kind: PrivacyOp["kind"], amountWei: string): Promise<PrivacyView> {
+  async start(
+    chainId: number,
+    kind: PrivacyOp["kind"],
+    amountWei: string,
+    note?: { depositIndex: number; secretIndex: number },
+  ): Promise<PrivacyView> {
     if (!/^\d+$/u.test(amountWei) || BigInt(amountWei) <= 0n) throw new Error("Enter an amount.");
     const rec = await this.record(chainId);
     if (rec.op && !isFinal(rec.op))
       throw new Error("Finish or cancel the private-balance operation in progress first.");
     await this.context(chainId); // fails early with the plain reason (no pool, no Vault, locked …)
-    const op = newOp({ id: crypto.randomUUID(), kind, chainId, amountWei, now: this.now() });
+    if (kind === "exit") {
+      const n = rec.balance?.notes.find(
+        (x) => note && x.depositIndex === note.depositIndex && x.secretIndex === note.secretIndex,
+      );
+      if (!n || n.status === "ragequit") throw new Error("Pick a note in your private balance to take back.");
+      amountWei = n.valueWei;
+    }
+    const base = newOp({ id: crypto.randomUUID(), kind, chainId, amountWei, now: this.now() });
+    const op: PrivacyOp =
+      kind === "exit" && note
+        ? { ...base, exit: { depositIndex: note.depositIndex, secretIndex: note.secretIndex } }
+        : base;
     await this.save(chainId, { op, history: archive(rec) });
     void this.run(chainId);
     return this.view(chainId);
@@ -505,6 +525,7 @@ export class PrivacyController {
     const ctx = await this.context(chainId);
     try {
       if (op.kind === "shield") await this.advanceShield(chainId, ctx);
+      else if (op.kind === "exit") await this.advanceExit(chainId, ctx);
       else await this.advanceUnshield(chainId, ctx);
     } catch (e) {
       if (e instanceof NeedsPhoneError) {
@@ -520,9 +541,11 @@ export class PrivacyController {
                 ? "check"
                 : cur.kind === "shield"
                   ? "deposit-key"
-                  : e.secretIndex === cur.withdraw?.secretIndex
-                    ? "withdraw-key"
-                    : "note-key",
+                  : cur.kind === "exit"
+                    ? "note-key"
+                    : e.secretIndex === cur.withdraw?.secretIndex
+                      ? "withdraw-key"
+                      : "note-key",
           }),
         });
         return;
@@ -632,6 +655,82 @@ export class PrivacyController {
     await this.apply(chainId, { type: "paid", ...(txHash ? { txHash } : {}) });
     await ctx.answers.clear().catch(() => undefined); // the deposit key is not needed any more this session
     await this.syncWith(chainId, ctx).catch(() => undefined);
+  }
+
+  /**
+   * Public exit (ragequit): the note's key from the phone (checked against the pool), a commitment-circuit proof in
+   * the offscreen Worker, then `pool.ragequit(proof)` from the account as a Vault approval (the pool is not an app
+   * the everyday key may call; only the original depositor, the account, may exit). Public: it unlinks nothing.
+   */
+  private async advanceExit(chainId: number, ctx: Ctx) {
+    let op = (await this.record(chainId)).op!;
+    if (op.step === "preparing") {
+      const notes = await this.syncWith(chainId, ctx);
+      const pub = notes.find(
+        (n) =>
+          n.depositIndex === op.exit?.depositIndex &&
+          n.secretIndex === op.exit?.secretIndex &&
+          (n.status === "approved" || n.status === "pending"),
+      );
+      if (!pub) throw new Error("That note isn't in your private balance any more (spent or already taken back).");
+      const note: Note = await ctx.client.noteFor(pub);
+      const depositor = decodeFunctionResult({
+        abi: POOL_ABI,
+        functionName: "depositors",
+        data: await ctx.provider.call({
+          to: ctx.cfg.pool,
+          data: encodeFunctionData({ abi: POOL_ABI, functionName: "depositors", args: [note.label] }),
+        }),
+      });
+      if (getAddress(depositor) !== getAddress(ctx.plan.address))
+        throw new Error("Only the account that made the deposit can take it back publicly, and that isn't this one.");
+      op = await this.apply(chainId, { type: "proving", at: this.now() });
+      const r = await this.d.prover().proveRagequit(ragequitInputs(note));
+      if (r.proof.pubSignals[0] !== note.commitment) throw new Error("The proof doesn't match this note.");
+      const tx = buildRagequitTx(ctx.cfg.pool, r.proof);
+      const est = await ctx.provider
+        .estimateGas({ from: ctx.plan.address, to: tx.to, data: tx.data, value: 0n })
+        .catch(() => 600_000n);
+      const req = await this.d.vault.create(
+        chainId,
+        {
+          type: "send",
+          calls: [{ target: tx.to, value: "0", data: tx.data }],
+          usd6: "0",
+          body: { execution: (700_000n + 2n * est).toString(), state: (400_000n + est).toString() },
+          label: `Public exit: take ${fmtEth(note.value)} ETH back from Privacy Pools to your account`,
+        },
+        { origin: "LEAKED Private balance" },
+      );
+      op = await this.apply(chainId, { type: "exit-proved", vaultRequestId: req.id, provedMs: r.ms });
+      await ctx.answers.clear().catch(() => undefined); // the proof is made: the note key leaves memory
+    }
+    for (let i = 0; i < 400; i++) {
+      op = (await this.record(chainId)).op!;
+      if (op.step !== "paying" || !op.exit?.vaultRequestId) return;
+      const r = await this.d.vault.get(op.exit.vaultRequestId);
+      if (r?.status === "confirmed") {
+        await this.apply(chainId, { type: "paid", ...(r.hash ? { txHash: r.hash } : {}) });
+        await this.syncWith(chainId, ctx).catch(() => undefined);
+        return;
+      }
+      if (!r || r.status === "failed" || r.status === "expired" || r.status === "cancelled") {
+        await this.apply(chainId, {
+          type: "failed",
+          error: {
+            code: "payment",
+            message:
+              r?.status === "cancelled" || r?.status === "expired"
+                ? "The exit's Vault approval was cancelled or expired. Nothing moved."
+                : `The exit didn't go through${r?.error ? `: ${r.error.message}` : ""}.`,
+            retry: true,
+          },
+        });
+        return;
+      }
+      if (r.status === "waiting" && i > 3) return; // resumed when the hand-off page reports back (privacy:run)
+      await sleep(2000);
+    }
   }
 
   private async advanceUnshield(chainId: number, ctx: Ctx) {

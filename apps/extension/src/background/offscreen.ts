@@ -1,4 +1,4 @@
-import type { Prover, ProveResult, WithdrawCircuitInputs } from "@leaked/privacy";
+import type { Prover, ProveResult, RagequitProver, WithdrawCircuitInputs } from "@leaked/privacy";
 import {
   OFFSCREEN_PATH,
   offscreenRequest,
@@ -39,8 +39,11 @@ export class OffscreenClient {
   }
 
   /** A `Prover` whose proofs are made in the offscreen document's Worker. */
-  prover(): Prover {
-    return { prove: (inputs: WithdrawCircuitInputs): Promise<ProveResult> => this.call("prove", { inputs }) };
+  prover(): Prover & RagequitProver {
+    return {
+      prove: (inputs: WithdrawCircuitInputs): Promise<ProveResult> => this.call("prove", { inputs }),
+      proveRagequit: (inputs) => this.call("prove-ragequit", { inputs }),
+    };
   }
 }
 

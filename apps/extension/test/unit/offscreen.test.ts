@@ -61,6 +61,21 @@ const result: ProveResult = {
   ms: 2391,
 };
 
+const rqResult = {
+  proof: {
+    pA: [1n, 2n] as const,
+    pB: [
+      [3n, 4n],
+      [5n, 6n],
+    ] as const,
+    pC: [7n, 8n] as const,
+    pubSignals: [1n, 2n, 3n, 4n] as const,
+  },
+  raw: { pi_a: [], pi_b: [], pi_c: [] },
+  publicSignals: ["1", "2", "3", "4"],
+  ms: 1,
+};
+
 describe("wire codec", () => {
   it("round-trips bigints (nested, in arrays) through JSON, the way chrome.runtime messages travel", () => {
     const wire = JSON.parse(JSON.stringify(encodeWire({ inputs, result })));
@@ -94,6 +109,7 @@ describe("messages", () => {
         expect(got).toEqual(inputs); // decoded on the offscreen side
         return result;
       },
+      "prove-ragequit": async () => rqResult,
       "anon:status": async () => {
         const e = new Error("boom");
         e.name = "ProofSelfCheckError";
@@ -148,6 +164,7 @@ describe("OffscreenClient", () => {
             await answerOffscreen(wire, {
               ping: async () => ({ prover: "ready", provedCount: 1 }),
               prove: async () => result,
+              "prove-ragequit": async () => rqResult,
               "anon:status": async ({ chainId }) => anonStatusFor(chainId, { harnessBundled: false }),
             }),
           ),
@@ -167,6 +184,12 @@ describe("OffscreenClient", () => {
     expect(f.creates()).toBe(1);
     expect(f.sent.every((m) => isOffscreenRequest(m))).toBe(true);
     expect(new Set(f.sent.map((m) => (m as { id: string }).id)).size).toBe(f.sent.length);
+  });
+
+  it("prover(): the public-exit proof travels the same way", async () => {
+    const c = new OffscreenClient(fakeChrome().chrome);
+    const r = await c.prover().proveRagequit({ value: 1n, label: 2n, nullifier: 3n, secret: 4n });
+    expect(r.proof.pubSignals).toEqual([1n, 2n, 3n, 4n]);
   });
 
   it("prover(): a Prover whose proofs come back from the offscreen Worker with bigints intact", async () => {

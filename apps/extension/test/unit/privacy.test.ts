@@ -118,6 +118,32 @@ describe("state machine", () => {
     expect(stepCopy(end).title).toMatch(/Waiting for pool review \(0xbow\)/u);
   });
 
+  it("public exit: phone (note key) → proving → paying (Vault) → done; public copy; retry proves again", () => {
+    const base = newOp({ id: "x", kind: "exit", chainId: 1337, amountWei: "100", now: T });
+    const op: PrivacyOp = { ...base, exit: { depositIndex: 0, secretIndex: 0 } };
+    expect(stepCopy(op).title).toBe("Preparing the public exit");
+    const seq: PrivacyEvent[] = [
+      { type: "needs-phone", phone: { ...ask, purpose: "note-key" } },
+      { type: "phone-answered" },
+      { type: "proving", at: T },
+      { type: "exit-proved", vaultRequestId: "v9", provedMs: 900 },
+    ];
+    const paying = seq.reduce((o, e, i) => transition(o, e, T + i), op);
+    expect(paying).toMatchObject({ step: "paying", exit: { vaultRequestId: "v9", provedMs: 900 } });
+    expect(stepCopy(paying).title).toMatch(/Approve the public exit/u);
+    const done = transition(paying, { type: "paid", txHash: `0x${"bb".repeat(32)}` }, T + 9);
+    expect(done).toMatchObject({ step: "done", exit: { txHash: `0x${"bb".repeat(32)}` } });
+    expect(stepCopy(done).body).toMatch(/Anyone can see/u);
+    const failed = transition(paying, { type: "failed", error: { code: "payment", message: "x", retry: true } }, T);
+    const again = transition(failed, { type: "retry" }, T);
+    expect(again.step).toBe("preparing");
+    expect(again.exit).toEqual({ depositIndex: 0, secretIndex: 0, provedMs: 900 });
+    // Exit events never apply to other operations.
+    expect(() =>
+      transition(newOp({ id: "s", kind: "shield", chainId: 1, amountWei: "1", now: T }), seq[3]!, T),
+    ).toThrow();
+  });
+
   it("unshield: phone → proving → submitted (mempool words) → done, with the fresh recipient and fee kept", () => {
     const op = run(newOp({ id: "2", kind: "unshield", chainId: 1337, amountWei: "50", now: T }), [
       { type: "withdraw-ready", depositIndex: 0, secretIndex: 1, circuit: "direct" },

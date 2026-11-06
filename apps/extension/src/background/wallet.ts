@@ -1544,9 +1544,11 @@ export class Wallet {
 
     "privacy:view": async ({ chainId }) => this.priv().view(await this.chainOr(chainId)),
     "privacy:sync": async ({ chainId }) => this.priv().sync(await this.chainOr(chainId)),
-    "privacy:start": async ({ chainId, kind, amountWei }) => {
-      if (kind !== "shield" && kind !== "unshield") throw new Error("Unknown private-balance operation.");
-      return this.priv().start(await this.chainOr(chainId), kind, amountWei);
+    "privacy:start": async ({ chainId, kind, amountWei, note }) => {
+      if (kind !== "shield" && kind !== "unshield" && kind !== "exit")
+        throw new Error("Unknown private-balance operation.");
+      if (kind === "exit" && !note) throw new Error("Pick the note to take back.");
+      return this.priv().start(await this.chainOr(chainId), kind, amountWei, note);
     },
     "privacy:answer": async ({ chainId, opId, signature }) =>
       this.priv().answerPhone(await this.chainOr(chainId), opId, signature),

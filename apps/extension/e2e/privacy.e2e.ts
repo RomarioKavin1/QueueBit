@@ -286,6 +286,31 @@ test("M6: shield → sync → withdraw via PoolPayer to a fresh address; the wat
     `[privacy e2e] withdrawal ${JSON.stringify({ ...hash, recipient, received: received.toString(), proofMs })}`,
   );
 
+  // ---- Public exit (ragequit) of the change note: phone (note key), commitment proof, Vault approval; public ----
+  await page.goto(extUrl(extensionId, "app.html#privacy"));
+  await expect(page.getByTestId("privacy-available")).toHaveText("0.05 ETH", { timeout: 60_000 });
+  const accountBefore = await pp.balanceOf(account);
+  await page.getByTestId("privacy-exit").first().click();
+  await expect(page.getByTestId("privacy-exit-confirm")).toContainText("This is public and unlinks nothing");
+  await shot("app-privacy-exit-confirm", page);
+  await page.getByTestId("privacy-exit-start").click();
+  await expect(op).toHaveAttribute("data-kind", "exit", { timeout: 30_000 });
+  await phoneSignsNoteKey(page, phone, "note-key");
+  await expect(op).toHaveAttribute("data-step", "paying", { timeout: 180_000 });
+  await op.getByTestId("privacy-approve-exit").click();
+  await expect(page.getByTestId("vault-title")).toContainText("Public exit");
+  await approveDepositOnPhone(page, phone);
+  await expect(page.getByTestId("vault-handoff")).toHaveAttribute("data-status", "confirmed", { timeout: 180_000 });
+  await page.getByRole("button", { name: "Back to private balance" }).click();
+  await expect(op).toHaveAttribute("data-step", "done", { timeout: 120_000 });
+  await expect(page.getByTestId("privacy-op-title")).toHaveText("Taken back publicly");
+  // The full note value came back to the depositing account (the Vault signer paid the network fee).
+  expect(await pp.balanceOf(account)).toBe(accountBefore + parseEther("0.05"));
+  await expect(page.getByTestId("privacy-available")).toHaveText("0 ETH", { timeout: 60_000 });
+  await expect(page.getByTestId("privacy-notes")).toContainText("taken back publicly");
+  await shot("app-privacy-exited", page);
+  console.log(`[privacy e2e] public exit: 0.05 ETH back to ${account} via ragequit`);
+
   // ---- watcher light mode: a queued Vault loosening → alert (list, badge, notification) → deep link to Pending ----
   await page.goto(extUrl(extensionId, "app.html#limits"));
   await expect(page.getByTestId("limits-daily-limit")).toHaveText("$500 in any 24 hours", { timeout: 30_000 });

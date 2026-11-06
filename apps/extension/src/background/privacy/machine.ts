@@ -15,6 +15,8 @@ export type PrivacyEvent =
   | { type: "paying"; route: "hot" | "vault"; activityId?: string; vaultRequestId?: string }
   | { type: "paid"; txHash?: `0x${string}` }
   | { type: "withdraw-ready"; depositIndex: number; secretIndex: number; circuit: "anonymous" | "direct" }
+  | { type: "exit-ready"; depositIndex: number; secretIndex: number }
+  | { type: "exit-proved"; vaultRequestId: string; provedMs?: number }
   | { type: "proving"; at: number }
   | { type: "built"; hash: `0x${string}`; recipient: `0x${string}`; feeWei: string; provedMs?: number }
   | { type: "mempool"; status: string }
@@ -88,13 +90,30 @@ export function transition(op: PrivacyOp, e: PrivacyEvent, now: number): Privacy
       });
     case "paid":
       if (op.step !== "paying") bad();
+      if (op.kind === "exit")
+        return next({ step: "done", exit: { ...op.exit!, ...(e.txHash ? { txHash: e.txHash } : {}) } });
       return next({ step: "done", deposit: { ...op.deposit!, ...(e.txHash ? { txHash: e.txHash } : {}) } });
+    case "exit-ready":
+      if (op.kind !== "exit" || op.step !== "preparing") bad();
+      return next({ exit: { depositIndex: e.depositIndex, secretIndex: e.secretIndex } });
+    case "exit-proved":
+      if (op.kind !== "exit" || op.step !== "proving") bad();
+      return next({
+        step: "paying",
+        exit: {
+          ...op.exit!,
+          vaultRequestId: e.vaultRequestId,
+          ...(e.provedMs !== undefined ? { provedMs: e.provedMs } : {}),
+        },
+      });
     case "withdraw-ready":
       if (op.kind !== "unshield" || op.step !== "preparing") bad();
       return next({
         withdraw: { ...op.withdraw, depositIndex: e.depositIndex, secretIndex: e.secretIndex, circuit: e.circuit },
       });
     case "proving":
+      if (op.kind === "exit" && op.exit && op.step === "preparing")
+        return next({ step: "proving", exit: { ...op.exit, provingStartedAt: e.at } });
       if (op.kind !== "unshield" || !op.withdraw || op.step !== "preparing") bad();
       return next({ step: "proving", withdraw: { ...op.withdraw!, provingStartedAt: e.at } });
     case "built":
@@ -139,11 +158,19 @@ export function transition(op: PrivacyOp, e: PrivacyEvent, now: number): Privacy
             return d;
           })()
         : undefined;
+      // A public exit retried before its Vault approval was sent proves again (same note, same phone answers).
+      const exit = rest.exit
+        ? (() => {
+            const { vaultRequestId: _v, provingStartedAt: _s, txHash: _t, ...x } = rest.exit!;
+            return x;
+          })()
+        : undefined;
       return {
         ...rest,
         step: "preparing",
         ...(withdraw ? { withdraw } : {}),
         ...(deposit ? { deposit } : {}),
+        ...(exit ? { exit } : {}),
         updatedAt: now,
       };
     }
@@ -272,6 +299,7 @@ const shortReason = (m: string) => {
 
 /** What the page says while an operation is in `step` (ux-spec §3.11: syncing, proving, waiting for the phone, …). */
 export function stepCopy(op: PrivacyOp, estimateMs?: number): { title: string; body: string } {
+  if (op.kind === "exit") return exitCopy(op);
   const shield = op.kind === "shield";
   switch (op.step) {
     case "preparing":
@@ -313,5 +341,37 @@ export function stepCopy(op: PrivacyOp, estimateMs?: number): { title: string; b
         : { title: "Done", body: "The money arrived at the fresh address." };
     case "failed":
       return { title: "This didn't go through", body: op.error?.message ?? "Nothing was sent." };
+  }
+}
+
+/** The public exit (ragequit): it is public and unlinks nothing, and the page says so at every step. */
+function exitCopy(op: PrivacyOp): { title: string; body: string } {
+  switch (op.step) {
+    case "preparing":
+      return { title: "Preparing the public exit", body: "Checking the pool's history against the chain." };
+    case "phone":
+      return {
+        title: "Waiting for your phone",
+        body: "Your phone signs the key of the note you're taking back. This browser never keeps it.",
+      };
+    case "proving":
+      return {
+        title: "Preparing proof",
+        body: "A small proof that this note is yours (a second or two). It reveals which deposit it is.",
+      };
+    case "paying":
+      return {
+        title: "Approve the public exit on your phone",
+        body: "Your account sends the exit to the pool: a Vault approval. The money comes back to your account.",
+      };
+    case "done":
+      return {
+        title: "Taken back publicly",
+        body: "The deposit is back in your account. Anyone can see that this exit and the deposit are the same money.",
+      };
+    case "failed":
+      return { title: "This didn't go through", body: op.error?.message ?? "Nothing was sent." };
+    default:
+      return { title: "Public exit", body: "" };
   }
 }

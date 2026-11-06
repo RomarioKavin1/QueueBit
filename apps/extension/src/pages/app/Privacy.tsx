@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { hexToBytes, toHex } from "viem";
 import { browser, type Browser } from "wxt/browser";
 import { UR_TYPES } from "@leaked/ur";
-import type { PrivacyOp, PrivacyView } from "../../shared/privacy";
+import type { NoteView, PrivacyOp, PrivacyView } from "../../shared/privacy";
 import {
   Button,
   Card,
@@ -48,6 +48,7 @@ export function Privacy() {
 
 function PrivacyBody({ view, reload }: { view: PrivacyView; reload: () => void }) {
   const [form, setForm] = useState<null | "shield" | "unshield">(null);
+  const [exitNote, setExitNote] = useState<NoteView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const op = view.op;
@@ -168,7 +169,25 @@ function PrivacyBody({ view, reload }: { view: PrivacyView; reload: () => void }
               busy={busy}
             />
           )}
-          <History view={view} />
+          {!active && exitNote && (
+            <ExitConfirm
+              note={exitNote}
+              busy={busy}
+              onCancel={() => setExitNote(null)}
+              onStart={() =>
+                act(async () => {
+                  if (op) await call("privacy:dismiss", {});
+                  await call("privacy:start", {
+                    kind: "exit",
+                    amountWei: exitNote.valueWei,
+                    note: { depositIndex: exitNote.depositIndex, secretIndex: exitNote.secretIndex },
+                  });
+                  setExitNote(null);
+                })
+              }
+            />
+          )}
+          <History view={view} {...(!active ? { onExit: (n: NoteView) => setExitNote(n) } : {})} />
         </>
       )}
     </div>
@@ -299,20 +318,71 @@ function AmountForm({
   );
 }
 
+/**
+ * The public exit (ragequit) for a note the reviewer hasn't approved (or any note): it takes the deposit back to the
+ * account in the open. It is not private: the exit names the deposit, so anyone can link the two.
+ */
+function ExitConfirm({
+  note,
+  busy,
+  onStart,
+  onCancel,
+}: {
+  note: NoteView;
+  busy: boolean;
+  onStart: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <Card tone="vault" heading={`Public exit: take back ${eth(note.valueWei)}`} headingLevel={2}>
+      <div className="mt-2 flex flex-col gap-3" data-testid="privacy-exit-confirm">
+        <p className="t-body">
+          This takes deposit #{note.depositIndex} out of the pool and back to your account, without waiting for the
+          pool&apos;s reviewer.
+        </p>
+        <RiskBanner
+          level="limit"
+          title="This is public and unlinks nothing"
+          body="Anyone can see that this money left the pool back to the account that deposited it. Use it to get your money back, not for privacy."
+        />
+        <p className="t-small text-muted">
+          Your phone signs the note&apos;s key, this computer makes a small proof, then your phone approves the exit (a
+          Vault approval). The full amount comes back; there is no pool fee.
+        </p>
+        <div className="flex gap-2">
+          <Button variant="secondary" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button variant="vault" loading={busy} onClick={onStart} data-testid="privacy-exit-start">
+            Take it back publicly
+          </Button>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 function steps(op: PrivacyOp): TimelineStep[] {
   const order: Array<[string, PrivacyOp["step"][]]> =
-    op.kind === "shield"
+    op.kind === "exit"
       ? [
           ["Phone signs the note key", ["preparing", "phone"]],
-          ["Pay the deposit", ["paying"]],
-          ["In the pool", ["done"]],
-        ]
-      : [
-          ["Phone signs the note key, then the change note key", ["preparing", "phone"]],
           ["Prove on this computer", ["proving"]],
-          ["Send via the fee payer", ["submitted"]],
-          ["Arrived", ["done"]],
-        ];
+          ["Approve the exit with Vault", ["paying"]],
+          ["Back in your account", ["done"]],
+        ]
+      : op.kind === "shield"
+        ? [
+            ["Phone signs the note key", ["preparing", "phone"]],
+            ["Pay the deposit", ["paying"]],
+            ["In the pool", ["done"]],
+          ]
+        : [
+            ["Phone signs the note key, then the change note key", ["preparing", "phone"]],
+            ["Prove on this computer", ["proving"]],
+            ["Send via the fee payer", ["submitted"]],
+            ["Arrived", ["done"]],
+          ];
   const at = op.step === "failed" ? -1 : order.findIndex(([, s]) => s.includes(op.step));
   return order.map(([label], i) => ({
     label,
@@ -349,7 +419,11 @@ function OpPanel({ view, op, reload }: { view: PrivacyView; op: PrivacyOp; reloa
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="t-small font-semibold tracking-wide text-vault uppercase">
-            {op.kind === "shield" ? `Move ${amount} to private` : `Move ${amount} to public`}
+            {op.kind === "shield"
+              ? `Move ${amount} to private`
+              : op.kind === "exit"
+                ? `Public exit of ${amount}`
+                : `Move ${amount} to public`}
           </p>
           <h2 className="t-title" data-testid="privacy-op-title">
             {copy.title}
@@ -436,11 +510,24 @@ function OpPanel({ view, op, reload }: { view: PrivacyView; op: PrivacyOp; reloa
         </div>
       )}
 
+      {op.step === "paying" && op.kind === "exit" && op.exit?.vaultRequestId && (
+        <div className="mt-3 flex flex-col gap-2">
+          <Button
+            variant="vault"
+            icon={<VaultIcon size={18} />}
+            data-testid="privacy-approve-exit"
+            onClick={() => (location.hash = `#vault/${op.exit!.vaultRequestId}?back=privacy`)}
+          >
+            Approve the public exit on your phone
+          </Button>
+        </div>
+      )}
+
       {op.step === "proving" && (
         <p className="t-body mt-3 inline-flex items-center gap-2" role="status" data-testid="privacy-proving">
           <Spinner size={16} /> Proving
-          {op.withdraw?.provingStartedAt
-            ? ` · ${Math.max(0, Math.round((now - op.withdraw.provingStartedAt) / 1000))} s`
+          {(op.withdraw ?? op.exit)?.provingStartedAt
+            ? ` · ${Math.max(0, Math.round((now - (op.withdraw ?? op.exit)!.provingStartedAt!) / 1000))} s`
             : ""}
         </p>
       )}
@@ -507,6 +594,7 @@ function OpPanel({ view, op, reload }: { view: PrivacyView; op: PrivacyOp; reloa
             </p>
           )}
           {op.deposit?.txHash && <p className="t-mono break-all">Deposit {op.deposit.txHash}</p>}
+          {op.exit?.txHash && <p className="t-mono break-all">Public exit {op.exit.txHash}</p>}
           {op.error && <p>Reason code {op.error.code}</p>}
         </div>
       </details>
@@ -514,7 +602,7 @@ function OpPanel({ view, op, reload }: { view: PrivacyView; op: PrivacyOp; reloa
   );
 }
 
-function History({ view }: { view: PrivacyView }) {
+function History({ view, onExit }: { view: PrivacyView; onExit?: (n: NoteView) => void }) {
   if (view.history.length === 0 && view.notes.length === 0) return null;
   return (
     <section aria-labelledby="pp-hist" className="flex flex-col gap-2">
@@ -531,11 +619,23 @@ function History({ view }: { view: PrivacyView }) {
               : n.status === "pending"
                 ? "waiting for pool review (0xbow)"
                 : "taken back publicly"}
+            {onExit && n.status !== "ragequit" && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="ml-auto"
+                data-testid="privacy-exit"
+                onClick={() => onExit(n)}
+              >
+                Public exit
+              </Button>
+            )}
           </li>
         ))}
         {view.history.slice(0, 5).map((h) => (
           <li key={h.id} className="t-small text-muted">
-            {h.kind === "shield" ? "Moved to private" : "Moved to public"} {eth(h.amountWei)} ·{" "}
+            {h.kind === "shield" ? "Moved to private" : h.kind === "exit" ? "Taken back publicly" : "Moved to public"}{" "}
+            {eth(h.amountWei)} ·{" "}
             {h.step === "done" ? "done" : h.error?.code === "cancelled" ? "cancelled" : "didn't go through"} ·{" "}
             {new Date(h.updatedAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}
           </li>

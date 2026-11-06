@@ -4,13 +4,21 @@ import tailwindcss from "@tailwindcss/vite";
 import { defaultClientConditions } from "vite";
 import { defineConfig } from "wxt";
 
-// The Privacy Pools withdraw-circuit artifacts (Apache-2.0, npm `@fatsolutions/privacy-pools-core-circuits@1.0.5`)
-// ship inside the extension package under `pp-circuits/`: the offscreen prover loads them from the extension itself
-// and checks each against its sha256 pin (`WITHDRAW_ARTIFACT_PINS`); nothing is fetched remotely (plan §40 §1.3).
+// The Privacy Pools withdraw- and commitment-circuit artifacts (Apache-2.0, npm
+// `@fatsolutions/privacy-pools-core-circuits@1.0.5`) ship inside the extension package under `pp-circuits/`: the
+// offscreen prover loads them from the extension itself and checks each against its sha256 pin
+// (`WITHDRAW_ARTIFACT_PINS`, `COMMITMENT_ARTIFACT_PINS`: the public exit); nothing is fetched remotely (plan §40 §1.3).
 const CIRCUITS = dirname(
   createRequire(import.meta.url).resolve("@fatsolutions/privacy-pools-core-circuits/artifacts/withdraw.vkey"),
 );
-const PP_ARTIFACTS = ["withdraw.wasm", "withdraw.zkey", "withdraw.vkey"];
+const PP_ARTIFACTS = [
+  "withdraw.wasm",
+  "withdraw.zkey",
+  "withdraw.vkey",
+  "commitment.wasm",
+  "commitment.zkey",
+  "commitment.vkey",
+];
 
 // Host permissions cover only the fixed RPCs (plan §30 §2.5: no <all_urls>, no dapp-supplied RPC URLs). A
 // local-devnet build (VITE_LEAKED_LOCAL_DEVNET=1: e2e, development) also reaches the devnet fork on localhost.

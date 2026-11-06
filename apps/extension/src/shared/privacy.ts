@@ -50,7 +50,8 @@ export interface PhoneAsk {
 
 export interface PrivacyOp {
   id: string;
-  kind: "shield" | "unshield";
+  /** `exit`: the public exit (ragequit) of one note back to the account, approved by the Vault. */
+  kind: "shield" | "unshield" | "exit";
   chainId: number;
   amountWei: string;
   createdAt: number;
@@ -85,6 +86,15 @@ export interface PrivacyOp {
     provedMs?: number;
     /** The withdrawal's node calls: on their own Anon-RPC circuit, or direct on a network without Anon-RPC. */
     circuit?: "anonymous" | "direct";
+  };
+  /** Public exit: which note, the Vault request that sends `pool.ragequit`, and its result. */
+  exit?: {
+    depositIndex: number;
+    secretIndex: number;
+    provingStartedAt?: number;
+    provedMs?: number;
+    vaultRequestId?: string;
+    txHash?: Hex;
   };
   error?: { code: string; message: string; retry: boolean };
 }

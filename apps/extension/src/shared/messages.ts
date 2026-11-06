@@ -114,7 +114,16 @@ export interface UiApi {
   /** Root-checked note sync (progress is written to storage as it goes). */
   "privacy:sync": { req: { chainId?: number }; res: PrivacyView };
   /** Starts Move to private (shield) or Move to public (unshield, to a fresh address via PoolPayer). */
-  "privacy:start": { req: { chainId?: number; kind: PrivacyOp["kind"]; amountWei: string }; res: PrivacyView };
+  "privacy:start": {
+    req: {
+      chainId?: number;
+      kind: PrivacyOp["kind"];
+      amountWei: string;
+      /** `exit`: the note to take back publicly. */
+      note?: { depositIndex: number; secretIndex: number };
+    };
+    res: PrivacyView;
+  };
   /** The phone's scanned `ur:leaked-signature` (CBOR hex) for the operation's note-key request. */
   "privacy:answer": { req: { chainId?: number; opId: string; signature: `0x${string}` }; res: PrivacyView };
   "privacy:retry": { req: { chainId?: number; opId: string }; res: PrivacyView };

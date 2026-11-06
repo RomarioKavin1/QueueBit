@@ -1,5 +1,12 @@
 import { browser } from "wxt/browser";
-import { createWorkerProver, type PortLike, type ProveResult, type WithdrawCircuitInputs } from "@leaked/privacy";
+import {
+  createWorkerProver,
+  type CommitmentCircuitInputs,
+  type PortLike,
+  type ProveResult,
+  type RagequitProveResult,
+  type WithdrawCircuitInputs,
+} from "@leaked/privacy";
 import { answerOffscreen, anonStatusFor, isOffscreenRequest, type OffscreenResponse } from "../shared/offscreen";
 import ProverWorker from "./prover.worker?worker";
 
@@ -21,6 +28,11 @@ export function startOffscreen(): void {
       ping: async () => ({ prover: prover ? "ready" : "idle", provedCount }),
       prove: async ({ inputs }: { inputs: WithdrawCircuitInputs }): Promise<ProveResult> => {
         const r = await getProver().prove(inputs);
+        provedCount++;
+        return r;
+      },
+      "prove-ragequit": async ({ inputs }: { inputs: CommitmentCircuitInputs }): Promise<RagequitProveResult> => {
+        const r = await getProver().proveRagequit(inputs);
         provedCount++;
         return r;
       },

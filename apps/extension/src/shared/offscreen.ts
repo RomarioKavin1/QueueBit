@@ -1,4 +1,4 @@
-import type { ProveResult, WithdrawCircuitInputs } from "@leaked/privacy";
+import type { CommitmentCircuitInputs, ProveResult, RagequitProveResult, WithdrawCircuitInputs } from "@leaked/privacy";
 
 /**
  * Service worker ⇄ offscreen document (plan §30 §2.1, §2.3): `chrome.runtime.sendMessage` with a `target`
@@ -23,6 +23,8 @@ export interface OffscreenApi {
   ping: { req: Record<string, never>; res: { prover: "idle" | "ready"; provedCount: number } };
   /** One withdraw proof (Groth16, self-verified against the pinned vkey before it is returned). */
   prove: { req: { inputs: WithdrawCircuitInputs }; res: ProveResult };
+  /** One public-exit (ragequit) proof over the pinned commitment circuit, self-verified the same way. */
+  "prove-ragequit": { req: { inputs: CommitmentCircuitInputs }; res: RagequitProveResult };
   "anon:status": { req: { chainId: number }; res: AnonStatus };
 }
 export type OffscreenKind = keyof OffscreenApi;
@@ -38,7 +40,7 @@ export interface OffscreenRequest<K extends OffscreenKind = OffscreenKind> {
 export type OffscreenResponse<K extends OffscreenKind = OffscreenKind> =
   { ok: true; kind: K; result: unknown } | { ok: false; kind: K; error: { name: string; message: string } };
 
-const KINDS: readonly OffscreenKind[] = ["ping", "prove", "anon:status"];
+const KINDS: readonly OffscreenKind[] = ["ping", "prove", "prove-ragequit", "anon:status"];
 
 export function isOffscreenRequest(m: unknown): m is OffscreenRequest {
   if (typeof m !== "object" || m === null) return false;
