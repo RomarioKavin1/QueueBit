@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { getNetwork } from "../../shared/chains";
+import { BUILD_FAUCET_URL, LOCAL_DEVNET } from "../../shared/build";
 import type { WalletState } from "../../shared/types";
 import {
   AddressChip,
@@ -11,15 +12,15 @@ import {
   Timeline,
   type TimelineStep,
 } from "../../ui";
-import { formatUsd, groupedAddress } from "../../ui/format";
+import { groupedAddress } from "../../ui/format";
 import { call, UiCallError } from "../lib/api";
 import { useAsync, usePoll } from "../lib/hooks";
 import { eth } from "../lib/money";
 
 /**
- * Activate the account (plan §30 §7 "deploy account"): the fee tank pays for `AccountFactory.createAccount` with the
- * init config fixed at setup (daily limit, per-payment limit, the fee tank allowed, the ETH price). Two steps the user
- * can see: put a little ETH in the fee tank, then activate.
+ * Create the account: the setup key sends `LeanAccountFactory.createAccount` with the configuration the address is
+ * bound to (the owner key, the LeanPool node, guardians). Two steps the user can see: put a little ETH on the setup
+ * key, then create.
  */
 export function ActivateScreen({ state, onBack }: { state: WalletState; onBack: () => void }) {
   const chainId = state.settings.selectedChainId;
@@ -28,17 +29,21 @@ export function ActivateScreen({ state, onBack }: { state: WalletState; onBack: 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const s = status.data;
-  const tankOk = s ? BigInt(s.tankWei) >= BigInt(s.activationCostWei) && BigInt(s.activationCostWei) > 0n : false;
+  const tankOk =
+    s?.setupWei !== undefined && s.activationCostWei !== undefined
+      ? BigInt(s.setupWei) >= BigInt(s.activationCostWei) && BigInt(s.activationCostWei) > 0n
+      : false;
+  const [funding, setFunding] = useState<string | null>(null);
   usePoll(status.reload, 3000, Boolean(s && !s.deployed));
 
   const steps: TimelineStep[] = s
     ? [
         {
-          label: `Add ETH to your fee tank (at least ${eth(s.activationCostWei, 4)})`,
+          label: `Add ETH to your setup key (at least ${eth(s.activationCostWei ?? "0", 4)})`,
           status: tankOk ? "done" : "active",
         },
         {
-          label: "Activate: your limits go on the network",
+          label: "Create the account on the network",
           status: s.deployed ? "done" : s.activation ? "active" : tankOk ? "active" : "pending",
         },
       ]
@@ -55,7 +60,7 @@ export function ActivateScreen({ state, onBack }: { state: WalletState; onBack: 
         >
           <ArrowLeftIcon />
         </button>
-        <h1 className="t-title">Activate account</h1>
+        <h1 className="t-title">Create account</h1>
       </header>
       <div className="flex flex-col gap-4 p-4">
         {!s ? (
@@ -65,7 +70,7 @@ export function ActivateScreen({ state, onBack }: { state: WalletState; onBack: 
             <RiskBanner
               level="info"
               title="Your account is active"
-              body={`Daily limit ${formatUsd(s.limits.capUsd)} in any 24 hours · up to ${formatUsd(s.limits.perTxMaxUsd)} per payment.`}
+              body="Fund it from Receive; payments are signed with your quantum-safe owner key."
             />
             <Button block onClick={onBack}>
               Done
@@ -76,22 +81,46 @@ export function ActivateScreen({ state, onBack }: { state: WalletState; onBack: 
         ) : (
           <>
             <p className="t-body">
-              Activation puts your limits on {net.name}: {formatUsd(s.limits.capUsd || state.setup.dailyLimitUsd)} in
-              any 24 hours, up to {formatUsd(s.limits.perTxMaxUsd || state.setup.perPaymentUsd)} per payment. Your fee
-              tank pays the one-time network fee.
+              Your setup key creates your account on {net.name} with your quantum-safe owner key, and pays the one-time
+              network fee.
             </p>
             <Timeline steps={steps} label="Activation steps" />
             {!tankOk && (
               <div className="flex flex-col items-center gap-2 rounded-md border border-line p-3">
                 <p className="t-small self-start text-muted">
-                  Send ETH on {net.name} to your fee tank. It pays network fees for everyday payments; a thief can only
-                  burn what's in it. About 0.01 ETH lasts many payments.
+                  Send a little ETH on {net.name} to your setup key. It pays for creating the account and for moves into
+                  it, and holds nothing else.
                 </p>
-                <QrCode value={s.tank} size={148} label={`QR code of your fee tank ${groupedAddress(s.tank)}`} />
-                <AddressChip address={s.tank} name="Fee tank" />
-                <p className="t-small text-muted" data-testid="tank-balance">
-                  In the tank: {eth(s.tankWei)}
+                <QrCode
+                  value={s.setupKey}
+                  size={148}
+                  label={`QR code of your setup key ${groupedAddress(s.setupKey)}`}
+                />
+                <AddressChip address={s.setupKey} name="Setup key" />
+                <p className="t-small text-muted" data-testid="setup-balance">
+                  On the setup key: {eth(s.setupWei ?? "0")}
                 </p>
+                {LOCAL_DEVNET && BUILD_FAUCET_URL && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={async () => {
+                      setFunding("Asking the faucet…");
+                      try {
+                        const u = new URL(BUILD_FAUCET_URL);
+                        u.searchParams.set("address", s.setupKey);
+                        const r = await fetch(u, { method: "POST" });
+                        setFunding(r.ok ? "Test ETH is on its way." : "The faucet said no.");
+                        setTimeout(() => void status.reload(), 3000);
+                      } catch {
+                        setFunding("The faucet isn't answering.");
+                      }
+                    }}
+                  >
+                    Get test ETH
+                  </Button>
+                )}
+                {funding && <p className="t-small text-muted">{funding}</p>}
               </div>
             )}
             {error && <RiskBanner level="danger" title={error} />}
@@ -99,7 +128,7 @@ export function ActivateScreen({ state, onBack }: { state: WalletState; onBack: 
               block
               disabled={!tankOk || Boolean(s.activation)}
               loading={busy || Boolean(s.activation)}
-              loadingLabel="Activating…"
+              loadingLabel="Creating…"
               onClick={async () => {
                 setBusy(true);
                 setError(null);
@@ -107,17 +136,19 @@ export function ActivateScreen({ state, onBack }: { state: WalletState; onBack: 
                   await call("account:activate", { chainId });
                   await status.reload();
                 } catch (e) {
-                  setError(e instanceof UiCallError ? e.message : "Couldn't activate. Try again.");
+                  setError(e instanceof UiCallError ? e.message : "Couldn't create the account. Try again.");
                 } finally {
                   setBusy(false);
                 }
               }}
             >
-              Activate account
+              Create account
             </Button>
-            <p className="t-small text-muted">
-              Your account address stays the same: <AddressChip address={s.address} copyable={false} />
-            </p>
+            {s.address && (
+              <p className="t-small text-muted">
+                Your account address stays the same: <AddressChip address={s.address} copyable={false} />
+              </p>
+            )}
           </>
         )}
       </div>

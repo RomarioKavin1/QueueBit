@@ -1,0 +1,51 @@
+{
+  "account": "0xFF8B0abd15e2016468f5EF47FDe09BE78adb0756",
+  "sessionKey": "0x4D90Eb09e046d983D15A717A79f69cca294f09B4",
+  "keyId": "0x7b797f7cea9a1252d9af4f70466dc67a74e419c2d233c93d4851baadd3217aa0",
+  "shop": "0x48F94F446dB854D30dfA9ff559eDD49d74F8dc60",
+  "token": "0x1F8669850fffF3D25528f80a017ec3F9A165632a",
+  "deployment": {
+    "registry": "0x9B7C395c5b666D23dbd1E08781a85aE1e5944A80",
+    "hub": "0x22b28CBC1177AaA894A2Bc555d7a0e3ad2b84483",
+    "legacyImplementation": "0xbb8F4693C27FC4a676c050da83B4c4cfAD60Dca5",
+    "testToken": "0x1F8669850fffF3D25528f80a017ec3F9A165632a",
+    "implementation": "0x130D4d3633d8ED106544278cc200d141643d7299",
+    "factory": "0x01864686257c6De40bD671ea10D60d53ef984394",
+    "keystore": "0x1422840e6fdda8642B802b9c213DF793314FCeba",
+    "hook": "0xd5302201B562eB26dE2D3B4AfCd9EEfa5f047F82",
+    "recovery": "0xa06381544b037975EfEcB3602EC0127c56187c9F"
+  },
+  "ownerSetsCaps": "0xfe943417aabf0a16d3eb50191318c110df3206f50681197d0edc28e59893c0ae",
+  "ethWithinCaps": {
+    "tx": "0x6e2bf2a1e5fc384f37fc6dafb65cc0a1e5c0467eef30e665421c4412d1bf437f",
+    "block": 6861,
+    "frames": "0x1/87453 0x1/85898"
+  },
+  "tokensWithinCaps": {
+    "tx": "0x3ec73144421e6add8b33086d549626a091eacb66be6175bff087aad4f65575ec",
+    "block": 6866,
+    "frames": "0x1/69572 0x1/131844"
+  },
+  "overDailyTokenCap": {
+    "tx": "0xf52f56f87d3d14e3b3e20ad5fadeeebe5ca08113c02a02084a77825321152ee1",
+    "block": 6871,
+    "frames": "0x1/69572 0x0/68904"
+  },
+  "hookTokenSpentToday": "100000000000000000000",
+  "approveRefused": {
+    "refused": "validation frame 0: reverted with data 0x0a0b0d79"
+  },
+  "overPerTxRefused": {
+    "refused": "validation frame 0: reverted with data 0x0a0b0d79"
+  },
+  "uncappedTokenRefused": {
+    "refused": "validation frame 0: reverted with data 0x0a0b0d79"
+  },
+  "tamperedCallsRefused": {
+    "refused": "validation frame 0: reverted with data 0xe5e19cf20000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "shopFinal": {
+    "eth": "100000000000000",
+    "tokens": "100000000000000000000"
+  }
+}

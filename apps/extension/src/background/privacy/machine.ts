@@ -1,22 +1,20 @@
 import { INVALIDATION_TEXT, classifyInvalidation } from "@queuebit/privacy";
-import type { PhoneAsk, PrivacyOp, PrivacyStep } from "../../shared/privacy";
+import type { PrivacyOp, PrivacyStep } from "../../shared/privacy";
 
 /**
  * The private-balance operation state machine (plan §40 §1.5, ux-spec §3.11), pure: the service worker feeds it
- * events and persists the result; the page renders it. Shield: preparing → phone (the note key) → paying (an
- * everyday payment or a Vault approval of the deposit) → done. Unshield: preparing → phone (the note's key, then the change note's key)
- * → proving → submitted (alt mempool) → done. Any step → failed with a plain reason; `retry` marks failures where
- * trying again is safe and needs no new phone approval while the signatures are still in the session (same unlock).
+ * events and persists the result; the page renders it. Shield: preparing → paying (an owner payment of the deposit)
+ * → done. Unshield: preparing → proving → submitted (alt mempool) → done. Exit: preparing → proving → paying (an
+ * owner payment of `pool.ragequit`) → done. Any step → failed with a plain reason; `retry` marks failures where trying
+ * again is safe. Note keys are signed in this browser by the privacy payer key (keyring PRIVACY_PAYER_PATH).
  */
 export type PrivacyEvent =
-  | { type: "needs-phone"; phone: PhoneAsk }
-  | { type: "phone-answered" }
   | { type: "deposit-ready"; deposit: NonNullable<PrivacyOp["deposit"]> }
-  | { type: "paying"; route: "hot" | "vault"; activityId?: string; vaultRequestId?: string }
+  | { type: "paying"; route: "owner"; activityId: string }
   | { type: "paid"; txHash?: `0x${string}` }
   | { type: "withdraw-ready"; depositIndex: number; secretIndex: number; circuit: "anonymous" | "direct" }
   | { type: "exit-ready"; depositIndex: number; secretIndex: number }
-  | { type: "exit-proved"; vaultRequestId: string; provedMs?: number }
+  | { type: "exit-proved"; activityId: string; provedMs?: number }
   | { type: "proving"; at: number }
   | { type: "built"; hash: `0x${string}`; recipient: `0x${string}`; feeWei: string; provedMs?: number }
   | { type: "mempool"; status: string }
@@ -47,7 +45,27 @@ export function newOp(o: {
     createdAt: o.now,
     updatedAt: o.now,
     step: "preparing",
-    phoneCount: 0,
+  };
+}
+
+/**
+ * An operation stored by an older version may sit in the removed "phone" step (a phone used to sign note keys). It
+ * can't continue: it is shown as failed, with nothing sent (that step always came before any payment).
+ */
+export function upgradeOp(op: PrivacyOp): PrivacyOp {
+  const legacy = op as Omit<PrivacyOp, "step"> & { step: string; phone?: unknown; phoneCount?: number };
+  if (legacy.step !== "phone" && legacy.phone === undefined && legacy.phoneCount === undefined) return op;
+  const { phone: _p, phoneCount: _c, ...rest } = legacy;
+  if (legacy.step !== "phone") return rest as PrivacyOp;
+  return {
+    ...(rest as PrivacyOp),
+    step: "failed",
+    error: {
+      code: "phone-removed",
+      message:
+        "This was waiting for a phone approval, which QueueBit no longer uses. Nothing was sent; start it again.",
+      retry: false,
+    },
   };
 }
 
@@ -66,14 +84,6 @@ export function transition(op: PrivacyOp, e: PrivacyEvent, now: number): Privacy
   const next = (patch: Partial<PrivacyOp>): PrivacyOp => ({ ...op, ...patch, updatedAt: now });
   if (isFinal(op) && e.type !== "retry" && e.type !== "failed") bad();
   switch (e.type) {
-    case "needs-phone":
-      if (op.step !== "preparing") bad();
-      return next({ step: "phone", phone: e.phone });
-    case "phone-answered": {
-      if (op.step !== "phone") bad();
-      const { phone: _drop, ...rest } = op;
-      return { ...rest, step: "preparing", phoneCount: op.phoneCount + 1, updatedAt: now };
-    }
     case "deposit-ready":
       if (op.kind !== "shield" || op.step !== "preparing") bad();
       return next({ deposit: e.deposit });
@@ -84,8 +94,7 @@ export function transition(op: PrivacyOp, e: PrivacyEvent, now: number): Privacy
         deposit: {
           ...op.deposit!,
           route: e.route,
-          ...(e.activityId ? { activityId: e.activityId } : {}),
-          ...(e.vaultRequestId ? { vaultRequestId: e.vaultRequestId } : {}),
+          activityId: e.activityId,
         },
       });
     case "paid":
@@ -102,7 +111,7 @@ export function transition(op: PrivacyOp, e: PrivacyEvent, now: number): Privacy
         step: "paying",
         exit: {
           ...op.exit!,
-          vaultRequestId: e.vaultRequestId,
+          activityId: e.activityId,
           ...(e.provedMs !== undefined ? { provedMs: e.provedMs } : {}),
         },
       });
@@ -134,10 +143,8 @@ export function transition(op: PrivacyOp, e: PrivacyEvent, now: number): Privacy
     case "withdrawn":
       if (op.step !== "submitted") bad();
       return next({ step: "done", withdraw: { ...op.withdraw!, receivedWei: e.receivedWei } });
-    case "failed": {
-      const { phone: _p, ...rest } = op;
-      return { ...rest, step: "failed", error: e.error, updatedAt: now };
-    }
+    case "failed":
+      return { ...op, step: "failed", error: e.error, updatedAt: now };
     case "restart":
       if (op.step !== "proving" && op.step !== "preparing") bad();
       return next({ step: "preparing" });
@@ -154,14 +161,14 @@ export function transition(op: PrivacyOp, e: PrivacyEvent, now: number): Privacy
       // A shield retried before its payment was made starts the payment again; after it, nothing is retried.
       const deposit = rest.deposit
         ? (() => {
-            const { route: _r, activityId: _a, vaultRequestId: _v, ...d } = rest.deposit!;
+            const { route: _r, activityId: _a, ...d } = rest.deposit!;
             return d;
           })()
         : undefined;
-      // A public exit retried before its Vault approval was sent proves again (same note, same phone answers).
+      // A public exit retried before its payment was sent proves again (same note).
       const exit = rest.exit
         ? (() => {
-            const { vaultRequestId: _v, provingStartedAt: _s, txHash: _t, ...x } = rest.exit!;
+            const { activityId: _v, provingStartedAt: _s, txHash: _t, ...x } = rest.exit!;
             return x;
           })()
         : undefined;
@@ -236,8 +243,8 @@ export function failureFor(err: unknown): NonNullable<PrivacyOp["error"]> {
         code: why,
         message:
           why === "unknown"
-            ? `The network dropped the withdrawal${reason ? ` (${reason})` : ""}. Try again: no new phone approval is needed.`
-            : `${INVALIDATION_TEXT[why]}${why === "note-spent" ? "" : " No new phone approval is needed."}`,
+            ? `The network dropped the withdrawal${reason ? ` (${reason})` : ""}. Try again.`
+            : `${INVALIDATION_TEXT[why]}`,
         retry: why !== "note-spent",
       };
     }
@@ -265,15 +272,14 @@ export function failureFor(err: unknown): NonNullable<PrivacyOp["error"]> {
       };
     case "EnvelopeSignatureError":
       return {
-        code: "phone-signature",
-        message: `${msg}. Scan the answer from your paired Vault phone.`,
+        code: "note-signature",
+        message: `${msg}. Try again.`,
         retry: true,
       };
     case "NonDeterministicSignerError":
       return {
-        code: "phone-not-deterministic",
-        message:
-          "Your phone signed the same note key two different ways, so the private balance can't use it. Update the Vault app.",
+        code: "note-not-deterministic",
+        message: "The note key was signed two different ways, so the private balance can't use it.",
         retry: false,
       };
     case "SyncIntegrityError":
@@ -297,7 +303,7 @@ const shortReason = (m: string) => {
   return line.length > 200 ? `${line.slice(0, 197)}…` : line;
 };
 
-/** What the page says while an operation is in `step` (ux-spec §3.11: syncing, proving, waiting for the phone, …). */
+/** What the page says while an operation is in `step` (ux-spec §3.11: syncing, proving, …). */
 export function stepCopy(op: PrivacyOp, estimateMs?: number): { title: string; body: string } {
   if (op.kind === "exit") return exitCopy(op);
   const shield = op.kind === "shield";
@@ -306,25 +312,11 @@ export function stepCopy(op: PrivacyOp, estimateMs?: number): { title: string; b
       return shield
         ? { title: "Preparing the deposit", body: "Checking the pool's history against the chain." }
         : { title: "Preparing the withdrawal", body: "Checking the pool's history and the network fee." };
-    case "phone":
-      return {
-        title: "Waiting for your phone",
-        body:
-          op.phone?.purpose === "check"
-            ? "One more scan of the same request, once: QueueBit checks that your phone signs note keys the same way every time."
-            : shield
-              ? "Your phone signs the key of this deposit's private note. Nothing is sent to the network and no money moves."
-              : op.phone?.purpose === "note-key"
-                ? "Your phone signs the key of the note you're moving. That key is what spends it; this browser never keeps it, so every withdrawal asks."
-                : "Your phone signs the key of the note that keeps your change (it also makes the fresh address). Kept only until this withdrawal is done.",
-      };
     case "paying":
-      return op.deposit?.route === "vault"
-        ? {
-            title: "Approve the deposit on your phone",
-            body: "The deposit is a payment from your account: it needs a Vault approval.",
-          }
-        : { title: "Sending the deposit", body: "An everyday payment from your account, within your daily limit." };
+      return {
+        title: "Sending the deposit",
+        body: "A payment from your account, signed with your quantum-safe owner key.",
+      };
     case "proving":
       return { title: "Preparing proof", body: proofEstimateText(estimateMs) };
     case "submitted":
@@ -349,11 +341,6 @@ function exitCopy(op: PrivacyOp): { title: string; body: string } {
   switch (op.step) {
     case "preparing":
       return { title: "Preparing the public exit", body: "Checking the pool's history against the chain." };
-    case "phone":
-      return {
-        title: "Waiting for your phone",
-        body: "Your phone signs the key of the note you're taking back. This browser never keeps it.",
-      };
     case "proving":
       return {
         title: "Preparing proof",
@@ -361,8 +348,8 @@ function exitCopy(op: PrivacyOp): { title: string; body: string } {
       };
     case "paying":
       return {
-        title: "Approve the public exit on your phone",
-        body: "Your account sends the exit to the pool: a Vault approval. The money comes back to your account.",
+        title: "Approve the public exit",
+        body: "Your account sends the exit to the pool, signed by your quantum-safe owner key. The money comes back to your account.",
       };
     case "done":
       return {

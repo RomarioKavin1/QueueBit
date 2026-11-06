@@ -12,11 +12,7 @@ export const FORBIDDEN = [
   { what: "design gallery", re: /0x1234567890abcdef1234567890abcdef1234abcd/iu },
   // Local devnet network entries (src/shared/chains.ts, BUILD.localDevnet).
   { what: "local devnet RPC", re: /localhost:(8545|8546|4337|14337|14340)/u },
-  { what: "local devnet network", re: /Local devnet|Local 4337 test chain/u },
-  // The shared-devnet flavour (src/shared/sharedDevnet.ts, BUILD.sharedDevnet).
-  { what: "shared devnet", re: /QueueBit devnet \(shared\)|queuebit:sharedDevnet|trycloudflare/u },
-  // The e2e-only service-worker probe (entrypoints/background.ts).
-  { what: "e2e probe", re: /__queuebitPq/u },
+  { what: "local devnet network", re: /Local devnet/u },
   // Source maps (they embed absolute paths and the sources).
   { what: "source map", re: /sourceMappingURL=/u },
 ];
@@ -37,8 +33,10 @@ export function checkProductionBuild(dir, files, { root, extraForbidden = [] } =
     for (const { what, re } of forbidden) if (re.test(text)) errors.push(`${f}: ${what} (${re})`);
   }
   const mf = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8"));
+  // The LeanPool node defaults to one on this computer (http://127.0.0.1, src/shared/build.ts): that host is allowed;
+  // localhost is the local devnet's.
   for (const h of mf.host_permissions ?? [])
-    if (/localhost|127\.0\.0\.1/u.test(h)) errors.push(`manifest host_permissions: ${h} (local devnet)`);
+    if (/localhost/u.test(h)) errors.push(`manifest host_permissions: ${h} (local devnet)`);
   if (mf.version === "0.0.0") errors.push("manifest version 0.0.0 (the Web Store refuses it)");
   if (errors.length) throw new Error(`not a production build:\n  ${errors.join("\n  ")}`);
   return mf;

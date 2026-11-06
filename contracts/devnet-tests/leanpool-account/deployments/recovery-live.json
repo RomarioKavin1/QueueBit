@@ -1,0 +1,70 @@
+{
+  "at": "2026-11-06T12:11:44.974Z",
+  "delaySeconds": 90,
+  "steps": [
+    {
+      "step": "guardian G2 swapped for G4; G2 refused",
+      "swapTx": "0xfc8bce841aef29ac120df06b2f899dbdb6c906a5798b9e996acaa3e62ce1f9ed",
+      "swapBlock": 3439,
+      "g2ApproveReverted": {
+        "tx": "0x0d7026c437f5ff68e15bc84c0b143ff4ab1b940c72fdec8a1737f2e78d10c37a",
+        "block": 3441,
+        "reason": "NotGuardian"
+      }
+    },
+    {
+      "step": "hostile recovery cancelled",
+      "proposalId": "0xe9aa88e9ad8bd3aec8039ebf26055a2408b10022b01a396a2535e07276b8179e",
+      "approvals": [
+        "0xc413d3080a25fbc5e5793bd13bed661748bd7d29fb7952349a13d8bdae226fef",
+        "0x8e2dec89e4db2b0cd48f1475081112ec1d3a2efa8eb3bf9e3fc07782549d7a21"
+      ],
+      "cancelTx": "0xc7158baae9ffda2967d3c874be43bbbfdbcf8f4b04e8948d782c5f713fb46177",
+      "cancelBlock": 3447,
+      "executeAfterDelayReverted": {
+        "tx": "0xf31e72bc3f2b0508e48e9d3ffa68461e5a4704d512a15570cf82f25a2f50a51d",
+        "block": 3459,
+        "reason": "AlreadyDone"
+      }
+    },
+    {
+      "step": "lost key recovered",
+      "proposalId": "0xe37a32d99ae57a845c926389f79d44e82196d1e1a53731118980613f609bf8e0",
+      "approvals": [
+        "0xd5a3480c13bbebfed8b3aaa8bd0b9805901fc9dad932176ac7f8c46f60152a57",
+        "0xcb984dc0e0ef2f96757ccd43a5119f77b36dbb13ad0bb71bb7850aaa1c0dd8ae"
+      ],
+      "executeEarlyReverted": {
+        "tx": "0x2321882b4a4672a618868c4a747f35abc86573f0b15b0b505ae66fa40bcf62af",
+        "block": 3462,
+        "reason": "NotReady"
+      },
+      "executeTx": "0x03a52b8a2b35a82abffd43f150e3607c69b03795dcc66f1405db6e46fa6f5873",
+      "executedBy": "0xA67bc5AE08f3E020c8F1BadE46Ee92D98be68953",
+      "pqKeysAfter": [
+        "0x72a25c5aea2b2727c239af5b28093887cf1d2809ee13155111e20b3816f314d9"
+      ]
+    },
+    {
+      "step": "new key spends; lost key refused by the LeanPool node",
+      "spendTx": "0xcc5c1460e6eed4054faa8a61f46340bda435513253e0ea27a664a00508d53f88",
+      "spendBlock": 3482,
+      "lostKeyRefusedByNode": "dependency key 0x0485a006b9d1d5566948090dcaac52eb1037cf40805c955fefdc3d06853071c0 is not a key held by 0x009c200e18cfdd860c2f1c1dc84c767af11ed1be"
+    }
+  ],
+  "account": "0x009C200e18CFdD860C2F1c1DC84C767aF11Ed1be",
+  "recovery": "0x7ee2866e07bbdc75f9582feb5af9d48e74614a68",
+  "keystore": "0x1bbefb4ca9907237b11887f8db876c089fe6fd91",
+  "anyone": "0xA67bc5AE08f3E020c8F1BadE46Ee92D98be68953",
+  "guardians": {
+    "g1": "0xd20F54061f60594F8c6783B8e60BEd87a68F7367",
+    "g2": "0xB65d0C42b2524E851fe148719D00c26A7526DEF3",
+    "g3": "0x34fcC412f44182895591845B72982f8CB3fE3252",
+    "g4": "0xaf777b43B28B5467658DD8376D997c6d07F22307"
+  },
+  "keys": {
+    "owner": "0x0485a006b9d1d5566948090dcaac52eb1037cf40805c955fefdc3d06853071c0",
+    "ownerNew": "0x72a25c5aea2b2727c239af5b28093887cf1d2809ee13155111e20b3816f314d9",
+    "attacker": "0x34f9a29223856615a05d4f85b2ce4ec3a2e16dc6bf95de1e565cba8959bed724"
+  }
+}

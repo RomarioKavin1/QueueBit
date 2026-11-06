@@ -1,0 +1,28 @@
+[package]
+name = "queuebit-lean-sphincs"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "leanVM leanSPHINCS (the scheme LeanPool aggregates) for QueueBit's post-quantum everyday key, compiled to WASM"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = []
+wasm = ["dep:wasm-bindgen", "getrandom/wasm_js"]
+
+[dependencies]
+# leanVM's leanSPHINCS at the revision `@kevaundray/lean-pq` 0.7.0 binds (lean-pq-bindings v0.7.0 Cargo.toml), so
+# keys and signatures are byte-compatible with the LeanPool node. 0.9.0 (leanVM ed7d2b9) is a different parameter
+# set (7,740-byte signatures): moving means moving the node, this crate and the scheme id together.
+signatures = { git = "https://github.com/leanEthereum/leanVM.git", rev = "a39758de10f35c7b34023d061cc05dfc0b36d43a" }
+# Pulled in by leanVM's `rand` 0.9; on wasm32 it needs the `wasm_js` backend (selected in .cargo/config.toml).
+getrandom = "=0.3.4"
+wasm-bindgen = { version = "=0.2.117", optional = true }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1

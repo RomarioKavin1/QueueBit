@@ -1,0 +1,11 @@
+{
+  "registry": "0x8139de17dd2a043f17b41999ee2ade17353f5da1",
+  "hub": "0xc5b640b8194c8c89999785ce1a299c1045e70359",
+  "legacyImplementation": "0x237e54e0111cdb9707dfbefa5f88c4ff91637d08",
+  "testToken": "0xcb4872c45625e59e5701b1c6005970b27c48c6ff",
+  "implementation": "0x93bb7dd870e3b6148ad157858646365ae71e0f09",
+  "factory": "0x41a4ef6a511e66d6c6818eae7c98bfe2684a08ce",
+  "keystore": "0xe980a01c14471b60d02d03c88ff301c8cc92ef42",
+  "hook": "0x7bba9117f72d0bd54edf30a65c1cb297b94efe3b",
+  "recovery": "0xf6a7974530c5b6a708ff59b8838e9bf5dc41f678"
+}

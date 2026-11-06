@@ -1,7 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { hexToBytes, toHex } from "viem";
+import { useEffect, useState } from "react";
 import { browser, type Browser } from "wxt/browser";
-import { UR_TYPES } from "@queuebit/ur";
 import type { NoteView, PrivacyOp, PrivacyView } from "../../shared/privacy";
 import {
   Button,
@@ -13,27 +11,23 @@ import {
   Spinner,
   TextField,
   Timeline,
-  VaultIcon,
   type TimelineStep,
 } from "../../ui";
-import { AnimatedQr, UrScanner } from "../../ui/QrHandoff";
 import { mempoolWord, stepCopy } from "../../background/privacy/machine";
 import { call, UiCallError } from "../lib/api";
 import { useAsync } from "../lib/hooks";
 import { eth, parseEth } from "../lib/money";
 
 /**
- * Private balance (ux-spec §3.11, plan §40 §1.5). Everything that touches note keys goes through the phone (a QR
- * round trip, the companion's typed-data flow); the deposit itself is an ordinary payment from the account (instant
- * within the daily limit, else a Vault approval); a withdrawal goes to a fresh address through the PoolPayer fee
+ * Private balance (ux-spec §3.11, plan §40 §1.5). Note keys are signed in this browser by a key made from your backup
+ * words for this purpose only; the deposit itself is a payment from the account, signed with the owner key; a
+ * withdrawal goes to a fresh address through the PoolPayer fee
  * payer, at cost, with no fee to choose. The page reads its state from the service worker and re-renders on
  * storage changes, so it survives the service worker restarting mid-operation.
  */
 export function Privacy() {
   const v = useAsync(() => call("privacy:view", {}), []);
   useEffect(() => {
-    // Resume whatever was in progress (e.g. after the deposit's Vault approval on the hand-off page).
-    void call("privacy:run", {}).catch(() => undefined);
     const onChanged = (changes: Record<string, Browser.storage.StorageChange>, area: string) => {
       if (area === "local" && Object.keys(changes).some((k) => k.startsWith("queuebit:privacy:"))) void v.reload();
     };
@@ -69,7 +63,7 @@ function PrivacyBody({ view, reload }: { view: PrivacyView; reload: () => void }
   return (
     <div className="flex flex-col gap-5" data-testid="privacy">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <h1 className="t-headline">Private balance</h1>
+        <h1 className="text-[24px] leading-[30px] font-semibold">Private balance</h1>
         <span
           className="t-small inline-flex items-center gap-1.5 rounded-full border border-line px-3 py-1"
           data-testid="privacy-connection"
@@ -100,15 +94,15 @@ function PrivacyBody({ view, reload }: { view: PrivacyView; reload: () => void }
       <Card className="bg-surface">
         <p className="t-body">
           Powered by Privacy Pools (0xbow). Deposits are public and are reviewed by the pool&apos;s reviewer before they
-          can be spent. Your spending keys for this balance live on your phone, not in this browser, which keeps only
-          what is public about each note (enough to show the balance after you unlock).
+          can be spent. Its spending keys are made from your backup words when needed and never stored; this browser
+          keeps only what is public about each note (enough to show the balance after you unlock).
         </p>
         <details className="mt-2">
           <summary className="t-small cursor-pointer text-muted underline underline-offset-2">What to know</summary>
           <ul className="t-small mt-2 flex list-disc flex-col gap-1 pl-5 text-muted">
             <li>
-              The note keys are classical signatures from your phone (not quantum-safe), and the proof is a standard
-              zero-knowledge proof. The pool&apos;s reviewer (0xbow) is trusted to approve deposits.
+              The note keys are classical signatures (not quantum-safe), and the proof is a standard zero-knowledge
+              proof. The pool&apos;s reviewer (0xbow) is trusted to approve deposits.
             </li>
             <li>
               Moving to public sends the money to a fresh address made for that withdrawal. Its network fee is paid out
@@ -139,11 +133,11 @@ function PrivacyBody({ view, reload }: { view: PrivacyView; reload: () => void }
           {!active && (
             <div className="flex flex-col gap-2">
               <div className="flex flex-wrap gap-2">
-                <Button variant="vault" onClick={() => setForm(form === "shield" ? null : "shield")}>
+                <Button variant="owner" onClick={() => setForm(form === "shield" ? null : "shield")}>
                   Move to private
                 </Button>
                 <Button
-                  variant="vault"
+                  variant="owner"
                   disabled={BigInt(view.maxWithdrawWei) === 0n}
                   title={BigInt(view.maxWithdrawWei) === 0n ? "Nothing approved to move yet" : undefined}
                   onClick={() => setForm(form === "unshield" ? null : "unshield")}
@@ -151,7 +145,7 @@ function PrivacyBody({ view, reload }: { view: PrivacyView; reload: () => void }
                   Move to public
                 </Button>
               </div>
-              <p className="t-small text-muted">Both need your phone.</p>
+              <p className="t-small text-muted">Both are signed with your keys in this browser.</p>
             </div>
           )}
           {!active && form && (
@@ -197,15 +191,15 @@ function PrivacyBody({ view, reload }: { view: PrivacyView; reload: () => void }
 function Balances({ view }: { view: PrivacyView }) {
   return (
     <div className="grid gap-3 sm:grid-cols-2">
-      <Card tone="vault">
+      <Card tone="owner">
         <p className="t-small text-muted">Available</p>
-        <p className="t-figure tabular" data-testid="privacy-available">
+        <p className="text-[22px] leading-7 font-semibold tabular" data-testid="privacy-available">
           {eth(view.approvedWei)}
         </p>
       </Card>
       <Card>
         <p className="t-small text-muted">Waiting for pool review (0xbow)</p>
-        <p className="t-figure tabular" data-testid="privacy-pending">
+        <p className="text-[22px] leading-7 font-semibold tabular" data-testid="privacy-pending">
           {eth(view.pendingWei)}
         </p>
       </Card>
@@ -254,7 +248,7 @@ function SyncLine({ view, busy, onSync }: { view: PrivacyView; busy: boolean; on
           aria-valuenow={pct ?? 0}
           className="h-1.5 overflow-hidden rounded-full bg-surface-2"
         >
-          <div className="h-full bg-vault" style={{ width: `${pct ?? 5}%` }} />
+          <div className="h-full bg-owner" style={{ width: `${pct ?? 5}%` }} />
         </div>
       )}
     </div>
@@ -279,7 +273,7 @@ function AmountForm({
   const max = BigInt(view.maxWithdrawWei);
   const tooMuch = kind === "unshield" && wei !== undefined && wei > max;
   return (
-    <Card tone="vault" heading={kind === "shield" ? "Move to private" : "Move to public"} headingLevel={2}>
+    <Card tone="owner" heading={kind === "shield" ? "Move to private" : "Move to public"} headingLevel={2}>
       <form
         className="mt-2 flex flex-col gap-3"
         onSubmit={(e) => {
@@ -295,8 +289,8 @@ function AmountForm({
           error={tooMuch ? `One withdrawal can move up to ${eth(max)} (one deposit at a time).` : undefined}
           description={
             kind === "shield"
-              ? "Needs your phone (the note key), and a Vault approval for the payment unless it fits your daily limit as an everyday payment."
-              : `Up to ${eth(max)} in one move. Your phone signs twice (the note's key, then its change note's key); it goes to a fresh address made for this withdrawal (your phone can recover it).`
+              ? "A payment from your account, signed with your owner key."
+              : `Up to ${eth(max)} in one move. It goes to a fresh address made for this withdrawal (your backup words can recover it).`
           }
         />
         {kind === "unshield" && (
@@ -309,8 +303,8 @@ function AmountForm({
           <Button variant="secondary" onClick={onCancel}>
             Cancel
           </Button>
-          <Button type="submit" variant="vault" loading={busy} disabled={!wei || tooMuch}>
-            {kind === "shield" ? "Continue with phone" : "Continue with phone"}
+          <Button type="submit" variant="owner" loading={busy} disabled={!wei || tooMuch}>
+            Continue
           </Button>
         </div>
       </form>
@@ -334,7 +328,7 @@ function ExitConfirm({
   onCancel: () => void;
 }) {
   return (
-    <Card tone="vault" heading={`Public exit: take back ${eth(note.valueWei)}`} headingLevel={2}>
+    <Card tone="owner" heading={`Public exit: take back ${eth(note.valueWei)}`} headingLevel={2}>
       <div className="mt-2 flex flex-col gap-3" data-testid="privacy-exit-confirm">
         <p className="t-body">
           This takes deposit #{note.depositIndex} out of the pool and back to your account, without waiting for the
@@ -346,14 +340,14 @@ function ExitConfirm({
           body="Anyone can see that this money left the pool back to the account that deposited it. Use it to get your money back, not for privacy."
         />
         <p className="t-small text-muted">
-          Your phone signs the note&apos;s key, this computer makes a small proof, then your phone approves the exit (a
-          Vault approval). The full amount comes back; there is no pool fee.
+          This computer makes a small proof, then your owner key signs the exit. The full amount comes back; there is no
+          pool fee.
         </p>
         <div className="flex gap-2">
           <Button variant="secondary" onClick={onCancel}>
             Cancel
           </Button>
-          <Button variant="vault" loading={busy} onClick={onStart} data-testid="privacy-exit-start">
+          <Button variant="owner" loading={busy} onClick={onStart} data-testid="privacy-exit-start">
             Take it back publicly
           </Button>
         </div>
@@ -366,19 +360,19 @@ function steps(op: PrivacyOp): TimelineStep[] {
   const order: Array<[string, PrivacyOp["step"][]]> =
     op.kind === "exit"
       ? [
-          ["Phone signs the note key", ["preparing", "phone"]],
+          ["Prepare", ["preparing"]],
           ["Prove on this computer", ["proving"]],
-          ["Approve the exit with Vault", ["paying"]],
+          ["Send the exit", ["paying"]],
           ["Back in your account", ["done"]],
         ]
       : op.kind === "shield"
         ? [
-            ["Phone signs the note key", ["preparing", "phone"]],
+            ["Prepare", ["preparing"]],
             ["Pay the deposit", ["paying"]],
             ["In the pool", ["done"]],
           ]
         : [
-            ["Phone signs the note key, then the change note key", ["preparing", "phone"]],
+            ["Prepare", ["preparing"]],
             ["Prove on this computer", ["proving"]],
             ["Send via the fee payer", ["submitted"]],
             ["Arrived", ["done"]],
@@ -391,7 +385,6 @@ function steps(op: PrivacyOp): TimelineStep[] {
 }
 
 function OpPanel({ view, op, reload }: { view: PrivacyView; op: PrivacyOp; reload: () => void }) {
-  const [phase, setPhase] = useState<"show" | "scan" | "checking">("show");
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
@@ -399,11 +392,9 @@ function OpPanel({ view, op, reload }: { view: PrivacyView; op: PrivacyOp; reloa
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, [op.step]);
-  useEffect(() => setPhase("show"), [op.phone?.requestId]);
-  const cbor = useMemo(() => (op.phone ? hexToBytes(op.phone.cbor) : undefined), [op.phone]);
   const copy = stepCopy(op, view.proofEstimateMs);
   const amount = eth(op.amountWei);
-  const tone = op.step === "failed" ? "danger" : op.step === "done" ? "safe" : "vault";
+  const tone = op.step === "failed" ? "danger" : op.step === "done" ? "safe" : "owner";
   const run = async (fn: () => Promise<unknown>) => {
     setError(null);
     try {
@@ -418,7 +409,7 @@ function OpPanel({ view, op, reload }: { view: PrivacyView; op: PrivacyOp; reloa
     <Card tone={tone} as="section" data-testid="privacy-op" data-step={op.step} data-kind={op.kind}>
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="t-small font-semibold tracking-wide text-vault uppercase">
+          <p className="t-small font-semibold tracking-wide text-owner uppercase">
             {op.kind === "shield"
               ? `Move ${amount} to private`
               : op.kind === "exit"
@@ -430,7 +421,7 @@ function OpPanel({ view, op, reload }: { view: PrivacyView; op: PrivacyOp; reloa
           </h2>
           <p className="t-body mt-1">{copy.body}</p>
         </div>
-        {(op.step === "preparing" || op.step === "phone") && (
+        {op.step === "preparing" && (
           <Button size="sm" variant="ghost" onClick={() => run(() => call("privacy:cancel", { opId: op.id }))}>
             Cancel
           </Button>
@@ -446,81 +437,10 @@ function OpPanel({ view, op, reload }: { view: PrivacyView; op: PrivacyOp; reloa
         </p>
       )}
 
-      {op.step === "phone" && op.phone && cbor && (
-        <div className="mt-3 flex flex-col gap-3" data-testid="privacy-phone" data-purpose={op.phone.purpose}>
-          {phase === "show" ? (
-            <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
-              <AnimatedQr type={UR_TYPES.signRequest} cbor={cbor} label="Note key request for your phone" />
-              <div className="flex flex-1 flex-col gap-3">
-                <ol className="t-body list-decimal pl-5">
-                  <li>
-                    Open <strong>QueueBit Vault</strong> and tap <strong>Scan request</strong>.
-                  </li>
-                  <li>
-                    It shows &ldquo;Privacy Pools note keys&rdquo;, deposit #{op.phone.depositIndex}, note #
-                    {op.phone.secretIndex}. Nothing is sent to the network.
-                  </li>
-                  <li>Approve, then scan the phone&apos;s answer back here.</li>
-                </ol>
-                <Button variant="vault" data-testid="scan-back" onClick={() => setPhase("scan")}>
-                  Phone has signed: scan it back
-                </Button>
-              </div>
-            </div>
-          ) : phase === "scan" ? (
-            <>
-              <UrScanner
-                accept={[UR_TYPES.signature]}
-                cameraLabel="Camera preview for scanning the phone's answer"
-                hint="Show the phone's answer code to this camera."
-                onComplete={async (r) => {
-                  setPhase("checking");
-                  await run(() => call("privacy:answer", { opId: op.id, signature: toHex(r.cbor) }));
-                  setPhase("show");
-                }}
-              />
-              <Button variant="ghost" onClick={() => setPhase("show")}>
-                Back to the request code
-              </Button>
-            </>
-          ) : (
-            <p className="t-body inline-flex items-center gap-2" role="status">
-              <Spinner size={16} /> Checking the phone&apos;s signature…
-            </p>
-          )}
-        </div>
-      )}
-
-      {op.step === "paying" && op.deposit && (
-        <div className="mt-3 flex flex-col gap-2">
-          {op.deposit.route === "vault" && op.deposit.vaultRequestId ? (
-            <Button
-              variant="vault"
-              icon={<VaultIcon size={18} />}
-              data-testid="privacy-approve-payment"
-              onClick={() => (location.hash = `#vault/${op.deposit!.vaultRequestId}?back=privacy`)}
-            >
-              Approve the deposit on your phone
-            </Button>
-          ) : (
-            <p className="t-body inline-flex items-center gap-2" role="status">
-              <Spinner size={16} /> Confirming on the network…
-            </p>
-          )}
-        </div>
-      )}
-
-      {op.step === "paying" && op.kind === "exit" && op.exit?.vaultRequestId && (
-        <div className="mt-3 flex flex-col gap-2">
-          <Button
-            variant="vault"
-            icon={<VaultIcon size={18} />}
-            data-testid="privacy-approve-exit"
-            onClick={() => (location.hash = `#vault/${op.exit!.vaultRequestId}?back=privacy`)}
-          >
-            Approve the public exit on your phone
-          </Button>
-        </div>
+      {op.step === "paying" && (
+        <p className="t-body mt-3 inline-flex items-center gap-2" role="status">
+          <Spinner size={16} /> Confirming on the network…
+        </p>
       )}
 
       {op.step === "proving" && (
@@ -548,7 +468,7 @@ function OpPanel({ view, op, reload }: { view: PrivacyView; op: PrivacyOp; reloa
               {op.withdraw.recipient}
             </span>
             <span className="t-small block text-muted">
-              A fresh address made for this withdrawal; your phone can recover it.
+              A fresh address made for this withdrawal; your backup words can recover it.
             </span>
           </dd>
           <dt className="text-muted">Network fee</dt>
@@ -563,7 +483,7 @@ function OpPanel({ view, op, reload }: { view: PrivacyView; op: PrivacyOp; reloa
       {op.step === "failed" && (
         <div className="mt-3 flex gap-2">
           {op.error?.retry && (
-            <Button variant="vault" onClick={() => run(() => call("privacy:retry", { opId: op.id }))}>
+            <Button variant="owner" onClick={() => run(() => call("privacy:retry", { opId: op.id }))}>
               Try again
             </Button>
           )}
@@ -583,7 +503,6 @@ function OpPanel({ view, op, reload }: { view: PrivacyView; op: PrivacyOp; reloa
       <details className="mt-3">
         <summary className="t-small cursor-pointer text-muted underline underline-offset-2">Details</summary>
         <div className="t-small mt-2 flex flex-col gap-1 text-muted">
-          <p>Phone approvals so far: {op.phoneCount}</p>
           {op.withdraw?.hash && <p className="t-mono break-all">Withdrawal {op.withdraw.hash}</p>}
           {op.withdraw?.provedMs !== undefined && <p>Proof took {(op.withdraw.provedMs / 1000).toFixed(1)} s here</p>}
           {op.withdraw?.circuit && (
@@ -613,7 +532,7 @@ function History({ view, onExit }: { view: PrivacyView; onExit?: (n: NoteView) =
       <ul className="flex flex-col gap-1" data-testid="privacy-notes">
         {view.notes.map((n) => (
           <li key={`${n.depositIndex}:${n.secretIndex}`} className="t-body flex items-center gap-2">
-            <ShieldIcon size={16} className="text-vault" />
+            <ShieldIcon size={16} className="text-owner" />
             Deposit #{n.depositIndex}: {eth(n.valueWei)} ·{" "}
             {n.status === "approved"
               ? "available"

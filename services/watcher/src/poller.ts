@@ -1,17 +1,13 @@
 import type { Address, Hex } from "viem";
 import {
-  blockedFromFrameTx,
-  bucketAvailableAt,
   decodeLogs,
-  hotAttempts,
   type Alert,
   type CoreState,
-  type MinedFrameTx,
   type RpcLog,
   type WatchedEvent,
   type WatcherCore,
 } from "@queuebit/watcher-core";
-import { readBucket, type BlockInfo, type ChainClient } from "./chain.js";
+import type { ChainClient } from "./chain.js";
 import type { Hub } from "./hub.js";
 import type { Checkpoint, CheckpointStore } from "./store.js";
 
@@ -26,7 +22,6 @@ export interface PollerOptions {
   startBlock: bigint | "latest";
   maxBlockRange: number;
   reorgWindow: number;
-  scanFrameTxs: boolean;
   /** Unix seconds for deadline ticks (default: wall clock). */
   clock?: () => number;
   log?: (msg: string, extra?: Record<string, unknown>) => void;
@@ -43,9 +38,11 @@ export interface PollResult {
 /**
  * Polls the chain for registered accounts:
  *  - processes only blocks at least `confirmations` behind the head;
- *  - `eth_getLogs` over the watched addresses in pages of `maxBlockRange` (halved when the node refuses a range);
- *  - frame accounts: also scans each block's own transactions of the account and their receipts, because an
- *    over-limit attempt reverts its SENDER frame and leaves no log;
+ *  - `eth_getLogs` over the watched accounts and the shared modules (keystore, spending-limit hook, guardian
+ *    recovery) in pages of `maxBlockRange` (halved when the node refuses a range); module events of other accounts
+ *    are dropped by the decoder;
+ *  - reads block headers only where needed: every block within `reorgWindow` of the head, and below it only blocks
+ *    with logs (and each page's last block), so catching up over a long history stays cheap;
  *  - reorgs deeper than the confirmation depth: compares the stored hash of the last processed block, walks back to
  *    the common ancestor, restores the core state saved there, reprocesses, and retracts alerts whose transaction
  *    did not come back;
@@ -59,7 +56,6 @@ export class Poller {
   private readonly alertsByBlock = new Map<bigint, string[]>();
   /** Alert id -> block it was raised in, for alerts a reorg orphaned and whose block has not been reprocessed yet. */
   private readonly pendingOrphans = new Map<string, bigint>();
-  private readonly frameAccounts: Set<string>;
   private readonly logAddresses: Address[];
   private range: number;
   private readonly clock: () => number;
@@ -74,9 +70,6 @@ export class Poller {
     this.core = o.makeCore(saved?.core ?? undefined);
     this.lastBlock = saved?.lastBlock ? BigInt(saved.lastBlock) : null;
     this.recent = (saved?.recent ?? []).map((r) => ({ n: BigInt(r.n), hash: r.hash as Hex }));
-    this.frameAccounts = new Set(
-      [...this.core.index.accounts].filter(([, b]) => b === "frame").map(([a]) => a.toLowerCase()),
-    );
     this.logAddresses = this.core.index.logAddresses();
     this.range = Math.max(1, o.maxBlockRange);
     this.clock = o.clock ?? (() => Math.floor(Date.now() / 1000));
@@ -91,7 +84,15 @@ export class Poller {
     return this.core;
   }
 
-  async poll(): Promise<PollResult> {
+  private inflight: Promise<PollResult> | undefined;
+
+  /** One poll; a call while one is running shares it (the service's timer and `pollOnce` may overlap). */
+  poll(): Promise<PollResult> {
+    this.inflight ??= this.pollNow().finally(() => (this.inflight = undefined));
+    return this.inflight;
+  }
+
+  private async pollNow(): Promise<PollResult> {
     const head = await this.o.chain.blockNumber();
     // A chain younger than the confirmation depth has no confirmed block yet: the cursor stays before block 0.
     const conf = BigInt(this.o.confirmations);
@@ -116,7 +117,12 @@ export class Poller {
         else byBlock.set(n, [l]);
       }
       let stop = false;
+      // Blocks deeper than the reorg window that have no logs need no header: nothing to ingest, and the window's
+      // reorg protection never reaches them. A catch-up over history costs one getBlock per block with logs (plus
+      // each page's last block, kept as the cursor), not one per block.
+      const deep = safe - BigInt(this.o.reorgWindow);
       for (let n = from; n <= to; n++) {
+        if (n < deep && n !== to && !byBlock.has(n)) continue;
         const alerts = await this.processBlock(n, byBlock.get(n) ?? []);
         if (alerts === null) {
           stop = true; // inconsistent view (a reorg in flight): retry on the next poll
@@ -158,13 +164,13 @@ export class Poller {
   private async checkReorg(): Promise<{ at: bigint; ancestor: bigint } | undefined> {
     const top = this.recent.at(-1);
     if (!top) return undefined;
-    const b = await this.o.chain.getBlock(top.n, false);
+    const b = await this.o.chain.getBlock(top.n);
     if (b && b.hash === top.hash) return undefined;
     // Walk back to the newest stored block that is still canonical.
     let ancestor: bigint | null = null;
     for (let i = this.recent.length - 2; i >= 0; i--) {
       const r = this.recent[i]!;
-      const c = await this.o.chain.getBlock(r.n, false);
+      const c = await this.o.chain.getBlock(r.n);
       if (c && c.hash === r.hash) {
         ancestor = r.n;
         break;
@@ -191,8 +197,7 @@ export class Poller {
 
   /** Alerts of one block, or null when the node's view is inconsistent (a reorg under our feet). */
   private async processBlock(n: bigint, logs: RpcLog[]): Promise<Alert[] | null> {
-    const scan = this.o.scanFrameTxs && this.frameAccounts.size > 0;
-    const block = await this.o.chain.getBlock(n, scan);
+    const block = await this.o.chain.getBlock(n);
     if (!block) return null;
     const prev = this.recent.at(-1);
     if (prev && prev.n === n - 1n && prev.hash !== block.parentHash) return null;
@@ -201,8 +206,6 @@ export class Poller {
     const events: WatchedEvent[] = decodeLogs(logs, this.core.index).map((e) =>
       e.timestamp === undefined ? { ...e, timestamp: block.timestamp } : e,
     );
-    if (scan) events.push(...(await this.blockedInBlock(block)));
-    events.sort((a, b) => a.logIndex - b.logIndex);
 
     const alerts = this.core.ingest(events, block.timestamp);
     this.recent.push({ n, hash: block.hash });
@@ -217,45 +220,6 @@ export class Poller {
       if (k <= n - BigInt(this.o.reorgWindow)) this.alertsByBlock.delete(k);
     this.lastBlock = n;
     return alerts;
-  }
-
-  /** Reverted hot SENDER frames of the watched frame accounts' own transactions in this block. */
-  private async blockedInBlock(block: BlockInfo): Promise<WatchedEvent[]> {
-    const out: WatchedEvent[] = [];
-    let parentTs: number | undefined;
-    for (const tx of block.transactions ?? []) {
-      const sender = tx.sender ?? tx.from;
-      if (!tx.frames || !sender || !this.frameAccounts.has(sender.toLowerCase())) continue;
-      const receipt = await this.o.chain.getReceipt(tx.hash);
-      if (!receipt) continue;
-      const mined: MinedFrameTx = {
-        hash: tx.hash,
-        sender,
-        blockNumber: block.number,
-        blockHash: block.hash,
-        frames: tx.frames,
-      };
-      const attempts = hotAttempts(mined, receipt);
-      if (!attempts.some((a) => a.status === "reverted")) continue;
-      // Evidence for the reason: the bucket before this block, refilled to this block's time.
-      const before = await readBucket(this.o.chain, sender, block.number - 1n);
-      let bucketAvailable: bigint | undefined;
-      if (before) {
-        parentTs ??= (await this.o.chain.getBlock(block.number - 1n, false))?.timestamp;
-        bucketAvailable =
-          parentTs === undefined ? before.available : bucketAvailableAt(before, parentTs, block.timestamp);
-      }
-      out.push(
-        ...blockedFromFrameTx(
-          mined,
-          receipt,
-          this.core.index,
-          bucketAvailable === undefined ? {} : { bucketAvailable },
-          block.timestamp,
-        ),
-      );
-    }
-    return out;
   }
 
   private async getLogs(from: bigint, to: bigint): Promise<RpcLog[]> {

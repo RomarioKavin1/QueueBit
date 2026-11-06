@@ -10,27 +10,6 @@
 [submodule "contracts/lib/hegota-support"]
 	path = contracts/lib/hegota-support
 	url = https://github.com/forshtat/hegota-support
-[submodule "contracts/lib/account-abstraction"]
-	path = contracts/lib/account-abstraction
-	url = https://github.com/eth-infinitism/account-abstraction
-[submodule "contracts/lib/erc7579-implementation"]
-	path = contracts/lib/erc7579-implementation
-	url = https://github.com/erc7579/erc7579-implementation
-[submodule "contracts/lib/sentinellist"]
-	path = contracts/lib/sentinellist
-	url = https://github.com/rhinestonewtf/sentinellist
-[submodule "contracts/lib/safe7579"]
-	path = contracts/lib/safe7579
-	url = https://github.com/rhinestonewtf/safe7579
 [submodule "contracts/lib/safe-smart-account"]
 	path = contracts/lib/safe-smart-account
 	url = https://github.com/safe-global/safe-smart-account
-[submodule "contracts/lib/kernel"]
-	path = contracts/lib/kernel
-	url = https://github.com/zerodevapp/kernel
-[submodule "contracts/lib/erc7579-safe7579-dep"]
-	path = contracts/lib/erc7579-safe7579-dep
-	url = https://github.com/erc7579/erc7579-implementation
-[submodule "contracts/lib/checknsignatures"]
-	path = contracts/lib/checknsignatures
-	url = https://github.com/rhinestonewtf/checknsignatures

@@ -35,9 +35,12 @@ export type { CallInit, FrameInit, TxInit, VerifyInit } from "./tx/build.js";
 export { MAX_FRAMES, validateTx } from "./tx/validate.js";
 export { MAX_RECENT_ROOT_REFERENCES, RECENT_ROOT_TUPLE_BYTES, encodeRecentRootData } from "./tx/recentRoots.js";
 export {
+  LEANSPHINCS_SCHEME,
   QUEUEBIT_VERIFY_ABI,
   accountVerifyData,
   hotSpendTx,
+  leanPoolTriple,
+  leanPoolWitness,
   roleSignerPathATx,
   roleSignerPathBTx,
   roleSignerVerifyData,

@@ -87,7 +87,7 @@ export type ApprovalOutcome = Exclude<ApprovalStatus, "pending">;
 
 export type ApprovalInit = Pick<
   Approval,
-  "kind" | "origin" | "chainId" | "firstVisit" | "embedded" | "topOrigin" | "tx" | "sig" | "routeDenial"
+  "kind" | "origin" | "chainId" | "firstVisit" | "embedded" | "topOrigin" | "tx" | "sessionMiss"
 >;
 
 /**

@@ -6,16 +6,17 @@
   "startBlock": "latest",
   "maxBlockRange": 2000,
   "reorgWindow": 64,
-  "scanFrameTxs": true,
   "accounts": [{ "address": "0x0000000000000000000000000000000000000000", "backend": "frame" }],
-  "modules": [],
-  "roleSigners": [],
+  "modules": [
+    "0xe980a01c14471b60d02d03c88ff301c8cc92ef42",
+    "0x7bba9117f72d0bd54edf30a65c1cb297b94efe3b",
+    "0xf6a7974530c5b6a708ff59b8838e9bf5dc41f678"
+  ],
+  "nearLimitPercent": 80,
   "store": "sqlite:./data/watcher.db",
   "http": { "host": "127.0.0.1", "port": 8787 },
   "apiKeys": [{ "id": "extension", "secret": "0x<64 hex chars: openssl rand -hex 32>" }],
   "rateLimit": { "perMinute": 60, "burst": 20, "maxStreamsPerKey": 4 },
   "webhook": { "url": "https://example.invalid/queuebit-hook", "secret": "0x<64 hex chars>", "minSeverity": "info" },
-  "ntfy": { "url": "https://ntfy.sh", "topic": "<long random topic>", "minSeverity": "warning" },
-  "blockedThreshold": 3,
-  "blockedWindowSec": 3600
+  "ntfy": { "url": "https://ntfy.sh", "topic": "<long random topic>", "minSeverity": "warning" }
 }

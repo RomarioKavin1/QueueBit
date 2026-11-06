@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { type Abi, toEventSelector } from "viem";
-import { frameAccountAbi, moduleAbi } from "../src/index.js";
+import { MODULE_TYPES, accountAbi, modulesAbi } from "../src/index.js";
 
 // @ts-expect-error -- plain .mjs script without types
 import { TARGET, artifactsPresent, render } from "../scripts/gen-abi.mjs";
@@ -17,31 +17,28 @@ describe("generated ABI", () => {
     },
   );
 
-  it("carries the canonical watcher events (plan §40 §5 / 10-contracts §10.3.2) for both backends", () => {
+  it("carries the events the rules act on", () => {
     const names = (abi: Abi) => new Set(abi.filter((x) => x.type === "event").map((x) => (x as { name: string }).name));
-    const frame = names(frameAccountAbi as Abi);
+    const account = names(accountAbi as Abi);
+    for (const e of ["ModuleInstalled", "ModuleUninstalled", "Upgraded"]) expect(account.has(e), e).toBe(true);
+    const mods = names(modulesAbi as Abi);
     for (const e of [
-      "Queued",
-      "QueueExecuted",
-      "QueueCancelled",
-      "Frozen",
-      "Unfrozen",
-      "HotKeyRotated",
-      "BunkerEnabled",
-      "UpgradeQueued",
-      "MigrationQueued",
-      "VaultRotationStarted",
-      "VaultRotationFinalized",
-      "CapUpdated",
-      "HotExecuted",
-    ]) {
-      expect(frame.has(e), e).toBe(true);
-    }
-    const mod = names(moduleAbi as Abi);
-    for (const e of ["Queued", "Frozen", "VaultRotationStarted", "QueueCancelled"]) expect(mod.has(e), e).toBe(true);
-    // No CapHit event exists: over-cap is derived from receipts.
-    expect(frame.has("CapHit")).toBe(false);
-    const queued = (frameAccountAbi as Abi).find((x) => x.type === "event" && x.name === "Queued")!;
-    expect(toEventSelector(queued as never)).toBe(toEventSelector("Queued(bytes32,uint8,uint48)"));
+      "KeyAdded",
+      "KeyRemoved",
+      "KeyUpdated",
+      "PolicySet",
+      "SessionTokenSet",
+      "DailyCapSet",
+      "TokenDailyCapSet",
+      "SessionSpend",
+      "SessionTokenSpend",
+      "Approved",
+      "Recovered",
+      "Cancelled",
+    ])
+      expect(mods.has(e), e).toBe(true);
+    const keyAdded = (modulesAbi as Abi).find((x) => x.type === "event" && x.name === "KeyAdded")!;
+    expect(toEventSelector(keyAdded as never)).toBe(toEventSelector("KeyAdded(address,bytes32,uint8,uint8,uint8)"));
+    expect(MODULE_TYPES.FRAME_VALIDATOR).toBe(11);
   });
 });

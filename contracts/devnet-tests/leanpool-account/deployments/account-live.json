@@ -1,0 +1,175 @@
+{
+  "at": "2026-11-06T11:03:44.829Z",
+  "account": "0xD0fA986F138F6C2421ab3559e61b17b16d822B53",
+  "keys": {
+    "pqA": "0x68ddae8091c57c9dd1a22d005160b239dae41b14c6810eb691a38daa729b5242",
+    "pqB": "0x547c8fb9505e3c12e0e89ca2af476434de1a4ed452cf3065d52988ad2b66e274",
+    "pqC": "0xf2c9ca8a5053aa173a77a9e9c2d3718616d15ddc5d785456f764328b04de9f0f",
+    "device": "0x140753b9209295b3b8a96292eb82f95b57820fb2",
+    "passkeyId": "0x10a664ff5794404c6e3441f26a3cd2c2ccf43bd462875809df8f67625a3f06ef",
+    "passkey": {
+      "x": "0x08e7400049a159acb7039a39e9a07a25dbd750d5203bcd5ecc12d9b1d61ddf76",
+      "y": "0x469352e6253da07cf631ea0147badd7247ec9a3a5b27b04237645a054e3c603e"
+    }
+  },
+  "txs": [
+    {
+      "label": "1. spend 1 wei, device P256 key alone (native entry)",
+      "txHash": "0x96b97d9211ddc21382c5b41572519a48abf92c04b72d0d790d3035fb63f0edcb",
+      "block": 2705,
+      "status": "0x1",
+      "gasUsed": 126162,
+      "verifyGas": 63580,
+      "frames": [
+        {
+          "status": "0x1",
+          "gas": 63580
+        },
+        {
+          "status": "0x1",
+          "gas": 37496
+        }
+      ]
+    },
+    {
+      "label": "2. spend 1 wei, PQ-A alone (leanSPHINCS via LeanPool)",
+      "poolTx": "0xc63d55f06f1519e369eb1c68a31eaaa819dc9385140aebdf8e88abdd2c4640b8",
+      "root": "0xe68cfc47c6c92202bbb073081189245cde007136dad90402ceb68b36cbf175a9",
+      "rootPostTx": "0x89598f3a6822e1b46926d92afe81fbfca387184bf769e0ad602b1c7d1c801d13",
+      "txHash": "0x6d8f22588a0ab785ffc497cda5fcb5d1c9925d2d9a09ef6d5feb3b5c07ca5714",
+      "block": 2710,
+      "status": "0x1",
+      "gasUsed": 113993,
+      "verifyGas": 54868,
+      "frames": [
+        {
+          "status": "0x1",
+          "gas": 54868
+        },
+        {
+          "status": "0x1",
+          "gas": 41027
+        }
+      ],
+      "proofHash": "0xfd55e9e1dea66ffcc3e7a8ba8d4c6226afcae27508aeee16c1bdb5d620449ba8"
+    },
+    {
+      "label": "3. admin batch: add a session key + its daily cap of 1500 wei, signed by PQ-A + device key",
+      "poolTx": "0x0664ac3849396a28b51fb14ae76cf11aaf3db4969ecc74aa863b2ec9c4c83c5f",
+      "root": "0x56c90b0212206a56d20ee3d7df8ae2b5944d739f6afe9a4ebe30973f08b23262",
+      "rootPostTx": "0xe7c7116044928a0767c87047ea761f0f712a7fd90e4c922a133cae823ac62947",
+      "txHash": "0x44c2394edbdf95710a5a7b9af8a23898429efa772ce6590c922417a6283b6035",
+      "block": 2715,
+      "status": "0x1",
+      "gasUsed": 706542,
+      "verifyGas": 61667,
+      "frames": [
+        {
+          "status": "0x1",
+          "gas": 61667
+        },
+        {
+          "status": "0x1",
+          "gas": 123457
+        }
+      ],
+      "proofHash": "0xc5fd516a3093924a7b75a3929bf4b909dc6fc3fda8175447707958d9b7e904d9"
+    },
+    {
+      "label": "4. spend 600 wei to the funder, session key alone (allowlist, per-tx cap, daily cap)",
+      "txHash": "0x88133f685cffc23320735389fbab247ed3db54fe18ee48834273b44665519c55",
+      "block": 2720,
+      "status": "0x1",
+      "gasUsed": 234580,
+      "verifyGas": 46136,
+      "frames": [
+        {
+          "status": "0x1",
+          "gas": 46136
+        },
+        {
+          "status": "0x1",
+          "gas": 65426
+        }
+      ]
+    },
+    {
+      "label": "5. batch: two transfers in one execute, PQ-A",
+      "poolTx": "0x28eda36ac7c43d3f7d909ea0c43f6f74cb6d0f0b73b8d523b6d2161341fd2e32",
+      "root": "0x1cb0471a3b53f525d36967ca8632e6e448695bb2af462ea564c29375438e1056",
+      "rootPostTx": "0x0167654e6a5fd8a59199d8eeb73f8354c17d99d6248695fb0803955850962a71",
+      "txHash": "0xb25936db831c20bb076c5e89f9772c04ac864be7c7ecbb781ef34f1ec24d94fc",
+      "block": 2725,
+      "status": "0x1",
+      "gasUsed": 131316,
+      "verifyGas": 58178,
+      "frames": [
+        {
+          "status": "0x1",
+          "gas": 58178
+        },
+        {
+          "status": "0x1",
+          "gas": 53400
+        }
+      ],
+      "proofHash": "0xb756021e05ad66048aab9ca0b1c574bbec5945aec33d89f05abc675469bafbff"
+    },
+    {
+      "label": "6. admin: rotate PQ-B to PQ-C, signed by PQ-A + PQ-B (two PQ dependencies)",
+      "poolTx": "0x4dffaf2c413f76c5946eaa06ac737b38fa4ead55b7cff5afb256e72da44807de",
+      "root": "0xf21b88603542fa8e4e67505bd2df33815576c6bf368c4e4258fe6fdcfc70d3af",
+      "rootPostTx": "0xbc48df8547ad96a4f810ab5b02689eaf1bd22a36009e10c983c6dd37090c1776",
+      "txHash": "0x3e5440eaf9c77f4b05d81100ab0418f51430ac7cf10530c4805f1d8ee76675b8",
+      "block": 2730,
+      "status": "0x1",
+      "gasUsed": 369158,
+      "verifyGas": 57341,
+      "frames": [
+        {
+          "status": "0x1",
+          "gas": 57341
+        },
+        {
+          "status": "0x1",
+          "gas": 146695
+        }
+      ],
+      "proofHash": "0x305934ba637d7fc26c393cd99b230b5b67a42f06aa9b12b088b3a8d217c16749"
+    },
+    {
+      "label": "7. admin: revoke the session key, signed by PQ-A + PQ-C (the rotated-in key)",
+      "poolTx": "0x53a25c9d72d124aef9e36e18506ed39026bcb6603ab53c9ad973c19a217443b2",
+      "root": "0x3ab756a111d56f234f4ea0eb2aef751cdc7f80732bc25a2074401619d3317986",
+      "rootPostTx": "0xe173cd6d07c3d9bf2d468e43dfdd7af277c63d0ac1e02eac5b34de066a9f4551",
+      "txHash": "0x860f093207f2e800a4b76c390c84bc7d67915abd036648fb14707cb4fc1f50c3",
+      "block": 2735,
+      "status": "0x1",
+      "gasUsed": 141549,
+      "verifyGas": 57047,
+      "frames": [
+        {
+          "status": "0x1",
+          "gas": 57047
+        },
+        {
+          "status": "0x1",
+          "gas": 98572
+        }
+      ],
+      "proofHash": "0xd04af53c8f45fe173c48fb75f90ef470988bbafe8c2424b73593054295dc6f25"
+    },
+    {
+      "label": "8. admin signed by PQ-A + PQ-B after the rotation (expected: refused by LeanPool)",
+      "refused": "dependency key 0x547c8fb9505e3c12e0e89ca2af476434de1a4ed452cf3065d52988ad2b66e274 is not a key held by 0xd0fa986f138f6c2421ab3559e61b17b16d822b53"
+    },
+    {
+      "label": "9. admin with the device key alone (expected: refused by the alt mempool)",
+      "refused": "validation frame 0: reverted with data 0x0a0b0d79"
+    },
+    {
+      "label": "10. spend with the passkey (WebAuthn: SHA256 + P256VERIFY precompiles in VERIFY)",
+      "refused": "payer accesses un-deployed contract address 0x0000000000000000000000000000000000000002 with opcode STATICCALL"
+    }
+  ]
+}

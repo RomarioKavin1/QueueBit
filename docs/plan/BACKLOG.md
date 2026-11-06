@@ -2,6 +2,10 @@
 
 Each entry is tagged with its source. Remove an entry when it lands, and cite the commit.
 
+> **LeanAccount rebuild (2026-11-06, [`70-leanaccount-rebuild.md`](70-leanaccount-rebuild.md)).** QueueBitAccount, the
+> Vault / Recovery / Guardian role signers, the 4337 / 7579 modules, the companion and the LeanPool hot signer were
+> removed. Open items below that are about them are obsolete; the LeanAccount section at the end is current.
+
 ## Extension
 - [x] M4: onboarding pairs the Vault **before** the account address is computed; the "plan frozen on first account:status" limits mismatch is fixed (the plan is computed once, at the end of onboarding) (M1 review; e2f1298).
 - [x] `wallet_getCapabilities` no longer exposes the limit or `capRemainingUsd`: `queuebit: {backend, activated}` only (M1 review; e2f1298).
@@ -77,3 +81,16 @@ Each entry is tagged with its source. Remove an entry when it lands, and cite th
 - [ ] `cargo audit`: `RUSTSEC-2024-0388` (`derivative` unmaintained, transitive via arkworks in `packages/groth16/rust`); informational, track an arkworks bump.
 - [ ] First green run of the nightly `devnet` workflow on a GitHub runner (written and linted locally; the compose stack is amd64-native there, but the run itself is unverified).
 - [ ] Release checklist (`docs/release/CHECKLIST.md`): audits, the circom artifact legal review, BUDGET-010 upstream, key ceremonies, 4337 mainnet addresses.
+
+## LeanAccount (2026-11-06)
+- [x] The LeanAccount / KeystoreValidator stack as QueueBit's account (ERC-8286 frame validator: PQ via LeanPool, passkeys, EIP-712 keys, weighted multisig, sessions with token caps, guardian recovery): `e8536c3`; SDK `e6e4061`.
+- [ ] Deploy to the public devnet (`bun run deploy:public` with a funded `DEPLOYER_KEY`) and regenerate `addresses.public.json` / `addresses.local.json`; a live run from the extension (onboarding, an owner payment through LeanPool, a session spend, a Safe → LeanAccount migration).
+- [ ] Local devnet: a `leanpool-node` service in `devnet/docker-compose.yml` (the Dockerfile exists; not added to the compose stack because it could not be run here), so the extension e2e covers owner payments.
+- [ ] A public LeanPool node for the shared builds (`VITE_QUEUEBIT_LEANPOOL_URL`).
+- [ ] A direct on-chain PQ path for admin actions (a scheme with an EVM verifier, checked in execution, ~260-380k gas), so LeanPool approvals can be limited to spending (THREAT-MODEL §3).
+- [ ] Aggregators that post roots from a PQ-authenticated account (closes the Q-day hole on the ECDSA posting key; THREAT-MODEL §3).
+- [ ] A per-session fee bound (TXPARAM MAX_COST in VERIFY) against fee griefing by a session or an expired key (THREAT-MODEL §4).
+- [ ] MetaMask as the signer from a web page: the extension cannot reach `window.ethereum`, so Safe owners and EIP-712 session keys sign there today only with an imported key; a small dapp page would let MetaMask sign the `SafeTx` / `LeanAccountTx`.
+- [ ] NFTs (ERC-721 / ERC-1155) in the migration's move path.
+- [ ] leanVM 0.9.0 (`ed7d2b9`) migration, together with the node and the scheme label.
+- [ ] `forge fmt --check` (Foundry 1.3.5) reports diffs in vendored PQ verifiers and `test/privacy` files at HEAD, before this change; decide whether to format or ignore them.

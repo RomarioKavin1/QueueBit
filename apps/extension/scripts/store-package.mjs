@@ -64,8 +64,9 @@ export function checkStorePackage(
   if (mf.version !== rel.version) errors.push(`zip version ${mf.version} != release manifest ${rel.version}`);
   for (const s of ["16", "32", "48", "128"])
     if (!inZip[mf.icons?.[s] ?? `icon/${s}.png`]) errors.push(`icon ${s} missing`);
+  // http://127.0.0.1 is the LeanPool node on the user's computer (the default); localhost is the local devnet's.
   for (const h of mf.host_permissions ?? [])
-    if (/localhost|127\.0\.0\.1/u.test(h)) errors.push(`host permission ${h}: a local-devnet build`);
+    if (/localhost/u.test(h)) errors.push(`host permission ${h}: a local-devnet build`);
   const base = JSON.parse(readFileSync(baseline, "utf8"));
   const kinds = ["permissions", "host_permissions", "optional_host_permissions"];
   const changed = kinds.filter((k) => !same(mf[k], base[k]));

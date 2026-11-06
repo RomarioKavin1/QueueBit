@@ -5,12 +5,10 @@ import type { WalletState } from "../../shared/types";
 import {
   ActivityIcon,
   AppsIcon,
-  BellIcon,
   Button,
   ChevronDownIcon,
   ExternalIcon,
   HomeIcon,
-  HourglassIcon,
   LockIcon,
   LogoMark,
   MoreIcon,
@@ -18,7 +16,7 @@ import {
   SettingsIcon,
   ShieldIcon,
   Spinner,
-  VaultIcon,
+  RecoveryIcon,
 } from "../../ui";
 import { cx } from "../../ui/cx";
 import { call } from "../lib/api";
@@ -62,7 +60,7 @@ export function PopupApp({ inTab = false, initialTab = "home" }: { inTab?: boole
           <LogoMark size={64} />
           <div>
             <h1 className="t-title">Welcome to QueueBit</h1>
-            <p className="t-body mt-1 text-muted">Small payments are instant. Your phone approves the rest.</p>
+            <p className="t-body mt-1 text-muted">A quantum-safe account, with sessions for the sites you use.</p>
           </div>
           <Button
             block
@@ -92,7 +90,6 @@ export function PopupApp({ inTab = false, initialTab = "home" }: { inTab?: boole
 function Unlocked({ state, close, initialTab }: { state: WalletState; close: () => void; initialTab: Tab }) {
   const [tab, setTab] = useState<Tab>(initialTab);
   const [screen, setScreen] = useState<"tabs" | "settings" | "activate">("tabs");
-  const [sendPrefill, setSendPrefill] = useState<{ to: string } | undefined>(undefined);
 
   if (screen !== "tabs") {
     return (
@@ -110,18 +107,25 @@ function Unlocked({ state, close, initialTab }: { state: WalletState; close: () 
 
   return (
     <Frame>
-      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-line bg-surface pr-1 pl-3">
-        <LogoMark size={24} />
-        <h1 className="t-strong tracking-tight">QueueBit</h1>
+      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-line pr-1 pl-3">
+        <LogoMark size={22} />
+        <h1 className="t-strong">QueueBit</h1>
         <NetworkSwitcher chainId={state.settings.selectedChainId} />
         <MenuButton
           label="More"
           icon={<MoreIcon />}
           items={[
-            { label: "Security", icon: <LockIcon size={18} />, onSelect: () => (openFullApp("#security"), close()) },
-            { label: "Limits", icon: <VaultIcon size={18} />, onSelect: () => (openFullApp("#limits"), close()) },
-            { label: "Pending", icon: <HourglassIcon size={18} />, onSelect: () => (openFullApp("#pending"), close()) },
-            { label: "Alerts", icon: <BellIcon size={18} />, onSelect: () => (openFullApp("#alerts"), close()) },
+            { label: "Sessions", icon: <AppsIcon size={18} />, onSelect: () => (openFullApp("#sessions"), close()) },
+            {
+              label: "Keys & recovery",
+              icon: <RecoveryIcon size={18} />,
+              onSelect: () => (openFullApp("#keys"), close()),
+            },
+            {
+              label: "Move to quantum-safe",
+              icon: <SendIcon size={18} />,
+              onSelect: () => (openFullApp("#migrate"), close()),
+            },
             {
               label: "Private balance",
               icon: <ShieldIcon size={18} />,
@@ -144,24 +148,18 @@ function Unlocked({ state, close, initialTab }: { state: WalletState; close: () 
         {tab === "home" && (
           <Home
             state={state}
-            onSend={(prefill) => (setSendPrefill(prefill), setTab("send"))}
+            onSend={() => setTab("send")}
             onActivate={() => setScreen("activate")}
-            onOpenApp={() => (openFullApp("#onboarding"), close())}
+            onOpenApp={(hash) => (openFullApp(hash), close())}
           />
         )}
         {tab === "send" && (
-          <SendScreen
-            key={sendPrefill?.to ?? "send"}
-            state={state}
-            {...(sendPrefill ? { prefill: sendPrefill } : {})}
-            onExit={() => (setSendPrefill(undefined), setTab("home"))}
-            onActivity={() => (setSendPrefill(undefined), setTab("activity"))}
-          />
+          <SendScreen state={state} onExit={() => setTab("home")} onActivity={() => setTab("activity")} />
         )}
         {tab === "activity" && <ActivityTab />}
         {tab === "apps" && <AppsTab />}
       </main>
-      <TabBar tab={tab} onChange={(t) => (setSendPrefill(undefined), setTab(t))} />
+      <TabBar tab={tab} onChange={setTab} />
     </Frame>
   );
 }
@@ -176,12 +174,11 @@ function NetworkSwitcher({ chainId }: { chainId: number }) {
         id="network-switcher"
         value={String(chainId)}
         onChange={(e) => void call("settings:update", { selectedChainId: Number(e.target.value) })}
-        className="min-h-9 cursor-pointer appearance-none rounded-full border border-line bg-bg py-1 pr-7 pl-3 font-mono text-[11px] leading-4 text-fg shadow-press hover:bg-surface-2"
+        className="t-small min-h-9 cursor-pointer appearance-none rounded-full border border-line bg-surface py-1 pr-7 pl-3 font-semibold text-fg hover:bg-surface-2"
       >
         {NETWORKS.map((n) => (
           <option key={n.chainId} value={n.chainId}>
             {n.shortName}
-            {n.enabled ? "" : " (not yet)"}
           </option>
         ))}
       </select>
@@ -201,7 +198,7 @@ const TABS: Array<{ id: Tab; label: string; icon: React.ReactNode }> = [
 
 function TabBar({ tab, onChange }: { tab: Tab; onChange: (t: Tab) => void }) {
   return (
-    <nav aria-label="Main" className="grid h-12 shrink-0 grid-cols-4 border-t border-line bg-surface">
+    <nav aria-label="Main" className="grid h-12 shrink-0 grid-cols-4 border-t border-line bg-bg">
       {TABS.map((t) => (
         <button
           key={t.id}
@@ -210,7 +207,7 @@ function TabBar({ tab, onChange }: { tab: Tab; onChange: (t: Tab) => void }) {
           onClick={() => onChange(t.id)}
           className={cx(
             "flex flex-col items-center justify-center gap-0.5 text-[12px] leading-4",
-            tab === t.id ? "font-bold text-brand" : "text-muted hover:text-fg",
+            tab === t.id ? "font-semibold text-brand" : "text-muted hover:text-fg",
           )}
         >
           <span aria-hidden="true">{t.icon}</span>

@@ -1,16 +1,16 @@
 # QueueBit watcher (self-hosted)
 
-Watches QueueBit accounts on chain and tells you, in plain language, when something happens that you should know
-about: the Vault scheduled a change, everyday spending was paused, a payment was blocked for being over the limit,
-the Recovery key started replacing the Vault, a waiting period ended. Plan: `docs/plan/sections/40-privacy-infra.md`
-§5 (milestone P9). Copy: `docs/design/ux-spec.md`.
+Watches QueueBit LeanAccounts on chain and tells you, in plain language, when something happens that you should know
+about: a key was added or changed, the account's security was lowered, an app session is near its daily limit, your
+guardians started a recovery, the account was updated. Plan: `docs/plan/sections/40-privacy-infra.md` §5 (milestone
+P9). Copy: `docs/design/ux-spec.md`.
 
 The service holds **no keys** and sends nothing to the chain. It reads through the RPC you configure, keeps a cursor
 in SQLite (or a JSON file) and delivers alerts three ways:
 
 | Channel | Auth / integrity | Contents |
 |---|---|---|
-| `GET /v1/stream` (Server-Sent Events) | request: `QUEUEBIT-HMAC` API key; every event: HMAC-signed envelope | full alert (account address, tx hash, opId, eta) |
+| `GET /v1/stream` (Server-Sent Events) | request: `QUEUEBIT-HMAC` API key; every event: HMAC-signed envelope | full alert (account address, tx hash, key id, recovery id, eta) |
 | HMAC-signed webhook | `x-queuebit-signature: t=…,n=…,v2=HMAC(secret, "t.n.body")`, `x-queuebit-delivery: <n>` | full alert |
 | ntfy.sh-compatible push (optional) | your topic (+ optional token) | title and body only: **no amounts, no addresses** |
 
@@ -19,29 +19,36 @@ mode runs, so both modes raise the same alerts with the same ids.
 
 ## What it detects
 
+A LeanAccount emits `ModuleInstalled` / `ModuleUninstalled` / `Upgraded` itself; its keys, sessions and recovery live
+in **shared modules** (one deployment for every account) whose events carry the account as the first indexed topic.
+List those modules under `modules` (KeystoreValidator, SpendingLimitHook, GuardianRecovery): the poller reads their
+logs and keeps only the watched accounts' events.
+
 | On-chain fact | Alert | Severity |
 |---|---|---|
-| `Queued(opId, LOOSEN)` | "Limit change scheduled" | urgent (the service cannot know you asked for it) |
-| `Queued(opId, SPEND)` | "Large payment scheduled" | warning |
-| `Queued(UPGRADE/MIGRATE)` / `UpgradeQueued` / `MigrationQueued` | "Account update / Move … scheduled" | urgent |
-| eta reached | "Waiting period over" | warning (info for payments) |
-| `VaultRotationFinalized` with ops still queued by the old Vault | "Scheduled change expired" | info |
-| `Frozen(by, until)` | "Paused by your Guardian" / "Paused by your Vault" | warning |
-| `until` reached / `Unfrozen` | "Pause ended" / "Everyday spending resumed" | info |
-| `BunkerEnabled` / `BunkerDisabled` | "Lockdown is on" / "Lockdown ended" | urgent / info |
-| `HotKeyRotated` (not Lockdown, not creation) | "Everyday key replaced" | warning |
-| `VaultRotationStarted` / ready / `Finalized` / `Cancelled` | "Replacing the Vault" / … | urgent / warning / warning / info |
-| `RecoverySignerSet`, `GuardianSet`, `CapUpdated`, allowed lists, `Upgraded`, `Migrated` | see `alerts.ts` | info–urgent |
-| a frame tx of the account whose `hotExecute` SENDER frame reverted | "Over the limit: payment blocked" | warning |
-| 3 blocked payments within an hour (configurable) | "Repeated blocked payments" | urgent |
-| 4337 backend: module events (`account`-indexed); `UserOperationRevertReason` with `OverCap` | same alerts | same |
-| `PQRoleSigner` `StakeUnlocked` (role signers you list) | "Vault sender deposit unlocking" | warning |
+| account creation / migration in (keystore installed + first key + policy, one tx) | – | none (setup) |
+| `KeyAdded` with the ADMIN role | "New admin key" | urgent |
+| `KeyAdded` with the SPEND role | "New spending key" | warning |
+| `KeyAdded`, session only | "App session added" | info |
+| `KeyRemoved` | "Key removed" | warning |
+| `KeyUpdated` | "Key changed" | urgent |
+| `PolicySet` with fewer approvals, `requirePQ` off, or another LeanPool aggregator | "Account security lowered" | urgent |
+| `PolicySet`, otherwise | "Account settings changed" | info |
+| `SessionTokenSet`, `DailyCapSet`, `TokenDailyCapSet` | "Session limits changed" | info |
+| `SessionSpend` / `SessionTokenSpend` crossing `nearLimitPercent` (80%) of a known daily limit | "Session near its daily limit" | warning (once per day) |
+| `Approved` (below the guardian threshold) | "A guardian approved a recovery" | warning |
+| `Approved` reaching the threshold (`readyAt` set) | "Recovery started" (countdown) | urgent |
+| `readyAt` reached | "Recovery ready" | urgent |
+| `Recovered` (its own key reset is not reported key by key) | "Keys replaced by recovery" | urgent |
+| `Cancelled` | "Recovery cancelled" | info |
+| `ModuleInstalled` (after setup) / `ModuleUninstalled` | "Account module added" / "removed" | warning |
+| `Upgraded` | "Account updated" | urgent |
 
-Over-limit attempts **emit no log** (`OverCap` reverts the SENDER frame; IQueueBitAccount "Paths that cannot log"), so
-for frame accounts the poller also reads each block's transactions of the account and their frame receipts. The
-reason is pinned down with `getBucket()` at the parent block: `hotExecute` debits at most the declared USD, so
-`declared > available` means over the limit, anything else means another rule blocked it. ERC-1271 checks of
-registered hashes are views and are not observable at all.
+The service cannot know whether you started an action, so it reports the severities above. The extension passes
+`initiated` for the transactions it sent: those become info.
+
+Not detected: a session payment the hook refused (`DailyCapExceeded`, `PerTxCapExceeded`, `ExpiredKey`, …) reverts and
+leaves no log; a session's expiry is not in any event. ERC-1271 checks are views and are not observable at all.
 
 Only on-chain facts are used. Nothing about devices, IPs or browsers.
 
@@ -51,7 +58,8 @@ Only on-chain facts are used. Nothing about devices, IPs or browsers.
 # from the repository root
 pnpm install && pnpm --filter "@queuebit/watcher..." run build
 WATCHER_RPC_URL=http://localhost:8545 \
-WATCHER_ACCOUNTS=0xYourAccount:frame \
+WATCHER_ACCOUNTS=0xYourAccount \
+WATCHER_MODULES=0xKeystoreValidator,0xSpendingLimitHook,0xGuardianRecovery \
 WATCHER_API_KEYS=extension:0x$(openssl rand -hex 32) \
 node services/watcher/dist/main.js
 ```
@@ -75,15 +83,14 @@ variables. Accounts are addresses only; any other field on an account (a label, 
 |---|---|---|---|
 | `rpcUrl` | `WATCHER_RPC_URL` | – | your own node, or Helios / an Anon-RPC gateway |
 | `chainId` | `WATCHER_CHAIN_ID` | 1337 | checked against the node at start |
-| `accounts[]` `{address, backend: frame\|4337}` | `WATCHER_ACCOUNTS=0x..:frame,0x..:4337` | – | |
-| `modules[]`, `entryPoint` | `WATCHER_ENTRYPOINT` | – | 4337 backend: QueueBitPolicyHook + QueueBitRoleExecutor, EntryPoint |
-| `roleSigners[]` `{address, account}` | – | – | PQRoleSigner clones to watch for stake unlocks |
+| `accounts[]` `{address}` | `WATCHER_ACCOUNTS=0x..,0x..` | – | LeanAccounts |
+| `modules[]` | `WATCHER_MODULES=0x..,0x..` | – | the shared KeystoreValidator, SpendingLimitHook, GuardianRecovery (see `config.example.json` for the devnet ones); without them only module installs and upgrades are seen |
+| `nearLimitPercent` | `WATCHER_NEAR_LIMIT_PERCENT` | 80 | "Session near its daily limit" threshold, 1–100 |
 | `confirmations` | `WATCHER_CONFIRMATIONS` | 2 | blocks behind head before processing |
 | `pollIntervalMs` | `WATCHER_POLL_MS` | 6000 | |
 | `startBlock` | `WATCHER_START_BLOCK` | `latest` | first block without a checkpoint |
 | `maxBlockRange` | – | 2000 | `eth_getLogs` page; halved automatically on refusal |
 | `reorgWindow` | – | 64 | blocks of hashes / state kept for rewinds |
-| `scanFrameTxs` | – | true | over-limit detection for frame accounts |
 | `store` | `WATCHER_STORE` | `file:./watcher-state.json` | `file:<path>` or `sqlite:<path>` (built-in `node:sqlite`) |
 | `http.host`, `http.port` | `WATCHER_HOST`, `WATCHER_PORT` | 127.0.0.1, 8787 | |
 | `http.trustProxy` | `WATCHER_TRUST_PROXY` | 0 | reverse-proxy hops to trust for the per-IP rate limit: with n, the client is the n-th address from the right of `X-Forwarded-For` + socket; 0 ignores the header (set it only when every request comes through your proxy) |
@@ -120,7 +127,7 @@ scanning `{url, topic, keyId, hmacKey}` (`parsePairing`).
 
 Blocks are processed once they are `confirmations` deep. The hash of every processed block within `reorgWindow` is
 kept; each poll first re-checks the newest one. On a mismatch the poller walks back to the common ancestor, restores
-the core state saved at that block (deadlines, dedup set), reprocesses the new branch and publishes `retract` for
+the core state saved at that block (deadlines, dedup set, known policies and session limits), reprocesses the new branch and publishes `retract` for
 alerts whose transaction did not come back. A retraction is published only once the orphaned alert's block height has
 been reprocessed without it: if the reprocessing stops early (the node's view is inconsistent mid-poll) or the new
 branch is still shorter, the alert stays pending rather than being retracted and re-raised. Alert ids derive from
@@ -132,7 +139,7 @@ best-effort, without retractions).
 ## Tests
 
 ```sh
-pnpm --filter @queuebit/watcher-core test   # decoding against real artifacts + devnet fixtures, rules, eta, HMAC, ABI drift
+pnpm --filter @queuebit/watcher-core test   # decoding real devnet logs, rules, recovery deadline, HMAC, ABI drift
 pnpm --filter @queuebit/watcher test        # mock chain: confirmations, paging, reorgs, checkpoints; HTTP auth, SSE, rate limit, webhook, ntfy
-LIVE_DEVNET=1 pnpm --filter @queuebit/watcher test   # local devnet (anvil #9): over-limit, queued loosening, Guardian pause
+LIVE_DEVNET=1 WATCHER_LIVE_RPC=<devnet rpc> pnpm --filter @queuebit/watcher test   # read-only replay of a real account (no transactions)
 ```

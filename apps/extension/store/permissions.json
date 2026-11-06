@@ -1,6 +1,6 @@
 {
-  "comment": "The permissions of the last extension release (none published yet: this is the M7 baseline). store-package.mjs refuses a zip whose manifest differs unless --accept-permission-change is given; then update this file and add a changelog line per change (plan 30-extension.md §9 item 7, docs/release/CHECKLIST.md §1).",
-  "permissions": ["storage", "alarms", "offscreen", "notifications"],
-  "host_permissions": ["https://altmempool.forshtat.com/*", "https://ethereum-sepolia-rpc.publicnode.com/*"],
-  "optional_host_permissions": ["https://*/*", "http://localhost/*"]
+  "comment": "The permissions of the last extension release (none published yet: this is the LeanAccount baseline). store-package.mjs refuses a zip whose manifest differs unless --accept-permission-change is given; then update this file and add a changelog line per change (plan 30-extension.md \u00a79 item 7, docs/release/CHECKLIST.md \u00a71).",
+  "permissions": ["storage", "alarms", "offscreen"],
+  "host_permissions": ["https://altmempool.forshtat.com/*", "http://127.0.0.1/*"],
+  "optional_host_permissions": []
 }

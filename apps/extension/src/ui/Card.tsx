@@ -1,13 +1,13 @@
 import type { HTMLAttributes, ReactNode } from "react";
 import { cx } from "./cx";
 
-export type Tone = "neutral" | "safe" | "limit" | "vault" | "danger";
+export type Tone = "neutral" | "safe" | "limit" | "owner" | "danger";
 
 const tones: Record<Tone, string> = {
   neutral: "bg-bg border-line",
   safe: "bg-safe-bg border-transparent",
   limit: "bg-limit-bg border-transparent",
-  vault: "bg-vault-bg border-transparent",
+  owner: "bg-owner-bg border-transparent",
   danger: "bg-danger-bg border-transparent",
 };
 

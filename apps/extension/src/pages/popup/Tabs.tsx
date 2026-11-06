@@ -6,18 +6,15 @@ import {
   AppsIcon,
   Button,
   CheckCircleIcon,
-  CloseIcon,
   GlobeIcon,
   HourglassIcon,
   OctagonIcon,
-  ReasonCode,
-  RiskBanner,
   Timeline,
   WalletIcon,
 } from "../../ui";
 import { cx } from "../../ui/cx";
 import { formatRelative, hostOf } from "../../ui/format";
-import { call, UiCallError } from "../lib/api";
+import { call } from "../lib/api";
 import { useAsync, usePoll } from "../lib/hooks";
 import { eth, STATUS_WORD } from "../lib/money";
 import { EmptyState } from "../common/EmptyState";
@@ -33,7 +30,7 @@ export function ActivityTab() {
       <EmptyState
         icon={<ActivityIcon />}
         title="No activity yet"
-        body="Payments, sign-ins and Vault approvals will show here, step by step."
+        body="Payments and changes to your account will show here, step by step."
       />
     );
   }
@@ -42,7 +39,7 @@ export function ActivityTab() {
       <h2 className="t-strong mb-2">Activity</h2>
       <ul className="flex flex-col divide-y divide-line rounded-md border border-line" aria-label="Activity">
         {entries.map((e) => (
-          <ActivityRow key={e.id} e={e} onChanged={list.reload} />
+          <ActivityRow key={e.id} e={e} />
         ))}
       </ul>
     </div>
@@ -54,13 +51,6 @@ function StatusIcon({ e }: { e: ActivityEntry }) {
     return (
       <span className="text-safe">
         <CheckCircleIcon size={20} />
-      </span>
-    );
-  // Nothing was sent: neither a success (green) nor a failure (red).
-  if (e.status === "cancelled" || e.status === "replaced")
-    return (
-      <span className="text-muted">
-        <CloseIcon size={20} />
       </span>
     );
   if (e.status === "failed")
@@ -76,12 +66,22 @@ function StatusIcon({ e }: { e: ActivityEntry }) {
   );
 }
 
-function ActivityRow({ e, onChanged }: { e: ActivityEntry; onChanged: () => void }) {
+const SIGNER_WORDS: Record<ActivityEntry["signer"], string> = {
+  owner: "your quantum-safe owner key",
+  session: "a session key",
+  setup: "your setup key",
+  imported: "a key you imported for a move",
+};
+
+const STAGES = ["pooled", "posted", "submitted", "mined"] as const;
+const STAGE_LABELS = ["Signature checked", "Batch recorded", "Sent", "Done"];
+
+function ActivityRow({ e }: { e: ActivityEntry }) {
   const [open, setOpen] = useState(false);
-  const [busy, setBusy] = useState<"speed-up" | "cancel" | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const net = findNetwork(e.chainId);
   const pending = e.status === "confirming" || e.status === "sending";
+  const link = explorerTxLink(net, e.txHash ?? e.hash);
+  const at = e.stage ? STAGES.indexOf(e.stage as (typeof STAGES)[number]) : -1;
   return (
     <li data-testid="activity-row" data-status={e.status}>
       <button
@@ -105,69 +105,36 @@ function ActivityRow({ e, onChanged }: { e: ActivityEntry; onChanged: () => void
       {open && (
         <div className="flex flex-col gap-3 px-3 pb-3">
           {e.detail && <p className="t-small text-muted">{e.detail}</p>}
-          {e.kind !== "activation" && (
-            <p className="t-small">
-              Approved by: your everyday key · Daily limit: {e.status === "confirmed" ? "used" : "not used"}
-            </p>
+          <p className="t-small">Signed by {SIGNER_WORDS[e.signer]}</p>
+          {e.via === "leanpool" && (
+            <Timeline
+              label="Steps"
+              steps={STAGE_LABELS.map((label, i) => ({
+                label,
+                status:
+                  i <= at
+                    ? "done"
+                    : i === at + 1
+                      ? e.status === "failed"
+                        ? "failed"
+                        : pending
+                          ? "active"
+                          : "pending"
+                      : "pending",
+              }))}
+            />
           )}
-          <Timeline
-            label="Steps"
-            steps={e.steps.map((st, i) => ({
-              label: `${i + 1} ${st.label}`,
-              status: st.status === "pending" ? (pending ? "active" : "pending") : st.status,
-            }))}
-          />
-          {e.feeWei && (
-            <p className="t-small text-muted">
-              Fee {pending ? "≈ " : ""}
-              {eth(e.feeWei)} · Lane: Standard
-            </p>
-          )}
-          {pending && e.stuck && <RiskBanner level="limit" title="Taking longer than usual." />}
-          {pending && e.kind !== "activation" && (
-            <div className="flex gap-2">
-              {(["speed-up", "cancel"] as const).map((mode) => (
-                <Button
-                  key={mode}
-                  size="sm"
-                  variant="secondary"
-                  loading={busy === mode}
-                  onClick={async () => {
-                    setBusy(mode);
-                    setError(null);
-                    try {
-                      await call("activity:replace", { id: e.id, mode });
-                      onChanged();
-                    } catch (err) {
-                      setError(err instanceof UiCallError ? err.message : "Couldn't replace the payment.");
-                    } finally {
-                      setBusy(null);
-                    }
-                  }}
-                >
-                  {mode === "speed-up" ? "Speed up (+10 % fee)" : "Cancel payment"}
-                </Button>
-              ))}
-            </div>
-          )}
-          {error && <p className="t-small text-danger">{error}</p>}
+          {e.feeWei && <p className="t-small text-muted">Network fee {eth(e.feeWei)}</p>}
           <details>
             <summary className="t-small cursor-pointer text-muted underline underline-offset-2">Details</summary>
             <div className="t-small mt-2 flex flex-col gap-1 text-muted">
-              {e.rules.length > 0 && (
-                <div className="flex flex-wrap gap-1" aria-label="Reason codes">
-                  {e.rules.map((r) => (
-                    <ReasonCode key={r} id={r} />
-                  ))}
-                </div>
-              )}
               <p>Network: {net?.name ?? e.chainId}</p>
               <p className="t-mono break-all">Id: {e.hash}</p>
-              {/* The devnet explorers index frame transactions; activation is a plain transaction from the fee tank. */}
-              {net?.backend === "frame" && e.kind !== "activation" && explorerTxLink(net, e.hash) && (
+              {e.txHash && e.txHash !== e.hash && <p className="t-mono break-all">On the network: {e.txHash}</p>}
+              {link && e.via !== "legacy" && (
                 <a
                   className="underline underline-offset-2"
-                  href={explorerTxLink(net, e.hash)}
+                  href={link}
                   target="_blank"
                   rel="noreferrer"
                   data-testid="activity-explorer-link"
@@ -175,7 +142,6 @@ function ActivityRow({ e, onChanged }: { e: ActivityEntry; onChanged: () => void
                   View in the explorer
                 </a>
               )}
-              {e.replaced.length > 0 && <p className="t-mono break-all">Replaced: {e.replaced.join(", ")}</p>}
               {e.blockNumber && <p>Block {e.blockNumber}</p>}
               {e.batchId && <p>Batch id: {e.batchId}</p>}
             </div>

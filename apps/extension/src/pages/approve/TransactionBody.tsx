@@ -1,17 +1,16 @@
 import { useEffect, useState } from "react";
-import { browser } from "wxt/browser";
 import type { ApprovalView } from "../../shared/messages";
 import type { SendPreview } from "../../shared/views";
-import { Button, RiskBanner, RouteCard, Spinner } from "../../ui";
-import { formatUsd, hostOf } from "../../ui/format";
+import { Button, RiskBanner, Spinner } from "../../ui";
+import { hostOf } from "../../ui/format";
 import { call, UiCallError } from "../lib/api";
-import { eth, usdOf } from "../lib/money";
+import { eth } from "../lib/money";
 import { approvalId, reject, useArmed } from "./shared";
 
 /**
- * Transaction / batch approval (ux-spec §3.5.2) for `eth_sendTransaction` and `wallet_sendCalls`: the plain-language
- * effect, the network fee from the fee tank, and the route decided before the user commits. "Needs your phone"
- * replaces Approve with "Request Vault approval"; closing then tells the site why (4100 + queuebitRule).
+ * Transaction / batch approval (ux-spec §3.5.2) for `eth_sendTransaction` and `wallet_sendCalls`. A request reaches
+ * this window only when no session of the site covers it: approving signs it with the owner key (quantum-safe) and
+ * sends it through the LeanPool node. The screen says why no session covered it, if the site has one.
  */
 export function TransactionBody({ view }: { view: ApprovalView }) {
   const tx = view.approval.tx!;
@@ -19,10 +18,10 @@ export function TransactionBody({ view }: { view: ApprovalView }) {
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [handoff, setHandoff] = useState<"idle" | "busy" | "done">("idle");
   const armed = useArmed();
   const total = tx.calls.reduce((s, c) => s + BigInt(c.value), 0n);
   const host = hostOf(view.approval.origin);
+  const raw = tx.calls.some((c) => c.data !== "0x");
 
   useEffect(() => {
     let live = true;
@@ -42,10 +41,6 @@ export function TransactionBody({ view }: { view: ApprovalView }) {
     return () => document.removeEventListener("keydown", onKey);
   }, []);
 
-  const route = preview?.route;
-  const hot = route?.route === "hot";
-  const raw = tx.calls.some((c) => c.data !== "0x");
-
   return (
     <>
       <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-4">
@@ -62,24 +57,15 @@ export function TransactionBody({ view }: { view: ApprovalView }) {
         </section>
         <dl className="t-body grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
           <dt className="text-muted">Sends</dt>
-          <dd>
-            {eth(total)}{" "}
-            {preview && preview.ethUsdPrice > 0 && (
-              <span className="text-muted">{usdOf(total, preview.ethUsdPrice)}</span>
-            )}
-          </dd>
-          {/* No fee line when the payment can't be instant: the Vault path has its own fee (M4). */}
-          {(!route || hot) && (
-            <>
-              <dt className="text-muted">Fee</dt>
-              <dd>
-                {preview?.feeWei
-                  ? `≈ ${eth(preview.feeWei)} · ${preview.backend === "4337" ? "from your account" : "from your fee tank"}`
-                  : "Checking…"}
-              </dd>
-            </>
-          )}
+          <dd>{eth(total)}</dd>
+          <dt className="text-muted">Network fee</dt>
+          <dd>{preview ? `at most ${eth(preview.maxFeeWei)}, from your account` : "Checking…"}</dd>
+          <dt className="text-muted">Signed by</dt>
+          <dd>Your quantum-safe owner key</dd>
         </dl>
+        {preview?.sessionMiss && preview.sessionMiss !== "This site has no session." && (
+          <RiskBanner level="info" title="Your session with this site doesn't cover this" body={preview.sessionMiss} />
+        )}
         {raw && (
           <RiskBanner
             level="limit"
@@ -89,106 +75,55 @@ export function TransactionBody({ view }: { view: ApprovalView }) {
         )}
         {previewError ? (
           <RiskBanner level="limit" title="Couldn't check this payment" body={previewError} />
-        ) : !route ? (
+        ) : !preview ? (
           <p className="t-small inline-flex items-center gap-2 text-muted" role="status">
-            <Spinner size={14} /> Checking your limit and the network fee…
+            <Spinner size={14} /> Checking the network fee…
           </p>
+        ) : !preview.deployed ? (
+          <RiskBanner level="limit" title="Your account isn't created yet." body="Create it from QueueBit's Home." />
         ) : (
-          <RouteCard
-            route={route}
-            {...(preview?.maxCostWei ? { maxFeeText: eth(preview.maxCostWei) } : {})}
-            details={
-              <>
-                <p>
-                  Requested with {tx.source} by {host}.
-                </p>
-                {route.leftAfterUsd !== undefined && <p>After this: {formatUsd(route.leftAfterUsd)} left today.</p>}
-                <details>
-                  <summary className="cursor-pointer underline underline-offset-2">Raw data (for experts)</summary>
-                  <pre className="t-mono mt-1 break-all whitespace-pre-wrap">
-                    {tx.calls.map((c) => `to ${c.target}\nvalue ${c.value}\ndata ${c.data}`).join("\n\n")}
-                  </pre>
-                </details>
-              </>
-            }
-          />
+          !preview.enough && (
+            <RiskBanner
+              level="limit"
+              title="Your account can't cover this and its network fee."
+              body={`It needs ${eth(BigInt(preview.valueWei) + BigInt(preview.maxFeeWei))}; it has ${eth(preview.balanceWei)}.`}
+            />
+          )
         )}
-        {preview?.tankTooLow && (
-          <RiskBanner
-            level="limit"
-            title={
-              preview.backend === "4337"
-                ? "Your account can't cover this payment and its network fee."
-                : "Your fee tank is empty."
-            }
-            body={
-              preview.backend === "4337"
-                ? "On this network your account pays its own network fees: add ETH to it."
-                : "Everyday payments need it to pay network fees."
-            }
-          />
-        )}
+        <details className="t-small text-muted">
+          <summary className="cursor-pointer underline underline-offset-2">Raw data (for experts)</summary>
+          <p className="mt-1">
+            Requested with {tx.source} by {host}.
+          </p>
+          <pre className="t-mono mt-1 break-all whitespace-pre-wrap">
+            {tx.calls.map((c) => `to ${c.target}\nvalue ${c.value}\ndata ${c.data}`).join("\n\n")}
+          </pre>
+        </details>
         {error && <RiskBanner level="danger" title={error} />}
       </div>
-      <footer
-        className={
-          route && !hot ? "flex flex-col gap-2 border-t border-line p-4" : "flex gap-2 border-t border-line p-4"
-        }
-      >
-        {route && !hot ? (
-          <>
-            {route.route === "needs-vault" && (
-              <Button
-                variant="vault"
-                block
-                data-testid="approve-on-phone"
-                loading={handoff === "busy"}
-                disabled={handoff === "done"}
-                onClick={async () => {
-                  setHandoff("busy");
-                  try {
-                    const rec = await call("approval:toVault", { id: view.approval.id });
-                    void browser.tabs.create({ url: browser.runtime.getURL(`/app.html#vault/${rec.id}`) });
-                    setHandoff("done");
-                  } catch (e) {
-                    setHandoff("idle");
-                    setError(e instanceof UiCallError ? e.message : "Couldn't start the Vault approval.");
-                  }
-                }}
-              >
-                {handoff === "done" ? "Waiting for your phone…" : "Approve on phone"}
-              </Button>
-            )}
-            <Button variant="secondary" block onClick={() => void reject()}>
-              Close
-            </Button>
-          </>
-        ) : (
-          <>
-            <Button variant="secondary" block onClick={() => void reject()}>
-              Reject
-            </Button>
-            <Button
-              block
-              loading={busy}
-              loadingLabel="Sending…"
-              disabled={!armed || !hot || preview?.tankTooLow}
-              onClick={async () => {
-                setBusy(true);
-                setError(null);
-                try {
-                  await call("approval:resolve", { id: approvalId, approved: true });
-                } catch (err) {
-                  setError(err instanceof UiCallError ? err.message : "Couldn't send. Nothing was sent.");
-                } finally {
-                  setBusy(false);
-                }
-              }}
-            >
-              Approve
-            </Button>
-          </>
-        )}
+      <footer className="flex gap-2 border-t border-line p-4">
+        <Button variant="secondary" block onClick={() => void reject()}>
+          Reject
+        </Button>
+        <Button
+          block
+          loading={busy}
+          loadingLabel="Signing…"
+          disabled={!armed || !preview?.enough || !preview.deployed}
+          onClick={async () => {
+            setBusy(true);
+            setError(null);
+            try {
+              await call("approval:resolve", { id: approvalId, approved: true });
+            } catch (err) {
+              setError(err instanceof UiCallError ? err.message : "Couldn't send. Nothing was sent.");
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          Approve
+        </Button>
       </footer>
     </>
   );

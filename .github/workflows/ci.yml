@@ -49,44 +49,16 @@ jobs:
       - name: PQ benchmark smoke (bench/contracts is a standalone Foundry project; no devnet)
         run: pnpm --filter bench run ci
 
-  companion-e2e:
-    # Playwright on the BUILT PWA (vite build + vite preview with the production CSP), phone viewport, fake camera.
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - name: Playwright browser
-        run: pnpm --filter @queuebit/companion exec playwright install --with-deps chromium
-      - name: e2e (build + preview + playwright)
-        env:
-          CI: "1"
-        run: pnpm --filter @queuebit/companion run e2e
-      - if: failure()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: companion-e2e-traces
-          path: apps/companion/test-results/
-          retention-days: 7
-
   extension-e2e:
     # Playwright with the built MV3 extension in Chromium's new headless mode (channel "chromium", which loads
-    # extensions). The 4337 tests run against a local anvil + EntryPoint v0.8 + the minimal bundler that the global
-    # setup starts (devnet/deploy/up-4337.ts). The frame-native tests (payments, vault) need the EIP-8141 devnet and
+    # extensions). The frame-native tests (onboarding, payments, sessions, migration) need the EIP-8141 devnet and
     # skip themselves here; the nightly `devnet` workflow runs them.
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          submodules: recursive # forge artifacts for the 4337 deploy (kernel pulls nested libs)
+          submodules: recursive # forge artifacts for devnet/deploy (Safe for the migration fixtures)
           persist-credentials: false
       - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -118,38 +90,6 @@ jobs:
           name: extension-e2e-traces
           path: apps/extension/test-results/
           retention-days: 7
-
-  aa-4337-e2e:
-    # contracts/devnet-tests/4337: the ERC-4337 + ERC-7579 backend on anvil (EntryPoint v0.8 at its canonical
-    # address, the QueueBit modules on the reference MSA, a fresh C13 vault signature, a minimal handleOps bundler).
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          submodules: recursive
-          persist-credentials: false
-      - uses: foundry-rs/foundry-toolchain@dba66c27052e63476d886f22216e119ba7e615bf # v1.9.2
-        with:
-          version: ${{ env.FOUNDRY_VERSION }}
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version: 1.3.9
-      - name: forge build
-        working-directory: contracts
-        run: forge build
-      - name: bun install
-        working-directory: contracts/devnet-tests/4337
-        run: bun install --frozen-lockfile
-      - name: e2e (starts its own anvil)
-        working-directory: contracts/devnet-tests/4337
-        run: bun run e2e
-      - if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: aa-4337-last-run
-          path: contracts/devnet-tests/4337/last-run.json
-          retention-days: 14
 
   pq-signer-wasm:
     # wasm/ is committed so JS consumers and the typescript job need no Rust toolchain.
@@ -186,6 +126,46 @@ jobs:
         run: cargo test --release --locked
       - name: rebuild wasm and diff
         working-directory: packages/pq-signer
+        run: |
+          bash scripts/build-wasm.sh
+          git diff --exit-code -- wasm/
+          test -z "$(git status --porcelain -- wasm/)" # no new untracked files either
+
+  lean-sphincs-wasm:
+    # @queuebit/lean-sphincs (leanVM leanSPHINCS for the post-quantum everyday key): same committed-wasm pattern as
+    # pq-signer-wasm. The vitest suite (typescript job) checks it against native lean-pq 0.7.0 vectors.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: rust toolchain (pinned by packages/lean-sphincs/rust/rust-toolchain.toml)
+        working-directory: packages/lean-sphincs/rust
+        run: rustup show
+      - name: cargo cache (registry, git deps and wasm-bindgen-cli; not target/)
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            ~/.cargo/bin/wasm-bindgen
+            ~/.cargo/bin/wasm-bindgen-test-runner
+          key: cargo-lean-${{ runner.os }}-${{ env.WASM_BINDGEN_VERSION }}-${{ hashFiles('packages/lean-sphincs/rust/Cargo.lock', 'packages/lean-sphincs/rust/rust-toolchain.toml') }}
+      - name: wasm-bindgen-cli
+        run: |
+          if [ "$(wasm-bindgen --version 2>/dev/null | awk '{print $2}')" != "$WASM_BINDGEN_VERSION" ]; then
+            cargo install wasm-bindgen-cli --version "$WASM_BINDGEN_VERSION" --locked --force
+          fi
+      - name: rust tests
+        working-directory: packages/lean-sphincs/rust
+        run: cargo test --release --locked
+      - name: rebuild wasm and diff
+        working-directory: packages/lean-sphincs
         run: |
           bash scripts/build-wasm.sh
           git diff --exit-code -- wasm/
@@ -247,8 +227,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # forge-std, OpenZeppelin, solady, hegota-support, the 4337/7579 hosts (pinned commits). Recursive: kernel's
-          # remapped ExcessivelySafeCall is a nested submodule.
+          # forge-std, OpenZeppelin, solady, hegota-support, Safe v1.4.1 (pinned commits).
           submodules: recursive
           persist-credentials: false
       - uses: foundry-rs/foundry-toolchain@dba66c27052e63476d886f22216e119ba7e615bf # v1.9.2
@@ -265,12 +244,21 @@ jobs:
       - name: forge fmt
         working-directory: contracts
         run: forge fmt --check
-      - name: lint VERIFY-reachable code (banned opcodes, halting reads)
+      - name: lint VERIFY-reachable code (no clock in VERIFY, banned constructs, storage association)
         working-directory: contracts
         run: ./script/lint-verify.sh
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.9
+      - name: LeanAccount devnet-tests (SDK, migration rails, vectors shared with forge; unit only)
+        working-directory: contracts/devnet-tests/leanpool-account
+        run: |
+          bun install --frozen-lockfile
+          bun run typecheck
+          bun run test
 
   release-reproducible:
-    # The companion's static bundle and the extension zip must be byte-identical across two clean builds
+    # The extension zip must be byte-identical across two clean builds
     # (scripts/release/README.md).
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -284,5 +272,5 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: build the companion and the extension twice and compare
+      - name: build the extension twice and compare
         run: REQUIRE_ALL=1 node scripts/release/verify-reproducible.mjs

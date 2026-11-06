@@ -1,4 +1,4 @@
-import { encodeFunctionData, parseAbi, type Address, type Hex } from "viem";
+import { encodeAbiParameters, encodeFunctionData, parseAbi, type Address, type Hex } from "viem";
 import type { Profile } from "../profiles/types.js";
 import {
   arbitraryEntry,
@@ -141,3 +141,24 @@ export function roleSignerPathATx(profile: Profile, init: RoleSignerInit): Frame
     signatures: [arbitraryEntry(profile, init.sigLength)],
   });
 }
+
+// ---------------------------------------------------------------------------------------- LeanPool ----------------
+
+/** EIP-8288 `LEANSPHINCS_SCHEME`: the scheme byte of a leanSPHINCS dependency triple. */
+export const LEANSPHINCS_SCHEME = 0x10;
+
+/**
+ * The 96-byte EIP-8288 dependency triple `(LEANSPHINCS_SCHEME, data_hash = 0, vk)`: "a leanSPHINCS signature by `vk`
+ * over this transaction's signature hash exists" (a zero data_hash stands for the containing tx's own sig hash). It is
+ * carried in the sender's VERIFY frame data (LeanAccount: inside the keystore's LEANPOOL_DEPS envelope), covered by
+ * the sig hash; the LeanPool node reads it from there.
+ */
+export const leanPoolTriple = (vk: Hex): Hex =>
+  encodeAbiParameters(
+    [{ type: "uint256" }, { type: "bytes32" }, { type: "bytes32" }],
+    [BigInt(LEANSPHINCS_SCHEME), `0x${"00".repeat(32)}`, vk],
+  );
+
+/** The witness a LeanPool node puts in entry 0 once the batch is posted: `abi.encode(root, ringPosition, proof)`. */
+export const leanPoolWitness = (root: Hex, ring: number, proof: Hex[]): Hex =>
+  encodeAbiParameters([{ type: "bytes32" }, { type: "uint8" }, { type: "bytes32[]" }], [root, ring, proof]);

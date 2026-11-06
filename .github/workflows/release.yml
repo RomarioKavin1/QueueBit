@@ -41,7 +41,7 @@ jobs:
           {
             echo '### Release artifacts'
             echo '```'
-            grep -v ' companion/' "$RUNNER_TEMP/release/SHA256SUMS" || true
+            cat "$RUNNER_TEMP/release/SHA256SUMS"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

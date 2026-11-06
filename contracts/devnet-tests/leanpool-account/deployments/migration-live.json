@@ -1,0 +1,99 @@
+{
+  "network": "alt-mempool devnet",
+  "deployment": {
+    "registry": "0x8139de17dd2a043f17b41999ee2ade17353f5da1",
+    "hub": "0xc5b640b8194c8c89999785ce1a299c1045e70359",
+    "keystore": "0x1bbefb4ca9907237b11887f8db876c089fe6fd91",
+    "hook": "0x2b29891699ea9e84660b29e74d75a999e92ac0aa",
+    "recovery": "0x7ee2866e07bbdc75f9582feb5af9d48e74614a68",
+    "legacyImplementation": "0x237e54e0111cdb9707dfbefa5f88c4ff91637d08",
+    "testToken": "0xcb4872c45625e59e5701b1c6005970b27c48c6ff",
+    "implementation": "0x93bb7dd870e3b6148ad157858646365ae71e0f09",
+    "factory": "0x41a4ef6a511e66d6c6818eae7c98bfe2684a08ce"
+  },
+  "A": {
+    "eoa": "0x8eA45EFAc6a3f87554DdFc46284abEE2519b58ee",
+    "account": "0x2c321aA6101c47b5537F42ccaEe92844Fd8899f1",
+    "migrationTxs": [
+      "0x91b91653981d93bb15c916aae894cc5e12d2a2c87f25b3d05d269516f49b84cc",
+      "0xf6e0c1b8988bcc772ca9753d8df4cc9231340b5e439f5c964ac5487c9fa259a8"
+    ],
+    "before": {
+      "eth": "700000000000000",
+      "mtt": "1000000000000000000000"
+    },
+    "eoaAfter": {
+      "eth": "959604000000",
+      "mtt": "0"
+    },
+    "accountAfter": {
+      "eth": "695891024000000",
+      "mtt": "1000000000000000000000"
+    },
+    "pqSpend": "0x4d234f93c0e02eb749a55dcfa7885831ba3f35f44ec8d3788dd33e25ca4e1c30"
+  },
+  "B": {
+    "eoa": "0x1417bfD475eBF978c9E46B9Dc43e4d6699400192",
+    "migrationTx": "0xf479fd4f24e9a3d775c3f834aed0cf304142113d11f116022e3785b8591728e2",
+    "code": "0xef010093bb7dd870e3b6148ad157858646365ae71e0f09",
+    "before": {
+      "eth": "700000000000000",
+      "mtt": "1000000000000000000000"
+    },
+    "after": {
+      "eth": "698804451631220",
+      "mtt": "1000000000000000000000"
+    },
+    "pqSpend": "0xf75db7cfbcaa928ceea62efa730b327778fc0d8502a9017235a22b422f1ccf24",
+    "thirdPartyReinit": {
+      "tx": "0xf8f2a27a210ecfc2b1d12396f30e2164a19864647ae515113f7053a08a291b77",
+      "block": 4779,
+      "reason": "AlreadyInitialized"
+    },
+    "relayedAuthorization": {
+      "tx": "0xe7987e9c7ae250412bd796e787267ef04f7a2fd9b5d4d79b44f6f10b9be6ae5c",
+      "block": 4781,
+      "reason": "OnlySelf"
+    },
+    "victimInitializesItself": "0xc397b953bef7b26e9529fa38845e51a6a4b9c45ec234b442b6134ed1b224fa60",
+    "ecdsaStillWorks": "0x7d5431caac9ee0ebe8667ad484d23a9f0103313610649b66a3b50922ac773f76"
+  },
+  "C": {
+    "account": "0x4aea3ba68b0dcdb7b5300c926989e6140f1e2e43",
+    "oldImplementation": "0x237e54e0111cdb9707dfbefa5f88c4ff91637d08",
+    "migrationTx": "0x3e452ac52f61398bec9bc90f945190372c3086598c9b986ae1004781ba170d08",
+    "implementation": "0x93bb7dd870e3b6148ad157858646365ae71e0f09",
+    "before": {
+      "eth": "700000000000000",
+      "mtt": "1000000000000000000000"
+    },
+    "after": {
+      "eth": "700000000000000",
+      "mtt": "1000000000000000000000"
+    },
+    "pqSpend": "0x0f6bf1f3407f9177b1d648ac90b8358e0c2ca6d96e8c7cdc31e03320bb34d847",
+    "oldOwnerRefused": {
+      "tx": "0x0ef8252279e057adf61485a8869cfa3affa511f1a40f5f6aa286600084666e61",
+      "block": 4796,
+      "reason": "Execution reverted with reason: Execution reverted without a reason string.."
+    }
+  },
+  "D": {
+    "oldAccount": "0xd74318d8faa4b8d250b8778bf16868a29910142e",
+    "account": "0x8d3527b2664a5558d45A2f878dea2fA22c080514",
+    "migrationTx": "0xc0bf600f5267515578ea7b3124a7413fac52746cdbbba21a42e3f9d53d58c784",
+    "before": {
+      "eth": "700000000000000",
+      "mtt": "1000000000000000000000"
+    },
+    "oldAfter": {
+      "eth": "0",
+      "mtt": "0"
+    },
+    "accountAfter": {
+      "eth": "700000000000000",
+      "mtt": "1000000000000000000000"
+    },
+    "pqSpend": "0x1665bffd1e9723a25ee03b2e61e6c2ea4732c3423a97b0bd4f3a520b673e2881"
+  }
+}

@@ -31,8 +31,8 @@ export const WalletIcon = (p: IconProps) => (
     <path d="M19 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0 0 4h14a2 2 0 0 1 2 2v3h-4a2 2 0 0 0 0 4h4v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5" />
   </Icon>
 );
-/** Vault: phone with a shield. */
-export const VaultIcon = (p: IconProps) => (
+/** The owner key: a shield. */
+export const OwnerIcon = (p: IconProps) => (
   <Icon {...p}>
     <rect x="5" y="2" width="14" height="20" rx="2.5" />
     <path d="M12 7.5l3 1.2v2.3c0 1.9-1.3 3.4-3 4-1.7-.6-3-2.1-3-4V8.7Z" />
@@ -204,7 +204,7 @@ export const BellIcon = (p: IconProps) => (
   </Icon>
 );
 
-/** The QueueBit "Q:" mark (same drawing as the toolbar icon, src/shared/icon.ts). Fixed colours: it is a logo. */
+/** The QueueBit mark (same drawing as the toolbar icon). */
 export function LogoMark({ size = 24, title }: { size?: number; title?: string }) {
   return (
     <svg
@@ -215,11 +215,10 @@ export function LogoMark({ size = 24, title }: { size?: number; title?: string }
       aria-label={title}
       aria-hidden={title ? undefined : true}
     >
-      <rect x="4" y="4" width="120" height="120" rx="28" fill="#E05A47" stroke="#1E1E1E" strokeWidth="8" />
-      <circle cx="54" cy="62" r="25" fill="none" stroke="#FCFAF7" strokeWidth="14" />
-      <path d="M64 74l18 20" stroke="#FCFAF7" strokeWidth="14" strokeLinecap="round" />
-      <circle cx="99" cy="48" r="8" fill="#FCFAF7" />
-      <circle cx="99" cy="78" r="8" fill="#FCFAF7" />
+      <rect width="128" height="128" rx="28" fill="var(--brand)" />
+      <path d="M64 18C64 18 32 55 32 79a32 32 0 0 0 64 0C96 55 64 18 64 18Z" fill="var(--on-brand)" />
+      <circle cx="64" cy="74" r="10" fill="var(--brand)" />
+      <path d="M59 80h10l3 20H56Z" fill="var(--brand)" />
     </svg>
   );
 }

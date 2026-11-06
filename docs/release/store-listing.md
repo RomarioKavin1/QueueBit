@@ -11,7 +11,7 @@ QueueBit
 
 ## Short description
 
-A wallet whose everyday key is safe to lose: small payments are instant, your phone approves the rest.
+A post-quantum smart-account wallet: a quantum-safe owner key, session keys with on-chain limits, and Move to PQ.
 
 ## Category
 
@@ -19,19 +19,19 @@ Productivity (Chrome has no wallet category; other wallets list here too).
 
 ## Detailed description
 
-QueueBit is an Ethereum wallet built on the assumption that the key in your browser will one day leak.
+QueueBit is an Ethereum wallet whose account is post-quantum, without waiting for a fork.
 
-- **Everyday payments are instant, up to a daily limit you choose.** The browser key can only spend within that
-  limit, to the apps and tokens you allowed. The limit is enforced by your account contract on chain, not by this
-  extension.
-- **Everything else needs your phone.** Bigger payments, raising a limit, adding an app, a new browser key: the
-  extension shows a QR code and your offline phone (the QueueBit companion) checks and signs it with a quantum-safe
-  key that never touches the browser.
-- **Changes that loosen your protection wait.** A time lock lets you, a guardian and the alerts see a change
-  before it takes effect, and cancel it.
-- **A private balance (testnets).** Move ETH into Privacy Pools and back out to a fresh address. The proof is
-  computed on your computer; the phone approves every private spend.
-- **Alerts.** The extension watches your account and tells you about anything you did not do.
+- **A quantum-safe owner key.** Your account is owned by a hash-based (leanSPHINCS) key generated in this extension.
+  A LeanPool node checks its signatures and batches them, so payments cost about as much as an ordinary one.
+- **Session keys with limits the chain enforces.** Give an app, or a browser wallet such as MetaMask, a session that
+  may only pay the addresses you chose, within per-payment and daily caps, until it expires. It can never change a
+  key or a setting.
+- **Move to PQ.** Bring an existing account over: an address's tokens and ETH move into your new account (or it keeps
+  its address with EIP-7702), and a Safe moves everything in one Safe transaction its owners sign.
+- **Guardian recovery.** Guardians you pick can reset your keys after a delay you can cancel.
+- **A private balance (testnets).** Move ETH into Privacy Pools and back out to a fresh address. The proof is computed
+  on your computer.
+- **Alerts.** The extension watches your account and tells you about key, limit and recovery changes.
 
 Open source (MIT): every release is built reproducibly from the public repository, and the zip's SHA-256 is
 published before it is uploaded here.
@@ -40,22 +40,20 @@ Test networks only until the audits are complete.
 
 ## Single purpose
 
-Manage a QueueBit smart account: connect it to websites, make payments within an on-chain limit, and hand every other
-action to the user's phone for approval.
+Manage a QueueBit (LeanAccount) smart account: create it, connect it to websites, pay with its owner or session keys,
+and move existing accounts into it.
 
 ## Permission justifications
 
-| Permission                                      | Why                                                                                                                                                                                                     |
-| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `storage`                                       | Keeps the encrypted wallet (the everyday key, encrypted with the user's password), settings and the activity list on this computer.                                                                     |
-| `alarms`                                        | Locks the wallet after the chosen idle time, and checks the account for alerts once a minute.                                                                                                           |
-| `offscreen`                                     | One offscreen document runs the private balance's zero-knowledge prover in a Worker, so a proof does not stall the service worker.                                                                      |
-| `notifications`                                 | Shows an alert when something the user did not do happens to their account (a limit change, a new app).                                                                                                 |
-| `https://altmempool.forshtat.com/*`             | The test network's node and transaction relay, the only servers the wallet talks to on that network.                                                                                                    |
-| `https://ethereum-sepolia-rpc.publicnode.com/*` | The Sepolia node the wallet reads balances and account state from.                                                                                                                                      |
-| `https://*/*`                                   | The content script on websites (see `http://*/*`). As an optional host permission: requested for one site only when the user pairs a self-hosted alert watcher (Security › Alerts).                     |
-| `http://localhost/*`                            | Optional, requested only when the user pairs a self-hosted alert watcher on their own computer.                                                                                                         |
-| `http://*/*`                                    | The content script that lets websites request a connection (EIP-1193 / EIP-6963 provider). It reads nothing from pages; it only relays the site's requests to the wallet, and the wallet asks the user. |
+| Permission                          | Why                                                                                                                                                                                                     |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `storage`                           | Keeps the encrypted wallet (the seed, encrypted with the user's password), settings and the activity list on this computer.                                                                             |
+| `alarms`                            | Locks the wallet after the chosen idle time, and checks the account for alerts once a minute.                                                                                                           |
+| `offscreen`                         | One offscreen document runs the WebAssembly work (the quantum-safe owner key's signatures, the private balance's zero-knowledge prover) in a Worker, so it does not stall the service worker.            |
+| `https://altmempool.forshtat.com/*` | The test network's node and transaction relay, the only servers the wallet talks to on that network.                                                                                                    |
+| `http://127.0.0.1/*`                | The LeanPool node on the user's own computer (default `http://127.0.0.1:8701`): payments signed by the owner key go to it to be batched. A build can name an https node instead.                         |
+| `https://*/*`                       | The content script on websites (see `http://*/*`).                                                                                                                                                      |
+| `http://*/*`                        | The content script that lets websites request a connection (EIP-1193 / EIP-6963 provider). It reads nothing from pages; it only relays the site's requests to the wallet, and the wallet asks the user. |
 
 ## Remote code
 
@@ -67,15 +65,15 @@ and changes only with a release ([`phishing-list.md`](phishing-list.md)).
 
 - Collected: none. The extension has no analytics, no telemetry and no QueueBit server.
 - Stored on the user's computer only: the encrypted wallet, settings, activity, alerts.
-- Sent to third parties: blockchain requests (addresses, signed transactions) to the network's node, as with any
-  wallet; to a self-hosted watcher only if the user pairs one.
-- Privacy policy URL: to be published with the first release (`TODO`: host the policy next to the companion).
+- Sent to third parties: blockchain requests (addresses, signed transactions) to the network's node and relay, as with
+  any wallet, and owner-signed transactions to the LeanPool node the account names.
+- Privacy policy URL: to be published with the first release (`TODO`).
 
 ## Screenshots
 
 1280×800 (or 640×400), 1–5 images. To render at that size from the screenshot suite
 (`pnpm --filter @queuebit/extension run screenshots`, `apps/extension/docs/screenshots/`): `popup-home`,
-`approve-transaction`, `app-vault-handoff`, `app-limits`, `app-privacy-withdrawn`. The current files are the
+`approve-transaction` and the extension's current screens (to be re-chosen after the LeanAccount rebuild). The current files are the
 review-size renders and must be re-rendered at a store size before submission.
 
 ## Submission

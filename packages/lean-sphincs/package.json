@@ -1,0 +1,34 @@
+{
+  "name": "@queuebit/lean-sphincs",
+  "version": "0.1.0",
+  "description": "leanVM leanSPHINCS (Rust/WASM) for QueueBit's post-quantum everyday key: the scheme LeanPool nodes verify and aggregate",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": true,
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./vectors/lean-pq-0.7.0.json": "./vectors/lean-pq-0.7.0.json"
+  },
+  "files": [
+    "dist",
+    "wasm",
+    "vectors",
+    "README.md"
+  ],
+  "scripts": {
+    "build:wasm": "bash scripts/build-wasm.sh",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:rust": "cd rust && cargo test --release"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.6",
+    "typescript": "6.0.3",
+    "vitest": "5.1.0"
+  }
+}

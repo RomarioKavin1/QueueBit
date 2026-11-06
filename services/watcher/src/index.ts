@@ -1,7 +1,7 @@
 export { loadConfig, parseConfig } from "./config.js";
 export type { WatcherConfig } from "./config.js";
-export { readBucket, rpcChainClient } from "./chain.js";
-export type { BlockInfo, ChainClient, RawTx } from "./chain.js";
+export { rpcChainClient } from "./chain.js";
+export type { BlockInfo, ChainClient } from "./chain.js";
 export { Hub } from "./hub.js";
 export type { HubEntry, Sink } from "./hub.js";
 export { Poller } from "./poller.js";

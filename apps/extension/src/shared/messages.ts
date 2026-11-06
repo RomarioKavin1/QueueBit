@@ -1,13 +1,9 @@
-import type { BucketReading } from "../background/bucket";
 import type { ActivityEntry } from "../background/activity";
+import type { SessionRecord, SessionRequest } from "../background/lean/sessions";
 import type { SerializedRpcError } from "./errors";
-import type { AccountStatus, SendPreview, PairPreview, PolicyView, SignerView } from "./views";
-import type { QueuedView, VaultRequestRecord } from "../background/vault";
-import type { VaultActionRequest } from "../background/vaultActions";
+import type { AccountStatus, KeysView, MigrationPreview, SendPreview } from "./views";
 import type { SiteWarning } from "./sites";
 import type { Approval, BalanceResult, KnownSite, OriginPermission, Settings, SetupState, WalletState } from "./types";
-import type { AlertRecord } from "../background/watcher/alerts";
-import type { PairingView } from "../background/watcher/pairing";
 import type { AnonStatus } from "./offscreen";
 import type { PrivacyNetworkConfig, PrivacyOp, PrivacyView } from "./privacy";
 
@@ -41,12 +37,24 @@ export interface SendRequest {
   valueWei: string;
 }
 
+/** A move into the account ("Move to quantum-safe"). Imported keys are used for this move only, never stored. */
+export interface MigrationRequest {
+  chainId?: number;
+  kind: "eoa" | "safe" | "smart-account";
+  /** The address to move from (EOA: derived from the key when omitted). */
+  address?: `0x${string}`;
+  /** EOA: keep the address with EIP-7702 instead of moving (not quantum-safe: the old key keeps working). */
+  keepAddress?: boolean;
+  /** The EOA's key; a Safe's owner keys; a smart account's owner key. */
+  keys: `0x${string}`[];
+}
+
 export interface UiApi {
   "state:get": { req: undefined; res: WalletState };
   /** The backup words leave the service worker only when the user asked to see them (`revealWords`). */
   "keyring:create": { req: { password: string; revealWords?: boolean }; res: { mnemonic?: string } };
   "keyring:import": { req: { mnemonic: string; password: string }; res: null };
-  /** Checklist › Back up your everyday words: the words, after the password is typed again. */
+  /** Back up your words: the words, after the password is typed again. */
   "keyring:revealWords": { req: { password: string }; res: { mnemonic: string } };
   "keyring:unlock": { req: { password: string }; res: null };
   "keyring:lock": { req: undefined; res: null };
@@ -55,67 +63,50 @@ export interface UiApi {
   "settings:update": { req: Partial<Settings>; res: Settings };
   "setup:update": { req: Partial<SetupState>; res: SetupState };
   "wallet:balance": { req: { chainId?: number }; res: BalanceResult };
-  "wallet:bucket": { req: undefined; res: BucketReading };
   "permissions:list": { req: undefined; res: OriginPermission[] };
   "permissions:revoke": { req: { origin: string }; res: null };
   "approval:get": { req: { id: string }; res: ApprovalView | null };
   "approval:resolve": { req: { id: string; approved: boolean; alwaysAllow?: boolean }; res: null };
-  /** Transaction approvals: the route and fee for what the site asked (simulates; can take a few seconds). */
+  /** Transaction approvals: who signs and the most the network fee can be. */
   "approval:preview": { req: { id: string }; res: SendPreview };
+
+  // ---- the account ----
+  /** Computes (once) and reads the account: its address, whether it exists, the setup key's balance. */
   "account:status": { req: { chainId?: number }; res: AccountStatus };
+  /** Before the account exists: who can help recover it (the address is bound to them). */
+  "account:setGuardians": {
+    req: { chainId?: number; guardians: `0x${string}`[]; threshold: number };
+    res: AccountStatus;
+  };
+  /** The setup key creates the account. */
   "account:activate": { req: { chainId?: number }; res: ActivityEntry };
   "send:preview": { req: SendRequest; res: SendPreview };
   "send:submit": { req: SendRequest; res: ActivityEntry };
   "activity:list": { req: undefined; res: ActivityEntry[] };
-  "activity:replace": { req: { id: string; mode: "speed-up" | "cancel" }; res: ActivityEntry };
-  /**
-   * Pairing (ux-spec §3.1.2, §3.1.4): the service worker decodes the scanned / pasted code itself. `confirm: false`
-   * only previews (the 8-character check); `confirm: true` stores it.
-   */
-  "pair:vault": { req: { text: string; confirm: boolean }; res: PairPreview };
-  "pair:recovery": { req: { text: string; confirm: boolean }; res: PairPreview };
-  /** The phone's recovery-test code: its signature must verify against the Recovery key scanned before (E-23). */
-  "pair:recoveryTest": { req: { text: string }; res: { ok: true; last8: string; payer?: `0x${string}` } };
-  /** A fresh, single-use request id for the recovery test, as a `ur:queuebit-recovery-challenge` code for the phone. */
-  "pair:recoveryChallenge": { req: undefined; res: { text: string; requestId: string } };
-  /** "Tokens you'll spend": validate (decimals on-chain) and store the choice for `chainId`. */
-  "setup:setTokens": {
-    req: { chainId: number; tokens: Array<{ token: `0x${string}`; usd: number; decimals: number; symbol: string }> };
-    res: SetupState;
-  };
-  "pair:forgetRecovery": { req: undefined; res: null };
-  /** Computes the counterfactual account from the paired Vault, the Recovery key and the limits (end of onboarding). */
-  "account:computePlan": { req: { chainId?: number }; res: AccountStatus };
-  /** A dapp payment the router sent to the Vault: the request stays pending until the phone's approval is sent. */
-  "approval:toVault": { req: { id: string }; res: VaultRequestRecord };
-  "vault:create": { req: { chainId?: number; action: VaultActionRequest }; res: VaultRequestRecord };
-  "vault:get": { req: { id: string }; res: VaultRequestRecord | null };
-  "vault:list": { req: undefined; res: VaultRequestRecord[] };
-  /** The scanned `ur:queuebit-signature` CBOR (hex): verified, simulated and submitted, or an error with its E-code. */
-  "vault:submit": { req: { id: string; signature: `0x${string}` }; res: VaultRequestRecord };
-  "vault:cancel": { req: { id: string }; res: null };
-  "vault:queue": { req: { chainId?: number }; res: QueuedView[] };
-  "vault:executeQueued": { req: { chainId?: number; opId: `0x${string}` }; res: { hash: `0x${string}` } };
-  "vault:policy": { req: { chainId?: number }; res: PolicyView };
-  "vault:signers": { req: { chainId?: number }; res: SignerView[] };
-  /** "Fee balance › Top up": what moving `amountWei` from the account to a role signer's fee balance would do. */
-  "vault:topUpPreview": {
-    req: { chainId?: number; role: "vault" | "recovery"; amountWei: string };
-    res: SendPreview & { tank: `0x${string}`; signer: `0x${string}` };
-  };
-  /** Everyday payment account → fee tank (counts against the limit), then tank → signer. Waits for both. */
-  "vault:topUp": {
-    req: { chainId?: number; role: "vault" | "recovery"; amountWei: string };
-    res: { paymentHash: `0x${string}`; hash?: `0x${string}`; balanceWei: string };
-  };
-  /** The next everyday key's address (for "Replace everyday key"). */
-  "security:nextEverydayKey": { req: undefined; res: { index: number; address: `0x${string}` } };
+
+  // ---- sessions ----
+  "sessions:list": { req: { chainId?: number }; res: SessionRecord[] };
+  /** The owner adds a session key (one admin transaction through LeanPool). */
+  "sessions:create": { req: SessionRequest; res: SessionRecord };
+  /** The owner removes it now. */
+  "sessions:revoke": { req: { id: `0x${string}` }; res: SessionRecord };
+
+  // ---- keys & recovery ----
+  "keys:view": { req: { chainId?: number }; res: KeysView };
+  /** Deletes expired keys from the account (one transaction). */
+  "keys:prune": { req: { chainId?: number; ids: `0x${string}`[] }; res: ActivityEntry };
+  /** Cancels a guardian recovery nobody here asked for (the owner signs). */
+  "keys:cancelRecovery": { req: { chainId?: number; id: `0x${string}` }; res: ActivityEntry };
+
+  // ---- move to quantum-safe ----
+  "migrate:preview": { req: MigrationRequest; res: MigrationPreview };
+  "migrate:run": { req: MigrationRequest; res: { hashes: `0x${string}`[] } };
 
   // ---- Private balance (ux-spec §3.11, plan §40 §1) ----
   "privacy:view": { req: { chainId?: number }; res: PrivacyView };
   /** Root-checked note sync (progress is written to storage as it goes). */
   "privacy:sync": { req: { chainId?: number }; res: PrivacyView };
-  /** Starts Move to private (shield) or Move to public (unshield, to a fresh address via PoolPayer). */
+  /** Starts Move to private (shield), Move to public (unshield, to a fresh address via PoolPayer) or a public exit. */
   "privacy:start": {
     req: {
       chainId?: number;
@@ -126,13 +117,9 @@ export interface UiApi {
     };
     res: PrivacyView;
   };
-  /** The phone's scanned `ur:queuebit-signature` (CBOR hex) for the operation's note-key request. */
-  "privacy:answer": { req: { chainId?: number; opId: string; signature: `0x${string}` }; res: PrivacyView };
   "privacy:retry": { req: { chainId?: number; opId: string }; res: PrivacyView };
   "privacy:cancel": { req: { chainId?: number; opId: string }; res: PrivacyView };
   "privacy:dismiss": { req: { chainId?: number }; res: PrivacyView };
-  /** Advance the operation (after its Vault payment was approved on the hand-off page). */
-  "privacy:run": { req: { chainId?: number }; res: PrivacyView };
   "privacy:saveConfig": {
     req: {
       chainId?: number;
@@ -146,19 +133,6 @@ export interface UiApi {
   };
   /** Settings › Private connection: whether Anon-RPC can be used on the network, and why not. */
   "privacy:connection": { req: { chainId?: number }; res: AnonStatus & { enabled: boolean } };
-
-  // ---- Alerts (watcher light mode + a paired self-hosted watcher; plan §30 §6.5, §40 §5) ----
-  "alerts:list": { req: undefined; res: AlertRecord[] };
-  "alerts:read": { req: { ids?: string[] }; res: AlertRecord[] };
-  /** Check now (also what the 60 s alarm does). */
-  "alerts:poll": { req: undefined; res: { added: number } };
-  "watcher:status": {
-    req: { chainId?: number };
-    res: { lastPollAt?: number; lastError?: string; cursor?: string; paired?: PairingView };
-  };
-  /** A self-hosted watcher's pairing code `{url, topic, keyId, hmacKey}`; `confirm: false` only checks it. */
-  "watcher:pair": { req: { text: string; confirm: boolean }; res: PairingView };
-  "watcher:unpair": { req: undefined; res: null };
 }
 
 export type UiType = keyof UiApi;
