@@ -1,0 +1,97 @@
+name: supply-chain
+
+# Dependency audit (non-blocking: findings become warnings, the job stays green) and CycloneDX SBOMs as artifacts.
+# Weekly as well as on changes, because new advisories arrive without any change here.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - pnpm-lock.yaml
+      - "**/package.json"
+      - "**/Cargo.lock"
+      - "**/Cargo.toml"
+      - scripts/supply-chain/**
+      - .github/workflows/supply-chain.yml
+  schedule:
+    - cron: "41 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supply-chain-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "26"
+  CARGO_AUDIT_VERSION: 0.22.2
+  CARGO_CYCLONEDX_VERSION: 0.5.9
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: cargo tools cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cargo/bin/cargo-audit
+          key: cargo-audit-${{ runner.os }}-${{ env.CARGO_AUDIT_VERSION }}
+      - name: cargo-audit
+        run: command -v cargo-audit || cargo install cargo-audit --version "$CARGO_AUDIT_VERSION" --locked
+      - name: audit (pnpm audit --prod, cargo audit)
+        id: audit
+        env:
+          OUT_DIR: ${{ runner.temp }}/audit
+        run: |
+          if scripts/supply-chain/audit.sh; then
+            echo "clean=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning title=dependency audit::findings in pnpm audit / cargo audit (see the job log and the audit artifact)"
+            echo "clean=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: audit-reports
+          path: ${{ runner.temp }}/audit/
+          retention-days: 30
+
+  sbom:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      # cdxgen reads licenses from the installed package.json files.
+      - run: pnpm install --frozen-lockfile
+      - name: cargo tools cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cargo/bin/cargo-cyclonedx
+          key: cargo-cyclonedx-${{ runner.os }}-${{ env.CARGO_CYCLONEDX_VERSION }}
+      - name: cargo-cyclonedx
+        run: command -v cargo-cyclonedx || cargo install cargo-cyclonedx --version "$CARGO_CYCLONEDX_VERSION" --locked
+      - name: SBOMs (CycloneDX, npm + both Rust crates)
+        env:
+          OUT_DIR: ${{ runner.temp }}/sbom
+        run: scripts/supply-chain/sbom.sh
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sbom-cyclonedx
+          path: ${{ runner.temp }}/sbom/
+          retention-days: 90

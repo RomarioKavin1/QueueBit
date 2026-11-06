@@ -8,7 +8,9 @@
 #     so the whole stack starts with one `docker compose up -d` (no two-step ENR dance);
 #   - platform: linux/amd64 on the two amd64-only images (ethrex, sidecar) for Apple Silicon hosts;
 #   - restart: unless-stopped on the long-running services;
-#   - a `skandha` service (standalone mode, no p2p) with the staking registry address pre-filled.
+#   - a `skandha` service (standalone mode, no p2p) with the staking registry address pre-filled;
+#   - every image overridable by env (GENESIS_IMAGE, VAL_TOOLS_IMAGE, ETHREX_IMAGE, LIGHTHOUSE_IMAGE, SKANDHA_IMAGE):
+#     CI (.github/workflows/devnet.yml) pins them all by digest.
 #
 # Usage: ./up.sh (never run `docker compose up` by hand the first time; genesis needs GENESIS_TIMESTAMP).
 
@@ -23,7 +25,7 @@ networks:
 services:
   # One-shot: writes genesis.json (EL), genesis.ssz + config.yaml (CL) and a JWT secret into ./data/genesis.
   genesis:
-    image: ethpandaops/ethereum-genesis-generator:6.1.6
+    image: ${GENESIS_IMAGE:-ethpandaops/ethereum-genesis-generator:6.1.6}
     environment:
       - GENESIS_TIMESTAMP
     volumes:
@@ -33,7 +35,7 @@ services:
 
   # One-shot: EIP-2335 keystores for the 32 genesis validators (weak KDF on purpose: throwaway devnet keys).
   validator-keys:
-    image: protolambda/eth2-val-tools:latest
+    image: ${VAL_TOOLS_IMAGE:-protolambda/eth2-val-tools:latest}
     depends_on:
       genesis:
         condition: service_completed_successfully
@@ -49,7 +51,7 @@ services:
       - --out-loc=/data/keystores
 
   ethrex:
-    image: ghcr.io/forshtat/ethrex:eip8141-tracer-latest
+    image: ${ETHREX_IMAGE:-ghcr.io/forshtat/ethrex:eip8141-tracer-latest}
     platform: linux/amd64
     restart: unless-stopped
     networks:
@@ -76,7 +78,7 @@ services:
       - "--discovery.port=30303"
 
   lighthouse-beacon:
-    image: ethpandaops/lighthouse:focil
+    image: ${LIGHTHOUSE_IMAGE:-ethpandaops/lighthouse:focil}
     restart: unless-stopped
     depends_on:
       ethrex:
@@ -111,7 +113,7 @@ services:
   # Passive peer with no validators. A solo Lighthouse never leaves SyncState::Stalled with zero peers and so
   # never builds a first block; this node exists only to satisfy that gate.
   lighthouse-beacon-2:
-    image: ethpandaops/lighthouse:focil
+    image: ${LIGHTHOUSE_IMAGE:-ethpandaops/lighthouse:focil}
     restart: unless-stopped
     depends_on:
       lighthouse-beacon:
@@ -143,7 +145,7 @@ services:
       - --boot-nodes=/ip4/172.28.0.3/tcp/9000
 
   lighthouse-validator:
-    image: ethpandaops/lighthouse:focil
+    image: ${LIGHTHOUSE_IMAGE:-ethpandaops/lighthouse:focil}
     restart: unless-stopped
     depends_on:
       lighthouse-beacon:

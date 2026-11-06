@@ -40,6 +40,8 @@ block producer cannot build Hegota payloads (see "Why not `ethrex --dev`"), so t
 
 Env knobs: `ETHREX_PORT` (8545), `SKANDHA_PORT` (14337), `BEACON_PORT` (5052), `SKANDHA_IMAGE` (to run a
 patched sidecar build, see below), `NO_SIDECAR=1`, `ETHREX_LOG_LEVEL`.
+Every image can be overridden (`ETHREX_IMAGE`, `LIGHTHOUSE_IMAGE`, `GENESIS_IMAGE`, `VAL_TOOLS_IMAGE`, `SKANDHA_IMAGE`);
+the nightly CI job (`.github/workflows/devnet.yml`) pins all of them by digest.
 
 ## Dev keys (public test keys, never real)
 

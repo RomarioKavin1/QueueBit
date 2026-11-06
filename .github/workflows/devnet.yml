@@ -1,0 +1,128 @@
+name: devnet
+
+# The slow suites that need the local EIP-8141 devnet (devnet/: ethrex eip8141-tracer + Lighthouse + the ERC-8421
+# sidecar, plus the BUDGET-010 patched sidecar for Path A). A fresh genesis takes ~7.5 minutes to reach Hegota, so this
+# runs nightly and on demand, not on every push. ethrex and the sidecar images are amd64-only: ubuntu-24.04 (x64)
+# runs them natively.
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      extension-e2e:
+        description: Run the extension e2e against the devnet
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: devnet-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  FOUNDRY_VERSION: v1.3.5
+  NODE_VERSION: "26"
+  # Images pinned by digest (devnet/README.md "Images"); the compose file reads these variables.
+  ETHREX_IMAGE: ghcr.io/forshtat/ethrex@sha256:920295ae5496669a6f90a44431d4cbcb4703feec0e89207599fe19a251739873
+  SKANDHA_IMAGE: ghcr.io/forshtat/mempool-workshop-sidecar@sha256:c4cdc5c707d94f3968566ba34904d1a7c4ab4dee962d822e1bac1bf6714e022e
+  LIGHTHOUSE_IMAGE: ethpandaops/lighthouse@sha256:dd7e92e2e9c3127750e9bff5f8a0efec686f296445a44ef5d9c1eb750e8906b0
+  GENESIS_IMAGE: ethpandaops/ethereum-genesis-generator@sha256:51decce4284d8498dabfa38ae13ddce84cbf8c7be4f33a32b798ce10c9868e77
+  VAL_TOOLS_IMAGE: protolambda/eth2-val-tools@sha256:7fb4e35dd39845407e1c61b39a992202cd9ceb6203a5928ab1e00151401c4fae
+
+jobs:
+  devnet:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - uses: foundry-rs/foundry-toolchain@dba66c27052e63476d886f22216e119ba7e615bf # v1.9.2
+        with:
+          version: ${{ env.FOUNDRY_VERSION }}
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.9
+      - run: pnpm install --frozen-lockfile
+      - name: forge build
+        working-directory: contracts
+        run: forge build
+      - name: bun install (devnet/deploy, G1)
+        run: |
+          (cd devnet/deploy && bun install --frozen-lockfile)
+          (cd contracts/devnet-tests/g1 && bun install --frozen-lockfile)
+
+      # The patched sidecar's image build runs in the background during the Hegota wait (~7.5 min).
+      - name: devnet up (fresh genesis, waits for Hegota) + build the BUDGET-010 sidecar image
+        working-directory: devnet
+        run: |
+          ./patched-sidecar/build.sh > "$RUNNER_TEMP/budget-build.log" 2>&1 &
+          build=$!
+          ./up.sh
+          if ! wait "$build"; then cat "$RUNNER_TEMP/budget-build.log"; exit 1; fi
+          tail -n 3 "$RUNNER_TEMP/budget-build.log"
+      - name: BUDGET-010 patched sidecar (:14340; built from upstream/skandha-budget-010)
+        run: devnet/patched-sidecar/up-patched.sh
+      - name: status
+        working-directory: devnet
+        run: ./status.sh
+      - name: deploy the account stack (CREATE2; must reproduce devnet/deploy/addresses.local.json)
+        working-directory: devnet/deploy
+        run: |
+          bun run deploy
+          git diff --exit-code -- addresses.local.json
+
+      - name: gate G1 (hot tx, Path B and Path A vault txs, forged sig, over-cap, recovery cancel, freeze)
+        working-directory: contracts/devnet-tests/g1
+        run: bun run test
+      - name: watcher live test (anvil #9)
+        env:
+          LIVE_DEVNET: "1"
+        run: pnpm --filter @leaked/watcher test
+      - name: rpc live test
+        env:
+          LIVE_DEVNET: "1"
+        run: pnpm --filter @leaked/rpc test
+
+      - name: Playwright browser
+        if: github.event_name == 'schedule' || inputs.extension-e2e
+        run: pnpm --filter @leaked/extension exec playwright install --with-deps chromium
+      - name: extension e2e against the devnet (payments, vault; 4337 on its own anvil)
+        if: github.event_name == 'schedule' || inputs.extension-e2e
+        env:
+          CI: "1"
+        run: pnpm --filter @leaked/extension run e2e
+
+      - name: container logs
+        if: failure()
+        working-directory: devnet
+        run: |
+          mkdir -p "$RUNNER_TEMP/devnet-logs"
+          for s in ethrex lighthouse-beacon lighthouse-beacon-2 lighthouse-validator skandha; do
+            docker compose --profile sidecar logs --no-color "$s" > "$RUNNER_TEMP/devnet-logs/$s.log" 2>&1 || true
+          done
+          docker logs leaked-devnet-skandha-budget-1 > "$RUNNER_TEMP/devnet-logs/skandha-budget.log" 2>&1 || true
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: devnet-results
+          path: |
+            contracts/devnet-tests/g1/last-run.json
+            apps/extension/test-results/
+            ${{ runner.temp }}/devnet-logs/
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: devnet down
+        if: always()
+        working-directory: devnet
+        run: |
+          ./patched-sidecar/up-patched.sh down || true
+          ./down.sh || true
