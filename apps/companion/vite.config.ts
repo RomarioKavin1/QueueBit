@@ -27,7 +27,8 @@ function relayUrl(): string {
   return url;
 }
 export const RELAY_URL = relayUrl();
-const RELAY_ORIGIN = RELAY_URL ? new URL(RELAY_URL).origin : "";
+/** The CSP source for the relay: its origin and path (`https://host/relay/`), so not even the rest of that host. */
+const RELAY_SOURCE = RELAY_URL ? `${RELAY_URL}/` : "";
 
 /**
  * The companion is a static, offline-first PWA. Security posture enforced by the build:
@@ -44,7 +45,7 @@ export const CSP = [
   "media-src 'self' blob: mediastream:",
   "worker-src 'self' blob:",
   "manifest-src 'self'",
-  RELAY_ORIGIN ? `connect-src ${RELAY_ORIGIN}` : "connect-src 'none'",
+  RELAY_SOURCE ? `connect-src ${RELAY_SOURCE}` : "connect-src 'none'",
   "font-src 'self'",
   "base-uri 'none'",
   "form-action 'none'",

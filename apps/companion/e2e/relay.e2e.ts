@@ -60,7 +60,7 @@ test("v2: the pairing link opens Link to browser; the pairing code arrives over 
   const H = await h();
   const { RelayClient, newChannel, pairLink, fingerprintWords } = H;
   const res = await page.request.get(`http://localhost:${PORT}/`);
-  expect(res.headers()["content-security-policy"]).toContain(`connect-src http://127.0.0.1:${RELAY_PORT};`);
+  expect(res.headers()["content-security-policy"]).toContain(`connect-src http://127.0.0.1:${RELAY_PORT}/relay/;`);
 
   const channel = newChannel();
   const link = pairLink(`http://localhost:${PORT}/`, channel);
