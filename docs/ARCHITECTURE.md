@@ -16,7 +16,8 @@ not a protocol change. This replaced the earlier QueueBitAccount (Vault, capped 
 | `WebAuthn`, `SessionRules`, `FrameOps` | `contracts/src/account/` | P256VERIFY passkey check; what a session call may do (shared by keystore and hook); the shared EIP-8141 introspection helpers (`FrameHelperHub`). |
 | `LeanAccountFactory` | `contracts/src/account/LeanAccountFactory.sol` | EIP-1167 clones at CREATE2 addresses bound to the full initial configuration. |
 | `DepsRegistry` | `contracts/src/leanpool/DepsRegistry.sol` | LeanPool: bonded aggregators post batch roots into a small ring per account; the keystore reads the account's own entry. |
-| LeanPool node | `services/leanpool-node` | Verifies leanSPHINCS signatures natively, batches them (EIP-8288 wrappers and dependencies), posts the root, fills each tx's witness, delivers it to the alt mempool; proves a recursive STARK per batch in the background and serves it by its on-chain hash. |
+| `PQAggregator` | `contracts/src/leanpool/PQAggregator.sol` | The bonded aggregator accounts name (public devnet pin): posts roots, attaches proof hashes, rotates its key and withdraws only on a SPHINCS- C13 signature it verifies in execution (`C13Verifier`, EIP-712 digest with a nonce per operation kind, 2^22-signature budget per key). Any EOA pays its gas; that ECDSA key authorizes nothing. |
+| LeanPool node | `services/leanpool-node` | Verifies leanSPHINCS signatures natively, batches them (EIP-8288 wrappers and dependencies), posts the root, fills each tx's witness, delivers it to the alt mempool; proves a recursive STARK per batch in the background and serves it by its on-chain hash. In PQ mode (`LEANPOOL_PQ_AGGREGATOR`) it signs each root and proof hash with the PQAggregator's C13 key (in a worker thread) and sends the signed call from a gas-payer EOA. |
 | `@queuebit/account` | `packages/account` | The SDK: keys, sessions, tx building and signing for every signer kind, submission, migration rails, the Safe adapter. Browser-safe. |
 | Extension | `apps/extension` | The wallet: seed, owner key (leanSPHINCS WASM in the offscreen document), session and setup keys, dapp provider, sessions, keys and recovery, Move to PQ, privacy. |
 | Watcher | `packages/watcher-core`, `services/watcher` | Alerts on key, policy, session and recovery events. |
@@ -26,7 +27,7 @@ not a protocol change. This replaced the earlier QueueBitAccount (Vault, capped 
 
 | Kind | Checked by | Typical role |
 |---|---|---|
-| **PQ** (leanVM leanSPHINCS) | inclusion of `keccak(0x10 ‖ SIG_HASH ‖ vk)` in a root the named aggregator posted (LeanPool) | owner: ADMIN + SPEND |
+| **PQ** (leanVM leanSPHINCS) | inclusion of `keccak(0x10 ‖ SIG_HASH ‖ vk)` in a root the named aggregator posted (LeanPool); with a PQAggregator, that root was itself authorized by a C13 signature verified on chain | owner: ADMIN + SPEND |
 | **ECDSA**, **P256** | the protocol's own signature entries (EIP-8141 SIGPARAM) | session keys, device keys |
 | **PASSKEY** | WebAuthn with P256VERIFY (0x100), challenge = SIG_HASH | spend or admin |
 | **EIP712** | `ecrecover` of typed data `LeanAccountTx(sigHash, Call[] calls)`, whose calls must equal the tx's executions | a browser wallet (MetaMask) as a session key |

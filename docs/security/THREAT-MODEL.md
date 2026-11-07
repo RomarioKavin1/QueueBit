@@ -20,24 +20,40 @@ owner key is covered by guardian recovery behind a delay the owner can cancel.
 | Session key (ECDSA, P256, or an EIP-712 browser wallet) | call its allowlisted targets within its per-tx and daily ETH and token caps, until it expires | change any key or setting; approve, permit, move NFTs; exceed a cap; act after expiry (stopped in execution) |
 | Setup key (secp256k1, extension) | pay legacy txs: account creation, migrations | anything on the account |
 | Guardian | approve a key reset; once enough approve and the delay passes, anyone executes it | act alone below the threshold; act before the delay; act on a reset the owner cancelled |
-| Aggregator (the LeanPool node the policy names) | post roots into the account's ring | — but see §3: a forged root approves an owner tx |
+| Aggregator (the one the policy names: on the public devnet the PQAggregator contract, authorized by a SPHINCS- C13 key) | post roots into the account's ring | — but see §3: a forged root approves an owner tx |
+| Aggregator gas payer (the LeanPool node's ECDSA key, PQ mode) | pay gas for the PQAggregator's signed calls | post, alter or replay a root, a proof hash, a key rotation or a withdrawal |
 
 ## 3. The owner key trusts its LeanPool aggregator
 
 The chain never sees the owner's leanSPHINCS signature: VERIFY checks that the tx's dependency
 `keccak(0x10 ‖ SIG_HASH ‖ vk)` is in a root that the policy's aggregator posted into the account's ring.
 
-- **A dishonest aggregator can approve an owner tx the key did not sign**, and so can anyone who breaks the
-  aggregator's ECDSA posting key (a quantum attacker, after Q-day). The owner has ADMIN, so this is account takeover,
-  not a bounded loss. This is the main trust assumption of the design.
+- **A dishonest aggregator can approve an owner tx the key did not sign.** The owner has ADMIN, so this is account
+  takeover, not a bounded loss. This is the main trust assumption of the design.
+- **The aggregator's own authority is post-quantum** when it is a `PQAggregator` (the public devnet's pinned
+  aggregator, `apps/extension/src/shared/chains.ts`). Roots, proof hashes, key rotation and withdrawals need a
+  SPHINCS- C13 signature that the contract verifies in execution, over an EIP-712 digest of chain id, contract,
+  registry, a per-operation nonce and every field (root, count, wallet list). The node's ECDSA key only pays gas: a
+  quantum attacker who breaks it can spend its ETH and nothing else. An account whose policy names a plain EOA
+  aggregator (as earlier devnet accounts did) still falls to whoever breaks that EOA's ECDSA key.
+- **C13 is few-time:** 2^22 signatures per key at the claimed 128-bit level (unproven, see §7). The contract counts
+  accepted signatures and refuses posts and proof hashes 16 short of the budget, keeping those for a PQ-signed
+  `rotateKey` (which resets the count); the node also counts every signature it produces (including ones whose tx
+  never landed) and stops at the same point. One root and one proof hash per batch: at a batch every 4 s that is
+  about 97 days of continuous batching per key. Rotate well before.
+- **The bond is irrevocable:** DepsRegistry v2 has no unbond, so nobody, PQ key or not, can take a bond back; the
+  PQAggregator's `withdraw` (PQ-signed) only releases ETH the contract itself holds.
 - **Accountability is after the fact.** Every batch's recursive STARK hash is attached on chain and the node serves
   the STARK; `queuebit-leanpool-verify-batch` checks it and that its claims rebuild the posted root. A forged root fails
   that check. There is no on-chain slashing: the EVM cannot verify leanVM signatures or STARKs yet.
 - **Mitigations available today:** name an aggregator you run or trust; watch every root posted for the account (the
   watcher alerts on key and policy changes, which a takeover needs); keep guardians.
+- **Cost of PQ authorization (live, public devnet):** `PQAggregator.post` 460,524 gas per root in steady state
+  (754,308 for the first, which creates the nonce and counter slots) against 254,172 for an EOA's `postRoot`; the
+  proof hash 336,009 (433,905 first). Signing takes ~2.3 s on an M3 and ~16-25 s on the 2-core ARM node host, so it
+  adds that to each batch's latency.
 - **Planned (backlog):** a direct path where admin actions carry the PQ signature verified on chain in execution
-  (a scheme with an EVM verifier, ~260-380k gas, rare actions only), so LeanPool approvals can be limited to spending;
-  and aggregators that post from a PQ-authenticated account, which closes the Q-day hole on the posting key.
+  (a scheme with an EVM verifier, ~260-380k gas, rare actions only), so LeanPool approvals can be limited to spending.
 
 ## 4. Sessions: what the caps bound
 
@@ -73,8 +89,12 @@ proposals die with it), and duplicate guardians count once.
 
 - **What is PQ:** the owner key (leanVM leanSPHINCS at lean-pq rev `a39758d`, 4,276-byte signatures, kept height 12:
   a budget of 120K signatures, counted by the extension). It is a research scheme with no external audit.
-- **What is not:** session keys, the setup key, guardians that are EOAs, and the aggregator's posting key (§3).
-- **SPHINCS- C13 / leanSphincs-s** (`packages/pq-signer`) remain as on-chain verifiers and benchmarks; they are the
+- **Also PQ:** the PQAggregator's root-authorization key (SPHINCS- C13, `packages/pq-signer`, verified on chain by
+  `C13Verifier`; upstream marks scheme and verifier "not audited", and the 2^22 few-time bound in the
+  public-grindable-R model is unproven). Its secret lives with the node operator (`LEANPOOL_PQ_KEY_FILE`).
+- **What is not:** session keys, the setup key, guardians that are EOAs, an aggregator that is a plain EOA (§3), and
+  the PQ-mode node's gas-payer key (which authorizes nothing).
+- **leanSphincs-s** (`packages/pq-signer`) remains as an on-chain verifier and benchmark; it and C13 are the
   candidates for the direct on-chain admin path (§3).
 
 ## 8. Mempools and liveness
