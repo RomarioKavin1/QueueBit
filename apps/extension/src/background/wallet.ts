@@ -1,6 +1,11 @@
 import {
   addSessionCalls,
   execTransactionCall,
+  grantCalls,
+  listGrants,
+  readGrant,
+  revokeGrantCalls,
+  validateGrant,
   guardianRecoveryAbi,
   multiSendSafeTx,
   packSafeSignatures,
@@ -54,6 +59,7 @@ import {
   type KeyringOptions,
 } from "./keyring";
 import { AccountError, AccountService, type LeanIo } from "./lean/account";
+import { grantView, mergeGrantSpec, type GrantRequest, type GrantView } from "./lean/grants";
 import { readGuardians, readKeys, readRecoveries } from "./lean/keys";
 import { quoteLegacy } from "./lean/legacy";
 import { planMigration, readMigrationSource, readSafe, runMigration, type MigrationPlan } from "./lean/migrate";
@@ -105,6 +111,9 @@ export interface WalletEnv {
 }
 
 const PRIVACY_ORIGIN = "QueueBit Private balance";
+/** Execution gas of a grant's and a revoke's SENDER frame (a grant writes a key, its allowlist and caps). */
+const GRANT_GAS = 400_000n;
+const REVOKE_GAS = 300_000n;
 
 /**
  * The service worker's composition root: every controller reads and writes storage, so nothing important lives only in
@@ -768,6 +777,67 @@ export class Wallet {
     return (await this.sessions.update(id, { status: "revoking", activityId: entry.id }))!;
   }
 
+  // ---- spending permissions (grants) ----
+
+  /** The account's grants as the chain holds them (nothing is kept here: every device shows the same). */
+  private async grantList(chainId: number): Promise<GrantView[]> {
+    const account = this.acct();
+    const rec = await account.ensure(chainId);
+    if (!(await account.deployed(chainId, rec.address))) return [];
+    const client = this.env.io!.publicClient(chainId);
+    const nowSec = Math.floor(this.now() / 1000);
+    const [list, tokens] = await Promise.all([
+      listGrants(client, account.deployment(chainId), rec.address, nowSec),
+      this.tokens(chainId),
+    ]);
+    return list.map((g) => grantView(g, tokens));
+  }
+
+  /** Grants (or changes) one asset for a person: what they have on chain, with this asset set, in one admin tx. */
+  private async createGrant(req: GrantRequest): Promise<ActivityEntry> {
+    const chainId = await this.chainOr(req.chainId);
+    const account = this.acct();
+    const d = account.deployment(chainId);
+    const rec = await account.ensure(chainId);
+    if (!(await account.deployed(chainId, rec.address)))
+      throw new AccountError("not-created", "Create your account first (your first payment does it).");
+    if (!isAddress(req.delegate, { strict: false }))
+      throw new Error("Enter the wallet address of the person you're letting spend (0x + 40 characters).");
+    const client = this.env.io!.publicClient(chainId);
+    const nowSec = Math.floor(this.now() / 1000);
+    const current = await readGrant(client, d, rec.address, getAddress(req.delegate), nowSec);
+    const spec = mergeGrantSpec(current, req, await this.tokens(chainId), nowSec);
+    validateGrant(d, rec.address, spec, nowSec);
+    const who = shortAddress(spec.delegate);
+    const entry = await account.pay(chainId, grantCalls(d, spec, current), {
+      kind: "admin",
+      // A new key, its allowlist and its caps are new storage (measured on the devnet: grants-live.ts).
+      gas: { execution: GRANT_GAS, state: 900_000n },
+      label: `Letting ${who} spend`,
+      doneLabel: `${who} can spend from your account`,
+    });
+    void this.trackSoon();
+    return entry;
+  }
+
+  private async revokeGrant(chainId: number, delegate: Address): Promise<ActivityEntry> {
+    const account = this.acct();
+    const d = account.deployment(chainId);
+    const rec = await account.ensure(chainId);
+    const client = this.env.io!.publicClient(chainId);
+    const current = await readGrant(client, d, rec.address, getAddress(delegate), Math.floor(this.now() / 1000));
+    if (!current.active) throw new Error("This person has no permission to remove.");
+    const who = shortAddress(current.delegate);
+    const entry = await account.pay(chainId, revokeGrantCalls(d, current), {
+      kind: "admin",
+      gas: { execution: REVOKE_GAS, state: 200_000n },
+      label: `Removing ${who}'s permission`,
+      doneLabel: `${who} can no longer spend`,
+    });
+    void this.trackSoon();
+    return entry;
+  }
+
   // ---- keys & recovery ----
 
   private async keysView(chainId: number): Promise<KeysView> {
@@ -1066,6 +1136,16 @@ export class Wallet {
     "sessions:revoke": async ({ id, proof }) => {
       await this.consent(proof);
       return this.revokeSession(id);
+    },
+
+    "grants:list": async ({ chainId }) => this.grantList(await this.chainOr(chainId)),
+    "grants:create": async ({ proof, ...req }) => {
+      await this.consent(proof);
+      return this.createGrant(req);
+    },
+    "grants:revoke": async ({ chainId, delegate, proof }) => {
+      await this.consent(proof);
+      return this.revokeGrant(await this.chainOr(chainId), delegate);
     },
 
     "keys:view": async ({ chainId }) => this.keysView(await this.chainOr(chainId)),
