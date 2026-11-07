@@ -4,7 +4,7 @@
 import { decodeEventLog, encodeFunctionData, type Address, type Hex } from "viem";
 import { generatePrivateKey } from "viem/accounts";
 import {
-  FUNDER, REGISTRY, CHAIN_ID, addr, artifact, deploy, encodeTx, ethrex, frame, hex, log, newTx, profile,
+  FUNDER, REGISTRY, CHAIN_ID, PUBLIC, addr, artifact, deploy, encodeTx, ethrex, frame, hex, log, newTx, profile,
   secp256k1Placeholder, send, signTx, type FrameTx,
 } from "./lib.ts";
 import { commitmentOf, contextOf, encodeFeeData, proveWithdrawal, secretFrom, type Note, type SolProof } from "./pp.ts";
@@ -24,53 +24,67 @@ export const PRIO_FEE_PER_GAS = 1_000_000_000n;
 
 export type Estimator = { intrinsicGas: bigint; perFrameGas: bigint; gasPerDataByte: bigint; refundFrameGas: bigint; valueFrameGas: bigint };
 
-export async function deployPayer(entrypoint: Address, pool: Address, est: Estimator, float: bigint) {
+/** Frame minimums `verify` enforces (Config.min*). The defaults are the local e2e's. */
+export type PayerMins = { minPayStateGas: bigint; minSettleGas: bigint; minSettleStateGas: bigint; minRefundGas: bigint; minRefundStateGas: bigint };
+export const DEFAULT_MINS: PayerMins = {
+  minPayStateGas: 183_600n, // STATE_BYTES_PER_NEW_ACCOUNT (120) * CPSB (1530): APPROVE creates the fresh sender
+  minSettleGas: 1_000_000n, minSettleStateGas: 1_000_000n,
+  // refund(): ~25k own work + PAYOUT_GAS + CREDIT_GAS_RESERVE (114k) so the refund is pushed, not credited.
+  minRefundGas: 150_000n, minRefundStateGas: 183_600n,
+};
+
+/** Deploys a PoolPayer (`file`: PoolPayer.sol, or PoolPayerLite.sol for the cheap VERIFY frame), funds its float
+ *  and stakes it in the ERC-8421 registry (its VERIFY frame reads the pool's and the Entrypoint's storage). */
+export async function deployPayer(entrypoint: Address, pool: Address, est: Estimator, float: bigint,
+  opts: { file?: string; mins?: PayerMins; stakeWei?: bigint } = {}) {
   const me = addr(FUNDER);
   const cfg = {
     devnet: 0, entrypoint, pool, registry: REGISTRY, operator: me, feeParam: 6 /* TxParam.MAX_COST */,
-    ...est,
-    minPayStateGas: 183_600n, // STATE_BYTES_PER_NEW_ACCOUNT (120) * CPSB (1530): APPROVE creates the fresh sender
-    minSettleGas: 1_000_000n, minSettleStateGas: 1_000_000n,
-    // refund(): ~25k own work + PAYOUT_GAS + CREDIT_GAS_RESERVE (114k) so the refund is pushed, not credited.
-    minRefundGas: 150_000n, minRefundStateGas: 183_600n,
+    ...est, ...(opts.mins ?? DEFAULT_MINS),
   };
-  const d = await deploy(FUNDER, "PoolPayer.sol", [cfg], {}, undefined, 0n);
-  const fund = await send(FUNDER, d.address, "0x", float, 100_000n);
-  const stake = await send(FUNDER, d.address, encodeFunctionData({ abi: payerArt.abi, functionName: "stake", args: [86_400] }), 12_000_000_000_000_000n, 500_000n);
+  const art = artifact(opts.file ?? "PoolPayer.sol");
+  const d = await deploy(FUNDER, opts.file ?? "PoolPayer.sol", [cfg], {}, undefined, 0n);
+  const fund = await send(FUNDER, d.address, "0x", float, PUBLIC ? undefined : 100_000n);
+  const stake = await send(FUNDER, d.address, encodeFunctionData({ abi: art.abi, functionName: "stake", args: [86_400] }),
+    opts.stakeWei ?? 12_000_000_000_000_000n, PUBLIC ? undefined : 500_000n);
   const info = await ethrex("eth_call", [{ to: REGISTRY, data: encodeFunctionData({
     abi: [{ type: "function", name: "getDepositInfo", inputs: [{ type: "address" }], outputs: [{ type: "uint256" }, { type: "uint32" }, { type: "uint64" }], stateMutability: "view" }],
     functionName: "getDepositInfo", args: [d.address] }) }, "latest"]);
-  log("PoolPayer deployed + funded + staked", { address: d.address, deployTx: d.hash, deployGas: d.gasUsed, fundTx: fund.transactionHash, stakeTx: stake.transactionHash, getDepositInfo: info, estimator: est });
-  return { address: d.address, deployTx: d.hash, stakeTx: stake.transactionHash as Hex };
+  log(`${opts.file ?? "PoolPayer.sol"} deployed + funded + staked`, { address: d.address, deployTx: d.hash, deployGas: d.gasUsed, fundTx: fund.transactionHash, stakeTx: stake.transactionHash, getDepositInfo: info, estimator: est });
+  return { address: d.address, deployTx: d.hash as Hex, fundTx: fund.transactionHash as Hex, stakeTx: stake.transactionHash as Hex, getDepositInfo: info as Hex };
 }
 
 export type Withdrawal = { processooor: Address; data: Hex };
 
-/** Builds and signs the PoolPayer frame tx. */
-export async function buildTx(senderKey: Hex, payer: Address, verifyData: Hex): Promise<FrameTx> {
+export type Limits = typeof LIMITS;
+export type Fees = { maxFeePerGas: bigint; maxPriorityFeePerGas: bigint };
+
+/** Builds and signs the PoolPayer frame tx (default: the local e2e's limits and fees). */
+export async function buildTx(senderKey: Hex, payer: Address, verifyData: Hex,
+  limits: Limits = LIMITS, fees: Fees = { maxFeePerGas: MAX_FEE_PER_GAS, maxPriorityFeePerGas: PRIO_FEE_PER_GAS }): Promise<FrameTx> {
   const sender = addr(senderKey);
   const tx = newTx({
     chainId: CHAIN_ID, sender, nonceSeq: 0n,
-    fees: { maxFeePerGas: MAX_FEE_PER_GAS, maxPriorityFeePerGas: PRIO_FEE_PER_GAS },
+    fees,
     signatures: [secp256k1Placeholder(profile, sender)],
     frames: [
-      frame(profile, "VERIFY", { scope: "EXECUTION", execution: LIMITS.onlyVerify }),
-      frame(profile, "VERIFY", { scope: "PAYMENT", target: payer, execution: LIMITS.pay, state: LIMITS.payState, data: verifyData }),
-      frame(profile, "DEFAULT", { target: payer, execution: LIMITS.settle, state: LIMITS.settleState,
+      frame(profile, "VERIFY", { scope: "EXECUTION", execution: limits.onlyVerify }),
+      frame(profile, "VERIFY", { scope: "PAYMENT", target: payer, execution: limits.pay, state: limits.payState, data: verifyData }),
+      frame(profile, "DEFAULT", { target: payer, execution: limits.settle, state: limits.settleState,
         data: encodeFunctionData({ abi: payerArt.abi, functionName: "settle", args: [1] }) }),
-      frame(profile, "DEFAULT", { target: payer, execution: LIMITS.refund, state: LIMITS.refundState,
+      frame(profile, "DEFAULT", { target: payer, execution: limits.refund, state: limits.refundState,
         data: encodeFunctionData({ abi: payerArt.abi, functionName: "refund", args: [] }) }),
     ],
   });
   return signTx(profile, tx, senderKey, 0);
 }
 
-const verifyCall = (scope: bigint, w: Withdrawal, p: SolProof, hint: number) =>
+export const verifyCall = (scope: bigint, w: Withdrawal, p: SolProof, hint: number) =>
   encodeFunctionData({ abi: payerArt.abi, functionName: "verify", args: [scope, w, p, hint] });
 
 // All-nonzero-byte placeholder: the max cost depends on the calldata's zero/nonzero bytes, so this bounds it from above.
 const FF = (1n << 253n) - 1n;
-const DUMMY: SolProof = { pA: [FF, FF], pB: [[FF, FF], [FF, FF]], pC: [FF, FF], pubSignals: [FF, FF, FF, FF, FF, FF, FF, FF] };
+export const DUMMY: SolProof = { pA: [FF, FF], pB: [[FF, FF], [FF, FF]], pC: [FF, FF], pubSignals: [FF, FF, FF, FF, FF, FF, FF, FF] };
 
 /**
  * Prepares a PoolPayer withdrawal of `withdrawn` from `note`: asks ethrex for the tx's max cost (simulating the same

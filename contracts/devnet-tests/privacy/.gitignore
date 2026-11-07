@@ -1,1 +1,3 @@
 results/
+# the Kohaku mnemonic of the public run (public-lite.ts)
+.keys/

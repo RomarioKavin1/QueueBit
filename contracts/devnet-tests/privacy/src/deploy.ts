@@ -1,12 +1,15 @@
 // Deploys the real Privacy Pools v1 contracts (vendored 0xbow sources, built by forge into contracts/out) on the
-// local devnet, registers the native-ETH pool, makes `notes` deposits and posts an ASP root containing their labels.
-// Everything is funded and sent by anvil #5 (owner, ASP postman, depositor are that one key).
+// devnet, registers the native-ETH pool, makes `notes` deposits and posts an ASP root containing their labels.
+// Everything is funded and sent by FUNDER (owner, ASP postman, depositor are that one key): anvil #5 locally, the
+// `FUNDER_KEY_FILE` key with `PUBLIC=1` (lib.ts). With `notes = 0` it only deploys and registers the pool (the caller
+// deposits and posts the ASP root itself, as public-lite.ts does through Kohaku).
 import { encodeFunctionData, type Address, type Hex } from "viem";
-import { FUNDER, addr, deploy, send, artifact, log, CHAIN_ID } from "./lib.ts";
+import { FUNDER, PUBLIC, addr, deploy, send, artifact, log, CHAIN_ID } from "./lib.ts";
 import { NATIVE_ASSET, commitmentOf, labelOf, precommitmentOf, scopeOf, secretFrom, tree, type Note } from "./pp.ts";
 
 export type PoolDeployment = {
-  verifier: Address; entrypoint: Address; pool: Address; scope: bigint;
+  verifier: Address; poseidonT3: Address; poseidonT4: Address; entrypointImpl: Address;
+  entrypoint: Address; pool: Address; deployBlock: bigint; scope: bigint;
   notes: Note[]; stateLeaves: bigint[]; aspLabels: bigint[]; aspRoot: bigint; txs: Record<string, Hex>;
 };
 
@@ -27,7 +30,7 @@ export async function deployPool(notesCount: number, tag: string): Promise<PoolD
   const pool = await deploy(FUNDER, "PrivacyPoolSimple.sol", [proxy.address, verifier.address, verifier.address], {
     PoseidonT3: t3.address, PoseidonT4: t4.address,
   });
-  Object.assign(txs, { verifier: verifier.hash, entrypoint: proxy.hash, pool: pool.hash });
+  Object.assign(txs, { verifier: verifier.hash, poseidonT3: t3.hash, poseidonT4: t4.hash, entrypointImpl: impl.hash, entrypoint: proxy.hash, pool: pool.hash });
   const reg = await send(FUNDER, proxy.address, encodeFunctionData({
     abi: ep.abi, functionName: "registerPool", args: [NATIVE_ASSET, pool.address, 0n, 0n, 0n],
   }));
@@ -48,11 +51,16 @@ export async function deployPool(notesCount: number, tag: string): Promise<PoolD
   }
   const stateLeaves = notes.map(commitmentOf);
   const aspLabels = notes.map((n) => n.label);
-  const aspRoot = tree(aspLabels).root;
-  const ur = await send(FUNDER, proxy.address, encodeFunctionData({ abi: ep.abi, functionName: "updateRoot", args: [aspRoot, CID] }));
-  txs.updateRoot = ur.transactionHash;
-  const d = { verifier: verifier.address, entrypoint: proxy.address, pool: pool.address, scope, notes, stateLeaves, aspLabels, aspRoot, txs };
-  log("Privacy Pools v1 deployed (local devnet)", { verifier: d.verifier, entrypoint: d.entrypoint, pool: d.pool, deposits: notesCount, txs, poolDeployGas: pool.gasUsed });
+  const aspRoot = notes.length ? tree(aspLabels).root : 0n;
+  if (notes.length) {
+    const ur = await send(FUNDER, proxy.address, encodeFunctionData({ abi: ep.abi, functionName: "updateRoot", args: [aspRoot, CID] }));
+    txs.updateRoot = ur.transactionHash;
+  }
+  const d = {
+    verifier: verifier.address, poseidonT3: t3.address, poseidonT4: t4.address, entrypointImpl: impl.address,
+    entrypoint: proxy.address, pool: pool.address, deployBlock: BigInt(proxy.blockNumber), scope, notes, stateLeaves, aspLabels, aspRoot, txs,
+  };
+  log(`Privacy Pools v1 deployed (${PUBLIC ? "public" : "local"} devnet)`, { verifier: d.verifier, entrypoint: d.entrypoint, pool: d.pool, deposits: notesCount, txs, poolDeployGas: pool.gasUsed });
   return d;
 }
 

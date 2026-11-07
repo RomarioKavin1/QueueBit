@@ -325,11 +325,15 @@ contract PoolPayer is HegotaSupport {
         if (fee.fee < q) revert FeeBelowQuote(fee.fee, q);
 
         // 5. The proof.
-        if (!VERIFIER.verifyProof(proof.pA, proof.pB, proof.pC, s)) {
-            revert InvalidProof();
-        }
+        _checkProof(proof);
 
         approve(Scope.PAYMENT);
+    }
+
+    /// Step 5 of `verify`: the Groth16 check (~250k gas). `PoolPayerLite` overrides it to a no-op and leaves the proof
+    /// to `pool.withdraw` in the settle frame (MAX_VERIFY_GAS); see its NatSpec for the trade-off.
+    function _checkProof(PrivacyPoolsTypes.WithdrawProof calldata proof) internal view virtual {
+        if (!VERIFIER.verifyProof(proof.pA, proof.pB, proof.pC, proof.pubSignals)) revert InvalidProof();
     }
 
     /// The fee (in the pool asset) that covers `maxCostWei` of gas. v1: the ETH pool, 1:1 (no oracle, no margin).

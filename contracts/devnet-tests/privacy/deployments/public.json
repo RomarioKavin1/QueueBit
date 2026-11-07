@@ -1,0 +1,200 @@
+{
+  "network": {
+    "chainId": 1337,
+    "rpc": "https://altmempool.forshtat.com",
+    "sidecar": "https://altmempool.forshtat.com/rpc",
+    "stakingRegistry": "0xd51c04d7a0b01124e84de152f4e56d9eecb22d2f"
+  },
+  "funder": "0x3A186AfbECE6E80f7bfba5Fa4fD9994aD6F32262",
+  "privacyPools": {
+    "verifier": "0xc9acd388f6f3efbc8e77c6e44a3bcd072df843d8",
+    "poseidonT3": "0xe0ec2bc11edef14df96fab3807a620e2e65f339e",
+    "poseidonT4": "0x2fe0a154d9cf9232066ebc12fe4c5f1589b65f9b",
+    "entrypointImpl": "0x07e28e39a3b14d55fb8b4fd89b9dd373fc0e7e1d",
+    "entrypoint": "0xe71178f42b23ef08ed3e5680dc34844ad42b8330",
+    "pool": "0xb522db9e59b670af99c19b3791d92138494b655f",
+    "scope": "18053113181683201396123763570868229805013741695906435314045260635440531651720",
+    "deployBlock": "10347",
+    "owner": "0x3A186AfbECE6E80f7bfba5Fa4fD9994aD6F32262",
+    "aspPostman": "0x3A186AfbECE6E80f7bfba5Fa4fD9994aD6F32262",
+    "txs": {
+      "verifier": "0x9f9ccf1cc28697dc3a06dce73edc7f49b950d468852e753f667dd84fbc7059e4",
+      "poseidonT3": "0x7b1351a07ad594941842bb43fd47bab8c0d1d6ca70a0d448314a0c9bde3538a8",
+      "poseidonT4": "0x5ddfecc175e56a6aee243f0ec4e5669062fd3a6352af2283490f6276ea55d45f",
+      "entrypointImpl": "0x81aeb111c91e8157a4a6c780c87a41c097feb68f8d6d39cf47b9d223083d09a3",
+      "entrypoint": "0x040f43bfcac553fc34cf319dbb4f3654c79fa37600e3139b52d4d6b145fbf6d7",
+      "pool": "0x3476a4e65bc09ed0e4537425e103e40e48fab22fc63c929c5e0d96ea098c0461",
+      "registerPool": "0x54157b92585ff3d4665ca64547a0446564e9beddc412870e683897f258b232dd"
+    }
+  },
+  "poolPayerLite": {
+    "address": "0xfb78bf13bbb43c66449e2d8b8b909ee5fa1fdf35",
+    "deployTx": "0xb65c5b27cc16891cf17bc10b2e76c508e42b1d720e04a99686740d449bdcf5cd",
+    "fundTx": "0xb997dc179b29768f992a7975bf33c33ccc71f8c56c46df2a3e64b73a55d3ab30",
+    "stakeTx": "0xfdc029370db132f4d9385f741a4bf4980c8e830167507e41b4285faa373f0855",
+    "getDepositInfo": "0x000000000000000000000000000000000000000000000000002386f26fc1000000000000000000000000000000000000000000000000000000000000000151800000000000000000000000000000000000000000000000000000000000000000",
+    "float": "10000000000000000",
+    "stake": "10000000000000000",
+    "unstakeDelaySec": 86400,
+    "estimator": {
+      "intrinsicGas": "21000",
+      "perFrameGas": "0",
+      "gasPerDataByte": "4",
+      "refundFrameGas": "23378",
+      "valueFrameGas": "0"
+    },
+    "mins": {
+      "minPayStateGas": "183600",
+      "minSettleGas": "800000",
+      "minSettleStateGas": "700000",
+      "minRefundGas": "150000",
+      "minRefundStateGas": "183600"
+    }
+  },
+  "deposit": {
+    "by": "kohaku prepareShield",
+    "from": "0x3A186AfbECE6E80f7bfba5Fa4fD9994aD6F32262",
+    "to": "0xe71178f42b23ef08ed3e5680dc34844ad42b8330",
+    "value": "100000000000000000",
+    "tx": "0x53bfcf553015542be8805e2f4af1af5f04c8a9572917df0d577650937f32dab0",
+    "block": "10353",
+    "status": "0x1",
+    "gasUsed": "1013597"
+  },
+  "aspRoot": {
+    "root": "9560255328493880711364410292532552872143034930256403953551970958160139736440",
+    "labels": [
+      "9560255328493880711364410292532552872143034930256403953551970958160139736440"
+    ],
+    "tx": "0x040c1e726ca1eff4db53562b8ab5398b5f57196e7d90e217416b3c43a00a41b1",
+    "status": "0x1"
+  },
+  "withdrawal": {
+    "sender": "0xbF80d1eBC6E6F74C923aDCD5bA12356366011AE3",
+    "kohaku": {
+      "fee": "3360000000000000",
+      "withdrawnValue": "50000000000000000",
+      "proveMs": 11095,
+      "noteDeposit": 0,
+      "noteWithdraw": 0
+    },
+    "rootIndexHint": 1,
+    "limits": {
+      "onlyVerify": "5000",
+      "pay": "92200",
+      "payState": "250000",
+      "settle": "800000",
+      "settleState": "700000",
+      "refund": "150000",
+      "refundState": "250000"
+    },
+    "fees": {
+      "maxFeePerGas": "1461317942",
+      "maxPriorityFeePerGas": "1000000000"
+    },
+    "prefixExecutionPlusSig": "100000",
+    "txHash": "0x8e1440801b3a2464321e05cd127852581e6e4ce25afcb12217aecc3a326bc23a",
+    "rawBytes": 1139,
+    "simulate": {
+      "canonicalMempoolValid": false,
+      "canonicalMempoolViolation": "StorageReadNonSender",
+      "payer": "0xfb78bf13bbb43c66449e2d8b8b909ee5fa1fdf35",
+      "maxCost": "0xbd045d7911b70",
+      "gasUsed": "0x121058",
+      "executionStatus": "success",
+      "executionError": null,
+      "frames": [
+        {
+          "gasUsed": "0x64"
+        },
+        {
+          "gasUsed": "0x105cd"
+        },
+        {
+          "gasUsed": "0x73fc5"
+        },
+        {
+          "gasUsed": "0x64da"
+        }
+      ],
+      "traceError": null
+    },
+    "invalidProofSimulation": {
+      "canonicalMempoolValid": false,
+      "payer": "0xfb78bf13bbb43c66449e2d8b8b909ee5fa1fdf35",
+      "executionStatus": "reverted",
+      "executionError": null,
+      "frames": [
+        {
+          "gasUsed": "0x64"
+        },
+        {
+          "gasUsed": "0x105cd"
+        },
+        {
+          "gasUsed": "0xbb0b4"
+        },
+        {
+          "gasUsed": "0x1444"
+        }
+      ]
+    },
+    "submittedTo": "https://altmempool.forshtat.com/rpc",
+    "balancesBefore": {
+      "payer": "10000000000000000",
+      "sender": "0"
+    },
+    "submitted": "0x8e1440801b3a2464321e05cd127852581e6e4ce25afcb12217aecc3a326bc23a",
+    "sidecarStatus": "OnChain",
+    "block": "10365",
+    "status": "0x1",
+    "gasUsed": "1183832",
+    "effectiveGasPrice": "1000000007",
+    "charge": "1183832008286824",
+    "frames": [
+      {
+        "status": "0x1",
+        "gasUsed": "100",
+        "stateGasUsed": "0"
+      },
+      {
+        "status": "0x1",
+        "gasUsed": "67021",
+        "stateGasUsed": "0"
+      },
+      {
+        "status": "0x1",
+        "gasUsed": "475077",
+        "stateGasUsed": "587520"
+      },
+      {
+        "status": "0x1",
+        "gasUsed": "25818",
+        "stateGasUsed": "0"
+      }
+    ],
+    "settled": {
+      "sigHash": "0x41800b91da33cd6eedf7ae0bab9e75ade144e3ce73624a1897b35fe24ac5d188",
+      "nullifierHash": "4632224606038738896437348534169792714299646419049575637998172574762186327500",
+      "recipient": "0xbF80d1eBC6E6F74C923aDCD5bA12356366011AE3",
+      "paid": "46640000000000000",
+      "fee": "3360000000000000"
+    },
+    "refunded": {
+      "sigHash": "0x41800b91da33cd6eedf7ae0bab9e75ade144e3ce73624a1897b35fe24ac5d188",
+      "to": "0xbF80d1eBC6E6F74C923aDCD5bA12356366011AE3",
+      "amount": "2182399991756800",
+      "costEstimate": "1177600008243200"
+    },
+    "balancesAfter": {
+      "payer": "9993767999956376",
+      "sender": "48822399991756800"
+    },
+    "senderReceived": "48822399991756800",
+    "expectedSenderReceived": "48822399991756800",
+    "senderReceivedEqualsWithdrawnMinusCharge": false,
+    "payerNet": "-6232000043624",
+    "payerNetExpected_costEstimateMinusCharge": "-6232000043624",
+    "nullifierSpent": true
+  }
+}
