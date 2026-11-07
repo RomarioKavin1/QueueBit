@@ -14,6 +14,8 @@ coverage/
 **/vectors/*.json
 **/rust/
 **/target/
+# Written by the impeccable design skill next to DESIGN.md (regenerated with it, not edited by hand)
+.impeccable/
 
 # tool caches
 **/.cache/

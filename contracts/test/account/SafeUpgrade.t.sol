@@ -50,6 +50,8 @@ interface ISafeLike {
 
 /// A Safe v1.4.1 becomes a LeanAccount at the same address, in one Safe transaction its owners sign: a DELEGATECALL
 /// into SafeToLeanAccount points the proxy at LeanAccount and initializes it with the PQ owner key.
+/// Safe v1.4.1 is built by the legacy-pipeline profile, so it is deployed from its artifact path: with two compiler
+/// profiles, forge 1.3.5's name lookup ("Safe.sol:Safe") finds no artifact.
 contract SafeUpgradeTest is Test {
     bytes32 constant VK = 0x1111111111111111111111111111111111111111111111111111111111111111;
     address constant AGG = address(0xab);
@@ -75,7 +77,7 @@ contract SafeUpgradeTest is Test {
         token = new TestToken("USDC", 6);
         (o1, k1) = makeAddrAndKey("owner 1");
         (o2, k2) = makeAddrAndKey("owner 2");
-        safe = deployCode("SafeProxy.sol:SafeProxy", abi.encode(deployCode("Safe.sol:Safe")));
+        safe = deployCode("out/SafeProxy.sol/SafeProxy.json", abi.encode(deployCode("out/Safe.sol/Safe.json")));
         address[] memory owners = new address[](2);
         (owners[0], owners[1]) = (o1, o2);
         ISafeLike(safe).setup(owners, 2, address(0), "", address(0), address(0), 0, address(0));

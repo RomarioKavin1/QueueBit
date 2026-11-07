@@ -14,6 +14,10 @@ if [ "$have" != "$want" ]; then
   exit 1
 fi
 cd "$here/rust"
+# Same bytes on every build host, not only on CI's: scripts/wasm/rustc-canonical-host.sh says why.
+QUEUEBIT_REAL_RUSTC="${RUSTC:-$(rustup which rustc 2>/dev/null || command -v rustc)}"
+export QUEUEBIT_REAL_RUSTC
+export RUSTC="$here/../../scripts/wasm/rustc-canonical-host.sh"
 # Panic locations embed source paths; remap them so the binary does not depend on the build machine's home or checkout.
 cargo_home="${CARGO_HOME:-$HOME/.cargo}"
 export RUSTFLAGS="--remap-path-prefix=$cargo_home=/cargo --remap-path-prefix=$here=/groth16"
