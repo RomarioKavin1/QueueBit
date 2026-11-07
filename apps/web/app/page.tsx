@@ -352,7 +352,7 @@ function Hero() {
         </p>
         <div className="flex flex-wrap items-center gap-4 lg:justify-end">
           <Link href="/pitch" className="mono-label text-ink-2 no-underline hover:text-blue">
-            The pitch, in 14 slides
+            The pitch, in 13 slides
           </Link>
           <StartLink />
         </div>

@@ -13,7 +13,6 @@ import {
   WalletLogos,
 } from "@/components/figures/Diagrams";
 import { FigAttack } from "@/components/figures/FigAttack";
-import { FigLeanPool } from "@/components/figures/FigLeanPool";
 import { FigMoveIn } from "@/components/figures/FigMoveIn";
 import { FigSession } from "@/components/figures/FigSession";
 import { FigSignature } from "@/components/figures/FigSignature";
@@ -111,17 +110,6 @@ const SLIDES: Slide[] = [
     plate: ["How the owner key signs", "A one-time key at a leaf plus the sibling hashes up to the root."],
   },
   {
-    id: "leanpool",
-    kicker: "LeanPool",
-    title: "Big signatures, small footprint.",
-    points: [
-      "A LeanPool node checks each 4 KB signature and batches many together.",
-      "Ethereum stores one 32-byte root. Your account asks: is my payment in it?",
-    ],
-    figure: <FigLeanPool />,
-    plate: ["LeanPool", "Many signatures go in; one root comes out."],
-  },
-  {
     id: "gas",
     kicker: "Gas",
     title: (
@@ -163,15 +151,14 @@ const SLIDES: Slide[] = [
     figure: <StakeFigure />,
   },
   {
-    id: "sessions",
-    kicker: "Sessions",
-    title: "Everyday payments, without the owner key.",
+    id: "private",
+    kicker: "Private payments",
+    title: "Send privately. No relayer.",
     points: [
-      "A site you trust gets its own key.",
-      "Only the apps you list, a cap per payment and per day, an expiry. Enforced on chain.",
+      "Funds join a Privacy Pool; a zero-knowledge proof sends them to a fresh address.",
+      "In one frame transaction, the pool pays the gas and is repaid at cost.",
     ],
-    figure: <FigSession />,
-    plate: ["A session at work", "The fourth payment would cross the daily cap and is refused."],
+    figure: <PrivacyFigure />,
   },
   {
     id: "resilience",
@@ -184,14 +171,15 @@ const SLIDES: Slide[] = [
     figure: <ResilienceFigure />,
   },
   {
-    id: "private",
-    kicker: "Private payments",
-    title: "Send privately. No relayer.",
+    id: "sessions",
+    kicker: "Sessions",
+    title: "Everyday payments, without the owner key.",
     points: [
-      "Funds join a Privacy Pool; a zero-knowledge proof sends them to a fresh address.",
-      "In one frame transaction, the pool pays the gas and is repaid at cost.",
+      "A site you trust gets its own key.",
+      "Only the apps you list, a cap per payment and per day, an expiry. Enforced on chain.",
     ],
-    figure: <PrivacyFigure />,
+    figure: <FigSession />,
+    plate: ["A session at work", "The fourth payment would cross the daily cap and is refused."],
   },
   {
     id: "status",
