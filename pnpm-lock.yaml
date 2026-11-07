@@ -135,6 +135,12 @@ importers:
       '@queuebit/extension':
         specifier: workspace:*
         version: link:../extension
+      '@queuebit/groth16':
+        specifier: workspace:*
+        version: link:../../packages/groth16
+      '@queuebit/privacy':
+        specifier: workspace:*
+        version: link:../../packages/privacy
       '@queuebit/rpc':
         specifier: workspace:*
         version: link:../../packages/rpc
@@ -163,6 +169,9 @@ importers:
         specifier: 2.57.16
         version: 2.57.16(bufferutil@4.1.0)(typescript@6.0.3)(utf-8-validate@5.0.10)(zod@3.25.76)
     devDependencies:
+      '@fatsolutions/privacy-pools-core-circuits':
+        specifier: 1.0.5
+        version: 1.0.5
       '@tailwindcss/postcss':
         specifier: 4.3.3
         version: 4.3.3

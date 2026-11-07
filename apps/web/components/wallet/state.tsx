@@ -9,6 +9,7 @@ export type AccountStatus = UiApi["account:status"]["res"];
 export type ActivityEntry = UiApi["activity:list"]["res"][number];
 export type TokenBalance = UiApi["tokens:list"]["res"][number];
 export type WalletRow = WalletsView["wallets"][number];
+export type PrivacyView = UiApi["privacy:view"]["res"];
 
 interface WalletData {
   net: NetworkInfo | undefined;
@@ -23,8 +24,12 @@ interface WalletData {
   /** The wallets on this device; `wallet` is the open one. */
   wallets: WalletsView | null;
   wallet: WalletRow | null;
+  /** The private balance (null until read, or where this network has none). */
+  privacy: PrivacyView | null;
   error: string | null;
   refresh: () => Promise<void>;
+  /** Re-reads the private balance; `sync` also reads the chain (new deposits, approvals). */
+  refreshPrivacy: (sync?: boolean) => Promise<void>;
   /** Runs an engine call; a locked wallet sends the person back to unlock. */
   guard: <T>(p: Promise<T>) => Promise<T>;
 }
@@ -54,6 +59,7 @@ export function WalletProvider({ net, children }: { net: NetworkInfo | undefined
   const [lockedWith, setLockedWith] = useState<"passkey" | "password" | null>(null);
   const [tokens, setTokens] = useState<TokenBalance[]>([]);
   const [wallets, setWallets] = useState<WalletsView | null>(null);
+  const [privacy, setPrivacy] = useState<PrivacyView | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const guard = useCallback(
@@ -92,6 +98,16 @@ export function WalletProvider({ net, children }: { net: NetworkInfo | undefined
     }
   }, [guard]);
 
+  const refreshPrivacy = useCallback(async (sync = false) => {
+    const e = engine();
+    try {
+      setPrivacy(await e.call(sync ? "privacy:sync" : "privacy:view", {}));
+    } catch {
+      // A failed chain read keeps the last balance; the view itself is local and cheap.
+      if (sync) await e.call("privacy:view", {}).then(setPrivacy, () => undefined);
+    }
+  }, []);
+
   useEffect(() => {
     void refresh();
     const e = engine();
@@ -115,10 +131,57 @@ export function WalletProvider({ net, children }: { net: NetworkInfo | undefined
     return () => clearInterval(timer.current);
   }, [busy, refresh]);
 
+  // The private balance: read from the chain on open and every minute; every 20 s while a deposit is getting ready;
+  // the local view every 3 s while something private is on its way.
+  const privOk = privacy?.availability.ok === true;
+  const privBusy = Boolean(privacy?.op && privacy.op.step !== "done" && privacy.op.step !== "failed");
+  const privWaiting = BigInt(privacy?.pendingWei ?? "0") > 0n;
+  useEffect(() => {
+    void refreshPrivacy(true);
+  }, [refreshPrivacy, status?.address]);
+  useEffect(() => {
+    if (!privOk) return;
+    const t = setInterval(
+      () => document.visibilityState === "visible" && void refreshPrivacy(!privBusy),
+      privBusy ? 3000 : privWaiting ? 20_000 : 60_000,
+    );
+    return () => clearInterval(t);
+  }, [privOk, privBusy, privWaiting, refreshPrivacy]);
+
   const wallet = wallets?.wallets.find((w) => w.id === wallets.active) ?? null;
   const value = useMemo(
-    () => ({ net, status, activity, budget, backedUp, lockedWith, tokens, wallets, wallet, error, refresh, guard }),
-    [net, status, activity, budget, backedUp, lockedWith, tokens, wallets, wallet, error, refresh, guard],
+    () => ({
+      net,
+      status,
+      activity,
+      budget,
+      backedUp,
+      lockedWith,
+      tokens,
+      wallets,
+      wallet,
+      privacy,
+      error,
+      refresh,
+      refreshPrivacy,
+      guard,
+    }),
+    [
+      net,
+      status,
+      activity,
+      budget,
+      backedUp,
+      lockedWith,
+      tokens,
+      wallets,
+      wallet,
+      privacy,
+      error,
+      refresh,
+      refreshPrivacy,
+      guard,
+    ],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

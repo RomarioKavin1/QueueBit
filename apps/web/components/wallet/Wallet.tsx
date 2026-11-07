@@ -11,6 +11,7 @@ import { ActivityTab, EntryDetail } from "./Activity";
 import { Home } from "./Home";
 import { Receive } from "./Receive";
 import { Guardians } from "./Guardians";
+import { MakePrivate } from "./Private";
 import { Send } from "./Send";
 import { WalletProvider } from "./state";
 import { AddToken } from "./Tokens";
@@ -29,7 +30,8 @@ export type View =
   | { id: "guardians" }
   | { id: "entry"; entryId: string }
   | { id: "wallets" }
-  | { id: "add-token" };
+  | { id: "add-token" }
+  | { id: "make-private" };
 
 export interface Nav {
   tab: Tab;
@@ -109,6 +111,7 @@ function Shell() {
   if (view?.id === "send") return <Send nav={nav} {...(view.token ? { token: view.token } : {})} />;
   if (view?.id === "wallets") return <WalletsScreen nav={nav} />;
   if (view?.id === "add-token") return <AddToken nav={nav} />;
+  if (view?.id === "make-private") return <MakePrivate nav={nav} />;
   if (view?.id === "receive") return <Receive nav={nav} />;
   if (view?.id === "guardians") return <Guardians nav={nav} />;
   if (view?.id === "entry") return <EntryDetail nav={nav} entryId={view.entryId} />;

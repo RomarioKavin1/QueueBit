@@ -87,6 +87,24 @@ lives as long as the tab:
   unprefixed keys), with its own passkey or password and a name. One is open at a time; opening another locks this one.
 - **Network** (top bar): a drop-down with the networks (the alt-mempool devnet only, for now) and the chain's details:
   chain ID, currency, latest block, RPC, LeanPool node, alt-mempool sidecar, aggregator and explorer.
+- **Private balance**: a card under the balance on Home ("Private · 0.10 ETH", with "getting ready…" while a deposit
+  waits for approval, "Making … private…", "Sending … privately…"). Two actions, and the UI names nothing else:
+  - **Make private** (the card's button): amount → confirm (passkey/password) → an owner payment from the account
+    that deposits into Privacy Pools v1 (`privacy:start` `shield`; the engine's `PrivacyController`). The first one
+    also creates the account.
+  - **Send → Send privately** (a switch on the amount step): the money comes from the private balance (up to one
+    earlier deposit per send). The engine proves the withdrawal in a dedicated Worker (`lib/engine/prover.worker.ts`:
+    `@queuebit/groth16` over the circuit artifacts served from `/pp-circuits/`, copied and sha256-checked at build
+    time by `scripts/copy-circuits.mjs`, checked again before proving), then sends a frame transaction from a fresh
+    one-time address holding 0 ETH: `[only_verify(sender), VERIFY PoolPayerLite.verify, settle, refund]` to the Miner
+    sidecar. PoolPayerLite pays the gas and takes it, at cost, out of the amount; the person paid receives the rest
+    (the unused fee included). One hint line: wait a while after making funds private, and use round amounts.
+
+  Chain 1337 ships the deployment (`contracts/devnet-tests/privacy/deployments/public.json`, `Network.privacy` in
+  `apps/extension/src/shared/chains.ts`): no settings. A deposit can be spent once its label is in the Entrypoint's
+  ASP root; on this deployment QueueBit is the ASP postman, and `bun run asp-auto` in `contracts/devnet-tests/privacy`
+  approves new deposits (below). The wallet reads the approved set from the chain (`pool-order`: the longest prefix of
+  the pool's deposits whose root is `latestRoot()`), so no file is served.
 
 Every signature asks for the passkey or password again, and the engine checks it too: the worker runs the `Wallet` with
 `confirmEachSignature`, so `send:submit` and the other signing requests carry a `proof` and are refused without one.
@@ -106,13 +124,26 @@ Open `/test`. Each panel calls the engine, and the right-hand column logs every 
 | Send, sessions create/revoke, keys prune, cancel recovery (owner-signed) | a **LeanPool node** (below) |
 | Session spends | a session for the site, then **Dapp simulator** → `eth_sendTransaction` from that origin (no prompt) |
 | Move to quantum-safe (EOA / 7702 / Safe / UUPS) | a funded source; devnet test keys only |
-| Private balance: Move to private | a Privacy Pools deployment (pool config) |
-| Private balance: Move to public, public exit | the Groth16 prover, **not hosted in the web engine yet** |
+| Private balance: Make private, Send privately | the public devnet (built in); the ASP auto-approver running (below) |
+| Private balance: public exit | the commitment circuit (served, untested in the web app) |
 
 **The LeanPool node.** Owner-signed transactions go through a LeanPool node, and the public devnet has no public one
 yet. Accounts on the public devnet trust the pinned aggregator `0x99Bd…AF41`, so a node must run with that
 aggregator's key (`contracts/devnet-tests/leanpool-account/.keys/aggregator.json`, not committed). The other option is
 the local devnet with your own node. See the root README "Quickstart" steps 1–3, and set the node URL in **Engine &
 network**.
+
+**The ASP auto-approver (private balance).** On our public-devnet deployment the funder key is the Entrypoint's ASP
+postman. `asp-auto` watches the pool's `Deposited` events and posts the root of every label, in deposit order, at
+most once a minute (devnet only: it approves everything):
+
+```sh
+cd contracts/devnet-tests/privacy && bun install
+FUNDER_KEY_FILE=/abs/path/to/contracts/devnet-tests/leanpool-account/.keys/funder.json \
+  nohup bun run asp-auto >> /tmp/asp-auto.log 2>&1 &      # ASP_INTERVAL_MS, ASP_POLL_MS, ASP_ONCE=1
+```
+
+The headless check of the same path (engine + `@queuebit/privacy` + the prover, real devnet ETH):
+`apps/extension/test/live/private-balance.public.test.ts` (its header has the command).
 
 `/test` is a development surface: it shows the backup words and takes private keys in plain inputs. Use test keys only.

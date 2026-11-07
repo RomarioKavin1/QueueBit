@@ -8,6 +8,7 @@ import { ago, eth, short } from "@/lib/format";
 import { engine } from "@/lib/engine/client";
 import { EntryRow, GhostSeal, Section, SignatureGauge } from "./bits";
 import { Identicon } from "./Identicon";
+import { PrivateCard } from "./Private";
 import { errText, useWallet } from "./state";
 import { Assets } from "./Tokens";
 import type { Nav } from "./Wallet";
@@ -120,6 +121,9 @@ export function Home({ nav }: { nav: Nav }) {
           {net?.name ?? "Test network"} · updated {status ? ago(status.readAt) : "…"}
         </p>
       </section>
+
+      {/* The private balance, right under the public one */}
+      <PrivateCard nav={nav} />
 
       {/* What you can do */}
       <div className={`mt-8 grid gap-2 ${canFaucet ? "grid-cols-3" : "grid-cols-2"}`}>
