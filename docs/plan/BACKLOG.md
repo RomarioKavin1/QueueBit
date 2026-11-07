@@ -88,7 +88,7 @@ Each entry is tagged with its source. Remove an entry when it lands, and cite th
 - [ ] Local devnet: a `leanpool-node` service in `devnet/docker-compose.yml` (the Dockerfile exists; not added to the compose stack because it could not be run here), so the extension e2e covers owner payments.
 - [ ] A public LeanPool node for the shared builds (`VITE_QUEUEBIT_LEANPOOL_URL`).
 - [ ] A direct on-chain PQ path for admin actions (a scheme with an EVM verifier, checked in execution, ~260-380k gas), so LeanPool approvals can be limited to spending (THREAT-MODEL §3).
-- [ ] Aggregators that post roots from a PQ-authenticated account (closes the Q-day hole on the ECDSA posting key; THREAT-MODEL §3).
+- [x] Aggregators that post roots from a PQ-authenticated account (closes the Q-day hole on the ECDSA posting key; THREAT-MODEL §3): `PQAggregator` (C13 verified in execution) `8f0ffb3`, node PQ mode `15e8003`, public devnet deploy and live owner payment `e191328`, pinned `44c9393`. Open: a PQ-signed `rotateKey` / `withdraw` tool (today a manual call), and `rotateKey` accepts the current or an earlier key (operator discipline).
 - [ ] A per-session fee bound (TXPARAM MAX_COST in VERIFY) against fee griefing by a session or an expired key (THREAT-MODEL §4).
 - [ ] MetaMask as the signer from a web page: the extension cannot reach `window.ethereum`, so Safe owners and EIP-712 session keys sign there today only with an imported key; a small dapp page would let MetaMask sign the `SafeTx` / `LeanAccountTx`.
 - [ ] NFTs (ERC-721 / ERC-1155) in the migration's move path.
