@@ -61,6 +61,8 @@ const every = (ms: number, what: string, fn: () => Promise<unknown>) => {
 };
 every(AGGREGATION_INTERVAL_MS, "mode 0 gossip", () => node.broadcastMode0());
 if (cfg.aggregate) every(cfg.batchMs, "batch", () => node.batchOnce());
+// Txs the alt mempool admitted but didn't mine in time: follow them to a receipt, or to the sidecar dropping them.
+if (cfg.aggregate) every(15_000, "follow", () => node.followPending());
 if (cfg.aggregate || cfg.rolling) every(2000, "prover", () => node.proveNext());
 // Pruning: a tx whose nonce lane moved past its seq was included (or replaced): it leaves the pool.
 every(6000, "prune", async () => {

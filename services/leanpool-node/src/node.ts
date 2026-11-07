@@ -60,6 +60,9 @@ export interface Chain8288 {
   /** Sends the finished tx to this node's alt-mempool sidecar and waits for its receipt. Throws AdmittedButPending when
    * the sidecar took it but no receipt came in time; any other error means the sidecar refused it. */
   submit(tx: FrameTx): Promise<{ status: string; gasUsed?: bigint }>;
+  /** What became of a tx the sidecar admitted: its receipt, `dropped` (the sidecar gave up on it), or null (still
+   * waiting). */
+  outcome(txHash: Hex): Promise<{ status: string; gasUsed?: bigint } | { dropped: string } | null>;
 }
 
 /** A pooled tx: a LeanWallet8288 tx has one dependency, a LeanAccount tx one per PQ signer. */
@@ -420,6 +423,29 @@ export class Node8288 {
       return { root, txs: rec.txs };
     } finally {
       this.batching = false;
+    }
+  }
+
+  /**
+   * Follows txs the alt mempool admitted but didn't mine in time: a receipt makes them mined / reverted, a sidecar
+   * that gave up makes them refused (so a wallet frees the nonce lane and can send again).
+   */
+  async followPending(): Promise<void> {
+    for (const b of this.batches) {
+      for (const r of b.results) {
+        if (r.status !== "pending") continue;
+        const o = await this.opts.chain.outcome(r.txHash).catch(() => null);
+        if (!o) continue;
+        if ("dropped" in o) {
+          r.status = "error";
+          r.error = `dropped by the alt mempool: ${o.dropped}`;
+          this.log(`  ${r.txHash} ${r.error}`);
+        } else {
+          r.status = o.status;
+          if (o.gasUsed !== undefined) r.gasUsed = o.gasUsed.toString();
+          this.log(`  ${r.txHash} landed late: status ${o.status}`);
+        }
+      }
     }
   }
 

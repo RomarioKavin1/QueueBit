@@ -200,9 +200,24 @@ export function makeChain(cfg: NodeConfig, log: (...a: unknown[]) => void): Node
       });
       return r.transactionHash;
     },
+    async outcome(hash) {
+      const r = (await jsonRpc(cfg.rpcUrl, "eth_getTransactionReceipt", [hash]).catch(() => null)) as {
+        status: Hex;
+        gasUsed: Hex;
+      } | null;
+      if (r) return { status: r.status, gasUsed: BigInt(r.gasUsed) };
+      const st = (await jsonRpc(cfg.sidecarUrl, "skandha_frameTransactionStatus", [hash]).catch(() => null)) as {
+        status?: string;
+        reason?: string;
+      } | null;
+      if (st?.status === "Cancelled" || st?.status === "Reverted") return { dropped: st.reason ?? st.status };
+      return null;
+    },
     async submit(tx: FrameTx) {
       await jsonRpc(cfg.sidecarUrl, "eth_sendFrameTransaction", [toWire(tx)]); // throws if the sidecar refuses it
-      const r = await waitFrameReceipt(txHash(tx), 300_000).catch((e: Error) => {
+      // A short wait: a tx still in the alt mempool after it is followed by the node's follow loop (followPending),
+      // so one slow tx doesn't hold up the next batch.
+      const r = await waitFrameReceipt(txHash(tx), 45_000).catch((e: Error) => {
         throw new AdmittedButPending(e.message);
       });
       log(`  mined ${txHash(tx)} in block ${BigInt(r.blockNumber)}`);

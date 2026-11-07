@@ -22,6 +22,7 @@ const wallets = new Map<string, Hex>();
 const accountKeys = new Map<string, Hex[]>();
 
 type FakeChain = Chain8288 & {
+  outcomes: Map<string, { status: string; gasUsed?: bigint } | { dropped: string } | null>;
   posted: { root: Hex; count: number; wallets: Address[] }[];
   proofs: { root: Hex; proofHash: Hex }[];
   submitted: FrameTx[];
@@ -52,6 +53,10 @@ function fakeChain(): FakeChain {
     async attachProof(root: Hex, proofHash: Hex) {
       c.proofs.push({ root, proofHash });
       return keccak256(proofHash);
+    },
+    outcomes: new Map<string, { status: string; gasUsed?: bigint } | { dropped: string } | null>(),
+    async outcome(hash: Hex) {
+      return c.outcomes.get(hash.toLowerCase()) ?? null;
     },
     async submit(tx: FrameTx) {
       c.submitted.push(tx);
@@ -246,6 +251,42 @@ test("a tx the alt mempool admitted but did not mine in time is not re-batched; 
   expect(await a.batchOnce()).toBeNull(); // nothing re-posted
   expect(chainA.posted.length).toBe(1);
   chainA.submit = submit;
+});
+
+test("a tx the alt mempool admitted and later dropped is reported refused, so the wallet frees its lane", async () => {
+  const { a, chainA } = pair();
+  const t = await signedTx(63);
+  await a.intake(t.raw, [t.sig]);
+  chainA.submit = async () => {
+    throw new AdmittedButPending("not mined within 300s");
+  };
+  await a.batchOnce();
+  const sent = a.txStatus(txHash(t.tx))!;
+  expect(sent.stage).toBe("submitted");
+  // Still in the mempool: nothing changes.
+  await a.followPending();
+  expect(a.txStatus(txHash(t.tx))!.stage).toBe("submitted");
+  // The sidecar gave up on it ("relayed 4 times without being included in a block").
+  chainA.outcomes.set(sent.txHash!.toLowerCase(), { dropped: "relayed 4 times without being included in a block" });
+  await a.followPending();
+  expect(a.txStatus(txHash(t.tx))).toMatchObject({
+    stage: "refused",
+    error: expect.stringContaining("relayed 4 times"),
+  });
+});
+
+test("a tx the alt mempool admitted and later mined is reported mined", async () => {
+  const { a, chainA } = pair();
+  const t = await signedTx(64);
+  await a.intake(t.raw, [t.sig]);
+  chainA.submit = async () => {
+    throw new AdmittedButPending("not mined within 300s");
+  };
+  await a.batchOnce();
+  const sent = a.txStatus(txHash(t.tx))!;
+  chainA.outcomes.set(sent.txHash!.toLowerCase(), { status: "0x1", gasUsed: 90_000n });
+  await a.followPending();
+  expect(a.txStatus(txHash(t.tx))).toMatchObject({ stage: "mined", gasUsed: "90000" });
 });
 
 test("a batch whose root is already posted is dropped, not retried forever", async () => {
