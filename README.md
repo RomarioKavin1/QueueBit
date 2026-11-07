@@ -11,35 +11,77 @@ Quantum computers will break ECDSA, the signature behind almost every Ethereum a
 safe replacement, but they are big: a leanSPHINCS signature is 4 KB, and checking one on chain costs about
 **383,000 gas** (around $11 at 10 gwei).
 
-## The idea: one root per batch
+## How it works
 
-Following [EIP-8288](https://eips.ethereum.org/EIPS/eip-8288), signatures are checked off chain and the chain keeps
-only a small proof:
+### Frame transactions
+
+Every QueueBit payment is an [EIP-8141](https://eips.ethereum.org/EIPS/eip-8141) frame transaction: a **VERIFY** frame
+in which the account decides whether the transaction is valid, then **SENDER** frames that execute it. The account
+(LeanAccount, ERC-8286 + ERC-7579) hands VERIFY to its keystore module, so the signature scheme is the account’s choice,
+not the protocol’s.
+
+### EIP-8288, implemented today
+
+[EIP-8288](https://eips.ethereum.org/EIPS/eip-8288) moves post-quantum signature checks out of the EVM: a transaction
+declares a **dependency** on its signature instead of carrying it, nodes verify and aggregate signatures off chain, and
+blocks carry one recursive proof. QueueBit runs the same design on today’s devnet:
 
 ```mermaid
 flowchart LR
-  B[Quantum-safe key<br/>leanSPHINCS] -->|signs, 4 KB| C[Aggregator<br/>checks and batches]
-  C -->|one root, hash-signed| D[(Root on chain)]
-  C -->|payment + proof| E[Alt mempool]
-  E --> F{In the root?}
-  D -.-> F
-  F -->|yes| G[Payment executes]
-  C -.->|STARK per batch| H[Anyone can audit]
+  K[leanSPHINCS key] -->|"tx + 4 KB sig"| N[Aggregator node]
+  N -->|"verifies natively,<br/>batches ≤16 deps"| R["Merkle root over<br/>keccak(0x10 ‖ sigHash ‖ vk)"]
+  R -->|"post(root, C13 sig)"| P[PQAggregator]
+  P -->|postRoot| G[("DepsRegistry<br/>8-slot ring per account")]
+  N -->|"tx + witness<br/>(root, slot, proof)"| M[ERC-8421 alt mempool]
+  M --> V{"VERIFY:<br/>leaf ∈ root in ring?"}
+  G -.->|rootAt| V
+  V -->|approve| S[SENDER frames execute]
+  N -.->|"recursive STARK,<br/>hash attached"| A[Audit]
 ```
 
-1. The account’s owner key is **leanSPHINCS**, hash-based. It signs each payment.
-2. The **aggregator** checks each signature, batches them, and posts **one Merkle root**, itself signed with a
-   hash-based key (SPHINCS- C13).
-3. Each payment only proves it is **in that root**. The account’s check fits the ERC-8421 alt mempool’s budget with no
-   stake.
-4. Every batch gets a **recursive STARK** anyone can verify against the chain.
+- **Dependency, not signature.** The transaction lists a dependency triple `(scheme 0x10, sigHash, vk)`; the 4 KB
+  leanSPHINCS signature goes only to the aggregator. The leaf is `keccak(0x10 ‖ SIG_HASH ‖ vk)`.
+- **Aggregation.** The node verifies each signature natively, gossips them to peers as EIP-8288 wrappers (mode 0: raw
+  signatures), batches up to 16 dependencies, and posts the batch’s **Merkle root** into the `DepsRegistry` ring of
+  every account in it (8 recent roots per account).
+- **Late witness.** The node puts `(root, ring slot, Merkle proofs)` into a signature entry with an empty `msg`. EIP-8141
+  leaves such entries out of `SIG_HASH`, so the owner’s signature stays valid when the witness is filled in after
+  signing.
+- **Proof.** For every batch the node proves a recursive leanVM STARK over all its signatures (mode 1) and attaches its
+  hash on chain; `queuebit-leanpool-verify-batch` checks it against the posted root.
+- **Where we differ.** EIP-8288 puts the recursive STARK in the block by hard fork. Without the fork, the root is posted
+  by a bonded aggregator that the account names in its policy. When EIP-8288 ships, the root can be swapped for the
+  block’s proof; accounts don’t change.
+
+### A quantum-safe root
+
+Accounts trust only roots their named aggregator posts, so that aggregator must not be ECDSA. It is the `PQAggregator`
+contract: it posts a root only with a **SPHINCS- C13** (hash-based) signature over an EIP-712 digest (chain, contract,
+registry, root, count, wallets, nonce), checked in execution. The node’s ECDSA key only pays gas; breaking it can’t forge
+a root. Cost: ~206k gas per root on top of a plain post, shared by the whole batch.
+
+### No stake, under budget
+
+ERC-7562 lets a validation read only storage “associated” with the sender unless the entity is staked. QueueBit’s VERIFY
+reads two things: the keystore’s keys and policy, and the registry’s ring, both stored under mappings keyed by the
+account’s address (STO-021). The public mempool rejects this (`StorageReadNonSender`); the **ERC-8421 alt mempool admits
+it unstaked**. VERIFY uses 70–87k gas, inside the 100k `MAX_VERIFY_GAS`. It reads no clock (TIMESTAMP is banned in
+validation), so session expiry is enforced in execution. A CI lint (`contracts/script/lint-verify.sh`) keeps every VERIFY
+path inside these rules.
+
+### Keyed nonces
+
+Owner payments use their own [EIP-8250](https://eips.ethereum.org/EIPS/eip-8250) nonce lane (key `0x1000`) and every
+session key gets its own, so a session payment never waits behind an owner payment that is still being batched.
+
+### Cost
 
 | | Gas per payment | Signature on chain |
 |---|---|---|
 | PQ signature checked in the EVM | 383,018 | ~5.7 KB |
 | **QueueBit** | **85,598** (4.5× less) | **0 bytes** |
 
-Measured on the devnet over 20 payments.
+Measured on the devnet over 20 payments; the QueueBit figure includes its share of root posting.
 
 ## What you can do
 
