@@ -1,7 +1,7 @@
 # QueueBit
 
-**A quantum-safe wallet for Ethereum, today.** Open it with a passkey; every payment is signed with a hash-based key a
-quantum computer can’t forge, and costs about as much as an ordinary one.
+**A quantum-safe wallet for Ethereum, today.** Every payment is signed with a hash-based key a quantum computer can’t
+forge, and costs about as much as an ordinary one.
 
 Try it: [queuebit.space](https://www.queuebit.space) (public EIP-8141 devnet, chain 1337).
 
@@ -18,8 +18,7 @@ only a small proof:
 
 ```mermaid
 flowchart LR
-  A[Passkey] -->|derives| B[Quantum-safe key]
-  B -->|signs, 4 KB| C[Aggregator<br/>checks and batches]
+  B[Quantum-safe key<br/>leanSPHINCS] -->|signs, 4 KB| C[Aggregator<br/>checks and batches]
   C -->|one root, hash-signed| D[(Root on chain)]
   C -->|payment + proof| E[Alt mempool]
   E --> F{In the root?}
@@ -28,7 +27,7 @@ flowchart LR
   C -.->|STARK per batch| H[Anyone can audit]
 ```
 
-1. Your passkey derives a **leanSPHINCS** owner key; nothing secret is stored.
+1. The account’s owner key is **leanSPHINCS**, hash-based. It signs each payment.
 2. The **aggregator** checks each signature, batches them, and posts **one Merkle root**, itself signed with a
    hash-based key (SPHINCS- C13).
 3. Each payment only proves it is **in that root**. The account’s check fits the ERC-8421 alt mempool’s budget with no
@@ -44,7 +43,8 @@ Measured on the devnet over 20 payments.
 
 ## What you can do
 
-- **Pay** with a passkey tap; the first payment also creates your account.
+- **Pay** with the quantum-safe key; the first payment also creates your account. Unlock the wallet with a password or
+  a passkey.
 - **Move in any wallet**: MetaMask or any EOA (or keep its address with EIP-7702), a **Safe** (its owners sign once and
   it becomes your PQ account), or an upgradeable smart account (upgraded in place).
 - **Pay privately with no relayer**: make funds private with Privacy Pools, then send from a brand-new address that
@@ -52,7 +52,7 @@ Measured on the devnet over 20 payments.
   Kohaku-compatible.
 - **Let someone spend** within limits you set (per payment, per day, until a time you pick), or use your MetaMask as a
   capped session key.
-- **Guardians** can reset your keys if you lose your passkey, after a delay you can cancel.
+- **Guardians** can reset your keys if you lose access, after a delay you can cancel.
 
 ## How it’s built
 
