@@ -73,6 +73,23 @@ const SLIDES: Slide[] = [
     plate: ["One attack, two keys", "Shor's algorithm recovers an elliptic-curve key; a hash-tree key holds."],
   },
   {
+    id: "move-in",
+    kicker: "Moving in",
+    title: "Bring any wallet. We handle the move.",
+    points: [
+      "MetaMask or any EOA: everything moves to your new account with one signature.",
+      "A Safe: its owners sign once. Upgradeable smart accounts keep their address.",
+    ],
+    figure: (
+      <>
+        <WalletLogos />
+        <div className="mt-6">
+          <FigMoveIn />
+        </div>
+      </>
+    ),
+  },
+  {
     id: "owner",
     kicker: "Under the hood",
     title: "leanSPHINCS keys, EIP\u20118288 batches, recursive STARK proofs.",
@@ -175,23 +192,6 @@ const SLIDES: Slide[] = [
       "In one frame transaction, the pool pays the gas and is repaid at cost.",
     ],
     figure: <PrivacyFigure />,
-  },
-  {
-    id: "move-in",
-    kicker: "Moving in",
-    title: "Bring any wallet. We handle the move.",
-    points: [
-      "MetaMask or any EOA: everything moves to your new account with one signature.",
-      "A Safe: its owners sign once. Upgradeable smart accounts keep their address.",
-    ],
-    figure: (
-      <>
-        <WalletLogos />
-        <div className="mt-6">
-          <FigMoveIn />
-        </div>
-      </>
-    ),
   },
   {
     id: "status",
