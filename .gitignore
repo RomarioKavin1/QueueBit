@@ -25,3 +25,4 @@ devnet/data/
 .next/
 next-env.d.ts
 *.tsbuildinfo
+apps/web/public/pp-circuits/

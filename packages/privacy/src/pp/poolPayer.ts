@@ -75,6 +75,27 @@ export const DEFAULT_POOL_PAYER_LIMITS: Readonly<PoolPayerLimits> = Object.freez
   refundState: 250_000n,
 });
 
+/**
+ * `PoolPayerLite` (no Groth16 check in VERIFY; `pool.withdraw` checks the proof in settle) for a mempool that caps the
+ * whole validation prefix at EIP-8141 `MAX_VERIFY_GAS` (the stock ERC-8421 sidecar, e.g. the public devnet):
+ * only_verify + pay + the sender's SECP256K1 entry = 5,000 + 92,200 + 2,800 = 100,000. The pay VERIFY measured 67,021
+ * gas and the settle frame 475,077 exec / 587,520 state on the public devnet (deployments/public.json); the state
+ * limits and settle/refund budgets meet the deployment's MIN_* (`verify` refuses less).
+ */
+export const POOL_PAYER_LITE_LIMITS: Readonly<PoolPayerLimits> = Object.freeze({
+  onlyVerify: 5_000n,
+  pay: 92_200n,
+  payState: 250_000n,
+  settle: 800_000n,
+  settleState: 700_000n,
+  refund: 150_000n,
+  refundState: 250_000n,
+});
+/** The stock sidecar's flat cap on a transaction's validation prefix (execution gas, signatures included). */
+export const STOCK_MAX_VERIFY_GAS = 100_000n;
+/** EIP-8141's charge for one SECP256K1 signature entry, counted against the prefix cap. */
+export const SECP256K1_VERIFY_GAS = 2_800n;
+
 /** `PoolPayer.verify`'s frame-budget requirements (immutables of the deployment) and its pool scope. */
 export interface PoolPayerRules {
   scope: bigint;

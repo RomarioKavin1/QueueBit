@@ -25,6 +25,7 @@ import {
   type Hex,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
+import type { Prover, RagequitProver } from "@queuebit/privacy";
 import { LOCAL_DEVNET } from "../shared/build";
 import { NO_DEPLOYMENT, findNetwork, getNetwork, toHexChainId } from "../shared/chains";
 import { ProviderRpcError, RpcErrorCode, userRejected } from "../shared/errors";
@@ -97,6 +98,8 @@ export interface WalletEnv {
   now?: () => number;
   /** The offscreen document (the withdraw prover). */
   offscreen?: OffscreenClient;
+  /** A prover of the host's own (the web app's prover Worker, a Node script); wins over `offscreen`. */
+  prover?: () => Prover & RagequitProver;
   /**
    * Every request that signs must carry the password or the passkey again (`proof`, checked here before any key is
    * used), not only an unlocked session. The web app sets it; the extension's pages don't send proofs yet.
@@ -170,6 +173,7 @@ export class Wallet {
             },
           }),
           prover: () => {
+            if (env.prover) return env.prover();
             if (!env.offscreen) throw new Error("The prover isn't available in this context.");
             return env.offscreen.prover();
           },
@@ -1236,9 +1240,9 @@ export class Wallet {
 
     "privacy:view": async ({ chainId }) => this.priv().view(await this.chainOr(chainId)),
     "privacy:sync": async ({ chainId }) => this.priv().sync(await this.chainOr(chainId)),
-    "privacy:start": async ({ chainId, kind, amountWei, note, proof }) => {
+    "privacy:start": async ({ chainId, kind, amountWei, note, to, proof }) => {
       await this.consent(proof);
-      return this.priv().start(await this.chainOr(chainId), kind, amountWei, note);
+      return this.priv().start(await this.chainOr(chainId), kind, amountWei, note, to);
     },
     "privacy:retry": async ({ chainId, opId, proof }) => {
       await this.consent(proof);

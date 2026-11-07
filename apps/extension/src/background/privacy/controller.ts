@@ -1,9 +1,20 @@
-import { decodeFunctionResult, encodeFunctionData, getAddress, parseGwei, type Address, type Hex } from "viem";
-import { getProfile } from "@queuebit/frames";
+import {
+  decodeEventLog,
+  decodeFunctionResult,
+  encodeFunctionData,
+  getAddress,
+  isAddress,
+  parseGwei,
+  type Address,
+  type Hex,
+} from "viem";
+import { getProfile, type FrameTxReceipt } from "@queuebit/frames";
 import {
   EncryptedStorage,
   FramePaymasterBroadcaster,
   POOL_ABI,
+  POOL_PAYER_ABI,
+  POOL_PAYER_LITE_LIMITS,
   PrivacyPoolsV1Client,
   buildRagequitTx,
   createHostProvider,
@@ -16,7 +27,7 @@ import {
   ragequitInputs,
   readPoolPayerRules,
   refreshPublicNotes,
-  withdrawalClients,
+  withdrawalClients as newWithdrawalClients,
   type EnvelopeSigner,
   type HostProvider,
   type Note,
@@ -86,6 +97,69 @@ export interface PrivacyDeps {
   anonStatus: (chainId: number) => Promise<AnonStatus>;
   localDevnet: boolean;
   now?: () => number;
+  /** Tests: the account-circuit reads (default: the network's RPC, direct). */
+  provider?: (chainId: number) => HostProvider;
+  /** Tests: a withdrawal's own node + sidecar clients (default: `withdrawalClients`, a fresh circuit each time). */
+  withdrawalClients?: typeof newWithdrawalClients;
+  /** Tests: how long to wait between polls of a payment (default 2 s). */
+  pollMs?: number;
+}
+
+/** The private balance's contracts on `chainId`: the ones saved in Settings, else the ones QueueBit ships with. */
+export function builtInPrivacyConfig(chainId: number): PrivacyNetworkConfig | undefined {
+  const p = findNetwork(chainId)?.privacy;
+  if (!p) return undefined;
+  return {
+    chainId,
+    entrypoint: getAddress(p.entrypoint),
+    pool: getAddress(p.pool),
+    poolPayer: getAddress(p.poolPayer),
+    deployBlock: p.deployBlock,
+    sidecarUrl: p.sidecarUrl,
+    asp: "pool-order",
+    savedAt: 0,
+    payer: p.payer,
+    builtIn: true,
+  };
+}
+
+/**
+ * The withdrawal transaction's fees: twice the node's gas price plus a 1 gwei tip (the account's own payments use the
+ * same rule). The fee taken from the withdrawal is the transaction's max cost at these fees, and `refund()` returns
+ * everything the network didn't charge.
+ */
+export function withdrawalFees(gasPrice: bigint): { maxFeePerGas: bigint; maxPriorityFeePerGas: bigint } {
+  const tip = parseGwei("1");
+  return { maxFeePerGas: 2n * gasPrice + tip, maxPriorityFeePerGas: tip };
+}
+
+/**
+ * What a mined withdrawal paid out, from the fee payer's own events: `Settled.paid` to the recipient, plus the
+ * `Refunded` amount when it went to the same address. No `Settled` event: the settle frame failed (the transaction was
+ * mined, but nothing was withdrawn), which is an error, never a success.
+ */
+export function withdrawalPayout(receipt: FrameTxReceipt, payer: Address, recipient: Address): bigint {
+  const logs = receipt.frameReceipts.flatMap((f) => f.logs);
+  let paid: bigint | undefined;
+  let refunded = 0n;
+  for (const l of logs) {
+    if (l.address.toLowerCase() !== payer.toLowerCase()) continue;
+    let ev;
+    try {
+      ev = decodeEventLog({ abi: POOL_PAYER_ABI, data: l.data, topics: l.topics as [Hex, ...Hex[]] });
+    } catch {
+      continue;
+    }
+    if (ev.eventName === "Settled" && getAddress(ev.args.recipient) === getAddress(recipient))
+      paid = (paid ?? 0n) + ev.args.paid;
+    if (ev.eventName === "Refunded" && getAddress(ev.args.to) === getAddress(recipient)) refunded += ev.args.amount;
+  }
+  if (paid === undefined) {
+    const e = new Error("The transaction was mined but the withdrawal step failed, so nothing was sent.");
+    e.name = "SettleFailedError";
+    throw e;
+  }
+  return paid + refunded;
 }
 
 /** A KV as the privacy package's ciphertext backend (storage.local; values are opaque strings). */
@@ -193,6 +267,7 @@ export class PrivacyController {
   // ---------------------------------------------------------------------------------------------- context ----
 
   private provider(chainId: number): HostProvider {
+    if (this.d.provider) return this.d.provider(chainId);
     // Anon-RPC is unavailable on the devnet (no worker there): reads go direct and the page says so (plan §40 §6.2).
     const net = getNetwork(chainId);
     return createHostProvider({
@@ -200,8 +275,13 @@ export class PrivacyController {
     });
   }
 
+  /** The contracts in use: saved in Settings (a local devnet), else the ones this network ships with. */
+  async cfg(chainId: number): Promise<PrivacyNetworkConfig | undefined> {
+    return (await this.config.get(chainId)) ?? builtInPrivacyConfig(chainId);
+  }
+
   private async context(chainId: number) {
-    const cfg = await this.config.get(chainId);
+    const cfg = await this.cfg(chainId);
     if (!cfg) throw new Error("Private balance isn't set up on this network.");
     const address = await this.d.account(chainId);
     if (!address) throw new Error("Create your account first.");
@@ -254,17 +334,17 @@ export class PrivacyController {
   async view(chainId: number): Promise<PrivacyView> {
     const [rec, cfg, account, anon] = await Promise.all([
       this.record(chainId),
-      this.config.get(chainId),
+      this.cfg(chainId),
       this.d.account(chainId),
       this.d.anonStatus(chainId).catch(() => ({ available: false, reason: "Private connection status unknown." })),
     ]);
     const net = findNetwork(chainId);
     let availability: PrivacyView["availability"] = { ok: true };
     if (!net) availability = { ok: false, reason: "Private balance isn't available on this network yet." };
-    else if (!net.capabilities.stagedBudget)
+    else if (!net.capabilities.stagedBudget && cfg?.payer !== "lite")
       // Withdrawals go through PoolPayer, whose VERIFY needs more than 100k gas and precompile calls: only a mempool
-      // with staked budgets admits it. Shielding is off too, so no one strands funds in a pool they could then only
-      // leave publicly (ragequit).
+      // with staked budgets admits it (PoolPayerLite fits a stock 100k sidecar). Shielding is off too, so no one
+      // strands funds in a pool they could then only leave publicly (ragequit).
       availability = {
         ok: false,
         reason:
@@ -405,8 +485,12 @@ export class PrivacyController {
     kind: PrivacyOp["kind"],
     amountWei: string,
     note?: { depositIndex: number; secretIndex: number },
+    to?: string,
   ): Promise<PrivacyView> {
     if (!/^\d+$/u.test(amountWei) || BigInt(amountWei) <= 0n) throw new Error("Enter an amount.");
+    if (to !== undefined && (kind !== "unshield" || !isAddress(to, { strict: false })))
+      throw new Error("That isn't an address.");
+    const toAddr = to === undefined ? undefined : getAddress(to);
     const rec = await this.record(chainId);
     if (rec.op && !isFinal(rec.op))
       throw new Error("Finish or cancel the private-balance operation in progress first.");
@@ -422,7 +506,9 @@ export class PrivacyController {
     const op: PrivacyOp =
       kind === "exit" && note
         ? { ...base, exit: { depositIndex: note.depositIndex, secretIndex: note.secretIndex } }
-        : base;
+        : toAddr
+          ? { ...base, to: toAddr }
+          : base;
     await this.save(chainId, { op, history: archive(rec) });
     void this.run(chainId);
     return this.view(chainId);
@@ -535,7 +621,7 @@ export class PrivacyController {
       if (e?.status === "confirmed") return this.paid(chainId, ctx, e.txHash);
       if (!e || e.status === "failed")
         throw new Error(`The deposit payment didn't go through${e?.detail ? `: ${e.detail}` : ""}.`);
-      await sleep(2000);
+      await sleep(this.d.pollMs ?? 2000);
     }
   }
 
@@ -623,7 +709,7 @@ export class PrivacyController {
         });
         return;
       }
-      await sleep(2000);
+      await sleep(this.d.pollMs ?? 2000);
     }
   }
 
@@ -662,6 +748,7 @@ export class PrivacyController {
       throw new Error(
         "The private connection is on, but this build can't send withdrawals through it yet. Nothing was sent.",
       );
+    const withdrawalClients = this.d.withdrawalClients ?? newWithdrawalClients;
     const clients = withdrawalClients({
       nodeUrl: net.rpcUrl,
       sidecarUrl: ctx.cfg.sidecarUrl,
@@ -671,7 +758,6 @@ export class PrivacyController {
     // circuit: on the account's, its timing and the fresh recipient's address would link the two.
     const wp = withdrawalProvider(clients);
     const gasPrice = await wp.getGasPrice().catch(() => parseGwei("1"));
-    const maxFeePerGas = gasPrice * 2n > parseGwei("2") ? gasPrice * 2n : parseGwei("2");
     const broadcaster = new FramePaymasterBroadcaster({
       ...clients,
       accountIsolationKeys: [isolationKeyFor(ctx.address, BigInt(chainId))],
@@ -679,7 +765,9 @@ export class PrivacyController {
       chainId: BigInt(chainId),
       payer: ctx.cfg.poolPayer,
       rules: await readPoolPayerRules(wp, ctx.cfg.poolPayer),
-      fees: { maxFeePerGas, maxPriorityFeePerGas: parseGwei("1") },
+      fees: withdrawalFees(gasPrice),
+      // PoolPayerLite: the validation prefix fits the stock sidecar's 100k cap.
+      ...(ctx.cfg.payer === "lite" ? { limits: POOL_PAYER_LITE_LIMITS } : {}),
       timeoutMs: 240_000,
     });
 
@@ -688,6 +776,8 @@ export class PrivacyController {
       note,
       amount,
       broadcaster,
+      // A private send pays the person directly; the fresh, empty address only signs (and pays nothing).
+      ...(op.to ? { recipient: op.to } : {}),
       onBuilt: async (b) => {
         await this.apply(chainId, {
           type: "built",
@@ -706,7 +796,7 @@ export class PrivacyController {
         void this.apply(chainId, { type: "mempool", status: s }).catch(() => undefined);
       },
     });
-    await this.finishWithdrawal(chainId, ctx, wp, out.sender, {
+    await this.finishWithdrawal(chainId, ctx, out.receipt, op.to ?? out.sender, {
       depositIndex: note.depositIndex,
       secretIndex: note.secretIndex + 1,
       precommitment: change.precommitment,
@@ -722,7 +812,11 @@ export class PrivacyController {
   private async waitWithdrawal(chainId: number, ctx: Ctx) {
     const op = (await this.record(chainId)).op!;
     const w = op.withdraw!;
-    const clients = withdrawalClients({ nodeUrl: getNetwork(chainId).rpcUrl, sidecarUrl: ctx.cfg.sidecarUrl });
+    const withdrawalClients = this.d.withdrawalClients ?? newWithdrawalClients;
+    const clients = withdrawalClients({
+      nodeUrl: getNetwork(chainId).rpcUrl,
+      sidecarUrl: ctx.cfg.sidecarUrl,
+    });
     const t0 = this.now();
     while (this.now() - t0 < 240_000) {
       const st = await clients.sidecar.frameTransactionStatus(w.hash!).catch(() => null);
@@ -736,8 +830,8 @@ export class PrivacyController {
         throw e;
       }
       const receipt = await clients.node.getTransactionReceipt(w.hash!).catch(() => null);
-      if (receipt) return this.finishWithdrawal(chainId, ctx, withdrawalProvider(clients), w.recipient!);
-      await sleep(1500);
+      if (receipt) return this.finishWithdrawal(chainId, ctx, receipt, op.to ?? w.recipient!);
+      await sleep(this.d.pollMs ?? 1500);
     }
     const e = new Error("timed out") as Error & { status?: string };
     e.name = "MempoolOutcomeError";
@@ -749,9 +843,16 @@ export class PrivacyController {
    * `change`: the change note's public data when this run proved the withdrawal (its secrets were in memory). After a
    * restart the sync still finds the change note from the `Withdrawn` event, keyless until its next spend re-keys it.
    */
-  private async finishWithdrawal(chainId: number, ctx: Ctx, wp: HostProvider, recipient: Address, change?: PublicNote) {
+  private async finishWithdrawal(
+    chainId: number,
+    ctx: Ctx,
+    receipt: FrameTxReceipt,
+    recipient: Address,
+    change?: PublicNote,
+  ) {
+    // Mined is not enough: the settle frame must have paid out (else the note is unspent and a retry is safe).
+    const received = withdrawalPayout(receipt, ctx.cfg.poolPayer, recipient);
     if (change) await this.recordNote(ctx, change).catch(() => undefined);
-    const received = await wp.getBalance(recipient).catch(() => 0n);
     await this.apply(chainId, { type: "withdrawn", receivedWei: received.toString() });
     await this.syncWith(chainId, ctx).catch(() => undefined);
   }

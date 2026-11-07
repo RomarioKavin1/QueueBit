@@ -6,13 +6,15 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "dev": "next dev --webpack",
-    "build": "next build --webpack",
+    "dev": "node scripts/copy-circuits.mjs && next dev --webpack",
+    "build": "node scripts/copy-circuits.mjs && next build --webpack",
     "start": "next start",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
     "@queuebit/extension": "workspace:*",
+    "@queuebit/groth16": "workspace:*",
+    "@queuebit/privacy": "workspace:*",
     "@queuebit/rpc": "workspace:*",
     "@reown/appkit": "1.8.24",
     "@reown/appkit-adapter-ethers": "1.8.24",
@@ -24,6 +26,7 @@
     "viem": "2.57.16"
   },
   "devDependencies": {
+    "@fatsolutions/privacy-pools-core-circuits": "1.0.5",
     "@tailwindcss/postcss": "4.3.3",
     "@types/node": "26.6.6",
     "@types/qrcode": "1.5.6",

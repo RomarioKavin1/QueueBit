@@ -23,6 +23,10 @@ export interface PrivacyNetworkConfig {
    */
   asp: "pool-order";
   savedAt: number;
+  /** PoolPayer (`full`, default: proof checked in VERIFY) or PoolPayerLite (`lite`: fits a stock 100k sidecar). */
+  payer?: "full" | "lite";
+  /** Shipped with QueueBit for this network (`Network.privacy`), not entered in Settings. */
+  builtIn?: boolean;
 }
 
 export type NoteStatusView = "approved" | "pending" | "ragequit";
@@ -45,6 +49,8 @@ export interface PrivacyOp {
   createdAt: number;
   updatedAt: number;
   step: PrivacyStep;
+  /** `unshield` as a private send: who receives the money (default: a fresh address of this wallet). */
+  to?: Hex;
   deposit?: {
     depositIndex: number;
     /** Public once deposited (`Deposited.precommitment`); the ledger entry is made from it when the payment lands. */
@@ -117,4 +123,39 @@ export interface PrivacyView {
    * only), whether its reads are light-client checked, the ASP source, and the block the last sync reached.
    */
   syncSource?: { node: string; verified: boolean; asp: string; scannedTo?: string };
+}
+
+/** What the wallet's private-balance card says (Home), in the two words people see: private, and getting ready. */
+export type PrivateCardState = "off" | "empty" | "ready" | "getting-ready" | "making-private" | "sending" | "failed";
+
+export interface PrivateBalanceSummary {
+  state: PrivateCardState;
+  /** Spendable privately now. */
+  readyWei: bigint;
+  /** Made private, waiting to be approved before it can be spent. */
+  gettingReadyWei: bigint;
+  /** The amount of the operation in progress (making private / sending), if any. */
+  movingWei?: bigint;
+  /** A failed operation's plain reason. */
+  error?: string;
+}
+
+/**
+ * The card's state from the engine's view: an operation in progress wins (making private, sending), then a failure
+ * still on screen, then money waiting for approval ("getting ready"), then ready / empty.
+ */
+export function privateBalanceSummary(v: PrivacyView | null | undefined): PrivateBalanceSummary {
+  const readyWei = BigInt(v?.approvedWei ?? "0");
+  const gettingReadyWei = BigInt(v?.pendingWei ?? "0");
+  const base = { readyWei, gettingReadyWei };
+  if (!v || !v.availability.ok) return { ...base, state: "off" };
+  const op = v.op;
+  if (op && op.step !== "done" && op.step !== "failed") {
+    const movingWei = BigInt(op.amountWei);
+    if (op.kind === "shield") return { ...base, state: "making-private", movingWei };
+    if (op.kind === "unshield") return { ...base, state: "sending", movingWei };
+  }
+  if (op?.step === "failed" && op.error) return { ...base, state: "failed", error: op.error.message };
+  if (gettingReadyWei > 0n) return { ...base, state: "getting-ready" };
+  return { ...base, state: readyWei > 0n ? "ready" : "empty" };
 }

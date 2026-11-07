@@ -10,7 +10,9 @@ import { engine, EngineCallError } from "@/lib/engine/client";
 import type { UiApi } from "@/lib/engine/protocol";
 import { askFaucet, waitForWei } from "@/lib/faucet";
 import { ago, eth, explorerLink, parseAmountInput, short, units } from "@/lib/format";
+import { privateBalanceSummary } from "@queuebit/extension/src/shared/privacy";
 import { Row, recipients, type Recipient } from "./bits";
+import { MIN_PRIVATE_SEND_WEI, PRIVACY_HINT, PrivateReview, PrivateSending } from "./Private";
 import { Identicon } from "./Identicon";
 import { Scanner, canScan } from "./Scan";
 import { TokenGlyph } from "./Tokens";
@@ -52,6 +54,8 @@ export function Send({ nav, token }: { nav: Nav; token?: `0x${string}` }) {
   const [pick, setPick] = useState<`0x${string}` | undefined>(token);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [proof, setProof] = useState<SignProof | null>(null);
+  /** "Send privately": paid from the private balance, from a one-time address. */
+  const [priv, setPriv] = useState(false);
   const asset = assets.find((a) => (a.token ?? "").toLowerCase() === (pick ?? "").toLowerCase()) ?? assets[0]!;
   const draft = useMemo<Draft | null>(() => {
     const a = parseAmountInput(amount, asset.decimals, asset.symbol);
@@ -68,7 +72,7 @@ export function Send({ nav, token }: { nav: Nav; token?: `0x${string}` }) {
         }}
       />
     );
-  if (step === "amount" || !draft || !preview)
+  if (step === "amount" || !draft || (!priv && !preview))
     return (
       <EnterAmount
         to={to}
@@ -80,6 +84,11 @@ export function Send({ nav, token }: { nav: Nav; token?: `0x${string}` }) {
         }}
         amount={amount}
         onAmount={setAmount}
+        priv={priv}
+        onPriv={(on) => {
+          setPriv(on);
+          if (on) setPick(undefined);
+        }}
         onBack={() => setStep("to")}
         onNext={(p) => {
           setPreview(p);
@@ -87,6 +96,32 @@ export function Send({ nav, token }: { nav: Nav; token?: `0x${string}` }) {
         }}
       />
     );
+  if (priv && step === "review")
+    return (
+      <PrivateReview
+        to={draft.to}
+        wei={draft.wei}
+        onBack={() => setStep("amount")}
+        onProof={(p) => {
+          setProof(p);
+          setStep("sending");
+        }}
+      />
+    );
+  if (priv && proof)
+    return (
+      <PrivateSending
+        nav={nav}
+        to={draft.to}
+        wei={draft.wei}
+        proof={proof}
+        onRetry={() => {
+          setProof(null);
+          setStep("review");
+        }}
+      />
+    );
+  if (!preview) return null;
   if (step === "review")
     return (
       <Confirm
@@ -318,6 +353,8 @@ function EnterAmount({
   onAsset,
   amount,
   onAmount,
+  priv,
+  onPriv,
   onBack,
   onNext,
 }: {
@@ -327,10 +364,16 @@ function EnterAmount({
   onAsset: (a: Asset) => void;
   amount: string;
   onAmount: (a: string) => void;
+  priv: boolean;
+  onPriv: (on: boolean) => void;
   onBack: () => void;
-  onNext: (p: Preview) => void;
+  onNext: (p: Preview | null) => void;
 }) {
-  const { status, activity, guard } = useWallet();
+  const { status, activity, guard, privacy } = useWallet();
+  const privSummary = privateBalanceSummary(privacy);
+  const privAvailable = privSummary.state !== "off";
+  // One private send spends from one earlier "make private" at a time: its largest ready amount.
+  const privMax = BigInt(privacy?.maxWithdrawWei ?? "0");
   const [fee, setFee] = useState<bigint | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -353,11 +396,12 @@ function EnterAmount({
   }, [to, asset.token]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ETH pays its own fee; a token's whole balance can go, the fee is paid in ETH beside it.
-  const spendable = !isEth || fee === null ? balance : balance > fee ? balance - fee : 0n;
+  const spendable = priv ? privMax : !isEth || fee === null ? balance : balance > fee ? balance - fee : 0n;
   const parsed = parseAmountInput(amount || "0", asset.decimals, asset.symbol);
   const wei = "wei" in parsed ? parsed.wei : 0n;
   const over = wei > spendable;
-  const noFee = !isEth && fee !== null && ethWei < fee;
+  const noFee = !priv && !isEth && fee !== null && ethWei < fee;
+  const tooSmall = priv && wei > 0n && wei < MIN_PRIVATE_SEND_WEI;
 
   const press = useCallback(
     (k: string) => {
@@ -391,6 +435,10 @@ function EnterAmount({
 
   const next = async () => {
     if (!("wei" in parsed) || wei === 0n || over) return;
+    if (priv) {
+      if (!tooSmall) onNext(null);
+      return;
+    }
     setBusy(true);
     setErr(null);
     try {
@@ -420,7 +468,12 @@ function EnterAmount({
       step={2}
       of={3}
       actions={
-        <Primary busy={busy} busyLabel="Checking" disabled={wei === 0n || over || noFee} onClick={() => void next()}>
+        <Primary
+          busy={busy}
+          busyLabel="Checking"
+          disabled={wei === 0n || over || noFee || tooSmall}
+          onClick={() => void next()}
+        >
           Review
         </Primary>
       }
@@ -449,6 +502,7 @@ function EnterAmount({
           {/* The unit is the asset picker: tap to send something else. */}
           <button
             type="button"
+            disabled={priv}
             onClick={() => setChoosing((c) => !c)}
             aria-expanded={choosing}
             aria-label={`Sending ${asset.symbol}. Change what you send`}
@@ -458,16 +512,59 @@ function EnterAmount({
             <Chevron open={choosing} />
           </button>
         </p>
-        <p className={`mt-3.5 text-[0.95rem] ${over || noFee ? "text-red" : "text-ink-3"}`}>
-          {over
-            ? isEth
-              ? `More than you can send. Up to ${eth(spendable, 6)} ETH after the fee.`
-              : `More than you have: ${units(balance, asset.decimals, 6)} ${asset.symbol}.`
-            : noFee
-              ? `The fee is paid in ETH (up to ${eth(fee, 6)}); the account has ${eth(ethWei, 6)}.`
-              : `${units(balance, asset.decimals, 6)} ${asset.symbol} available${fee !== null ? ` · fee up to ${eth(fee, 6)} ETH` : ""}`}
+        <p className={`mt-3.5 text-[0.95rem] ${over || noFee || tooSmall ? "text-red" : "text-ink-3"}`}>
+          {priv
+            ? over
+              ? `More than one private send can move: up to ${eth(privMax, 6)} ETH.`
+              : tooSmall
+                ? `Send at least ${eth(MIN_PRIVATE_SEND_WEI, 4)} ETH privately: the network fee comes out of it.`
+                : privMax === 0n
+                  ? privSummary.gettingReadyWei > 0n
+                    ? `Your private balance is getting ready (${eth(privSummary.gettingReadyWei, 6)} ETH).`
+                    : "Nothing private yet. Make some ETH private from Home first."
+                  : `${eth(privMax, 6)} ETH private, ready · the network fee comes out of the amount`
+            : over
+              ? isEth
+                ? `More than you can send. Up to ${eth(spendable, 6)} ETH after the fee.`
+                : `More than you have: ${units(balance, asset.decimals, 6)} ${asset.symbol}.`
+              : noFee
+                ? `The fee is paid in ETH (up to ${eth(fee, 6)}); the account has ${eth(ethWei, 6)}.`
+                : `${units(balance, asset.decimals, 6)} ${asset.symbol} available${fee !== null ? ` · fee up to ${eth(fee, 6)} ETH` : ""}`}
         </p>
       </div>
+
+      {privAvailable && (
+        <div className="mt-5 border-y border-rule py-2.5">
+          <button
+            type="button"
+            role="switch"
+            aria-checked={priv}
+            onClick={() => {
+              setErr(null);
+              setChoosing(false);
+              onPriv(!priv);
+              onAmount("");
+            }}
+            className="flex min-h-11 w-full items-center gap-3 text-left"
+          >
+            <span className="flex-1">
+              <span className="block text-[1rem]">Send privately</span>
+              <span className="block text-[0.88rem] text-ink-3">
+                From your private balance, through a one-time address
+              </span>
+            </span>
+            <span
+              aria-hidden
+              className={`relative h-6 w-11 shrink-0 border ${priv ? "border-blue bg-blue" : "border-ink bg-paper"}`}
+            >
+              <span
+                className={`absolute top-[3px] size-4 transition-[left] ${priv ? "left-[23px] bg-on-blue" : "left-[3px] bg-ink"}`}
+              />
+            </span>
+          </button>
+          {priv && <p className="mt-1.5 text-[0.88rem] leading-[1.5] text-ink-3">{PRIVACY_HINT}</p>}
+        </div>
+      )}
 
       {choosing && (
         <ul className="mt-5 border-t border-ink" aria-label="What to send">

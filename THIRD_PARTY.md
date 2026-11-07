@@ -279,6 +279,11 @@ runtime code. The artifact is distributed under Apache-2.0 by its publisher; whe
 embedded runtime is a question for legal review before the CRX ships it (it concerns the pinned artifact, not this
 engine, which would run any circom 2 witness module).
 
+**The web wallet** (`apps/web`) serves the same six artifacts, unmodified, from `/pp-circuits/` (copied from npm
+`@fatsolutions/privacy-pools-core-circuits@1.0.5` at build time by `apps/web/scripts/copy-circuits.mjs`, which checks
+all six pins; git-ignored) and runs this engine in a Worker (`apps/web/lib/engine/prover.worker.ts`). The open
+question above applies to that deployment too.
+
 The BSD-3-Clause license text of `subtle` (`subtle-2.6.1/LICENSE`):
 
 ```

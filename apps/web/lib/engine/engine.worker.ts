@@ -5,6 +5,7 @@
  * get JSON-safe views through the `UiApi` messages. One tab runs the engine at a time (the client takes a Web Lock),
  * because the owner key's signature count must never be raced.
  */
+import { createWorkerProver, type PortLike } from "@queuebit/privacy";
 import { KeyringError } from "@queuebit/extension/src/background/keyring";
 import { OwnerKeyError } from "@queuebit/extension/src/background/lean/owner";
 import { AccountError, Wallet } from "@queuebit/extension/src/background/wallet";
@@ -56,6 +57,20 @@ interface Registry {
   active: string;
 }
 
+/**
+ * The private balance's prover: a dedicated Worker, started on first use and shared by every wallet on this device
+ * (it holds no keys between proofs).
+ */
+let prover: ReturnType<typeof createWorkerProver> | undefined;
+const proverOf = () =>
+  (prover ??= createWorkerProver(
+    new Worker(new URL("./prover.worker.ts", import.meta.url), {
+      type: "module",
+      name: "queuebit-prover",
+    }) as unknown as PortLike,
+    { timeoutMs: 300_000 },
+  ));
+
 let windowSeq = 0;
 function makeWallet(id: string): Wallet {
   return new Wallet({
@@ -80,6 +95,7 @@ function makeWallet(id: string): Wallet {
     confirmEachSignature: true,
     getBalance: io.getBalance,
     io: io.lean,
+    prover: proverOf,
     emit(name, data, origin) {
       post({ event: "provider", name, data, ...(origin ? { origin } : {}) });
     },
@@ -175,6 +191,10 @@ setInterval(() => {
     .catch(() => undefined);
   void active()
     .refreshActivity()
+    .catch(() => undefined);
+  // A private-balance operation left halfway (the page was reloaded) continues once the wallet is unlocked.
+  void active()
+    .privacy?.rehydrate([DEFAULT_CHAIN_ID])
     .catch(() => undefined);
 }, 30_000);
 
