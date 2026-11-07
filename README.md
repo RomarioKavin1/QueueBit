@@ -1,175 +1,91 @@
 # QueueBit
 
-**A browser wallet whose account is post-quantum, without waiting for a fork.** (QueueBit was formerly LEAKED, its
-working name.)
+**A quantum-safe wallet for Ethereum, today.** Open it with a passkey; every payment is signed with a hash-based key a
+quantum computer can’t forge, and costs about as much as an ordinary one.
 
-QueueBit is a smart account, **LeanAccount**, and the browser extension that drives it. Every transaction is an
-EIP-8141 frame transaction, and the account decides for itself which signatures count:
+Try it: [queuebit.space](https://www.queuebit.space) (public EIP-8141 devnet, chain 1337).
 
-- An **owner key** that is post-quantum (leanVM leanSPHINCS, hash-based). A PQ signature is too large and expensive
-  to check on chain for every transaction, so a **LeanPool** node verifies it off chain, batches it with others and
-  posts one Merkle root; the account only checks that its transaction is in that root. No signature bytes go on chain,
-  and the ERC-8421 alternative mempool admits the account without stake.
-- **Session keys** for everyday use and for apps: each may call only the contracts it was given, within a per-payment
-  and a daily ETH cap and per-token caps, until it expires, and can never change a key or a setting. A session key
-  can be a key the extension holds or a browser wallet such as MetaMask (EIP-712 typed data that shows the calls).
-- Passkeys (WebAuthn, checked with P256VERIFY), other ECDSA/P256 keys, weighted thresholds, `requirePQ` (every admin
-  action needs a PQ signer) and **guardian recovery** (guardians reset the keys after a delay the owner can cancel).
-- **Move to PQ**: an EOA (its tokens and ETH move into a new LeanAccount, or it keeps its address with EIP-7702), an
-  upgradeable smart account (upgraded in place, same address) or a **Safe** (its owners sign one Safe transaction that
-  moves everything) becomes a LeanAccount.
+## The problem
 
-The account is ERC-8286 + ERC-7579 (modular: validators, executors, a hook), UUPS and ERC-7201-namespaced. Privacy
-Pools withdrawals can pay their own gas through a paymaster contract.
+Quantum computers will break ECDSA, the signature behind almost every Ethereum account. Hash-based signatures are the
+safe replacement, but they are big: a leanSPHINCS signature is 4 KB, and checking one on chain costs about
+**383,000 gas** (around $11 at 10 gwei).
 
-> **Status: research prototype, unaudited, devnets only.** Read [Security status](#security-status) first.
+## The idea: one root per batch
 
-## Architecture
+Following [EIP-8288](https://eips.ethereum.org/EIPS/eip-8288), signatures are checked off chain and the chain keeps
+only a small proof:
 
-```
- Browser extension (apps/extension)
- ┌──────────────────────────────────────────────┐
- │ seed → PQ owner key (leanSPHINCS, WASM)        │   dapps ⇄ EIP-1193 provider
- │      → session keys (secp256k1), setup key    │
- │ @queuebit/account: build, sign, migrate       │
- └──────┬──────────────────────────┬─────────────┘
-        │ owner tx {raw, PQ sig}   │ session tx (signed entry)
-        ▼                          │
- ┌───────────────────────┐         │
- │ LeanPool node          │         │
- │ verify, batch, post    │──root──►│ DepsRegistry (per-account ring of roots)
- │ root, fill witness     │         │
- └──────┬─────────────────┘         │
-        └──────────────► ERC-8421 alt mempool (sidecar) ──► EIP-8141 chain
-                                    │
- LeanAccount ─ verify ─► KeystoreValidator: PQ inclusion │ passkey │ ECDSA/P256 │ EIP-712 ─► roles, thresholds,
- (ERC-8286)               sessions (allowlist, per-tx caps), requirePQ
-             ─ execute ─► SpendingLimitHook (daily caps, key expiry) ─► the calls
-             GuardianRecovery (executor) · watcher (services/watcher): alerts on key, policy and recovery events
+```mermaid
+flowchart LR
+  A[Passkey] -->|derives| B[Quantum-safe key]
+  B -->|signs, 4 KB| C[Aggregator<br/>checks and batches]
+  C -->|one root, hash-signed| D[(Root on chain)]
+  C -->|payment + proof| E[Alt mempool]
+  E --> F{In the root?}
+  D -.-> F
+  F -->|yes| G[Payment executes]
+  C -.->|STARK per batch| H[Anyone can audit]
 ```
 
-Components, transaction shapes, migration and the trust model: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+1. Your passkey derives a **leanSPHINCS** owner key; nothing secret is stored.
+2. The **aggregator** checks each signature, batches them, and posts **one Merkle root**, itself signed with a
+   hash-based key (SPHINCS- C13).
+3. Each payment only proves it is **in that root**. The account’s check fits the ERC-8421 alt mempool’s budget with no
+   stake.
+4. Every batch gets a **recursive STARK** anyone can verify against the chain.
 
-## Repository map
+| | Gas per payment | Signature on chain |
+|---|---|---|
+| PQ signature checked in the EVM | 383,018 | ~5.7 KB |
+| **QueueBit** | **85,598** (4.5× less) | **0 bytes** |
+
+Measured on the devnet over 20 payments.
+
+## What you can do
+
+- **Pay** with a passkey tap; the first payment also creates your account.
+- **Move in any wallet**: MetaMask or any EOA (or keep its address with EIP-7702), a **Safe** (its owners sign once and
+  it becomes your PQ account), or an upgradeable smart account (upgraded in place).
+- **Pay privately with no relayer**: make funds private with Privacy Pools, then send from a brand-new address that
+  never held ETH. The pool pays the gas inside the same frame transaction, which only frame transactions allow.
+  Kohaku-compatible.
+- **Let someone spend** within limits you set (per payment, per day, until a time you pick), or use your MetaMask as a
+  capped session key.
+- **Guardians** can reset your keys if you lose your passkey, after a delay you can cancel.
+
+## How it’s built
 
 | Path | What |
 |---|---|
-| [`contracts/`](contracts/) | Foundry: `src/account` (LeanAccount, KeystoreValidator, SpendingLimitHook, GuardianRecovery, WebAuthn, factory), `src/leanpool` (DepsRegistry), PoolPayer, PQ verifiers; `devnet-tests/leanpool-account` (SDK scripts and live runs), `devnet-tests/privacy` |
-| [`packages/account`](packages/account/) | The LeanAccount SDK: keys, sessions, tx building and signing, submission, migration rails, Safe adapter |
-| [`packages/frames`](packages/frames/) | EIP-8141 frame-transaction codec and signature hash, per-network profiles |
-| [`packages/lean-sphincs`](packages/lean-sphincs/) | leanVM leanSPHINCS, the owner key's scheme (Rust → committed, reproducible WASM) |
-| [`services/leanpool-node`](services/leanpool-node/) | The LeanPool node: verifies, batches and delivers PQ-signed transactions; STARK audit CLI |
-| [`packages/pq-signer`](packages/pq-signer/) | SPHINCS- C13 / leanSphincs-s signer and on-chain verifiers (benchmarks; PQ checked in the EVM) |
-| [`packages/rpc`](packages/rpc/) | Transports for ethrex, the alt-mempool sidecar and the LeanPool node |
-| [`packages/privacy`](packages/privacy/) | Privacy Pools v1 client, frame-paymaster broadcaster, note signer |
-| [`packages/groth16`](packages/groth16/) | MIT Groth16 prover (arkworks → WASM) for the privacy circuits |
-| [`packages/watcher-core`](packages/watcher-core/), [`services/watcher`](services/watcher/) | Alert rules for LeanAccount; the self-hosted alert service |
-| [`apps/extension`](apps/extension/) | The MV3 browser extension (WXT + viem) |
-| [`apps/web`](apps/web/) | The landing page and PWA wallet (Next.js); runs the extension's wallet engine in a Web Worker; `/test` exercises every feature |
-| [`bench/`](bench/) | Post-quantum verifier benchmark |
-| [`devnet/`](devnet/) | Local EIP-8141 devnet (ethrex + Lighthouse + sidecar), deploy scripts, the BUDGET-010 sidecar |
-| [`upstream/`](upstream/) | Upstream contributions as patch series (BUDGET-010) |
-| [`scripts/`](scripts/) | Release tooling (reproducible builds) and supply-chain checks (audit, SBOM) |
-| [`docs/`](docs/) | [LeanAccount rebuild](docs/plan/70-leanaccount-rebuild.md), [architecture](docs/ARCHITECTURE.md), [threat model](docs/security/THREAT-MODEL.md), [backlog](docs/plan/BACKLOG.md), [implementation notes](docs/plan/IMPLEMENTATION-NOTES.md), [research](docs/research/) |
+| [`contracts/`](contracts/) | LeanAccount (ERC-8286 + ERC-7579), its keystore, spending-limit hook, guardian recovery; the root registry and `PQAggregator`; the privacy paymaster |
+| [`services/leanpool-node`](services/leanpool-node/) | The aggregator: verifies, batches, posts roots, proves STARKs |
+| [`packages/account`](packages/account/) | The SDK: keys, sessions, grants, migration, Safe adapter |
+| [`apps/web`](apps/web/) | The wallet ([queuebit.space](https://www.queuebit.space)): onboarding, Send, private balance, permissions |
+| [`apps/extension`](apps/extension/) | The browser extension and the wallet engine both apps run |
+| [`packages/privacy`](packages/privacy/), [`packages/groth16`](packages/groth16/) | Privacy Pools client and an in-browser Groth16 prover |
+| [`packages/lean-sphincs`](packages/lean-sphincs/) | The owner key’s signature scheme (Rust → WASM) |
+| [`docs/`](docs/) | [Architecture](docs/ARCHITECTURE.md), [threat model](docs/security/THREAT-MODEL.md) |
 
-## Quickstart
+## Run it
 
-Requirements: Node ≥ 22.12 (CI uses 26) and pnpm 10 (`corepack enable`), Foundry 1.3.5, Bun 1.3, Docker with
-~4 GB RAM (the devnet), Python 3. Rust is needed only to rebuild the committed WASM.
+Requirements: Node ≥ 22.12, pnpm 10, Foundry 1.3.5, Bun 1.3.
 
 ```sh
-git clone --recurse-submodules <this repo> && cd queuebit-wallet   # or: git submodule update --init --recursive
+git clone --recurse-submodules https://github.com/RomarioKavin1/QueueBit && cd QueueBit
 pnpm install --frozen-lockfile
-pnpm build
-(cd contracts && forge build)
+pnpm --filter @queuebit/web dev          # the wallet at http://localhost:3000
+pnpm test && (cd contracts && forge test)
 ```
 
-**1. The local devnet** (chain 1337; ~7.5 minutes until frame transactions activate):
+Hosting the wallet and your own aggregator: [`apps/web/SELF-HOSTING.md`](apps/web/SELF-HOSTING.md). A local devnet:
+[`devnet/README.md`](devnet/README.md).
 
-```sh
-cd devnet && ./up.sh            # ethrex :8545, sidecar :14337; ./status.sh, ./down.sh, ./reset.sh
-```
+## Status
 
-**2. Deploy the contracts** (CREATE2, idempotent; writes `devnet/deploy/addresses.local.json`): the LeanPool
-registry, the LeanAccount stack, Safe v1.4.1 and the migration fixtures, test tokens.
+A hackathon prototype on a devnet, not audited. EIP-8141, EIP-8288 and ERC-8421 are drafts. What each key can and
+can’t do, and what the aggregator is trusted for: [threat model](docs/security/THREAT-MODEL.md). Report issues
+privately: [`SECURITY.md`](SECURITY.md).
 
-```sh
-cd devnet/deploy && bun install && bun run deploy
-```
-
-**3. Run a LeanPool node** (it posts roots, so its key needs devnet ETH; it bonds itself with `LEANPOOL_AUTO_BOND_WEI`):
-
-```sh
-pnpm --filter @queuebit/leanpool-node build
-LEANPOOL_PRIVATE_KEY=0x… LEANPOOL_RPC_URL=http://localhost:8545 LEANPOOL_SIDECAR_URL=http://localhost:14337/rpc/ \
-  LEANPOOL_REGISTRY=<DepsRegistry> LEANPOOL_KEYSTORE=<KeystoreValidator> LEANPOOL_AGGREGATE=1 \
-  LEANPOOL_AUTO_BOND_WEI=10000000000000000 pnpm --filter @queuebit/leanpool-node start   # see its README
-```
-
-**4. Run the extension:**
-
-```sh
-pnpm --filter @queuebit/extension build:local   # then chrome://extensions → Load unpacked → apps/extension/.output/chrome-mv3
-```
-
-The devnet keys in [`devnet/README.md`](devnet/README.md) are public test keys: never use them elsewhere.
-
-**5. Run the tests:**
-
-```sh
-pnpm typecheck && pnpm lint && pnpm test                     # every workspace package (vitest)
-(cd contracts && forge test)                                 # FOUNDRY_PROFILE=ci for 10k fuzz runs
-contracts/script/lint-verify.sh                              # VERIFY-frame admission lint
-(cd contracts/devnet-tests/leanpool-account && bun install && bun run test)   # SDK vectors shared with forge
-pnpm --filter @queuebit/extension e2e                          # Playwright with the built extension
-LIVE_DEVNET=1 pnpm --filter @queuebit/watcher test             # watcher against the devnet
-```
-
-The live devnet runs (sessions with token caps and an EIP-712 key, the four migration paths, guardian recovery,
-keystore rotation, passkeys) are scripts in
-[`contracts/devnet-tests/leanpool-account`](contracts/devnet-tests/leanpool-account/), with their recorded
-transactions in its `deployments/`.
-
-CI: [`ci.yml`](.github/workflows/ci.yml) on every push (unit, lint, the extension e2e, contracts and the LeanAccount
-devnet-tests' unit suite, WASM and release reproducibility), [`devnet.yml`](.github/workflows/devnet.yml) nightly (deploy
-reproducibility, the extension e2e and the live tests against a fresh devnet),
-[`supply-chain.yml`](.github/workflows/supply-chain.yml) (audit, SBOMs) and [`release.yml`](.github/workflows/release.yml).
-
-## Security status
-
-Honest summary; the details are in the [threat model](docs/security/THREAT-MODEL.md).
-
-- **No external audit** of anything: contracts, the leanSPHINCS signer, the LeanPool node, the extension, the Groth16
-  engine.
-- **Devnets only.** EIP-8141, EIP-8288 and ERC-8421 are drafts; the bytecode is pinned to a devnet profile.
-- **The owner key's approvals trust the LeanPool aggregator** the account names: the chain checks inclusion in the
-  aggregator's root, not the PQ signature. A dishonest aggregator, or one whose ECDSA posting key is broken, could
-  approve owner actions. Every batch's recursive STARK hash is on chain, so this is auditable after the fact, not
-  prevented. A direct on-chain PQ path for admin actions is in the backlog.
-- **Sessions bound what they can move,** not the fees they can burn: a session key (or an expired one until it is
-  pruned) can spend the account's ETH on fees with transactions that revert.
-- **EIP-7702 migration keeps the EOA's ECDSA key alive** (it can still sign and re-delegate) until key deactivation
-  (EIP-7851) exists: PQ-ready, not PQ-safe.
-
-Report vulnerabilities privately: [`SECURITY.md`](SECURITY.md). Release gates: [`docs/release/CHECKLIST.md`](docs/release/CHECKLIST.md).
-
-## Contributing
-
-[`CONTRIBUTING.md`](CONTRIBUTING.md): the git rules for a shared working tree (never stash, reset or clean it), commit
-conventions, and the checks to run before pushing.
-
-## Licenses
-
-QueueBit is [MIT](LICENSE). Code copied or adapted from other projects (LeanAccount and LeanPool from
-LeoFranklin015/Queue-bit, the hegota-support codec, the SPHINCS- verifiers and signer logic, the devnet compose files) is
-listed with its origin and license in [`THIRD_PARTY.md`](THIRD_PARTY.md). Notes:
-
-- Safe v1.4.1 (LGPL-3.0, a Foundry submodule) is compiled and deployed only on devnets as the migration fixture; it is
-  not part of the account.
-- The shipped WASM includes two permissive non-MIT/Apache crates, `subtle` (BSD-3-Clause) and `foldhash` (Zlib).
-- snarkjs (GPL-3.0) is a test-only dev dependency (the cross-check oracle); it is never bundled. No `@kohaku-eth/*`
-  package is a dependency (their licenses are unclear).
-- **Open legal question:** the Privacy Pools withdrawal circuit artifact (`withdraw.wasm`) is circom compiler output,
-  and circom is GPL-3.0. Whether that reaches the artifact is unresolved; it is a release gate.
-- Foundry submodules (`contracts/lib/`) and npm / crates dependencies ship their own licenses; the
-  [`supply-chain`](.github/workflows/supply-chain.yml) workflow publishes CycloneDX SBOMs of what we ship.
+MIT. Third-party code and assets: [`THIRD_PARTY.md`](THIRD_PARTY.md). Contributing:
+[`CONTRIBUTING.md`](CONTRIBUTING.md).
