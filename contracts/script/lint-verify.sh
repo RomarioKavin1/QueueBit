@@ -18,7 +18,9 @@ strip() { sed -e 's://.*$::' "$1" | perl -0pe 's:/\*.*?\*/::gs'; }
 
 echo "== 1. LeanAccount.verify"
 acct=src/account/LeanAccount.sol
-vcode=$(strip "$acct" | awk '/function verify\(bytes calldata data\)/{on=1} on{print} on&&/^    }$/{exit}')
+# awk reads to the end rather than `exit`ing after verify(): an early exit can SIGPIPE the writer, which pipefail and
+# set -e turn into a silent abort of the whole lint (exit 141).
+vcode=$(strip "$acct" | awk '!done && /function verify\(bytes calldata data\)/{on=1} on{print} on&&/^    }$/{on=0; done=1}')
 if [ -z "$vcode" ]; then
   echo "lint-verify: $acct: verify() not found"
   fail=1

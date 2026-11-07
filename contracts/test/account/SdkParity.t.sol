@@ -50,6 +50,8 @@ interface ISafe {
 /// The TS SDK (packages/account) against the contracts it targets: the same inputs as packages/account/test/fixture.ts
 /// give the same counterfactual address, MultiSend bytes and Safe transaction hash (constants pinned on both sides),
 /// and a Safe really moves into a LeanAccount with the migration the SDK builds.
+/// Safe v1.4.1 is built by the legacy-pipeline profile, so it is deployed from its artifact path: with two compiler
+/// profiles, forge 1.3.5's name lookup ("Safe.sol:Safe") finds no artifact.
 contract SdkParityTest is Test {
     // packages/account/test/fixture.ts
     address constant KEYSTORE = address(0xa2);
@@ -105,8 +107,8 @@ contract SdkParityTest is Test {
         assertEq(keccak256(packed), MULTISEND_HASH);
 
         vm.chainId(1337);
-        address singleton = deployCode("Safe.sol:Safe");
-        deployCodeTo("SafeProxy.sol:SafeProxy", abi.encode(singleton), SAFE);
+        address singleton = deployCode("out/Safe.sol/Safe.json");
+        deployCodeTo("out/SafeProxy.sol/SafeProxy.json", abi.encode(singleton), SAFE);
         address[] memory owners = new address[](1);
         owners[0] = address(0xbeef);
         ISafe(SAFE).setup(owners, 1, address(0), "", address(0), address(0), 0, address(0));
@@ -124,11 +126,11 @@ contract SdkParityTest is Test {
         LeanAccountFactory factory = new LeanAccountFactory(address(impl));
         SpendingLimitHook hook = new SpendingLimitHook(ISessionContext(address(ks)));
         TestToken token = new TestToken("USDC", 6);
-        address multiSend = deployCode("MultiSendCallOnly.sol:MultiSendCallOnly");
+        address multiSend = deployCode("out/MultiSendCallOnly.sol/MultiSendCallOnly.json");
 
         (address o1, uint256 k1) = makeAddrAndKey("owner 1");
         (address o2, uint256 k2) = makeAddrAndKey("owner 2");
-        address safe = deployCode("SafeProxy.sol:SafeProxy", abi.encode(deployCode("Safe.sol:Safe")));
+        address safe = deployCode("out/SafeProxy.sol/SafeProxy.json", abi.encode(deployCode("out/Safe.sol/Safe.json")));
         address[] memory owners = new address[](2);
         (owners[0], owners[1]) = (o1, o2);
         ISafe(safe).setup(owners, 2, address(0), "", address(0), address(0), 0, address(0));
