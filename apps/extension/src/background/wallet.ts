@@ -437,7 +437,8 @@ export class Wallet {
   }
 
   private async onUnlocked(): Promise<void> {
-    await this.syncOwnerBudget();
+    // The count sync reads the chain (seconds on a slow node): unlocking doesn't wait for it, signing does.
+    this.owner.after(this.syncOwnerBudget().catch(() => undefined));
     for (const p of await this.permissions.list()) {
       const account = await this.accountFor(await this.chainOfOrigin(p.origin));
       if (account) this.env.emit("accountsChanged", [account], p.origin);
@@ -1328,3 +1329,4 @@ const safeTxFromJson = (j: SafeTxJson): SafeTx => ({
   refundReceiver: j.refundReceiver,
   nonce: BigInt(j.nonce),
 });
+

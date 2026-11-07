@@ -36,6 +36,8 @@ export interface PqKey {
 export class OwnerKey {
   private key: PqKey | undefined;
   private building: Promise<PqKey> | undefined;
+  /** Work the next signature must wait for (the count sync after an unlock). */
+  private pending: Promise<unknown> = Promise.resolve();
 
   constructor(
     private readonly kv: KV,
@@ -63,8 +65,20 @@ export class OwnerKey {
     return Math.max(0, this.budget - ((await this.record())?.used ?? 0));
   }
 
+  /** Makes the next signatures wait for `p` (e.g. raising the count from the chain), without blocking anything else. */
+  after(p: Promise<unknown>): void {
+    const prev = this.pending;
+    this.pending = Promise.all([prev, p]).catch(() => undefined);
+  }
+
+  /** Resolves once the work `after` queued is done. */
+  settled(): Promise<unknown> {
+    return this.pending;
+  }
+
   /** Signs a 32-byte message (a frame transaction's sig hash). */
   async sign(message: Hex): Promise<Hex> {
+    await this.pending;
     const key = await this.open();
     const vk = bytesToHex(key.publicKey);
     const r = (await this.record()) ?? { vk, used: 0 };

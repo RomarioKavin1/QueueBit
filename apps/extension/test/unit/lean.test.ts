@@ -133,6 +133,22 @@ describe("owner key signature budget", () => {
     owner.lock();
     expect(await owner.record()).toEqual({ vk, used: 2 });
   });
+
+  it("a signature waits for the count sync started at unlock, so it can't sign on a stale count", async () => {
+    const local = new MemoryKV();
+    const keyring = new KeyringController(local, new MemoryKV(), { scrypt: FAST });
+    await keyring.import(MNEMONIC, "password-1");
+    const owner = new OwnerKey(local, keyring, fakePq, 3);
+    await owner.vk();
+    let release!: () => void;
+    // The chain says 3 signatures were made already; the answer is slow.
+    owner.after(new Promise<void>((r) => (release = r)).then(() => owner.atLeast(3)));
+    const signing = owner.sign(`0x${"aa".repeat(32)}`);
+    await flush();
+    expect(await owner.remaining()).toBe(3); // still waiting, nothing counted
+    release();
+    await expect(signing).rejects.toMatchObject({ reason: "budget" });
+  });
 });
 
 const session = (over: Partial<SessionRecord> = {}): SessionRecord => ({
@@ -502,11 +518,13 @@ describe("restoring: the same words give the same account, and the signature cou
     chain.txCount.set(st.address!.toLowerCase(), 7);
     await wallet.handleUi("keyring:lock", undefined);
     await wallet.handleUi("keyring:unlock", { password: "password-1" });
+    await wallet.owner.settled(); // the sync runs after the unlock answers; signing waits for it
     expect(await wallet.owner.remaining()).toBe(wallet.owner.budget - 7);
     // Never down: a lower count on chain leaves it.
     chain.txCount.set(st.address!.toLowerCase(), 3);
     await wallet.handleUi("keyring:lock", undefined);
     await wallet.handleUi("keyring:unlock", { password: "password-1" });
+    await wallet.owner.settled(); // the sync runs after the unlock answers; signing waits for it
     expect(await wallet.owner.remaining()).toBe(wallet.owner.budget - 7);
   });
 

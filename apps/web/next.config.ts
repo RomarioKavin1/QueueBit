@@ -19,6 +19,11 @@ const LEANPOOL_URL = (
   process.env.NEXT_PUBLIC_QUEUEBIT_LEANPOOL_URL ?? (LOCAL_DEVNET ? "http://127.0.0.1:8701" : PUBLIC_LEANPOOL_URL)
 ).replace(/\/+$/u, "");
 const FAUCET_URL = LOCAL_DEVNET ? (process.env.NEXT_PUBLIC_QUEUEBIT_FAUCET_URL ?? "") : "";
+/**
+ * The service worker's cache version: one per build, so a deploy replaces the cached app shell and assets instead of
+ * piling up next to them (app/sw-register.tsx registers `/sw.js?v=<this>`).
+ */
+const BUILD_ID = process.env.NEXT_PUBLIC_QUEUEBIT_BUILD_ID ?? Date.now().toString(36);
 
 const WORKSPACE = [
   "@queuebit/extension",
@@ -33,6 +38,7 @@ const WORKSPACE = [
 
 const config: NextConfig = {
   reactStrictMode: true,
+  env: { NEXT_PUBLIC_QUEUEBIT_BUILD_ID: BUILD_ID },
   transpilePackages: WORKSPACE,
   // The engine's sources live outside this app (apps/extension, packages/*).
   outputFileTracingRoot: new URL("../..", import.meta.url).pathname,

@@ -22,6 +22,8 @@ declare const self: DedicatedWorkerGlobalScope;
 
 const CONFIG_KEY = "web:config";
 const WALLETS_KEY = "web:wallets";
+/** The last account status per wallet, so the wallet page draws at once after an unlock (the chain is slow). */
+const statusKey = (id: string) => `web:status:${id}`;
 const local = new IndexedDbKV();
 const io = new WebIo();
 
@@ -187,6 +189,7 @@ async function handle(msg: ToEngine): Promise<unknown> {
       // Remember each wallet's address, for the wallet list (read while the others are locked).
       if (msg.type === "account:status") {
         const address = (res as { address?: `0x${string}` }).address;
+        if (!(res as { error?: string }).error) await local.set(statusKey(id), res);
         const r = await registry();
         const slot = r.wallets.find((s) => s.id === id);
         if (address && slot && slot.address !== address) {
@@ -219,6 +222,8 @@ async function handle(msg: ToEngine): Promise<unknown> {
       return null;
     case "wallets":
       return walletsView();
+    case "status:cached":
+      return (await active().keyring.isUnlocked()) ? ((await local.get(statusKey(activeId))) ?? null) : null;
     case "wallets:add": {
       const r = await registry();
       const id = crypto.randomUUID().slice(0, 8);

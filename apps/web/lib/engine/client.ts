@@ -117,6 +117,11 @@ class EngineClient {
     return this.send({ kind: "storage:wipe" }) as Promise<null>;
   }
 
+  /** The open wallet's last account status, or null: shown at once while `account:status` reads the chain. */
+  cachedStatus(): Promise<UiApi["account:status"]["res"] | null> {
+    return this.send({ kind: "status:cached" }) as Promise<UiApi["account:status"]["res"] | null>;
+  }
+
   /** The wallets on this device and which one is open. */
   wallets(): Promise<WalletsView> {
     return this.send({ kind: "wallets" }) as Promise<WalletsView>;

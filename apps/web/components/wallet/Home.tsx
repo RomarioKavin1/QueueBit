@@ -10,6 +10,7 @@ import { EntryRow, GhostSeal, Section, SignatureGauge } from "./bits";
 import { Identicon } from "./Identicon";
 import { errText, useWallet } from "./state";
 import { Assets } from "./Tokens";
+import { useInstall } from "@/lib/install";
 import type { Nav } from "./Wallet";
 
 /**
@@ -157,6 +158,7 @@ export function Home({ nav }: { nav: Nav }) {
           <b className="font-medium">Back up your 24 words.</b> Lose the phone without them, lose the wallet.
         </Strip>
       )}
+      <InstallStrip />
 
       <Section title="Assets">
         <Assets nav={nav} />
@@ -255,5 +257,61 @@ function CopyIcon() {
       <rect x="4.5" y="4.5" width="8" height="8" />
       <path d="M2 9.5V2h7.5" />
     </svg>
+  );
+}
+
+/** "Add to home screen": the browser's prompt where there is one, the Share-sheet steps on iPhone. */
+function InstallStrip() {
+  const { mode, install, dismiss } = useInstall();
+  const [steps, setSteps] = useState(false);
+  if (!mode) return null;
+  return (
+    <div className="mt-3 border border-rule bg-paper-2 px-3.5 py-3 text-[0.95rem] leading-[1.45] text-ink-2">
+      <div className="flex items-center gap-3.5">
+        <span className="grid size-[34px] shrink-0 place-items-center border border-blue text-blue">
+          <svg viewBox="0 0 16 16" aria-hidden className="size-4 fill-none stroke-current [stroke-width:1.3]">
+            <rect x="4" y="1.5" width="8" height="13" />
+            <path d="M8 5v5M5.8 7.8L8 10l2.2-2.2" />
+          </svg>
+        </span>
+        <span className="flex-1">
+          <b className="font-medium">Add QueueBit to your home screen.</b> It opens full screen, like an app.
+        </span>
+      </div>
+      {steps && (
+        <ol className="mt-3 ml-[48px] list-decimal space-y-1 pl-4 text-[0.92rem]">
+          <li>
+            Tap <b className="font-medium">Share</b> in Safari&apos;s toolbar.
+          </li>
+          <li>
+            Choose <b className="font-medium">Add to Home Screen</b>, then <b className="font-medium">Add</b>.
+          </li>
+        </ol>
+      )}
+      <div className="mt-2 ml-[48px] flex gap-2">
+        {mode === "prompt" ? (
+          <button
+            type="button"
+            onClick={() => void install()}
+            className="mono-label h-10 border border-blue bg-blue px-3 text-[11px] text-on-blue"
+          >
+            Install
+          </button>
+        ) : (
+          !steps && (
+            <button
+              type="button"
+              onClick={() => setSteps(true)}
+              className="mono-label h-10 border border-ink bg-paper px-3 text-[11px]"
+            >
+              Show me how
+            </button>
+          )
+        )}
+        <button type="button" onClick={dismiss} className="mono-label h-10 px-2 text-[11px] text-ink-3">
+          Not now
+        </button>
+      </div>
+    </div>
   );
 }

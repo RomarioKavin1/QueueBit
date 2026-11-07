@@ -75,6 +75,7 @@ export function WalletProvider({ net, children }: { net: NetworkInfo | undefined
         Promise.all([e.call("account:status", {}), e.call("activity:list"), e.call("state:get")]),
       );
       setStatus(s);
+      setBudget(s.ownerSignatureBudget);
       setActivity(a);
       setBackedUp(Boolean(st.setup.backupConfirmedAt));
       setError(s.error ?? null);
@@ -93,12 +94,13 @@ export function WalletProvider({ net, children }: { net: NetworkInfo | undefined
   }, [guard]);
 
   useEffect(() => {
-    void refresh();
     const e = engine();
+    // The last known status first (instant), then the chain's (seconds on a slow node).
     void e
-      .call("keys:view", {})
-      .then((k) => setBudget(k.ownerSignatureBudget))
+      .cachedStatus()
+      .then((s) => s && setStatus((cur) => cur ?? s))
       .catch(() => undefined);
+    void refresh();
     void e
       .call("keyring:passkeyInfo")
       .then((i) => setLockedWith(i ? "passkey" : "password"))

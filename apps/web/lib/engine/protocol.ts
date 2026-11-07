@@ -21,6 +21,8 @@ export type ToEngine =
   | { id: number; kind: "storage:dump" }
   | { id: number; kind: "storage:wipe" }
   | { id: number; kind: "wallets" }
+  /** The open wallet's last account status (instant, from storage), to show while a fresh one is read. */
+  | { id: number; kind: "status:cached" }
   /** A new, empty wallet becomes the active one; onboarding sets it up. */
   | { id: number; kind: "wallets:add"; name?: string }
   | { id: number; kind: "wallets:switch"; walletId: string }

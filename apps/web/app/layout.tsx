@@ -30,7 +30,8 @@ export const metadata: Metadata = {
     "QueueBit moves your wallet into an account whose owner key is hash-based, so a quantum computer can't forge it. Start with a passkey.",
   applicationName: "QueueBit",
   appleWebApp: { capable: true, title: "QueueBit", statusBarStyle: "default" },
-  icons: { icon: "/icons/icon.svg", apple: "/icons/icon-192.png" },
+  icons: { icon: "/icons/icon.svg", apple: "/icons/apple-touch-icon.png" },
+  formatDetection: { telephone: false, address: false, email: false },
 };
 
 export const viewport: Viewport = {

@@ -94,6 +94,21 @@ Every signature asks for the passkey or password again, and the engine checks it
 Owner-signed payments need a LeanPool node (see below). Without one, Send stops at the signing step with the node's
 error and nothing is sent.
 
+## Installing (PWA)
+
+Production builds register `public/sw.js` (development doesn't). It is installable on Chrome, Edge and Android (the
+Home screen offers **Install**) and on iPhone (Home shows the Share → Add to Home Screen steps).
+
+- **Manifest** (`app/manifest.ts`): standalone, portrait, `/start` as the start page, icons including a maskable one,
+  and screenshots (`public/screenshots/`) for the install sheet. `app/layout.tsx` adds the iOS meta tags and a 180 px
+  Apple touch icon.
+- **Offline:** `/`, `/start`, `/wallet` and their RSC payloads are precached, and build assets (the engine worker and
+  its WASM included) are cached on first use. Offline, the wallet opens, unlocks (that's local) and shows the last
+  balance it read; sending needs the network.
+- **Updates:** the worker is registered as `/sw.js?v=<build id>` (`NEXT_PUBLIC_QUEUEBIT_BUILD_ID`, default: the
+  build time), so each deploy gets fresh caches and removes the old ones.
+- RPC, LeanPool and faucet calls (other origins) and POSTs are never cached.
+
 ## Testing with /test
 
 Open `/test`. Each panel calls the engine, and the right-hand column logs every call with its result and timing.

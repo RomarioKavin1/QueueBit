@@ -19,6 +19,8 @@ export interface AccountStatus {
   activation?: { hash: Hex; sentAt: number };
   /** Signatures the owner key can still safely make. */
   ownerSignaturesLeft: number;
+  /** How many it can make in all (leanSPHINCS's budget). */
+  ownerSignatureBudget: number;
   leanpoolUrl: string;
   /** The LeanPool node whose batches the account accepts. */
   aggregator?: Address;

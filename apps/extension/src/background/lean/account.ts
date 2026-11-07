@@ -280,6 +280,7 @@ export class AccountService {
       chainId,
       setupKey: accounts?.setup ?? ("0x0000000000000000000000000000000000000000" as Address),
       ownerSignaturesLeft: await this.d.owner.remaining(),
+      ownerSignatureBudget: this.d.owner.budget,
       leanpoolUrl: net.leanpoolUrl,
       readAt: this.now(),
     };
