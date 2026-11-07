@@ -1413,4 +1413,3 @@ const safeTxFromJson = (j: SafeTxJson): SafeTx => ({
   refundReceiver: j.refundReceiver,
   nonce: BigInt(j.nonce),
 });
-
