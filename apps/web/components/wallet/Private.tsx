@@ -20,6 +20,31 @@ import type { Nav } from "./Wallet";
 
 /** The one hint about how to use it well. */
 export const PRIVACY_HINT = "For more privacy, wait a while after making funds private, and use round amounts.";
+
+/**
+ * Where the privacy comes from: the Privacy Pools protocol (0xbow), whose pool and proofs this uses directly, and
+ * Kohaku (the EF's privacy wallet SDK), whose note and fee formats it follows (a Kohaku-built note withdraws through
+ * the same paymaster: contracts/devnet-tests/privacy). The app's client is QueueBit's own, so "compatible", not "by".
+ */
+export function PrivacyBrands() {
+  return (
+    <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-rule pt-4">
+      <span className="mono-label text-[11px] text-ink-3">Private with</span>
+      <span className="inline-flex items-center gap-2">
+        <img src="/brands/privacy-pools.svg" alt="" width={20} height={20} className="h-5 w-5" />
+        <span className="text-[0.95rem]">
+          Privacy Pools <span className="text-ink-3">by 0xbow</span>
+        </span>
+      </span>
+      <span className="inline-flex items-center gap-2">
+        <img src="/brands/kohaku.png" alt="" width={22} height={22} className="h-[22px] w-[22px]" />
+        <span className="text-[0.95rem]">
+          Kohaku<span className="text-ink-3">-compatible</span>
+        </span>
+      </span>
+    </div>
+  );
+}
 /** The network fee of a private send comes out of the amount: below this, there's nothing left to send. */
 export const MIN_PRIVATE_SEND_WEI = 3_000_000_000_000_000n; // 0.003 ETH
 /** Kept back in the account when making everything private, for the payment's own network fee. */
@@ -384,6 +409,7 @@ function ReviewMakePrivate({
         <Notice>This first payment also creates your account (a setup key pays for that).</Notice>
       )}
       <p className="mt-5 text-[0.92rem] leading-[1.55] text-ink-3">{PRIVACY_HINT}</p>
+      <PrivacyBrands />
       {c.field}
     </Screen>
   );
@@ -557,6 +583,7 @@ export function PrivateReview({
         <Row k="They see">a payment from a new, one-time address</Row>
       </dl>
       <p className="mt-5 text-[0.92rem] leading-[1.55] text-ink-3">{PRIVACY_HINT}</p>
+      <PrivacyBrands />
       {c.field}
     </Screen>
   );

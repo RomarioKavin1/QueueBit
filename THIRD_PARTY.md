@@ -366,3 +366,13 @@ WASM; no source is copied. Its vectors come from `@kevaundray/lean-pq` 0.7.0 (MI
 
 EB Garamond, Exo 2 and Geist Mono (all SIL OFL 1.1) are fetched at build time by `next/font/google` and self-hosted in the
 build output; no font file is committed.
+
+## Partner logos in the web app (`apps/web/public/brands/`)
+
+Shown on the private-balance review screens to say where the privacy comes from; the marks belong to their owners
+and are used for attribution only.
+
+| File | Source | Note |
+|---|---|---|
+| `privacy-pools.svg` | 0xbow-io/privacy-pools-core, `docs/static/img/logo.svg` | unchanged |
+| `kohaku.png` | ethereum/kohaku (MIT), `docs/public/kohaku_icon.svg` | rendered to a 128 px PNG (the SVG is ~360 KB) |
