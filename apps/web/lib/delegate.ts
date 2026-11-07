@@ -94,7 +94,8 @@ export async function follow(hash: Hex, timeoutMs = 180_000): Promise<"mined" | 
       .catch(() => null)) as { frameReceipts?: { status: Hex }[]; status?: Hex } | null;
     if (r) {
       const frames = r.frameReceipts ?? [];
-      return frames.length ? (frames.every((f) => BigInt(f.status) === 1n) ? "mined" : "reverted") : "mined";
+      const ok = frames.length ? frames.every((f) => BigInt(f.status) === 1n) : BigInt(r.status ?? "0x1") === 1n;
+      return ok ? "mined" : "reverted";
     }
     const s = await sidecar.frameTransactionStatus(hash).catch(() => null);
     if (s?.status === "Cancelled") return "dropped";

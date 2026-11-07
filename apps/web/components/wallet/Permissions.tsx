@@ -196,8 +196,10 @@ export function Permissions({ nav }: { nav: Nav }) {
       {err && <Notice tone="error">{err}</Notice>}
       {net && (
         <p className="mt-8 text-[0.9rem] text-ink-3">
-          Their payments come out of this account, and so do their network fees (they pay nothing). Limits reset at
-          midnight UTC.
+          Their payments come out of this account, and so do their network fees (they pay nothing). The limits cover
+          what they send, not those fees: only let someone you trust spend, and remove a permission when it has ended
+          (until then the network still accepts their payments, which then fail and cost this account a fee). A day is a
+          calendar day in UTC: the daily limit starts again at midnight UTC.
         </p>
       )}
     </Screen>
@@ -391,7 +393,7 @@ function GrantForm({
           </div>
           <p className="mt-2 text-[0.9rem] text-ink-3">
             {isEth
-              ? "ETH can only go to addresses you list: the account checks every ETH payment against this list."
+              ? "ETH can only go to addresses you list: the account checks every ETH payment against this list. List people's wallets, not contracts: on a listed contract they could call more than a payment."
               : `${asset.symbol} can go to anyone: the account checks how much is sent, not who receives it.`}
           </p>
           {isEth && (

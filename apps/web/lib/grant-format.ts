@@ -1,6 +1,6 @@
 /** How spending permissions read on both pages: end times and countdowns in the person's own words. */
 
-/** "Fri 5 pm", or "14 Nov, 5:30 pm" beyond a week. */
+/** "today 5 pm", "Fri 5 pm" within six days, else "14 Nov, 5:30 pm". */
 export function untilText(validUntil: number, now = Date.now()): string {
   const t = new Date(validUntil * 1000);
   const days = (t.getTime() - now) / 86_400_000;

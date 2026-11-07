@@ -90,7 +90,8 @@ export const grantKeyId = (delegate: Address): Hex => keyIdOf(KIND.EIP712, addrK
 
 /**
  * The delegate's own EIP-8250 nonce lane on the account, apart from the owner's (0x1000) and the extension's site
- * sessions (1, 2, ...): 2^32 + the address's low 32 bits.
+ * sessions (1, 2, ...): 2^32 + the address's low 32 bits. Two delegates of one account sharing those bits (1 in 2^32)
+ * share a lane: their payments then wait on each other, nothing worse.
  */
 export const delegateNonceKey = (delegate: Address): bigint => (1n << 32n) | (hexToBigInt(delegate) & 0xffffffffn);
 
@@ -299,7 +300,8 @@ function daily(limit: { dailyCap: bigint; day: bigint; spent: bigint }, nowSec: 
 /**
  * A grant from the chain: the key (expiry, ETH per payment), the allowlist (recovered from the txs that set it, then
  * confirmed with isSessionTarget), the token caps (SessionTokenSet events, confirmed with sessionTokenCap), and the
- * hook's daily caps and today's spend. `hints`: more candidate targets to confirm (e.g. from a link).
+ * hook's daily caps and today's spend. `tokens` keeps a removed key's leftover token caps too (grantCalls clears
+ * them on a new grant); `eth` only exists while the key does (its per-payment cap lives in the key).
  */
 export async function readGrant(
   client: GrantClient,
@@ -307,7 +309,6 @@ export async function readGrant(
   account: Address,
   delegate: Address,
   nowSec: number,
-  hints: Address[] = [],
 ): Promise<Grant> {
   const keyId = grantKeyId(delegate);
   const read = <T>(address: Address, abi: unknown, functionName: string, args: unknown[]) =>
@@ -360,7 +361,7 @@ export async function readGrant(
     tokens.push({ token, perPayment, perDay: u.cap, ...u });
   }
 
-  const candidates = uniq([...fromTxs, ...tokenCandidates, ...hints]);
+  const candidates = uniq([...fromTxs, ...tokenCandidates]);
   const allowed = await Promise.all(
     candidates.map((t) => read<boolean>(d.keystore, keystoreAbi, "isSessionTarget", [account, keyId, t])),
   );
@@ -397,7 +398,6 @@ export async function findGrants(
   d: AccountDeployment,
   delegate: Address,
   nowSec: number,
-  hints: Address[] = [],
 ): Promise<Grant[]> {
   const keyId = grantKeyId(delegate);
   const logs = (await client.getLogs({
@@ -408,7 +408,7 @@ export async function findGrants(
     toBlock: "latest",
   } as never)) as unknown as Array<{ args: { account: Address } }>;
   const accounts = uniq(logs.map((l) => getAddress(l.args.account)));
-  const grants = await Promise.all(accounts.map((a) => readGrant(client, d, a, delegate, nowSec, hints)));
+  const grants = await Promise.all(accounts.map((a) => readGrant(client, d, a, delegate, nowSec)));
   return grants.filter((g) => g.active);
 }
 
@@ -508,8 +508,6 @@ export interface DelegatePaymentOptions {
   grant: Grant;
   calls: Call[];
   nonceSeq: bigint;
-  /** The account's nonce lane (default: delegateNonceKey). */
-  nonceKey?: bigint;
   maxFeePerGas: bigint;
   maxPriorityFeePerGas: bigint;
   /** The delegate's browser wallet: eth_signTypedData_v4 of `typed` (it shows the calls). */
@@ -524,7 +522,7 @@ export function buildDelegatePayment(o: DelegatePaymentOptions): Promise<TxPlan>
   return buildAndSign({
     d: o.d,
     account: o.grant.account,
-    nonceKey: o.nonceKey ?? delegateNonceKey(o.grant.delegate),
+    nonceKey: delegateNonceKey(o.grant.delegate),
     nonceSeq: o.nonceSeq,
     calls: [o.calls],
     signers: [{ kind: "EIP712", keyId: o.grant.keyId, signTypedData: o.signTypedData }],
