@@ -32,6 +32,24 @@ LEANPOOL_SIDECAR_URL=https://altmempool.forshtat.com/rpc LEANPOOL_REGISTRY=<Deps
 LEANPOOL_AGGREGATE=1 LEANPOOL_AUTO_BOND_WEI=10000000000000000 node services/leanpool-node/dist/main.js
 ```
 
+**PQ mode** (the public devnet's pinned aggregator): the aggregator identity is a `PQAggregator` contract
+(`contracts/src/leanpool/PQAggregator.sol`). The node signs every root and proof hash with the contract's SPHINCS- C13
+key (an EIP-712 digest of chain, contract, registry, nonce and fields; signed in a worker thread, ~2.3 s on an M3,
+~16-25 s on a 2-core ARM server) and sends the signed call from `LEANPOOL_PRIVATE_KEY`, which then only pays gas.
+`leanpool_status` reports `nodeId` = the contract, plus `gasPayer` and `pq` (public key, signatures used, budget). The
+node refuses to start if the contract holds another key, and counts its signatures in `LEANPOOL_DATA_DIR/pq-signatures.json`
+(C13 is few-time: 2^22 per key; posts stop 16 short, which the contract also enforces; rotate with `rotateKey`).
+
+```sh
+LEANPOOL_PQ_AGGREGATOR=<PQAggregator> LEANPOOL_PQ_KEY_FILE=…/.keys/pq-aggregator.json \
+LEANPOOL_PRIVATE_KEY=0x<gas payer> … node services/leanpool-node/dist/main.js
+```
+
+`LEANPOOL_PQ_KEY` (64-byte hex `skSeed ‖ pkSeed ‖ pkRoot`) works instead of the file, which holds the same hex or a
+JSON object with `secretKey`. The key is never logged. Deploying and bonding a PQAggregator: `devnet/deploy`
+(`PQ_AGGREGATOR_PK=<public key>`). The Forge tests' C13 signatures come from `pnpm --filter @queuebit/leanpool-node
+pin-vectors`.
+
 Other settings (`src/config.ts`): `LEANPOOL_PORT` (8711), `LEANPOOL_HOST`, `LEANPOOL_PEERS` (comma-separated node
 URLs), `LEANPOOL_BATCH_MS` (4000), `LEANPOOL_DATA_DIR`, `LEANPOOL_ROLLING`, `LEANPOOL_KEYSTORE` (a LeanPool ERC-8286
 keystore for multi-signer txs), `LEANPOOL_CHAIN_ID`. Container: `Dockerfile`.
@@ -49,7 +67,8 @@ committed payment is backed by a real leanSPHINCS signature.
 ## Trust
 
 The aggregator can approve a payment the key did not sign: the EVM cannot verify leanVM signatures or STARKs yet, so
-there is no on-chain slashing. QueueBit bounds this with the account's everyday limits (the same bound as a leaked
+there is no on-chain slashing. In PQ mode that authority is a C13 key verified on chain; in ECDSA mode it is the
+node's ECDSA key, which a quantum attacker could break. QueueBit bounds this with the account's everyday limits (the same bound as a leaked
 everyday key), and a user moves to another aggregator through the Vault. See THREAT-MODEL.md.
 
 ## Tests

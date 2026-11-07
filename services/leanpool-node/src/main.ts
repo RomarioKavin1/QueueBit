@@ -3,12 +3,18 @@
 //
 //   LEANPOOL_PRIVATE_KEY=0x… LEANPOOL_RPC_URL=… LEANPOOL_SIDECAR_URL=… LEANPOOL_REGISTRY=0x… LEANPOOL_AGGREGATE=1 \
 //     node dist/main.js
+//
+// PQ mode (the aggregator is a PQAggregator contract; LEANPOOL_PRIVATE_KEY only pays gas):
+//   … LEANPOOL_PQ_AGGREGATOR=0x… LEANPOOL_PQ_KEY_FILE=/path/to/pq-aggregator.json node dist/main.js
 import fs from "node:fs";
 import path from "node:path";
 import { bytesToHex, hexToBytes, keccak256 } from "viem";
 import type { Hex } from "viem";
 import { loadConfig } from "./config.js";
 import { jsonRpc, makeChain } from "./chain.js";
+import type { PQSetup } from "./chain.js";
+import { readSecretKey, workerSigner } from "./c13.js";
+import { SignatureLedger } from "./pqOps.js";
 import { AGGREGATION_INTERVAL_MS, Node8288 } from "./node.js";
 import * as pq from "./leanpq.js";
 import { createRpcServer } from "./server.js";
@@ -16,7 +22,26 @@ import { createRpcServer } from "./server.js";
 const cfg = loadConfig();
 const name = `${cfg.aggregate ? "aggregator" : "relay"}:${cfg.port}`;
 const log = (...a: unknown[]) => console.log(`[leanpool ${name}]`, ...a);
-const { chain, keyedNonce, ensureBond, address } = makeChain(cfg, log);
+let pqSetup: PQSetup | undefined;
+if (cfg.pq) {
+  const sk = readSecretKey(cfg.pq);
+  pqSetup = { signer: workerSigner(sk), ledger: new SignatureLedger(path.join(cfg.dataDir, "pq-signatures.json")) };
+  sk.fill(0);
+}
+const { chain, keyedNonce, ensureBond, address, gasPayer, pq: pqOps } = makeChain(cfg, log, pqSetup);
+let pqInfo: { publicKey: Hex; signaturesUsed: string; budget: string; reserve: string } | null = null;
+if (pqOps && pqSetup) {
+  const c = await pqOps.check(); // the contract must hold this node's C13 key
+  pqInfo = {
+    publicKey: pqSetup.signer.publicKey,
+    signaturesUsed: c.signaturesUsed.toString(),
+    budget: c.budget.toString(),
+    reserve: c.reserve.toString(),
+  };
+  log(
+    `PQ mode: aggregator ${address} (C13 key ${pqSetup.signer.publicKey}, ${c.signaturesUsed}/${c.budget} signatures used); gas payer ${gasPayer}`,
+  );
+}
 
 // Every STARK is kept on disk and loaded at start: an on-chain proof hash is only checkable while someone serves it.
 const starkDir = path.join(cfg.dataDir, "starks");
@@ -78,6 +103,7 @@ const server = createRpcServer({
   log,
   extraStatus: () => ({
     nodeId: address,
+    ...(pqInfo ? { gasPayer, pq: pqInfo } : {}),
     registry: cfg.registry,
     peers: cfg.peers,
     sidecar: cfg.sidecarUrl,

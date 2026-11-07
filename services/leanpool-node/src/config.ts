@@ -13,8 +13,12 @@ export interface NodeConfig {
   chainId: number;
   /** The DepsRegistry roots are posted to. */
   registry: Address;
-  /** The node's ECDSA key: the aggregator identity (bond, postRoot, attachProof). Secret. */
+  /** The node's ECDSA key. ECDSA mode: the aggregator identity (bond, postRoot, attachProof). PQ mode (`pq`): only
+   * the gas payer of the PQAggregator's signed calls; it authorizes nothing. Secret. */
   privateKey: Hex;
+  /** PQ mode: the aggregator identity is this PQAggregator contract, and roots and proof hashes are authorized by its
+   * SPHINCS- C13 key (LEANPOOL_PQ_KEY, hex, or LEANPOOL_PQ_KEY_FILE; secret, never logged). */
+  pq: { aggregator: Address; key?: string; keyFile?: string } | null;
   aggregate: boolean;
   /** Also run the rolling recursive aggregate (CPU heavy; off by default). */
   rolling: boolean;
@@ -43,6 +47,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): NodeConfig {
   if (!isHex(key) || key.length !== 66) throw new Error("LEANPOOL_PRIVATE_KEY must be a 32-byte hex key");
   privateKeyToAccount(key); // throws on an invalid key
   const aggregate = env.LEANPOOL_AGGREGATE === "1" || env.LEANPOOL_AGGREGATE === "true";
+  if (env.LEANPOOL_PQ_AGGREGATOR && !env.LEANPOOL_PQ_KEY && !env.LEANPOOL_PQ_KEY_FILE)
+    throw new Error("LEANPOOL_PQ_AGGREGATOR needs LEANPOOL_PQ_KEY or LEANPOOL_PQ_KEY_FILE (the C13 secret key)");
   return {
     host: env.LEANPOOL_HOST ?? "127.0.0.1",
     port: Number(env.LEANPOOL_PORT ?? "8701"),
@@ -51,6 +57,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): NodeConfig {
     chainId: Number(env.LEANPOOL_CHAIN_ID ?? "1337"),
     registry: getAddress(req(env, "LEANPOOL_REGISTRY")),
     privateKey: key,
+    pq: env.LEANPOOL_PQ_AGGREGATOR
+      ? {
+          aggregator: getAddress(env.LEANPOOL_PQ_AGGREGATOR),
+          ...(env.LEANPOOL_PQ_KEY ? { key: env.LEANPOOL_PQ_KEY } : {}),
+          ...(env.LEANPOOL_PQ_KEY_FILE ? { keyFile: env.LEANPOOL_PQ_KEY_FILE } : {}),
+        }
+      : null,
     aggregate,
     rolling: env.LEANPOOL_ROLLING === "1",
     peers: (env.LEANPOOL_PEERS ?? "")
