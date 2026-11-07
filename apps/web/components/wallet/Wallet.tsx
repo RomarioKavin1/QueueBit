@@ -12,6 +12,7 @@ import { Home } from "./Home";
 import { Receive } from "./Receive";
 import { Guardians } from "./Guardians";
 import { MakePrivate } from "./Private";
+import { Permissions } from "./Permissions";
 import { Send } from "./Send";
 import { WalletProvider } from "./state";
 import { AddToken } from "./Tokens";
@@ -28,6 +29,7 @@ export type View =
   | { id: "send"; token?: `0x${string}` }
   | { id: "receive" }
   | { id: "guardians" }
+  | { id: "permissions" }
   | { id: "entry"; entryId: string }
   | { id: "wallets" }
   | { id: "add-token" }
@@ -114,6 +116,7 @@ function Shell() {
   if (view?.id === "make-private") return <MakePrivate nav={nav} />;
   if (view?.id === "receive") return <Receive nav={nav} />;
   if (view?.id === "guardians") return <Guardians nav={nav} />;
+  if (view?.id === "permissions") return <Permissions nav={nav} />;
   if (view?.id === "entry") return <EntryDetail nav={nav} entryId={view.entryId} />;
 
   return (

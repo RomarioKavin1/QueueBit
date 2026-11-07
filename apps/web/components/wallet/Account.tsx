@@ -87,6 +87,7 @@ export function AccountTab({ nav }: { nav: Nav }) {
 
       <Group title="Funds">
         <Item label="Move funds in" value="From a wallet or Safe" onClick={() => router.push("/start#move-in")} />
+        <Item label="Let someone spend" value="Limits you choose" onClick={() => nav.open({ id: "permissions" })} />
       </Group>
     </>
   );

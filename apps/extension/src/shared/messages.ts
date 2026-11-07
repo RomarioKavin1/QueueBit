@@ -1,6 +1,7 @@
 import type { Hex } from "viem";
 import type { ActivityEntry } from "../background/activity";
 import type { SessionRecord, SessionRequest } from "../background/lean/sessions";
+import type { GrantRequest, GrantView } from "../background/lean/grants";
 import type { SerializedRpcError } from "./errors";
 import type { AccountStatus, KeysView, MigrationPreview, SendPreview } from "./views";
 import type { SiteWarning } from "./sites";
@@ -175,6 +176,14 @@ export interface UiApi {
   "sessions:create": { req: Signed<SessionRequest>; res: SessionRecord };
   /** The owner removes it now. */
   "sessions:revoke": { req: Signed<{ id: `0x${string}` }>; res: SessionRecord };
+
+  // ---- spending permissions (grants: someone else's wallet spends from this account, within limits) ----
+  /** The account's grants, read from the chain (limits, today's spend, end time). */
+  "grants:list": { req: { chainId?: number }; res: GrantView[] };
+  /** The owner grants (or changes) one asset for a person (one admin transaction through LeanPool). */
+  "grants:create": { req: Signed<GrantRequest>; res: ActivityEntry };
+  /** The owner ends a person's grant now. */
+  "grants:revoke": { req: Signed<{ chainId?: number; delegate: `0x${string}` }>; res: ActivityEntry };
 
   // ---- keys & recovery ----
   "keys:view": { req: { chainId?: number }; res: KeysView };

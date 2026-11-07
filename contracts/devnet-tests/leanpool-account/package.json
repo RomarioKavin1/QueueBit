@@ -9,6 +9,7 @@
     "typecheck": "tsc -p tsconfig.json",
     "deploy": "bun src/account/scripts/deploy.ts",
     "live:sessions": "bun src/account/scripts/sessions-live.ts",
+    "live:grants": "bun --conditions=source src/account/scripts/grants-live.ts",
     "live:migrate": "bun src/account/scripts/migrate-live.ts",
     "live:keystore": "bun src/account/scripts/live-keystore.ts",
     "live:recovery": "bun src/account/scripts/recovery-live.ts",

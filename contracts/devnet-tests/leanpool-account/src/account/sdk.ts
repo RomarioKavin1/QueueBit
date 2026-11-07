@@ -294,11 +294,11 @@ export async function sendViaLeanPool(
   account: Address,
   calls: Call[],
   signer: Pick<PqKey, "publicKey" | "sign">,
-  o: { node?: string; aggregatorNode?: string; sidecar?: string; senderState?: bigint } = {},
+  o: { node?: string; aggregatorNode?: string; sidecar?: string; senderState?: bigint; senderGas?: bigint } = {},
 ) {
   const plan = await buildAndSign({
     d, account, nonceKey: 1n, nonceSeq: await keyedNonce(account, 1n), calls: [calls],
-    signers: [{ kind: "PQ", vk: signer.publicKey, sign: async (m: Hex) => signer.sign(m) }], senderState: o.senderState ?? 0n,
+    signers: [{ kind: "PQ", vk: signer.publicKey, sign: async (m: Hex) => signer.sign(m) }], senderState: o.senderState ?? 0n, ...(o.senderGas ? { senderGas: o.senderGas } : {}),
   });
   const sent = await submit(plan, { node: o.node, sidecar: o.sidecar });
   if (sent.via !== "leanpool") throw new Error("expected a LeanPool submission");

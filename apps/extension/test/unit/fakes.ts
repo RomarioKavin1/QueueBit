@@ -58,6 +58,11 @@ export function fakeChain() {
       args?: [Address];
     }) => {
       if (functionName === "isModuleInstalled") return knobs.recoveryInstalled === true;
+      // Keystore and hook views with no grants on the chain (spending permissions read these).
+      if (functionName === "getKey") return { kind: 0, roles: 0, validUntil: 0, perTxCap: 0n };
+      if (functionName === "getKeys") return [[], []];
+      if (functionName === "isSessionTarget") return false;
+      if (functionName === "sessionTokenCap") return 0n;
       const t = tokens.get(k(address));
       if (!t) throw new Error(`fake chain: no ${functionName} at ${address}`);
       if (functionName === "balanceOf") return t.balances.get(k(args![0])) ?? 0n;
@@ -71,6 +76,8 @@ export function fakeChain() {
     getTransactionCount: async ({ address }: { address: Address }) => txCount.get(k(address)) ?? 0,
     // EIP-8250 keyed nonces live in the nonce manager at keccak(account ‖ key), as AccountService.nonce reads them.
     getStorageAt: async ({ slot }: { slot: Hex }) => storage.get(slot.toLowerCase()) ?? "0x0",
+    getLogs: async () => [],
+    request: async () => null,
     estimateGas: async () => 200_000n,
     sendRawTransaction: async ({ serializedTransaction }: { serializedTransaction: Hex }) => {
       legacy.push(serializedTransaction);
