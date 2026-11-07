@@ -1,0 +1,40 @@
+{
+  "delegate": "0x68143B69ec28E0CADfb00D08314b7d8Dd7db7657",
+  "shop": "0x8F058423C50A150c5892Eec6C71C95A199B46F32",
+  "token": "0x1F8669850fffF3D25528f80a017ec3F9A165632a",
+  "account": "0x8EF0A3219A8EbFD1c5Ac5c2CA3d42ef2a78d87d8",
+  "grant": "0x85c5be1595aac8fabe2629eaf9673fe6e780ba9b2dfe93cf2d3ed626ce9115a1",
+  "ethWithin": {
+    "tx": "0xb2302ba9f6523812e0c2a3ff15a120fb75bbf1d1ff28e8c7b901c58fe14841c6",
+    "block": 11082,
+    "frames": "0x1/87453 0x1/85898",
+    "pageSaid": "ok"
+  },
+  "tokenWithin": {
+    "tx": "0xfe353ee54bad2a28f95636c8380ad51b4ab2ce983fd253dad091b2d4450d4101",
+    "block": 11088,
+    "frames": "0x1/69572 0x1/131844",
+    "pageSaid": "ok"
+  },
+  "afterPayments": {
+    "ethLeftToday": "50000000000000",
+    "tokenLeftToday": "15000000000000000000"
+  },
+  "overPerPayment": {
+    "refused": "eth_sendFrameTransaction on https://altmempool.forshtat.com/rpc: validation frame 0: reverted with data 0x0a0b0d79",
+    "pageSaid": "That's more than one payment may send."
+  },
+  "unlistedEth": {
+    "refused": "eth_sendFrameTransaction on https://altmempool.forshtat.com/rpc: validation frame 0: reverted with data 0x0a0b0d79",
+    "pageSaid": "You may only send ETH to the addresses the owner listed."
+  },
+  "overDaily": {
+    "tx": "0xa815d0c2da36864ae35f46cbf57b1c507d6a4e4bd2bf1ebcebf490d3e1ac2a19",
+    "block": 11095,
+    "frames": "0x1/67453 0x0/48489",
+    "pageSaid": "That's more ETH than is left for today.",
+    "simulatedRevert": "no revert data"
+  },
+  "revoke": "0xb012e964e4f42ccf60c2d3681bb019d49bebf00a1e3a6e2f71256af1bf5a7ac8",
+  "revokedClean": true
+}
