@@ -114,6 +114,25 @@
       ],
       "initCodeHash": "0x0f71563e75c373c3e1c03bfd7e6979187fc434eabc757126168ba6e54b700b74",
       "deployTx": "0x67a1a3c4ffcaddae3122178720180e05938905bd63cfc9e734efeee80d1459e4"
+    },
+    "C13Verifier": {
+      "address": "0x0E8826D0506D1d706B2E80DeE8608d6d02c7C98F",
+      "artifact": "C13Verifier.sol/C13Verifier",
+      "args": [],
+      "initCodeHash": "0x6bb7940450c486efc601df5db8e29082e5328f9d5793e0fa807a5e55b223dc38",
+      "deployTx": "0xf541fcced05d9120e291d67ea9114fa722a298c1382c9b9377d48cfdf0a5c3c9"
+    },
+    "PQAggregator": {
+      "address": "0x19F0F29c94edCc30476a8Ef9BF5A453b6A1B477a",
+      "artifact": "PQAggregator.sol/PQAggregator",
+      "args": [
+        "0x9B7C395c5b666D23dbd1E08781a85aE1e5944A80",
+        "0x0E8826D0506D1d706B2E80DeE8608d6d02c7C98F",
+        "0x7947405f7da55e4e5da32a288ca41d8eb28b683cf958ea5819dc762aba4c048f",
+        4194304
+      ],
+      "initCodeHash": "0x4d72391d9c4340d38871d139408917ec58af0ecf3e179cba9b016a12f45e40b2",
+      "deployTx": "0x260998f2971f01ceaa350ba56f67fc8e5007ee6b6e2c5362a60daeb5fdad4764"
     }
   },
   "tokens": {

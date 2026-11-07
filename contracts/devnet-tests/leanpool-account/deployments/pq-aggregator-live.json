@@ -1,0 +1,17 @@
+{
+  "account": "0x5ea01d3639873C6dE70C8c1266530fF2d385CFDd",
+  "aggregator": "0x19F0F29c94edCc30476a8Ef9BF5A453b6A1B477a",
+  "owner": "0x8779cb52b77c49da6277e880f061a53262cffc766cc12acd7332d7c674fdadf7",
+  "payment": {
+    "tx": "0x304ad474fc938f2ae3bcc5fe49ae2ddfd6107f2e31eea89884db65ccb5918729",
+    "block": 11030,
+    "frames": "0x1/76313 0x1/48183"
+  },
+  "rootPost": {
+    "root": "0xb017981c2cf03b86bd612940b6be57034eff467d8cb488f1d808363f4455f2d3",
+    "tx": "0xe28e55725173c6a77876a62529cf6b0627766a0b956afc5b6a29f46be733393e",
+    "gasUsed": "460524",
+    "from": "0x7f5efbb11cc27412257fafe3e6ac1ba0aaf70512",
+    "block": 11025
+  }
+}

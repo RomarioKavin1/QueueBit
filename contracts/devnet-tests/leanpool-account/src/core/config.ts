@@ -5,6 +5,8 @@ import { privateKeyToAccount } from "viem/accounts";
 
 /** This project's folder (contracts/devnet-tests/leanpool-account). */
 export const ROOT = path.resolve(import.meta.dir, "../..");
+/** Where the role keys live: KEYS_DIR, else .keys here (git-ignored). A worktree can point KEYS_DIR at the main checkout's. */
+export const KEYS_DIR = process.env.KEYS_DIR ?? path.join(ROOT, ".keys");
 
 export const devnet = {
   chainId: 1337,
@@ -40,7 +42,7 @@ export const local = {
 export function key(role: string): { address: Address; privateKey: Hex } {
   const env = process.env[`${role.toUpperCase()}_KEY`] ?? (role === "funder" ? process.env.DEPLOYER_KEY : undefined);
   if (env) return { address: privateKeyToAccount(env as Hex).address, privateKey: env as Hex };
-  const file = path.join(ROOT, ".keys", `${role}.json`);
+  const file = path.join(KEYS_DIR, `${role}.json`);
   if (!fs.existsSync(file)) throw new Error(`no key for "${role}": set ${role.toUpperCase()}_KEY or write ${file}`);
   const [k] = JSON.parse(fs.readFileSync(file, "utf8"));
   return { address: k.address, privateKey: k.private_key };
