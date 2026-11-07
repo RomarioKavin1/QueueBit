@@ -11,20 +11,37 @@ import { privateKeyToAccount } from "viem/accounts";
 export { profile, encodeTx, frame, newTx, secp256k1Placeholder, signTx, txHash, toWire };
 export type { Frame, FrameTx };
 
-export const ETHREX = process.env.ETHREX_URL ?? "http://localhost:8545";
-export const SIDECAR = process.env.SIDECAR_URL ?? "http://localhost:14337/rpc";
+/** `PUBLIC=1`: the public alt-mempool devnet (chain 1337 too): its RPC, the Miner sidecar, its staking registry, the
+ *  funding key from `FUNDER_KEY_FILE` (never anvil #5, which is not funded there) and cheap legacy gas. */
+export const PUBLIC = process.env.PUBLIC === "1";
+export const ETHREX = process.env.ETHREX_URL ?? (PUBLIC ? "https://altmempool.forshtat.com" : "http://localhost:8545");
+/** On the public devnet: the Miner's sidecar (the gateway's gossip does not reach the miner). */
+export const SIDECAR = process.env.SIDECAR_URL ?? (PUBLIC ? "https://altmempool.forshtat.com/rpc" : "http://localhost:14337/rpc");
 /** The canonical BUDGET-010 patched sidecar (devnet/patched-sidecar/README.md). */
 export const PATCHED_SIDECAR = process.env.PATCHED_SIDECAR_URL ?? "http://localhost:14340/rpc";
 export const CHAIN_ID = 1337n;
-export const REGISTRY: Address = (process.env.STAKING_REGISTRY as Address) ?? "0x8464135c8F25Da09e49BC8782676a84730C318bC";
+export const REGISTRY: Address = (process.env.STAKING_REGISTRY as Address) ??
+  (PUBLIC ? "0xd51c04d7a0b01124e84de152f4e56d9eecb22d2f" : "0x8464135c8F25Da09e49BC8782676a84730C318bC");
+/** Legacy-tx gas price: 2 gwei locally; 0.002 gwei on the public devnet (base fee ~9 wei, deploys cost ~150M gas). */
+export const LEGACY_GAS_PRICE = PUBLIC ? 2_000_000n : 2_000_000_000n;
+/** `[{ address, private_key }]` (the QueueBit deployer's file by default); read in-process, never printed. */
+export const FUNDER_KEY_FILE = process.env.FUNDER_KEY_FILE ??
+  new URL("../../leanpool-account/.keys/funder.json", import.meta.url).pathname;
+function publicFunderKey(): Hex {
+  const k = JSON.parse(readFileSync(FUNDER_KEY_FILE, "utf8"))[0]?.private_key as string | undefined;
+  if (!k || !/^0x[0-9a-fA-F]{64}$/.test(k)) throw new Error(`no private_key in ${FUNDER_KEY_FILE}`);
+  return k as Hex;
+}
 /** anvil #5: the privacy workstream's root funding key (public test key). */
 export const ROOT_FUNDER: Hex = "0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba";
 /** The key the scripts fund from: anvil #5 itself, or (`FUNDER_LABEL=x`) the sub-account
  *  keccak256(anvil#5 ‖ "queuebit.privacy.sub:" ‖ x), topped up from anvil #5 by `ensureFunder` (so a run never shares
  *  nonces with another script on anvil #5). */
-export const FUNDER: Hex = process.env.FUNDER_LABEL
-  ? keccak256(concat([ROOT_FUNDER, toHex(`queuebit.privacy.sub:${process.env.FUNDER_LABEL}`)]))
-  : ROOT_FUNDER;
+export const FUNDER: Hex = PUBLIC
+  ? publicFunderKey()
+  : process.env.FUNDER_LABEL
+    ? keccak256(concat([ROOT_FUNDER, toHex(`queuebit.privacy.sub:${process.env.FUNDER_LABEL}`)]))
+    : ROOT_FUNDER;
 export const addr = (k: Hex): Address => privateKeyToAccount(k).address;
 
 export const ethrex = (m: string, p: unknown[] = []) => rpc(ETHREX, m, p) as Promise<any>;
@@ -43,14 +60,20 @@ export async function waitReceipt(hash: Hex, timeoutMs = 180_000): Promise<any> 
 }
 
 const nonces = new Map<Address, bigint>();
-/** Legacy tx from `key` (sequential nonces tracked locally; one sender, one script). */
-export async function send(key: Hex, to: Address | null, data: Hex = "0x", value = 0n, gas = 3_000_000n): Promise<any> {
+/** Legacy tx from `key` (sequential nonces tracked locally; one sender, one script). `gas` undefined: estimated
+ *  (+25 %), which the public devnet needs (state gas: a new account ~200k, a new slot ~100k). */
+export async function send(key: Hex, to: Address | null, data: Hex = "0x", value = 0n, gas?: bigint): Promise<any> {
   const acct = privateKeyToAccount(key);
+  if (gas === undefined) {
+    gas = PUBLIC
+      ? (BigInt(await ethrex("eth_estimateGas", [{ from: acct.address, to: to ?? undefined, data, value: hex(value) }])) * 5n) / 4n
+      : 3_000_000n;
+  }
   let nonce = nonces.get(acct.address);
   if (nonce === undefined) nonce = BigInt(await ethrex("eth_getTransactionCount", [acct.address, "pending"]));
   nonces.set(acct.address, nonce + 1n);
   const signed = await acct.signTransaction({
-    type: "legacy", chainId: Number(CHAIN_ID), nonce: Number(nonce), gasPrice: 2_000_000_000n, gas,
+    type: "legacy", chainId: Number(CHAIN_ID), nonce: Number(nonce), gasPrice: LEGACY_GAS_PRICE, gas,
     to: to ?? undefined, data, value,
   });
   const hash = await ethrex("eth_sendRawTransaction", [signed]);
@@ -61,6 +84,11 @@ export async function send(key: Hex, to: Address | null, data: Hex = "0x", value
 
 /** Tops the sub-account funder up to `minWei` from anvil #5 (no-op when FUNDER is anvil #5). */
 export async function ensureFunder(minWei: bigint): Promise<void> {
+  if (PUBLIC) {
+    const have = BigInt(await ethrex("eth_getBalance", [addr(FUNDER), "latest"]));
+    if (have < minWei) throw new Error(`public funder ${addr(FUNDER)} has ${have} wei < ${minWei}`);
+    return;
+  }
   if (FUNDER === ROOT_FUNDER) return;
   const have = BigInt(await ethrex("eth_getBalance", [addr(FUNDER), "latest"]));
   if (have >= minWei) return;
@@ -99,7 +127,7 @@ export async function deploy(key: Hex, file: string, args: unknown[] = [], libs:
   const blockLimit = BigInt((await ethrex("eth_getBlockByNumber", ["latest", false])).gasLimit) - 2_000_000n;
   const gas = (est * 5n) / 4n > blockLimit ? blockLimit : (est * 5n) / 4n;
   const r = await send(key, null, data, value, gas);
-  return { address: r.contractAddress as Address, hash: r.transactionHash as Hex, gasUsed: BigInt(r.gasUsed), abi: a.abi };
+  return { address: r.contractAddress as Address, hash: r.transactionHash as Hex, gasUsed: BigInt(r.gasUsed), blockNumber: r.blockNumber as Hex, abi: a.abi };
 }
 
 export const ZERO: Address = "0x0000000000000000000000000000000000000000";

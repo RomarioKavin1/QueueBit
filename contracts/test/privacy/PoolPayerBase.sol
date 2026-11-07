@@ -105,6 +105,12 @@ abstract contract PoolPayerBase is FrameSim {
         });
     }
 
+    /// The PoolPayer under test (`PoolPayerLite.t.sol` swaps in the cheap-VERIFY variant at the same CREATE nonce, so
+    /// the fixtures' proofs, whose context binds the processooor address, stay valid).
+    function _deployPayer(PoolPayer.Config memory c) internal virtual returns (PoolPayer) {
+        return new PoolPayer(c);
+    }
+
     function setUp() public virtual {
         (sender, senderPk) = makeAddrAndKey("sender");
         // Deployment order = the fixture generator's CREATE nonces (1..7 of this test contract).
@@ -118,7 +124,7 @@ abstract contract PoolPayerBase is FrameSim {
         IERC20 asset = IERC20(pool.ASSET());
         vm.prank(owner);
         entrypoint.registerPool(asset, IPrivacyPool(address(pool)), 0, 0, 0);
-        payer = new PoolPayer(_config());
+        payer = _deployPayer(_config());
         griefer = new RevertingReceiver();
         assertEq(address(pool), Fx.POOL, "fixture: pool address");
         assertEq(address(payer), Fx.POOL_PAYER, "fixture: PoolPayer address");

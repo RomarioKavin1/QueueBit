@@ -3,15 +3,18 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "PoolPayer (privacy milestone P4): Privacy Pools withdrawal proofs, the Foundry fixture generator and the local-devnet e2e (bun; standalone, not a workspace package)",
+  "description": "PoolPayer (privacy milestone P4): Privacy Pools withdrawal proofs, the Foundry fixture generator, the local-devnet e2e and the public-devnet PoolPayerLite + Kohaku run (bun; standalone, not a workspace package)",
   "scripts": {
     "fixtures": "node src/gen-fixtures.ts",
     "e2e": "node src/e2e.ts",
-    "mass-invalidation": "node src/mass-invalidation.ts"
+    "mass-invalidation": "node src/mass-invalidation.ts",
+    "public-lite": "PUBLIC=1 node --import ./src/esm-extension-fix.mjs src/public-lite.ts",
+    "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
     "@fatsolutions/privacy-pools-core-circuits": "1.0.5",
     "@forshtat/hegota-support": "file:../../../devnet/tools/vendor/forshtat-hegota-support-0.0.1.tgz",
+    "@kohaku-eth/privacy-pools": "0.1.0-alpha.38",
     "@zk-kit/lean-imt": "2.2.2",
     "poseidon-lite": "0.3.0",
     "snarkjs": "0.7.5",
