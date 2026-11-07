@@ -8,7 +8,7 @@ import { Wallet } from "../../src/background/wallet";
 import { MemoryKV } from "../../src/shared/kv";
 
 export const MNEMONIC = "test test test test test test test test test test test junk";
-export const AGGREGATOR = "0x99Bd573ABC2E87D33429856d13712BA82203AF41" as Address;
+export const AGGREGATOR = "0x19F0F29c94edCc30476a8Ef9BF5A453b6A1B477a" as Address;
 export const FAST = { N: 2 ** 10, r: 8, p: 1 };
 
 /** A stand-in for the leanSPHINCS WASM key: a 32-byte public key from the seed, fixed-size signatures. */

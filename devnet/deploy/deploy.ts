@@ -7,7 +7,9 @@
 //
 // Options (env): ETHREX_URL; DEPLOYER_KEY (default anvil #7, the local devnet's extension e2e key; public devnet: a
 // funded key); STAKING_REGISTRY (recorded for the sidecar's staking rules; LeanAccount itself never stakes);
-// ADDRESSES_FILE (default addresses.local.json); MIN_BOND (DepsRegistry's aggregator bond, default 0.01 ETH).
+// ADDRESSES_FILE (default addresses.local.json); MIN_BOND (DepsRegistry's aggregator bond, default 0.01 ETH);
+// GAS_PRICE (legacy gas price in wei, default 2 gwei); PQ_AGGREGATOR_PK (the PQAggregator's SPHINCS- C13 public key,
+// pkSeed ‖ pkRoot: deploys a PQAggregator for it and bonds it; without it a PQAggregator already in the file is kept).
 //
 // Idempotent by construction: every contract goes through the Arachnid CREATE2 deployer (in the devnet genesis) with
 // one fixed salt, so its address is a function of its init code (creation code + constructor args). A run deploys
@@ -23,6 +25,9 @@
 //   Safe, SafeProxyFactory, MultiSendCallOnly, CompatibilityFallbackHandler
 //                                              Safe v1.4.1, for the Safe -> LeanAccount migration demo
 //   LegacyAccount(0)                           a UUPS smart account stand-in, for the upgrade-in-place migration demo
+//   C13Verifier()                              stateless SPHINCS- C13 verifier (IPQVerifier)
+//   PQAggregator(registry, verifier, pk, 2^22) a LeanPool aggregator authorized by a C13 key (roots, proof hashes,
+//                                              key rotation, withdrawals); any EOA pays its gas. Bonded MIN_BOND.
 // Devnet test tokens (TestToken, public `mint(address,uint256)`; not minted here), under "tokens": USDC (6), DAI (18).
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -31,9 +36,11 @@ import {
   createPublicClient,
   createWalletClient,
   encodeDeployData,
+  encodeFunctionData,
   getContractAddress,
   http,
   keccak256,
+  parseAbi,
   parseEther,
   stringToHex,
   toFunctionSelector,
@@ -54,6 +61,10 @@ const SALT = keccak256(stringToHex("queuebit.devnet.deploy.v2-leanaccount"));
 const STAKING_REGISTRY: Address =
   (process.env.STAKING_REGISTRY as Address | undefined) ?? "0x8464135c8F25Da09e49BC8782676a84730C318bC";
 const MIN_BOND = BigInt(process.env.MIN_BOND ?? parseEther("0.01").toString());
+const GAS_PRICE = BigInt(process.env.GAS_PRICE ?? "2000000000");
+const PQ_AGGREGATOR_PK = process.env.PQ_AGGREGATOR_PK as Hex | undefined;
+/** SPHINCS- C13's signatures per key at the claimed 128-bit level (PQAggregator.C13_SIGNATURE_BUDGET). */
+const C13_SIGNATURE_BUDGET = 2 ** 22;
 
 const here = fileURLToPath(new URL(".", import.meta.url));
 const OUT = fileURLToPath(new URL("../../contracts/out/", import.meta.url));
@@ -138,7 +149,7 @@ async function deploy(name: string, file: string, args: unknown[], key = name): 
     const data = concatHex([SALT, initCode]);
     // New code and storage cost state gas on the devnet's resource-based gas model: estimate, then add 30%.
     const gas = ((await pub.estimateGas({ account: funder.address, to: CREATE2_DEPLOYER, data })) * 13n) / 10n;
-    const hash = await wallet.sendTransaction({ to: CREATE2_DEPLOYER, data, gas, gasPrice: 2_000_000_000n, type: "legacy" });
+    const hash = await wallet.sendTransaction({ to: CREATE2_DEPLOYER, data, gas, gasPrice: GAS_PRICE, type: "legacy" });
     const r = await pub.waitForTransactionReceipt({ hash, timeout: 240_000 });
     if (r.status !== "success" || (await pub.getCode({ address })) === undefined) {
       throw new Error(`${key}: deployment failed (${hash}, ${r.gasUsed} gas)`);
@@ -172,6 +183,48 @@ await deploy("SafeProxyFactory", "SafeProxyFactory.sol", []);
 await deploy("MultiSendCallOnly", "MultiSendCallOnly.sol", []);
 await deploy("CompatibilityFallbackHandler", "CompatibilityFallbackHandler.sol", []);
 await deploy("LegacyAccount", "LegacyAccount.sol", ["0x0000000000000000000000000000000000000000"]);
+
+// Post-quantum root authorization: the aggregator accounts name can be a PQAggregator (a C13 key, verified in
+// execution) instead of an ECDSA EOA.
+const c13Verifier = await deploy("C13Verifier", "C13Verifier.sol", []);
+if (PQ_AGGREGATOR_PK) {
+  if (!/^0x[0-9a-fA-F]{64}$/u.test(PQ_AGGREGATOR_PK)) throw new Error("PQ_AGGREGATOR_PK must be 32 bytes of hex");
+  const pqAggregator = await deploy("PQAggregator", "PQAggregator.sol", [
+    registry,
+    c13Verifier,
+    PQ_AGGREGATOR_PK,
+    C13_SIGNATURE_BUDGET,
+  ]);
+  if (!checkOnly) await bondPQAggregator(pqAggregator);
+} else if (previous?.contracts.PQAggregator) {
+  // Kept from the file (its key is not an input of this run): it must still be on chain.
+  const prev = previous.contracts.PQAggregator;
+  const code = await pub.getCode({ address: prev.address });
+  if (!code || code === "0x") {
+    console.log(`! PQAggregator ${prev.address} NOT deployed (set PQ_AGGREGATOR_PK to deploy it)`);
+    missing++;
+  } else {
+    console.log(`= PQAggregator ${prev.address} (kept; set PQ_AGGREGATOR_PK to redeploy)`);
+  }
+  contracts.PQAggregator = prev;
+}
+
+/** Bonds the PQAggregator up to MIN_BOND in the registry (PQAggregator.bond forwards the value as the aggregator). */
+async function bondPQAggregator(pqAggregator: Address): Promise<void> {
+  const abi = parseAbi(["function bonds(address) view returns (uint256)", "function bond() payable"]);
+  const bonded = await pub.readContract({ address: registry, abi, functionName: "bonds", args: [pqAggregator] });
+  if (bonded >= MIN_BOND) {
+    console.log(`= PQAggregator bond ${bonded} wei`);
+    return;
+  }
+  const value = MIN_BOND - bonded;
+  const data = encodeFunctionData({ abi, functionName: "bond" });
+  const gas = ((await pub.estimateGas({ account: funder.address, to: pqAggregator, data, value })) * 13n) / 10n;
+  const hash = await wallet.sendTransaction({ to: pqAggregator, data, value, gas, gasPrice: GAS_PRICE, type: "legacy" });
+  const r = await pub.waitForTransactionReceipt({ hash, timeout: 240_000 });
+  if (r.status !== "success") throw new Error(`PQAggregator bond failed (${hash})`);
+  console.log(`+ PQAggregator bonded ${value} wei (${hash})`);
+}
 
 // Devnet test tokens: deployed like the contracts, recorded under "tokens" (not in "contracts").
 const tokens: Record<string, TokenEntry> = {};

@@ -19,6 +19,9 @@ import { profile, toWire, txHash, type FrameTx } from "./frameTx.js";
 import type { Chain8288 } from "./node.js";
 import { AdmittedButPending } from "./node.js";
 import type { NodeConfig } from "./config.js";
+import type { C13Signer } from "./c13.js";
+import { PQ_AGGREGATOR_ABI } from "./pqAggregator.js";
+import { pqOps, type PQOps, type SignatureLedger } from "./pqOps.js";
 
 export const REGISTRY_ABI = parseAbi([
   "function minBond() view returns (uint256)",
@@ -27,6 +30,7 @@ export const REGISTRY_ABI = parseAbi([
   "function postRoot(bytes32 root, uint16 count, address[] wallets) returns (uint8 ring)",
   "function attachProof(bytes32 root, bytes32 proofHash)",
   "function rootAt(address aggregator, address wallet, uint8 i) view returns (bytes32)",
+  "function isPosted(address aggregator, bytes32 root) view returns (bool)",
   "function batches(address aggregator, bytes32 root) view returns (uint64 postedAt, uint16 count, bool posted, bytes32 proofHash)",
   "event RootPosted(bytes32 indexed root, address indexed aggregator, uint16 count, uint8 ring)",
   "event ProofAttached(bytes32 indexed root, address indexed aggregator, bytes32 proofHash)",
@@ -78,10 +82,22 @@ export interface NodeChain {
   chain: Chain8288;
   keyedNonce(sender: Address, nonceKey: bigint): Promise<bigint>;
   ensureBond(): Promise<{ bonded: bigint; min: bigint }>;
+  /** The aggregator identity accounts name in their policy: the ECDSA key's address, or the PQAggregator. */
   address: Address;
+  /** The EOA that sends the registry txs (= `address` in ECDSA mode; only the gas payer in PQ mode). */
+  gasPayer: Address;
+  /** PQ mode only. */
+  pq: PQOps | null;
 }
 
-export function makeChain(cfg: NodeConfig, log: (...a: unknown[]) => void): NodeChain {
+/** PQ mode: the C13 signer and its signature count (`cfg.pq` names the PQAggregator). */
+export interface PQSetup {
+  signer: C13Signer;
+  ledger: SignatureLedger;
+}
+
+export function makeChain(cfg: NodeConfig, log: (...a: unknown[]) => void, pqSetup?: PQSetup): NodeChain {
+  if (!!cfg.pq !== !!pqSetup) throw new Error("PQ mode needs both LEANPOOL_PQ_AGGREGATOR and the C13 signer");
   const chain = defineChain({
     id: cfg.chainId,
     name: "leanpool-chain",
@@ -91,6 +107,8 @@ export function makeChain(cfg: NodeConfig, log: (...a: unknown[]) => void): Node
   const account = privateKeyToAccount(cfg.privateKey);
   const pub = createPublicClient({ chain, transport: http(cfg.rpcUrl, { timeout: 30_000 }) });
   const wallet = createWalletClient({ chain, account, transport: http(cfg.rpcUrl, { timeout: 30_000 }) });
+  /** The aggregator identity: rings, bonds and batches are keyed by it. */
+  const identity: Address = cfg.pq?.aggregator ?? account.address;
 
   /** Legacy tx; new storage slots cost extra state gas on the devnet's resource-based model: estimate, add 30%. */
   async function sendLegacy(tx: { to: Address; data: Hex; value?: bigint }) {
@@ -127,18 +145,50 @@ export function makeChain(cfg: NodeConfig, log: (...a: unknown[]) => void): Node
   async function ensureBond(): Promise<{ bonded: bigint; min: bigint }> {
     const [min, bonded] = await Promise.all([
       pub.readContract({ address: cfg.registry, abi: REGISTRY_ABI, functionName: "minBond" }),
-      pub.readContract({ address: cfg.registry, abi: REGISTRY_ABI, functionName: "bonds", args: [account.address] }),
+      pub.readContract({ address: cfg.registry, abi: REGISTRY_ABI, functionName: "bonds", args: [identity] }),
     ]);
     if (bonded >= min || cfg.autoBondWei === 0n) return { bonded, min };
     const value = min - bonded > cfg.autoBondWei ? cfg.autoBondWei : min - bonded;
+    // PQ mode: PQAggregator.bond() forwards the value to the registry as the aggregator (adding stake is permissionless).
     await sendLegacy({
-      to: cfg.registry,
-      data: encodeFunctionData({ abi: REGISTRY_ABI, functionName: "bond" }),
+      to: cfg.pq ? cfg.pq.aggregator : cfg.registry,
+      data: encodeFunctionData({ abi: cfg.pq ? PQ_AGGREGATOR_ABI : REGISTRY_ABI, functionName: "bond" }),
       value,
     });
-    log(`bonded ${value} wei in ${cfg.registry}`);
+    log(`bonded ${value} wei in ${cfg.registry} for ${identity}`);
     return { bonded: bonded + value, min };
   }
+
+  const pq = pqSetup
+    ? pqOps(
+        {
+          chainId: cfg.chainId,
+          registry: cfg.registry,
+          aggregator: identity,
+          read: (functionName) => pub.readContract({ address: identity, abi: PQ_AGGREGATOR_ABI, functionName }),
+          publicKey: () => pub.readContract({ address: identity, abi: PQ_AGGREGATOR_ABI, functionName: "publicKey" }),
+          isPosted: (root) =>
+            pub.readContract({
+              address: cfg.registry,
+              abi: REGISTRY_ABI,
+              functionName: "isPosted",
+              args: [identity, root],
+            }),
+          proofHashOf: async (root) =>
+            (
+              await pub.readContract({
+                address: cfg.registry,
+                abi: REGISTRY_ABI,
+                functionName: "batches",
+                args: [identity, root],
+              })
+            )[3],
+          send: (data) => sendLegacy({ to: identity, data }),
+        },
+        pqSetup.signer,
+        pqSetup.ledger,
+      )
+    : null;
 
   const c: Chain8288 = {
     async holdsKey(sender: Address, vk: Hex, validator: Address | null) {
@@ -150,7 +200,7 @@ export function makeChain(cfg: NodeConfig, log: (...a: unknown[]) => void): Node
         const agg = await pub
           .readContract({ address: sender, abi: SENDER_ABI, functionName: "aggregator" })
           .catch(() => null);
-        return !agg || agg.toLowerCase() === account.address.toLowerCase() || !cfg.aggregate;
+        return !agg || agg.toLowerCase() === identity.toLowerCase() || !cfg.aggregate;
       }
       if (!cfg.keystore || validator.toLowerCase() !== cfg.keystore.toLowerCase()) return false;
       const k = await pub
@@ -166,6 +216,13 @@ export function makeChain(cfg: NodeConfig, log: (...a: unknown[]) => void): Node
       );
     },
     async postRoot(root, count, wallets) {
+      if (pq) {
+        // PQAggregator.post: the C13 signature over (chain, contract, registry, nonce, root, count, wallets) is
+        // verified in execution; the gas payer's ECDSA key authorizes nothing.
+        const r = await pq.postRoot(root, count, wallets);
+        log(`  PQAggregator.post ${r.tx}: ${r.gasUsed} gas`);
+        return { tx: r.tx, block: r.block, ring: ringOf(r.logs) };
+      }
       const r = await sendLegacy({
         to: cfg.registry,
         data: encodeFunctionData({ abi: REGISTRY_ABI, functionName: "postRoot", args: [root, count, wallets] }),
@@ -181,7 +238,7 @@ export function makeChain(cfg: NodeConfig, log: (...a: unknown[]) => void): Node
             address: cfg.registry,
             abi: REGISTRY_ABI,
             functionName: "rootAt",
-            args: [account.address, w, i],
+            args: [identity, w, i],
           });
           if (r.toLowerCase() === root.toLowerCase()) {
             found = i;
@@ -194,6 +251,11 @@ export function makeChain(cfg: NodeConfig, log: (...a: unknown[]) => void): Node
       return at;
     },
     async attachProof(root, proofHash) {
+      if (pq) {
+        const r = await pq.attachProof(root, proofHash);
+        log(`  PQAggregator.attachProof ${r.tx}: ${r.gasUsed} gas`);
+        return r.tx;
+      }
       const r = await sendLegacy({
         to: cfg.registry,
         data: encodeFunctionData({ abi: REGISTRY_ABI, functionName: "attachProof", args: [root, proofHash] }),
@@ -224,5 +286,5 @@ export function makeChain(cfg: NodeConfig, log: (...a: unknown[]) => void): Node
       return { status: r.status, gasUsed: BigInt(r.gasUsed) };
     },
   };
-  return { chain: c, keyedNonce, ensureBond, address: account.address };
+  return { chain: c, keyedNonce, ensureBond, address: identity, gasPayer: account.address, pq };
 }

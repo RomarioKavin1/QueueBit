@@ -125,8 +125,9 @@ Open `/test`. Each panel calls the engine, and the right-hand column logs every 
 | Private balance: Move to public, public exit | the Groth16 prover, **not hosted in the web engine yet** |
 
 **The LeanPool node.** Owner-signed transactions go through a LeanPool node, and the public devnet has no public one
-yet. Accounts on the public devnet trust the pinned aggregator `0x99Bd…AF41`, so a node must run with that
-aggregator's key (`contracts/devnet-tests/leanpool-account/.keys/aggregator.json`, not committed). The other option is
+yet. Accounts on the public devnet trust the pinned aggregator, the PQAggregator contract `0x19F0…477a`, so a node
+must run in PQ mode with its C13 key (`contracts/devnet-tests/leanpool-account/.keys/pq-aggregator.json`, not
+committed; see `services/leanpool-node/README.md`). The other option is
 the local devnet with your own node. See the root README "Quickstart" steps 1–3, and set the node URL in **Engine &
 network**.
 

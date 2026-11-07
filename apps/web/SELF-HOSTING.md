@@ -67,7 +67,8 @@ Check it with `curl localhost:8701/health` (`{"ok":true,…}`). It bonds 0.01 ET
 posts a root per batch and proves a STARK per batch in the background (30–75 s each; keep `LEANPOOL_DATA_DIR`).
 
 **Which aggregator key.** An account's address is bound to the aggregator its policy names, and the public network
-pins one in `apps/extension/src/shared/chains.ts` (`aggregator: "0x99Bd…AF41"`). The app refuses a node that posts
+pins one in `apps/extension/src/shared/chains.ts` (`aggregator: "0x19F0…477a"`, a PQAggregator contract: a node
+serves it in PQ mode, `LEANPOOL_PQ_AGGREGATOR` + its C13 key). The app refuses a node that posts
 from another address instead of silently creating a different account. So either:
 
 - **use the pinned aggregator**: run the node with its key (held by the QueueBit maintainers, not in the repository),
