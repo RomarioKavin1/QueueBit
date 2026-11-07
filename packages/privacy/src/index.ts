@@ -116,6 +116,9 @@ export { WithdrawalInputError, buildWithdrawInputs } from "./pp/withdraw.js";
 export type { WithdrawInputsArgs } from "./pp/withdraw.js";
 export {
   DEFAULT_POOL_PAYER_LIMITS,
+  POOL_PAYER_LITE_LIMITS,
+  SECP256K1_VERIFY_GAS,
+  STOCK_MAX_VERIFY_GAS,
   MAX_FEE_UINT96,
   MAX_SIGNATURES,
   MAX_UNPRICED_DATA_BYTES,

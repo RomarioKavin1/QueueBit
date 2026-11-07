@@ -210,6 +210,8 @@ export class PrivacyPoolsV1Client {
     note: Note;
     amount: bigint;
     broadcaster: FramePaymasterBroadcaster;
+    /** Who receives the money (a private send); default: the fresh sender itself. */
+    recipient?: Address;
     refundRecipient?: Address;
     /** The fresh sender; default: derived from the change note's vault signature (recoverable from the vault). */
     sender?: FrameSenderSigner;
@@ -225,6 +227,7 @@ export class PrivacyPoolsV1Client {
     const q = await a.broadcaster.quote({
       sender,
       rootIndexHint: hint,
+      ...(a.recipient ? { recipient: a.recipient } : {}),
       ...(a.refundRecipient ? { refundRecipient: a.refundRecipient } : {}),
     });
     if (q.fee > a.amount) throw new Error(`withdrawal ${a.amount} does not cover the gas (${q.fee})`);

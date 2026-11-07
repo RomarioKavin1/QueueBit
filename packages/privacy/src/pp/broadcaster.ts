@@ -1,4 +1,4 @@
-import type { Address, Hex } from "viem";
+import { isAddressEqual, type Address, type Hex } from "viem";
 import { privateKeyToAddress } from "viem/accounts";
 import { encodeTx, signTx, txHash, type FrameTx, type FrameTxReceipt, type Profile } from "@queuebit/frames";
 import {
@@ -209,11 +209,16 @@ export class FramePaymasterBroadcaster {
   async quote(a: {
     sender: FrameSenderSigner;
     rootIndexHint: number;
+    /** Who receives the withdrawal (and, without `refundRecipient`, the unused fee). Default: the fresh sender. */
+    recipient?: Address;
     refundRecipient?: Address;
   }): Promise<FramePaymasterQuote> {
     rejectFeeOptions(a);
     if ("senderKey" in (a as object)) throw new TypeError("pass a signer handle (localFrameSigner), not a private key");
     const sender = a.sender.address;
+    const recipient = a.recipient ?? sender;
+    for (const r of [recipient, a.refundRecipient])
+      if (r && isAddressEqual(r, this.o.payer)) throw new Error("the recipient can't be the fee payer itself");
     this.signers.set(sender.toLowerCase(), a.sender);
     // The nonce is signed into the tx whose max cost becomes the fee, and the fee is bound by the proof's `context`:
     // a guessed nonce would only surface as a failed re-simulation after the proof, so an RPC failure here is an error.
@@ -221,7 +226,7 @@ export class FramePaymasterBroadcaster {
     const mk = (fee: bigint) =>
       poolPayerWithdrawal({
         payer: this.o.payer,
-        recipient: sender,
+        recipient,
         fee,
         ...(a.refundRecipient ? { refundRecipient: a.refundRecipient } : {}),
       });
