@@ -13,7 +13,6 @@ import {
   WalletLogos,
 } from "@/components/figures/Diagrams";
 import { FigAttack } from "@/components/figures/FigAttack";
-import { FigLeanPool } from "@/components/figures/FigLeanPool";
 import { FigMoveIn } from "@/components/figures/FigMoveIn";
 import { FigSession } from "@/components/figures/FigSession";
 import { FigSignature } from "@/components/figures/FigSignature";
@@ -109,17 +108,6 @@ const SLIDES: Slide[] = [
     ],
     figure: <FigSignature />,
     plate: ["How the owner key signs", "A one-time key at a leaf plus the sibling hashes up to the root."],
-  },
-  {
-    id: "leanpool",
-    kicker: "LeanPool",
-    title: "Big signatures, small footprint.",
-    points: [
-      "A LeanPool node checks each 4 KB signature and batches many together.",
-      "Ethereum stores one 32-byte root. Your account asks: is my payment in it?",
-    ],
-    figure: <FigLeanPool />,
-    plate: ["LeanPool", "Many signatures go in; one root comes out."],
   },
   {
     id: "gas",
