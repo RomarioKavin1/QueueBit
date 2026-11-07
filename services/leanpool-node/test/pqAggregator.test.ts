@@ -88,6 +88,9 @@ function fakeContract(o: { publicKey: Hex; budget?: bigint; verify?: (pk: Hex, d
     async isPosted(root) {
       return st.posted.has(root);
     },
+    async proofHashOf(root) {
+      return st.posted.get(root)?.proofHash ?? pad("0x", { size: 32 });
+    },
     async send(data) {
       const call = decodeFunctionData({ abi: PQ_AGGREGATOR_ABI, data });
       const tx = keccak256(toHex(++st.txs));
@@ -194,6 +197,10 @@ describe("pqOps", () => {
     await ops.attachProof(root, keccak256("0xaa"));
     expect(st.attachNonce).toBe(1n);
     expect(st.posted.get(root)!.proofHash).toBe(keccak256("0xaa"));
+    // attached already: no second signature (the same hash is a no-op, another one an error)
+    await ops.attachProof(root, keccak256("0xaa"));
+    await expect(ops.attachProof(root, keccak256("0xbb"))).rejects.toThrow(/ProofExists/);
+    expect(signer.signed).toHaveLength(3);
   });
 
   test("a root already posted is reported as RootExists without spending a signature", async () => {
@@ -224,6 +231,7 @@ describe("pqOps", () => {
     await ops.postRoot(keccak256("0x02"), 1, [addr(1)]);
     await expect(ops.postRoot(keccak256("0x03"), 1, [addr(1)])).rejects.toBeInstanceOf(BudgetExhausted);
     expect(st.signaturesUsed).toBe(2n);
+    expect(signer.signed).toHaveLength(2);
     // the ledger survives a restart, and counts a signature whose tx never landed
     const ledger = new SignatureLedger(file);
     expect(ledger.used(signer.publicKey)).toBe(2);
@@ -233,6 +241,21 @@ describe("pqOps", () => {
       BudgetExhausted,
     );
     fs.rmSync(dir, { recursive: true });
+  });
+
+  test("the batch and prover loops cannot both take the last signature", async () => {
+    const signer = fakeSigner(0x11);
+    const { io } = fakeContract({ publicKey: signer.publicKey, budget: 18n }); // 2 post signatures
+    const ledger = new SignatureLedger(null);
+    const ops = pqOps(io, signer, ledger);
+    const root = keccak256("0x01");
+    await ops.postRoot(root, 1, [addr(1)]);
+    const results = await Promise.allSettled([
+      ops.postRoot(keccak256("0x02"), 1, [addr(1)]),
+      ops.attachProof(root, keccak256("0xaa")),
+    ]);
+    expect(results.filter((r) => r.status === "rejected")).toHaveLength(1);
+    expect(ledger.used(signer.publicKey)).toBe(2);
   });
 
   test("a real C13 signature: the inline signer signs the Post digest and pq-signer verifies it", async () => {

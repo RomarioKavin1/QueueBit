@@ -17,6 +17,8 @@ export interface PQChainIO {
   publicKey(): Promise<Hex>;
   /** DepsRegistry.isPosted(aggregator, root). */
   isPosted(root: Hex): Promise<boolean>;
+  /** The proof hash DepsRegistry holds for the aggregator's root (zero when none). */
+  proofHashOf(root: Hex): Promise<Hex>;
   /** A legacy tx from the gas payer to the PQAggregator; resolves to the receipt, throws if it reverted. */
   send(
     data: Hex,
@@ -61,12 +63,17 @@ export interface PQOps {
 export function pqOps(io: PQChainIO, signer: C13Signer, ledger: SignatureLedger): PQOps {
   const domain = { chainId: io.chainId, aggregator: io.aggregator };
 
-  async function budget(): Promise<void> {
-    const [used, total, reserve] = await Promise.all([
+  const budgetOnChain = async () => {
+    const [signaturesUsed, budget, reserve] = await Promise.all([
       io.read("signaturesUsed"),
       io.read("signatureBudget"),
       io.read("ADMIN_RESERVE"),
     ]);
+    return { signaturesUsed, budget, reserve };
+  };
+
+  async function checkBudget(): Promise<void> {
+    const { signaturesUsed: used, budget: total, reserve } = await budgetOnChain();
     const cap = total - reserve;
     if (used >= cap || BigInt(ledger.used(signer.publicKey)) >= cap) {
       throw new BudgetExhausted(
@@ -75,9 +82,16 @@ export function pqOps(io: PQChainIO, signer: C13Signer, ledger: SignatureLedger)
     }
   }
 
+  // The batch loop and the prover loop sign concurrently: the budget check and the count happen one at a time, so
+  // the two cannot both take the last signature.
+  let counting: Promise<unknown> = Promise.resolve();
   async function signed(digest: Hex): Promise<Hex> {
-    await budget();
-    ledger.add(signer.publicKey); // counted before signing: a crash mid-signature still counts
+    const turn = counting.then(async () => {
+      await checkBudget();
+      ledger.add(signer.publicKey); // counted before signing: a crash mid-signature still counts
+    });
+    counting = turn.catch(() => {});
+    await turn;
     return signer.sign(digest);
   }
 
@@ -89,12 +103,7 @@ export function pqOps(io: PQChainIO, signer: C13Signer, ledger: SignatureLedger)
           `the PQAggregator ${io.aggregator} holds the C13 key ${pk}, not this node's ${signer.publicKey}`,
         );
       }
-      const [signaturesUsed, budget, reserve] = await Promise.all([
-        io.read("signaturesUsed"),
-        io.read("signatureBudget"),
-        io.read("ADMIN_RESERVE"),
-      ]);
-      return { signaturesUsed, budget, reserve };
+      return budgetOnChain();
     },
     async postRoot(root, count, wallets) {
       // DepsRegistry refuses a root twice; say so (the node then delivers with the posted root) without signing.
@@ -107,6 +116,12 @@ export function pqOps(io: PQChainIO, signer: C13Signer, ledger: SignatureLedger)
       return { tx: r.transactionHash, block: r.blockNumber, gasUsed: r.gasUsed, logs: r.logs };
     },
     async attachProof(root, proofHash) {
+      // DepsRegistry keeps the first proof hash: an already attached one would only waste a few-time signature.
+      const attached = await io.proofHashOf(root);
+      if (BigInt(attached) !== 0n) {
+        if (attached.toLowerCase() === proofHash.toLowerCase()) return { tx: "0x", gasUsed: 0n };
+        throw new Error(`ProofExists: ${root} already has proof hash ${attached}`);
+      }
       const nonce = await io.read("attachNonce");
       const sig = await signed(attachDigest(domain, { registry: io.registry, nonce, root, proofHash }));
       const r = await io.send(

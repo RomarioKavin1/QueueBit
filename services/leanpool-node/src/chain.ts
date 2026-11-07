@@ -174,6 +174,15 @@ export function makeChain(cfg: NodeConfig, log: (...a: unknown[]) => void, pqSet
               functionName: "isPosted",
               args: [identity, root],
             }),
+          proofHashOf: async (root) =>
+            (
+              await pub.readContract({
+                address: cfg.registry,
+                abi: REGISTRY_ABI,
+                functionName: "batches",
+                args: [identity, root],
+              })
+            )[3],
           send: (data) => sendLegacy({ to: identity, data }),
         },
         pqSetup.signer,
