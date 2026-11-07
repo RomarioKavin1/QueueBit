@@ -208,88 +208,69 @@ export function WalletLogos() {
 }
 
 /**
- * The whole system on one page: where each thing happens, from a tap on the phone to the account paying out. Three
- * lanes (your phone, a LeanPool node, Ethereum), the owner path in blue, the paths that skip the node dashed.
+ * One root per batch: the key signs, the aggregator checks and batches, the chain keeps one hash-signed root, each
+ * payment proves it is in that root, and a STARK per batch lets anyone audit the aggregator.
  */
 export function FlowChart() {
-  const N = ({
-    x,
-    y,
-    w = 150,
-    h = 50,
-    t,
-    s,
-    k = "box",
-  }: {
-    x: number;
-    y: number;
-    w?: number;
-    h?: number;
-    t: string;
-    s?: string;
-    k?: "box" | "tint" | "solid";
-  }) => (
-    <g>
-      <rect
-        x={x}
-        y={y}
-        width={w}
-        height={h}
-        className={k === "solid" ? "fill-[var(--blue)] stroke-[var(--blue)]" : k === "tint" ? tint : box}
-      />
-      <T x={x + w / 2} y={y + (s ? h / 2 - 3 : h / 2 + 4)} s={11} c={k === "solid" ? "var(--on-blue)" : "var(--ink)"}>
-        {t}
-      </T>
-      {s && (
-        <T x={x + w / 2} y={y + h / 2 + 13} s={9} c={k === "solid" ? "var(--on-blue)" : "var(--ink-3)"}>
-          {s}
-        </T>
-      )}
-    </g>
+  const label = (x: number, y: number, t: string, c = "var(--ink-2)") => (
+    <T x={x} y={y} s={10} c={c}>
+      {t}
+    </T>
   );
-  const lane = (y: number, h: number, label: string) => (
-    <g>
-      <rect x={0} y={y} width={960} height={h} className="fill-none stroke-[var(--rule)] [stroke-width:1]" />
-      <T x={12} y={y + 18} a="start" s={10} c="var(--ink-3)">
-        {label}
+  const two = (x: number, y: number, a: string, b: string, on = false) => (
+    <>
+      <T x={x} y={y - 3} s={11} c={on ? "var(--on-blue)" : "var(--ink)"}>
+        {a}
       </T>
-    </g>
+      <T x={x} y={y + 13} s={9} c={on ? "var(--on-blue)" : "var(--ink-3)"}>
+        {b}
+      </T>
+    </>
   );
   return (
-    <svg viewBox="0 0 960 470" className="w-full min-w-[760px]" aria-hidden>
+    <svg viewBox="0 0 1040 300" className="w-full min-w-[760px]" aria-hidden>
       <Arrow id="flw" />
-      {lane(0, 120, "YOUR PHONE")}
-      {lane(132, 96, "LEANPOOL NODE")}
-      {lane(240, 228, "ETHEREUM")}
-      {/* phone */}
-      <N x={30} y={40} t="YOU TAP SEND" s="or a site asks" />
-      <N x={225} y={40} t="PASSKEY" s="Face ID unlocks" />
-      <N x={420} y={40} t="OWNER KEY SIGNS" s="hashes only" k="tint" />
-      <N x={700} y={40} w={230} t="SESSION KEY SIGNS" s="sites you allowed, within limits" />
-      <path d="M180 65h43" className={line} markerEnd="url(#flw)" />
-      <path d="M375 65h43" className={line} markerEnd="url(#flw)" />
-      {/* node */}
-      <N x={420} y={160} w={230} t="CHECKS THE SIGNATURE" s="batches many into one root" k="tint" />
-      <path d="M495 90v68" className={line} markerEnd="url(#flw)" />
-      {/* chain */}
-      <N x={420} y={270} w={230} t="SHARED REGISTRY" s="one root slot per wallet" />
-      <path d="M535 210v58" className={line} markerEnd="url(#flw)" />
-      <N x={700} y={270} w={230} t="YOUR ACCOUNT CHECKS" s="my root, or an allowed session key" k="solid" />
-      <path d="M650 295h48" className={line} markerEnd="url(#flw)" />
-      <path d="M815 90v178" className={line} strokeDasharray="5 4" markerEnd="url(#flw)" />
-      <T x={822} y={185} a="start" s={9} c="var(--blue)">
-        DIRECT
+      {/* key */}
+      <rect x={10} y={120} width={150} height={60} className={tint} />
+      {two(85, 150, "QUANTUM-SAFE KEY", "leanSPHINCS")}
+      <path d="M160 150h98" className={line} markerEnd="url(#flw)" />
+      {label(210, 141, "SIGNS · 4 KB")}
+      {/* aggregator */}
+      <rect x={262} y={120} width={180} height={60} className={tint} />
+      {two(352, 150, "AGGREGATOR", "checks and batches")}
+      {/* payment + proof → alt mempool */}
+      <path d="M392 120 C420 62 470 52 598 52" className={line} markerEnd="url(#flw)" />
+      {label(520, 40, "PAYMENT + PROOF")}
+      <rect x={600} y={30} width={150} height={44} className={box} />
+      <T x={675} y={56} s={11}>
+        ALT MEMPOOL
       </T>
-      <N x={700} y={370} w={230} t="LIMITS + RULES" s="daily caps, expiry, allowed apps" />
-      <path d="M815 320v48" className={line} markerEnd="url(#flw)" />
-      <N x={420} y={370} w={230} t="PAYMENT GOES OUT" s="your funds move" k="tint" />
-      <path d="M700 395h-48" className={line} markerEnd="url(#flw)" />
-      <N x={30} y={270} w={300} t="GUARDIANS APPROVE" s="from their own wallets, straight on chain" />
-      <path d="M180 320v48" className={line} strokeDasharray="5 4" markerEnd="url(#flw)" />
-      <T x={190} y={350} a="start" s={9} c="var(--blue)">
-        AFTER A DELAY YOU CAN CANCEL
+      {/* one root → chain */}
+      <path d="M442 150h156" className={line} markerEnd="url(#flw)" />
+      {label(521, 141, "ONE ROOT, HASH-SIGNED")}
+      <path d="M600 132v36a75 9 0 0 0 150 0v-36" className={tint} />
+      <ellipse cx={675} cy={132} rx={75} ry={9} className={tint} />
+      <T x={675} y={160} s={11}>
+        ROOT ON CHAIN
       </T>
-      <N x={30} y={370} w={300} t="LOST KEY REPLACED" s="your account gets a new owner key" k="tint" />
+      {/* STARK → audit */}
+      <path d="M392 180 C420 238 470 250 598 250" className={line} strokeDasharray="3 4" markerEnd="url(#flw)" />
+      {label(492, 276, "RECURSIVE STARK PER BATCH")}
+      <rect x={600} y={228} width={150} height={44} className={box} strokeDasharray="4 3" />
+      <T x={675} y={254} s={11}>
+        ANYONE CAN AUDIT
+      </T>
+      {/* in the root? */}
+      <path d="M750 52 C786 52 796 78 804 104" className={line} markerEnd="url(#flw)" />
+      <path d="M750 150h16" className={line} strokeDasharray="3 4" markerEnd="url(#flw)" />
+      <path d="M822 96 878 150 822 204 766 150Z" className={box} />
+      <T x={822} y={154} s={10}>
+        IN THE ROOT?
+      </T>
+      <path d="M878 150h42" className={line} markerEnd="url(#flw)" />
+      {label(899, 141, "YES", "var(--blue)")}
+      <rect x={922} y={124} width={110} height={52} className="fill-[var(--blue)] stroke-[var(--blue)]" />
+      {two(977, 150, "PAYMENT", "executes", true)}
     </svg>
   );
 }

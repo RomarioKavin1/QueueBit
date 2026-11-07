@@ -131,9 +131,12 @@ const SLIDES: Slide[] = [
   {
     id: "flow",
     kicker: "How it works",
-    title: "From a tap to a payment.",
+    title: "One root per batch.",
     wide: true,
-    points: ["Owner actions go through a LeanPool node.", "Sessions and guardians go straight to your account."],
+    points: [
+      "Your key signs; the aggregator checks every signature and batches them.",
+      "Ethereum keeps one hash-signed root. Each payment proves it is in it.",
+    ],
     figure: (
       <div className="-mx-2 overflow-x-auto px-2">
         <FlowChart />
@@ -346,7 +349,7 @@ function SlideView({ s, i }: { s: Slide; i: number }) {
           )}
         </div>
         {s.figure && (
-          <div className={`min-w-0 ${s.wide ? "w-full max-w-[1040px]" : ""}`}>
+          <div className={`min-w-0 ${s.wide ? "w-full" : ""}`}>
             {s.plate ? (
               <Plate n={i + 1} title={s.plate[0]} label={s.plate[1]} caption={s.plate[1]}>
                 {s.figure}
