@@ -21,6 +21,8 @@ fs_permissions = [
   { access = "read", path = "../packages/pq-signer/vectors" },
   # LeanAccount: the WebAuthn and EIP-712 vectors its tests share with its TS SDK.
   { access = "read", path = "test/account/fixtures" },
+  # PQAggregator: real C13 signatures over its digests (services/leanpool-node pin-vectors).
+  { access = "read", path = "test/leanpool/fixtures" },
   # test/account/SdkParity deploys Safe v1.4.1 from its artifacts (vm.deployCode; Safe compiles without via-IR).
   { access = "read", path = "out" },
 ]
