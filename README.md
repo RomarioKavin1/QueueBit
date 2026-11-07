@@ -11,6 +11,37 @@ Quantum computers will break ECDSA, the signature behind almost every Ethereum a
 safe replacement, but they are big: a leanSPHINCS signature is 4 KB, and checking one on chain costs about
 **383,000 gas** (around $11 at 10 gwei).
 
+## Why it costs 4.5× less
+
+A post-quantum signature is expensive in two ways: the EVM has to recompute thousands of hashes to check it, and its
+4 KB must be posted as calldata, every transaction. QueueBit does neither on chain:
+
+- **The signature never reaches the chain.** An off-chain node checks it natively, where hashing is free.
+- **The chain checks a short Merkle proof instead**, that the transaction is in a batch the node vouched for: a few
+  hashes, a few thousand gas.
+- **The batch costs are shared.** One root and one proof cover many transactions, so each pays only a slice.
+
+| Per payment (20 payments, from receipts) | Signature checked in the EVM | QueueBit |
+|---|---|---|
+| The transaction itself | 383,018 | 56,912 |
+| Its share of posting the batch root | – | 15,625 |
+| Its share of the batch’s STARK hash | – | 13,061 |
+| **Total** | **383,018** | **85,598** |
+| Signature bytes on chain | ~5,700 | 0 |
+
+The fuller the batch, the smaller each share.
+
+## Why it needs no stake
+
+An alternative mempool has to protect itself: if a transaction’s validity depended on shared state, one change could
+invalidate thousands of pending transactions at once. So ERC-7562 lets validation read only storage *associated with
+the sender*; anything else requires the account to post a stake and earn reputation.
+
+QueueBit’s validation reads exactly two things, and both are stored **under the account’s own address**: its keys and
+policy in the keystore, and its own ring of recent batch roots in the registry. Only the account’s own data can change
+its validity, so the mempool admits it **without stake** (rule STO-021). It also stays inside the unstaked gas budget:
+70–87k of the 100k allowed. The public mempool refuses the same transaction, because it allows no outside reads at all.
+
 ## How it works
 
 ### Frame transactions
@@ -73,15 +104,6 @@ path inside these rules.
 
 Owner payments use their own [EIP-8250](https://eips.ethereum.org/EIPS/eip-8250) nonce lane (key `0x1000`) and every
 session key gets its own, so a session payment never waits behind an owner payment that is still being batched.
-
-### Cost
-
-| | Gas per payment | Signature on chain |
-|---|---|---|
-| PQ signature checked in the EVM | 383,018 | ~5.7 KB |
-| **QueueBit** | **85,598** (4.5× less) | **0 bytes** |
-
-Measured on the devnet over 20 payments; the QueueBit figure includes its share of root posting.
 
 ## What you can do
 
