@@ -8,6 +8,7 @@ export * from "./keys.js";
 export * from "./create.js";
 export * from "./tx.js";
 export * from "./sessions.js";
+export * from "./grants.js";
 export * from "./guardians.js";
 export * from "./migrate.js";
 export * from "./safe.js";
