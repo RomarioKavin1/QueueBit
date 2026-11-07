@@ -11,7 +11,7 @@ Try it: [queuebit.space](https://www.queuebit.space) (public EIP-8141 devnet, ch
   block 11014, 07 Nov 2026, 06:22 IST. VERIFY checks the batch-root proof; the public mempool refuses this tx.
 - [Private withdrawal from a 0-ETH address](https://explorer.altmempool.wtf/tx/0x8e1440801b3a2464321e05cd127852581e6e4ce25afcb12217aecc3a326bc23a?node=https%3A%2F%2Faltmempool.forshtat.com%2Frpc):
   block 10365, 07 Nov 2026, 05:17 IST. The privacy pool pays the gas in the same frame transaction, with no relayer.
-- Code that submits one: [`services/leanpool-node/src/chain.ts`](services/leanpool-node/src/chain.ts).
+- Code that submits one: [`services/leanpool-node/src/chain.ts`](services/leanpool-node/src/chain.ts#L278), `submit()`.
 
 ## The problem
 
