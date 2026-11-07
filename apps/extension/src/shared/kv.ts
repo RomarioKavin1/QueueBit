@@ -48,4 +48,6 @@ export const StorageKeys = {
   /** Moves into the account (EOA, Safe, smart account), for Activity and resuming. */
   migrations: "queuebit:migrations",
   activity: "queuebit:activity",
+  /** ERC-20s the person added, per chain (the network's presets aren't stored). */
+  tokens: "queuebit:tokens",
 } as const;

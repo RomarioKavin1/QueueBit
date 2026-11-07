@@ -1,6 +1,15 @@
 "use client";
 
-import type { EngineConfig, EngineError, FromEngine, NetworkInfo, ToEngine, UiApi, UiType } from "./protocol";
+import type {
+  EngineConfig,
+  EngineError,
+  FromEngine,
+  NetworkInfo,
+  ToEngine,
+  UiApi,
+  UiType,
+  WalletsView,
+} from "./protocol";
 
 /** An engine call failed: `reason` (keyring/account) or `code` (provider) say why. */
 export class EngineCallError extends Error {
@@ -106,6 +115,28 @@ class EngineClient {
 
   wipeStorage(): Promise<null> {
     return this.send({ kind: "storage:wipe" }) as Promise<null>;
+  }
+
+  /** The wallets on this device and which one is open. */
+  wallets(): Promise<WalletsView> {
+    return this.send({ kind: "wallets" }) as Promise<WalletsView>;
+  }
+
+  addWallet(name?: string): Promise<WalletsView> {
+    return this.send({ kind: "wallets:add", ...(name ? { name } : {}) }) as Promise<WalletsView>;
+  }
+
+  /** Locks the wallet in use and makes `walletId` the active one (it opens with its own passkey or password). */
+  switchWallet(walletId: string): Promise<WalletsView> {
+    return this.send({ kind: "wallets:switch", walletId }) as Promise<WalletsView>;
+  }
+
+  renameWallet(walletId: string, name: string): Promise<WalletsView> {
+    return this.send({ kind: "wallets:rename", walletId, name }) as Promise<WalletsView>;
+  }
+
+  removeWallet(walletId: string): Promise<WalletsView> {
+    return this.send({ kind: "wallets:remove", walletId }) as Promise<WalletsView>;
   }
 
   on(listener: (e: EngineEvent) => void): () => void {

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { parseEther, toHex } from "viem";
 import { engine, type EngineEvent } from "@/lib/engine/client";
 import { createPasskey, passkeySecret } from "@/lib/passkey";
+import type { SignProof } from "@/lib/proof";
 import type { NetworkInfo, UiType } from "@/lib/engine/protocol";
 import { Btn, Check, Field, LogProvider, Panel, Row, Select, json, list, useRunner, type LogEntry } from "./ui";
 
@@ -76,6 +77,19 @@ const UI_TYPES: UiType[] = [
 const PUBLIC_FAUCET_RPC = "https://altmempoolgateway.forshtat.com/rpc";
 
 const eth = engine;
+
+/** The password typed in the Keyring panel: the engine signs only with the password or passkey sent again. */
+let harnessPassword = "";
+
+/** A signing request with its proof: the passkey (a prompt) for a passkey wallet, else the Keyring panel's password. */
+async function signed<T extends object>(req: T): Promise<T & { proof: SignProof }> {
+  const info = await eth().call("keyring:passkeyInfo");
+  if (info)
+    return { ...req, proof: { entropy: (await passkeySecret(navigator.credentials, info.credentialId)).entropy } };
+  if (!harnessPassword)
+    throw new Error("Type the wallet's password in the Keyring panel first: every signature needs it.");
+  return { ...req, proof: { password: harnessPassword } };
+}
 const hex = (s: string) => s.trim() as `0x${string}`;
 
 export function TestHarness() {
@@ -346,8 +360,8 @@ function PasskeyPanel() {
         <Btn
           tone="primary"
           onClick={() =>
-            void r.run("transfer", () =>
-              eth().call("send:submit", { to: hex(to), valueWei: parseEther(amount.trim()).toString() }),
+            void r.run("transfer", async () =>
+              eth().call("send:submit", await signed({ to: hex(to), valueWei: parseEther(amount.trim()).toString() })),
             )
           }
         >
@@ -363,7 +377,11 @@ function PasskeyPanel() {
 
 function KeyringPanel() {
   const r = useRunner();
-  const [password, setPassword] = useState("");
+  const [password, setPasswordState] = useState("");
+  const setPassword = (v: string) => {
+    harnessPassword = v;
+    setPasswordState(v);
+  };
   const [newPassword, setNewPassword] = useState("");
   const [mnemonic, setMnemonic] = useState("");
   const [reveal, setReveal] = useState(true);
@@ -458,7 +476,10 @@ function AccountPanel({ network }: { network?: NetworkInfo }) {
           account:status
         </Btn>
         <Btn onClick={() => void r.run("wallet:balance", () => eth().call("wallet:balance", {}))}>wallet:balance</Btn>
-        <Btn tone="primary" onClick={() => void r.run("account:activate", () => eth().call("account:activate", {}))}>
+        <Btn
+          tone="primary"
+          onClick={() => void r.run("account:activate", async () => eth().call("account:activate", await signed({})))}
+        >
           Activate (setup key creates it)
         </Btn>
       </Row>
@@ -524,7 +545,10 @@ function SendPanel() {
         <Field label="To" value={to} onChange={setTo} placeholder="0x…" />
         <Field label="Amount (ETH)" value={amount} onChange={setAmount} />
         <Btn onClick={() => void r.run("send:preview", () => eth().call("send:preview", req()))}>Preview</Btn>
-        <Btn tone="primary" onClick={() => void r.run("send:submit", () => eth().call("send:submit", req()))}>
+        <Btn
+          tone="primary"
+          onClick={() => void r.run("send:submit", async () => eth().call("send:submit", await signed(req())))}
+        >
           Send
         </Btn>
       </Row>
@@ -593,15 +617,18 @@ function SessionsPanel({ network }: { network?: NetworkInfo }) {
           tone="primary"
           onClick={() =>
             void r.run("sessions:create", async () =>
-              eth().call("sessions:create", {
-                chainId: network?.chainId ?? 1337,
-                origin: origin.trim(),
-                targets: list(targets).map(hex),
-                perTxEth,
-                dailyEth,
-                hours: Number(hours),
-                tokens: JSON.parse(tokens || "[]"),
-              }),
+              eth().call(
+                "sessions:create",
+                await signed({
+                  chainId: network?.chainId ?? 1337,
+                  origin: origin.trim(),
+                  targets: list(targets).map(hex),
+                  perTxEth,
+                  dailyEth,
+                  hours: Number(hours),
+                  tokens: JSON.parse(tokens || "[]"),
+                }),
+              ),
             )
           }
         >
@@ -610,7 +637,11 @@ function SessionsPanel({ network }: { network?: NetworkInfo }) {
         <Field label="Session id" value={revokeId} onChange={setRevokeId} />
         <Btn
           tone="danger"
-          onClick={() => void r.run("sessions:revoke", () => eth().call("sessions:revoke", { id: hex(revokeId) }))}
+          onClick={() =>
+            void r.run("sessions:revoke", async () =>
+              eth().call("sessions:revoke", await signed({ id: hex(revokeId) })),
+            )
+          }
         >
           Revoke
         </Btn>
@@ -720,7 +751,9 @@ function DappPanel({ approvals, onResolved }: { approvals: string[]; onResolved:
               tone="primary"
               onClick={() =>
                 void r
-                  .run("approval:resolve ✓", () => eth().call("approval:resolve", { id, approved: true, alwaysAllow }))
+                  .run("approval:resolve ✓", async () =>
+                    eth().call("approval:resolve", await signed({ id, approved: true, alwaysAllow })),
+                  )
                   .then(() => onResolved(id))
               }
             >
@@ -761,14 +794,20 @@ function KeysPanel() {
           keys:view
         </Btn>
         <Field label="Expired key ids" value={ids} onChange={setIds} />
-        <Btn onClick={() => void r.run("keys:prune", () => eth().call("keys:prune", { ids: list(ids).map(hex) }))}>
+        <Btn
+          onClick={() =>
+            void r.run("keys:prune", async () => eth().call("keys:prune", await signed({ ids: list(ids).map(hex) })))
+          }
+        >
           Prune
         </Btn>
         <Field label="Recovery id" value={recoveryId} onChange={setRecoveryId} />
         <Btn
           tone="danger"
           onClick={() =>
-            void r.run("keys:cancelRecovery", () => eth().call("keys:cancelRecovery", { id: hex(recoveryId) }))
+            void r.run("keys:cancelRecovery", async () =>
+              eth().call("keys:cancelRecovery", await signed({ id: hex(recoveryId) })),
+            )
           }
         >
           Cancel recovery
@@ -812,7 +851,10 @@ function MigratePanel() {
       <Field label="Private keys (EOA key / Safe owners / account owner)" value={keys} onChange={setKeys} area wide />
       <Row>
         <Btn onClick={() => void r.run("migrate:preview", () => eth().call("migrate:preview", req()))}>Preview</Btn>
-        <Btn tone="primary" onClick={() => void r.run("migrate:run", () => eth().call("migrate:run", req()))}>
+        <Btn
+          tone="primary"
+          onClick={() => void r.run("migrate:run", async () => eth().call("migrate:run", await signed(req())))}
+        >
           Run the move
         </Btn>
       </Row>
@@ -874,19 +916,26 @@ function PrivacyPanel() {
         <Btn
           tone="primary"
           onClick={() =>
-            void r.run("privacy:start", () =>
-              eth().call("privacy:start", {
-                kind: kind as never,
-                amountWei: parseEther(amount.trim() || "0").toString(),
-                ...(note.trim() ? { note: JSON.parse(note) } : {}),
-              }),
+            void r.run("privacy:start", async () =>
+              eth().call(
+                "privacy:start",
+                await signed({
+                  kind: kind as never,
+                  amountWei: parseEther(amount.trim() || "0").toString(),
+                  ...(note.trim() ? { note: JSON.parse(note) } : {}),
+                }),
+              ),
             )
           }
         >
           Start
         </Btn>
         <Field label="Operation id" value={opId} onChange={setOpId} />
-        <Btn onClick={() => void r.run("privacy:retry", () => eth().call("privacy:retry", { opId }))}>Retry</Btn>
+        <Btn
+          onClick={() => void r.run("privacy:retry", async () => eth().call("privacy:retry", await signed({ opId })))}
+        >
+          Retry
+        </Btn>
         <Btn tone="danger" onClick={() => void r.run("privacy:cancel", () => eth().call("privacy:cancel", { opId }))}>
           Cancel
         </Btn>

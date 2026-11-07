@@ -1,11 +1,12 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { decodeFunctionData, erc20Abi, type Hex } from "viem";
 import { LineArrow, Working } from "@/components/onboarding/ui";
-import { ago, eth } from "@/lib/format";
+import { ago, short, units } from "@/lib/format";
 import { Mark } from "@/components/paper/Logo";
 import { Identicon } from "./Identicon";
-import type { ActivityEntry } from "./state";
+import { useWallet, type ActivityEntry, type TokenBalance } from "./state";
 
 /** A label/value line in a ruled list. */
 export function Row({ k, children, strong }: { k: string; children: ReactNode; strong?: boolean }) {
@@ -63,7 +64,32 @@ export function SignatureGauge({ left, budget }: { left: number; budget: number 
   );
 }
 
-const sumWei = (e: ActivityEntry) => e.calls.reduce((s, c) => s + BigInt(c.value), 0n);
+/** What a payment sent and to whom: ETH as the call's value, or an ERC-20 `transfer` (read from the call data). */
+export interface Payout {
+  to: `0x${string}`;
+  amount: bigint;
+  symbol: string;
+  decimals: number;
+  token?: `0x${string}`;
+}
+
+export function payout(e: ActivityEntry, tokens: TokenBalance[]): Payout | null {
+  if (e.kind !== "payment" || e.calls.length !== 1) return null;
+  const c = e.calls[0]!;
+  if (c.data === "0x") {
+    const v = BigInt(c.value);
+    return v > 0n ? { to: c.target, amount: v, symbol: "ETH", decimals: 18 } : null;
+  }
+  try {
+    const d = decodeFunctionData({ abi: erc20Abi, data: c.data as Hex });
+    if (d.functionName !== "transfer") return null;
+    const [to, amount] = d.args;
+    const t = tokens.find((x) => x.token.toLowerCase() === c.target.toLowerCase());
+    return { to, amount, symbol: t?.symbol ?? short(c.target), decimals: t?.decimals ?? 18, token: c.target };
+  } catch {
+    return null;
+  }
+}
 
 /** What a row says, now: the headline while it's under way, the done line after. */
 export function entryTitle(e: ActivityEntry) {
@@ -76,17 +102,11 @@ export function entryState(e: ActivityEntry): { label: string; tone: "ink" | "bl
   return { label: "On its way", tone: "blue" };
 }
 
-/** A payment's value out of the account (null for entries that don't move value out). */
-export function entryOut(e: ActivityEntry): bigint | null {
-  if (e.kind !== "payment") return null;
-  const v = sumWei(e);
-  return v > 0n ? v : null;
-}
-
 /** One line of the logbook: what happened, when, and how much left the account. */
 export function EntryRow({ e, onOpen }: { e: ActivityEntry; onOpen: () => void }) {
+  const { tokens } = useWallet();
   const st = entryState(e);
-  const out = entryOut(e);
+  const out = payout(e, tokens);
   return (
     <li className="border-b border-rule">
       <button
@@ -94,11 +114,7 @@ export function EntryRow({ e, onOpen }: { e: ActivityEntry; onOpen: () => void }
         onClick={onOpen}
         className="grid min-h-[68px] w-full grid-cols-[auto_1fr_auto_auto] items-center gap-3 py-3 text-left active:bg-blue-wash"
       >
-        {e.kind === "payment" && e.calls.length === 1 ? (
-          <Identicon address={e.calls[0]!.target} size={34} />
-        ) : (
-          <Mark size={34} variant="line" />
-        )}
+        {out ? <Identicon address={out.to} size={34} /> : <Mark size={34} variant="line" />}
         <span className="min-w-0">
           <span className="block truncate text-[1.02rem] leading-snug">{entryTitle(e)}</span>
           <span className="mt-1 flex items-center gap-2 mono-label text-[11px] text-ink-3">
@@ -112,7 +128,12 @@ export function EntryRow({ e, onOpen }: { e: ActivityEntry; onOpen: () => void }
             )}
           </span>
         </span>
-        <span className="text-[1rem] tnum">{out !== null ? `−${eth(out)}` : ""}</span>
+        <span className="text-right text-[1rem] tnum">
+          {out ? `−${units(out.amount, out.decimals)}` : ""}
+          {out && out.symbol !== "ETH" && (
+            <span className="mono-label block text-[10.5px] text-ink-3">{out.symbol}</span>
+          )}
+        </span>
         <LineArrow className="text-ink-3" />
       </button>
     </li>
@@ -148,15 +169,15 @@ export interface Recipient {
 export function recipients(activity: ActivityEntry[]): Recipient[] {
   const by = new Map<string, Recipient>();
   for (const e of activity) {
-    if (e.kind !== "payment" || e.status === "failed" || e.calls.length !== 1) continue;
-    const c = e.calls[0]!;
-    if (BigInt(c.value) === 0n || c.data !== "0x") continue;
-    const k = c.target.toLowerCase();
+    if (e.status === "failed") continue;
+    const p = payout(e, []);
+    if (!p) continue;
+    const k = p.to.toLowerCase();
     const r = by.get(k);
     if (r) {
       r.count++;
       r.last = Math.max(r.last, e.createdAt);
-    } else by.set(k, { address: c.target, count: 1, last: e.createdAt });
+    } else by.set(k, { address: p.to, count: 1, last: e.createdAt });
   }
   return [...by.values()].sort((a, b) => b.last - a.last);
 }

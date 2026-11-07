@@ -13,6 +13,9 @@ import {
 } from "@queuebit/account";
 import {
   encodeFunctionData,
+  erc20Abi,
+  formatUnits,
+  getAddress,
   hashTypedData,
   hexToBytes,
   isAddress,
@@ -25,8 +28,17 @@ import { privateKeyToAccount } from "viem/accounts";
 import { LOCAL_DEVNET } from "../shared/build";
 import { NO_DEPLOYMENT, findNetwork, getNetwork, toHexChainId } from "../shared/chains";
 import { ProviderRpcError, RpcErrorCode, userRejected } from "../shared/errors";
-import type { KV } from "../shared/kv";
-import type { ApprovalView, MigrationRequest, SafeTxJson, SendRequest, UiApi, UiType } from "../shared/messages";
+import { StorageKeys, type KV } from "../shared/kv";
+import type {
+  ApprovalView,
+  MigrationRequest,
+  SafeTxJson,
+  SendRequest,
+  SignProof,
+  TokenBalance,
+  UiApi,
+  UiType,
+} from "../shared/messages";
 import { anonStatusFor } from "../shared/offscreen";
 import { siteWarning } from "../shared/sites";
 import type { Approval, ApprovalTx, WalletState } from "../shared/types";
@@ -85,6 +97,11 @@ export interface WalletEnv {
   now?: () => number;
   /** The offscreen document (the withdraw prover). */
   offscreen?: OffscreenClient;
+  /**
+   * Every request that signs must carry the password or the passkey again (`proof`, checked here before any key is
+   * used), not only an unlocked session. The web app sets it; the extension's pages don't send proofs yet.
+   */
+  confirmEachSignature?: boolean;
 }
 
 const PRIVACY_ORIGIN = "QueueBit Private balance";
@@ -161,6 +178,104 @@ export class Wallet {
           now: this.now,
         })
       : undefined;
+  }
+
+  /** The engine's own check before a signature (see WalletEnv.confirmEachSignature): no proof, no signature. */
+  private async consent(proof: SignProof | undefined): Promise<void> {
+    if (!this.env.confirmEachSignature) return;
+    if (!proof) throw new KeyringError("confirm", "Confirm with your passkey or password to sign.");
+    await this.keyring.verify(
+      "entropy" in proof ? { entropy: hexToBytes(proof.entropy) } : { password: proof.password },
+    );
+  }
+
+  // ---- tokens ----
+
+  private async customTokens(chainId: number): Promise<TokenInfo[]> {
+    const all = (await this.env.local.get<Record<string, TokenInfo[]>>(StorageKeys.tokens)) ?? {};
+    return all[String(chainId)] ?? [];
+  }
+
+  private async setCustomTokens(chainId: number, list: TokenInfo[]): Promise<void> {
+    const all = (await this.env.local.get<Record<string, TokenInfo[]>>(StorageKeys.tokens)) ?? {};
+    await this.env.local.set(StorageKeys.tokens, { ...all, [String(chainId)]: list });
+  }
+
+  /** The network's presets, then the ones added here. */
+  private async tokens(chainId: number): Promise<Array<TokenInfo & { custom: boolean }>> {
+    const presets = getNetwork(chainId).tokens.map((t) => ({
+      token: t.token,
+      symbol: t.symbol,
+      name: t.name,
+      decimals: t.decimals,
+      custom: false,
+    }));
+    const known = new Set(presets.map((t) => t.token.toLowerCase()));
+    const custom = (await this.customTokens(chainId))
+      .filter((t) => !known.has(t.token.toLowerCase()))
+      .map((t) => ({ ...t, custom: true }));
+    return [...presets, ...custom];
+  }
+
+  private async token(chainId: number, address: Address): Promise<TokenInfo & { custom: boolean }> {
+    const t = (await this.tokens(chainId)).find((x) => x.token.toLowerCase() === address.toLowerCase());
+    if (!t) throw new Error("That token isn't in this wallet: add it first.");
+    return t;
+  }
+
+  private async tokenBalance(chainId: number, token: Address): Promise<bigint> {
+    const account = await this.accountFor(chainId);
+    if (!account) return 0n;
+    return this.env.io!.publicClient(chainId).readContract({
+      address: token,
+      abi: erc20Abi,
+      functionName: "balanceOf",
+      args: [account],
+    });
+  }
+
+  private async tokenList(chainId: number): Promise<TokenBalance[]> {
+    const list = await this.tokens(chainId);
+    return Promise.all(
+      list.map(async (t) => ({
+        ...t,
+        balance: (await this.tokenBalance(chainId, t.token).catch(() => 0n)).toString(),
+      })),
+    );
+  }
+
+  /** Reads an ERC-20's symbol, name and decimals from the chain, and keeps it in this wallet's list. */
+  private async addToken(chainId: number, address: Address): Promise<TokenBalance> {
+    if (!isAddress(address, { strict: false })) throw new Error("That isn't a contract address.");
+    const token = getAddress(address);
+    const existing = (await this.tokens(chainId)).find((t) => t.token.toLowerCase() === token.toLowerCase());
+    if (existing) return { ...existing, balance: (await this.tokenBalance(chainId, token).catch(() => 0n)).toString() };
+    const c = this.env.io!.publicClient(chainId);
+    const read = <T>(functionName: "symbol" | "name" | "decimals") =>
+      c.readContract({ address: token, abi: erc20Abi, functionName }) as Promise<T>;
+    let info: TokenInfo;
+    try {
+      const [symbol, decimals, name] = await Promise.all([
+        read<string>("symbol"),
+        read<number>("decimals"),
+        read<string>("name").catch(() => ""),
+      ]);
+      if (!symbol || decimals > 36) throw new Error("not a token");
+      info = { token, symbol: symbol.slice(0, 12), name: (name || symbol).slice(0, 40), decimals: Number(decimals) };
+    } catch {
+      throw new Error("No ERC-20 token answers at that address on this network.");
+    }
+    await this.setCustomTokens(chainId, [...(await this.customTokens(chainId)), info]);
+    return { ...info, custom: true, balance: (await this.tokenBalance(chainId, token).catch(() => 0n)).toString() };
+  }
+
+  /** A send: ETH as the call's value, or a token's `transfer` from the account. */
+  private async sendPlan(chainId: number, req: SendRequest) {
+    const call = sendCall(req);
+    if (!req.token) return { call, amount: BigInt(req.valueWei) };
+    const t = await this.token(chainId, req.token);
+    const balance = await this.tokenBalance(chainId, t.token);
+    return { call, amount: BigInt(req.valueWei), token: t, balance };
   }
 
   private acct(): AccountService {
@@ -864,7 +979,8 @@ export class Wallet {
       return null;
     },
     "approval:get": ({ id }) => this.approvalView(id),
-    "approval:resolve": async ({ id, approved }) => {
+    "approval:resolve": async ({ id, approved, proof }) => {
+      if (approved) await this.consent(proof);
       await this.resolveApproval(id, approved);
       return null;
     },
@@ -876,23 +992,63 @@ export class Wallet {
       await this.acct().ensure(id, { guardians, guardianThreshold: threshold });
       return this.acct().status(id);
     },
-    "account:updateGuardians": async ({ chainId, guardians, threshold }) => {
+    "account:updateGuardians": async ({ chainId, guardians, threshold, proof }) => {
       const id = await this.chainOr(chainId);
       for (const g of guardians) if (!isAddress(g, { strict: false })) throw new Error(`${g} isn't an address.`);
+      // After creation, the owner key signs the change; before, it only changes what creation will set.
+      if ((await this.acct().status(id)).deployed) await this.consent(proof);
       const { entry } = await this.acct().updateGuardians(id, guardians, threshold);
       if (entry) void this.trackSoon();
       return { ...(entry ? { entry } : {}), status: await this.acct().status(id) };
     },
-    "account:activate": async ({ chainId }) => {
+    "account:activate": async ({ chainId, proof }) => {
+      await this.consent(proof);
       const entry = await this.acct().activate(await this.chainOr(chainId));
       void this.trackSoon();
       return entry;
     },
-    "send:preview": async (req) => this.preview(await this.chainOr(req.chainId), [sendCall(req)]),
-    "send:submit": async (req) => {
-      const entry = await this.acct().pay(await this.chainOr(req.chainId), [sendCall(req)]);
+    "send:preview": async (req) => {
+      const id = await this.chainOr(req.chainId);
+      const s = await this.sendPlan(id, req);
+      const p = await this.preview(id, [s.call]);
+      if (!s.token) return p;
+      return {
+        ...p,
+        enough: p.enough && s.balance >= s.amount,
+        effects: [`${formatUnits(s.amount, s.token.decimals)} ${s.token.symbol} to ${shortAddress(req.to)}`],
+        token: {
+          token: s.token.token,
+          symbol: s.token.symbol,
+          decimals: s.token.decimals,
+          balance: s.balance.toString(),
+        },
+      };
+    },
+    "send:submit": async ({ proof, ...req }) => {
+      await this.consent(proof);
+      const id = await this.chainOr(req.chainId);
+      const s = await this.sendPlan(id, req);
+      if (s.token && s.balance < s.amount)
+        throw new AccountError(
+          "funds",
+          `Your account has ${formatUnits(s.balance, s.token.decimals)} ${s.token.symbol}; this sends ${formatUnits(s.amount, s.token.decimals)}.`,
+        );
+      const label = s.token
+        ? `${formatUnits(s.amount, s.token.decimals)} ${s.token.symbol} to ${shortAddress(req.to)}`
+        : undefined;
+      const entry = await this.acct().pay(id, [s.call], label ? { label, doneLabel: `Paid ${label}` } : {});
       void this.trackSoon();
       return entry;
+    },
+    "tokens:list": async ({ chainId }) => this.tokenList(await this.chainOr(chainId)),
+    "tokens:add": async ({ chainId, token }) => this.addToken(await this.chainOr(chainId), token),
+    "tokens:remove": async ({ chainId, token }) => {
+      const id = await this.chainOr(chainId);
+      await this.setCustomTokens(
+        id,
+        (await this.customTokens(id)).filter((t) => t.token.toLowerCase() !== token.toLowerCase()),
+      );
+      return null;
     },
     "activity:list": async () => {
       if ((await this.activity.pending()).length > 0) await this.refreshActivity().catch(() => undefined);
@@ -903,11 +1059,18 @@ export class Wallet {
       const id = await this.chainOr(chainId);
       return (await this.sessions.list()).filter((s) => s.chainId === id);
     },
-    "sessions:create": (req) => this.createSession(req),
-    "sessions:revoke": ({ id }) => this.revokeSession(id),
+    "sessions:create": async ({ proof, ...req }) => {
+      await this.consent(proof);
+      return this.createSession(req);
+    },
+    "sessions:revoke": async ({ id, proof }) => {
+      await this.consent(proof);
+      return this.revokeSession(id);
+    },
 
     "keys:view": async ({ chainId }) => this.keysView(await this.chainOr(chainId)),
-    "keys:prune": async ({ chainId, ids }) => {
+    "keys:prune": async ({ chainId, ids, proof }) => {
+      await this.consent(proof);
       const id = await this.chainOr(chainId);
       const account = this.acct();
       const rec = await account.ensure(id);
@@ -921,7 +1084,8 @@ export class Wallet {
       void this.trackSoon();
       return entry;
     },
-    "keys:cancelRecovery": async ({ chainId, id }) => {
+    "keys:cancelRecovery": async ({ chainId, id, proof }) => {
+      await this.consent(proof);
       const cid = await this.chainOr(chainId);
       const account = this.acct();
       const d = account.deployment(cid);
@@ -944,7 +1108,10 @@ export class Wallet {
       const safe = req.kind === "safe" ? await readSafe(this.env.io!.publicClient(chainId), plan.source) : undefined;
       return this.migrationView(chainId, plan, safe ? { owners: safe.owners, threshold: safe.threshold } : undefined);
     },
-    "migrate:run": (req) => this.runMigration(req),
+    "migrate:run": async ({ proof, ...req }) => {
+      await this.consent(proof);
+      return this.runMigration(req);
+    },
     "migrate:safeTx": async ({ chainId: cid, address }) => {
       const { chainId, plan } = await this.migrationPlan({
         chainId: cid,
@@ -1068,9 +1235,14 @@ export class Wallet {
 
     "privacy:view": async ({ chainId }) => this.priv().view(await this.chainOr(chainId)),
     "privacy:sync": async ({ chainId }) => this.priv().sync(await this.chainOr(chainId)),
-    "privacy:start": async ({ chainId, kind, amountWei, note }) =>
-      this.priv().start(await this.chainOr(chainId), kind, amountWei, note),
-    "privacy:retry": async ({ chainId, opId }) => this.priv().retry(await this.chainOr(chainId), opId),
+    "privacy:start": async ({ chainId, kind, amountWei, note, proof }) => {
+      await this.consent(proof);
+      return this.priv().start(await this.chainOr(chainId), kind, amountWei, note);
+    },
+    "privacy:retry": async ({ chainId, opId, proof }) => {
+      await this.consent(proof);
+      return this.priv().retry(await this.chainOr(chainId), opId);
+    },
     "privacy:cancel": async ({ chainId, opId }) => this.priv().cancel(await this.chainOr(chainId), opId),
     "privacy:dismiss": async ({ chainId }) => this.priv().dismiss(await this.chainOr(chainId)),
     "privacy:saveConfig": async (req) => {
@@ -1089,11 +1261,28 @@ function toCalls(calls: ApprovalTx["calls"]): Call[] {
   return calls.map((c) => ({ to: c.target, value: BigInt(c.value), data: c.data }));
 }
 
+interface TokenInfo {
+  token: Address;
+  symbol: string;
+  name: string;
+  decimals: number;
+}
+
 function sendCall(req: SendRequest): Call {
   if (!isAddress(req.to, { strict: false })) throw new Error("That isn't an address.");
   if (!/^\d+$/u.test(req.valueWei) || BigInt(req.valueWei) <= 0n) throw new Error("Enter an amount.");
+  if (req.token) {
+    if (!isAddress(req.token, { strict: false })) throw new Error("That isn't a token address.");
+    return {
+      to: req.token,
+      value: 0n,
+      data: encodeFunctionData({ abi: erc20Abi, functionName: "transfer", args: [req.to, BigInt(req.valueWei)] }),
+    };
+  }
   return { to: req.to, value: BigInt(req.valueWei), data: "0x" };
 }
+
+const shortAddress = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 
 function paymentState(e: ActivityEntry): PaymentState {
   return {

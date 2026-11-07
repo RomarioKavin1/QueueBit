@@ -5,16 +5,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatEther, formatUnits, isHex } from "viem";
 import { english, mnemonicToAccount, privateKeyToAccount } from "viem/accounts";
 import { engine, EngineCallError } from "@/lib/engine/client";
-import type { NetworkInfo } from "@/lib/engine/protocol";
+import type { NetworkInfo, WalletsView } from "@/lib/engine/protocol";
 import type { SafeMove } from "@queuebit/extension/src/shared/messages";
 import { connect, sendAndWait, type Injected } from "@/lib/injected";
 import { useConnectedWallet } from "@/lib/wallets";
 import { PasskeyError, createPasskey, passkeySecret, passkeySupport, type PasskeySecret } from "@/lib/passkey";
+import { passkeyProof } from "@/lib/proof";
 import {
   Address,
   Area,
   Choices,
   Field,
+  LineArrow,
   Notice,
   Primary,
   Screen,
@@ -76,7 +78,14 @@ type LockMethod = "passkey" | "password";
 /** How the wallet is locked: a passkey wallet's words come from its passkey (nothing secret stored). */
 type Lock = { kind: "password"; pw: string } | { kind: "passkey"; passkey: PasskeySecret };
 
-const newPasskey = () => createPasskey(navigator.credentials, { userName: "QueueBit wallet" });
+/** A new passkey, named after the wallet it locks (so several wallets are told apart in the passkey list). */
+const newPasskey = async () => {
+  const w = await engine()
+    .wallets()
+    .catch(() => null);
+  const name = w?.wallets.find((x) => x.id === w.active)?.name;
+  return createPasskey(navigator.credentials, { userName: name ? `QueueBit · ${name}` : "QueueBit wallet" });
+};
 
 /** The passkey a passkey wallet needs, asked for its PRF output (a biometric prompt). */
 async function askPasskey(): Promise<PasskeySecret> {
@@ -131,8 +140,11 @@ export function Onboarding() {
   const [prf, setPrf] = useState<boolean | null>(null);
   /** The unlock secret of this session (passkey-derived or typed), held only in memory for the backup step. */
   const secret = useRef<string | null>(null);
-  /** Opened from the wallet to back up (/start#backup): finishing goes back there. */
+  /** Opened from the wallet to back up (/start#backup) or move funds in (/start#move-in): finishing goes back there. */
   const fromWallet = useRef(false);
+  const intent = useRef<"backup" | "move-in" | null>(null);
+  /** Setting up a wallet added next to others: it can be cancelled, back to them. */
+  const [addingTo, setAddingTo] = useState<string | null>(null);
 
   useEffect(() => {
     void passkeySupport().then(setPrf);
@@ -141,15 +153,23 @@ export function Onboarding() {
       if (s === "other-tab") return commit({ id: "other-tab" });
       setNet(await e.getNetwork());
       const st = await e.call("state:get");
-      fromWallet.current = st.initialized && location.hash === "#backup";
+      const hash = location.hash;
+      intent.current = hash === "#backup" ? "backup" : hash === "#move-in" ? "move-in" : null;
+      fromWallet.current = st.initialized && intent.current !== null;
+      if (!st.initialized) {
+        const w = await e.wallets().catch(() => null);
+        if (w && w.wallets.length > 1) setAddingTo(w.wallets.find((x) => x.id !== w.active)?.name ?? null);
+      }
       commit(
         !st.initialized
           ? { id: "choose" }
           : !st.unlocked
             ? { id: "unlock" }
-            : fromWallet.current
+            : intent.current === "backup"
               ? { id: "backup-auth" }
-              : { id: "wallet" },
+              : intent.current === "move-in"
+                ? { id: "move-in" }
+                : { id: "wallet" },
       );
     });
   }, [commit]);
@@ -190,13 +210,31 @@ export function Onboarding() {
       return (
         <Screen
           actions={
-            <p className="pb-1 text-center text-[0.85rem] leading-[1.5] text-ink-3">
-              Runs on the QueueBit test network. Test money only.
-            </p>
+            addingTo ? (
+              <TextButton
+                onClick={() =>
+                  void (async () => {
+                    // Not set up yet, so nothing to lose: drop it and go back to the wallets already here.
+                    const w = await engine().wallets();
+                    await engine().removeWallet(w.active);
+                    setAddingTo(null);
+                    commit({ id: "unlock" });
+                  })()
+                }
+              >
+                Cancel, back to {addingTo}
+              </TextButton>
+            ) : (
+              <p className="pb-1 text-center text-[0.85rem] leading-[1.5] text-ink-3">
+                Runs on the QueueBit test network. Test money only.
+              </p>
+            )
           }
         >
           <VChoose />
-          <Title sub="Three ways in. All end in an account a quantum computer can't forge.">Set up QueueBit</Title>
+          <Title sub="Three ways in. All end in an account a quantum computer can't forge.">
+            {addingTo ? "Set up your new wallet" : "Set up QueueBit"}
+          </Title>
           <Choices
             items={[
               {
@@ -227,17 +265,17 @@ export function Onboarding() {
     case "unlock":
       return (
         <Unlock
-          onDone={(pw, next) => {
+          onDone={(pw) => {
             secret.current = pw;
-            if (next === "move-in") {
-              commit({ id: "ready" });
-              go({ id: "move-in" });
-            } else commit(fromWallet.current ? { id: "backup-auth" } : { id: "wallet" });
+            commit(
+              intent.current === "backup" && fromWallet.current
+                ? { id: "backup-auth" }
+                : intent.current === "move-in" && fromWallet.current
+                  ? { id: "move-in" }
+                  : { id: "wallet" },
+            );
           }}
-          onNewWallet={async () => {
-            await engine().call("keyring:reset");
-            commit({ id: "choose" });
-          }}
+          onSwitched={() => commit({ id: "unlock" })}
         />
       );
 
@@ -384,7 +422,9 @@ export function Onboarding() {
       );
 
     case "moving":
-      return <Moving source={screen.source} onDone={() => commit({ id: "ready" })} onBack={back} />;
+      return (
+        <Moving source={screen.source} secret={secret.current} onDone={() => commit({ id: "ready" })} onBack={back} />
+      );
 
     case "backup-auth":
       return (
@@ -422,7 +462,7 @@ export function Onboarding() {
 
     case "move-in":
       return (
-        <Screen onBack={back} method="Move in">
+        <Screen onBack={canBack ? back : () => commit({ id: "wallet" })} method="Move in">
           <Title sub="Everything in it moves to your quantum-safe account: every token, then the ETH.">
             Move funds in
           </Title>
@@ -630,31 +670,36 @@ function PasskeyCreate({
   );
 }
 
-function Unlock({
-  onDone,
-  onNewWallet,
-}: {
-  onDone: (secret: string | null, next?: "move-in") => void;
-  onNewWallet: () => Promise<void>;
-}) {
+function Unlock({ onDone, onSwitched }: { onDone: (secret: string | null) => void; onSwitched: () => void }) {
   const method = useLockMethod();
   const [chosen, setMode] = useState<LockMethod | null>(null);
   const mode: LockMethod = chosen ?? method ?? "passkey";
   const [pw, setPw] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const unlock = async (how: LockMethod, next?: "move-in") => {
+  const [wallets, setWallets] = useState<WalletsView | null>(null);
+  const [picking, setPicking] = useState(false);
+  useEffect(() => {
+    void engine()
+      .wallets()
+      .then(setWallets)
+      .catch(() => undefined);
+  }, []);
+  const current = wallets?.wallets.find((w) => w.id === wallets.active);
+  const others = wallets?.wallets.filter((w) => w.id !== wallets.active) ?? [];
+
+  const unlock = async (how: LockMethod) => {
     setBusy(true);
     setErr(null);
     try {
       if (how === "passkey") {
         const p = await askPasskey();
         await engine().call("keyring:unlockWithPasskey", { entropy: p.entropy });
-        onDone(null, next);
+        onDone(null);
         return;
       }
       await engine().call("keyring:unlock", { password: pw });
-      onDone(pw, next);
+      onDone(pw);
     } catch (e) {
       setErr(
         e instanceof EngineCallError && e.reason === "wrong-password" ? "That didn't open the wallet." : errText(e),
@@ -663,6 +708,17 @@ function Unlock({
       setBusy(false);
     }
   };
+
+  const open = async (id: string) => {
+    setErr(null);
+    try {
+      await engine().switchWallet(id);
+      onSwitched();
+    } catch (e) {
+      setErr(errText(e));
+    }
+  };
+
   return (
     <Screen
       actions={
@@ -684,7 +740,9 @@ function Unlock({
       }
     >
       <VUnlock />
-      <Title sub="Your keys stay encrypted on this phone.">Welcome back</Title>
+      <Title sub="Your keys stay encrypted on this phone.">
+        {current && others.length ? `Unlock ${current.name}` : "Welcome back"}
+      </Title>
       {mode === "password" && (
         <Field
           label="Password"
@@ -695,29 +753,45 @@ function Unlock({
           onKeyDown={(e) => e.key === "Enter" && void unlock("password")}
         />
       )}
-      <div className="mt-8">
-        <Choices
-          items={[
-            {
-              key: "move-in",
-              title: "Move funds in",
-              body: "From MetaMask or another wallet address, or from a Safe. Unlocks first, then moves into this wallet.",
-              onSelect: () => void unlock(mode, "move-in"),
-              disabled: busy || (mode === "password" && !pw),
-            },
-            {
-              key: "new",
-              title: "Create a new wallet instead",
-              body: "Removes this wallet from this device. Its money stays on chain; its passkey or words bring it back.",
-              onSelect: () => {
-                if (confirm("Remove this wallet from this device and start a new one?"))
-                  void onNewWallet().catch((e) => setErr(errText(e)));
-              },
-              disabled: busy,
-            },
-          ]}
-        />
-      </div>
+      {/* Several wallets on this phone: open a different one instead (each has its own passkey or password). */}
+      {others.length > 0 && (
+        <div className="mt-6">
+          <button
+            type="button"
+            onClick={() => setPicking((p) => !p)}
+            aria-expanded={picking}
+            className="mono-label flex h-11 items-center gap-1.5 text-[12px] text-blue"
+          >
+            Open another wallet
+            <svg viewBox="0 0 10 6" aria-hidden className={`w-2.5 ${picking ? "rotate-180" : ""}`}>
+              <path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.3" />
+            </svg>
+          </button>
+          {picking && (
+            <ul className="border-t border-ink">
+              {others.map((w) => (
+                <li key={w.id} className="border-b border-rule">
+                  <button
+                    type="button"
+                    onClick={() => void open(w.id)}
+                    className="flex min-h-[56px] w-full items-center justify-between gap-3 py-2.5 text-left active:bg-blue-wash"
+                  >
+                    <span>
+                      <span className="block text-[1.02rem]">{w.name}</span>
+                      <span className="mono-label block text-[11px] text-ink-3">
+                        {!w.initialized
+                          ? "Not set up yet"
+                          : `${w.address ? short(w.address) : "Locked"} · ${w.lockedWith === "passkey" ? "Passkey" : "Password"}`}
+                      </span>
+                    </span>
+                    <LineArrow className="text-ink-3" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
       {err && <Notice tone="error">{err}</Notice>}
     </Screen>
   );
@@ -1215,7 +1289,18 @@ function MovePreview({
   );
 }
 
-function Moving({ source, onDone, onBack }: { source: Source; onDone: () => void; onBack: () => void }) {
+function Moving({
+  source,
+  secret,
+  onDone,
+  onBack,
+}: {
+  source: Source;
+  /** The password typed this session; a passkey wallet is asked again (the engine signs only with a fresh proof). */
+  secret: string | null;
+  onDone: () => void;
+  onBack: () => void;
+}) {
   const [log, setLog] = useState<Array<{ label: string; state: "sending" | "done" }>>([]);
   const [err, setErr] = useState<string | null>(null);
   const [done, setDone] = useState(false);
@@ -1226,7 +1311,8 @@ function Moving({ source, onDone, onBack }: { source: Source; onDone: () => void
     try {
       if (source.kind === "key") {
         setLog([{ label: "Signing and sending the move", state: "sending" }]);
-        const r = await engine().call("migrate:run", migrationReq(source));
+        const proof = secret ? { password: secret } : await passkeyProof();
+        const r = await engine().call("migrate:run", { ...migrationReq(source), proof });
         setLog([{ label: `${r.hashes.length} transaction${r.hashes.length > 1 ? "s" : ""} confirmed`, state: "done" }]);
       } else {
         const req = migrationReq(source);
@@ -1247,7 +1333,7 @@ function Moving({ source, onDone, onBack }: { source: Source; onDone: () => void
     } catch (e) {
       setErr(errText(e));
     }
-  }, [source]);
+  }, [source, secret]);
 
   useEffect(() => {
     if (started.current) return;

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { isAddress, type Address as Addr } from "viem";
 import { Address, Field, Notice, Primary, Screen, Secondary, Title, Working } from "@/components/onboarding/ui";
 import { engine } from "@/lib/engine/client";
-import { passkeySecret } from "@/lib/passkey";
+import { signProof } from "@/lib/proof";
 import { Row, Section } from "./bits";
 import { Identicon } from "./Identicon";
 import { errText, useWallet } from "./state";
@@ -61,19 +61,11 @@ export function Guardians({ nav }: { nav: Nav }) {
     setBusy(true);
     setErr(null);
     try {
-      if (status?.deployed) {
-        if (lockedWith === "passkey") {
-          const info = await engine().call("keyring:passkeyInfo");
-          if (!info) throw new Error("This wallet has no passkey.");
-          const { entropy } = await passkeySecret(navigator.credentials, info.credentialId);
-          await engine().call("keyring:verify", { entropy });
-        } else {
-          await engine().call("keyring:verify", { password: pw });
-        }
-      }
+      const proof = status?.deployed && lockedWith ? await signProof(lockedWith, pw) : undefined;
       const r = await engine().call("account:updateGuardians", {
         guardians: list,
         threshold: list.length ? threshold : 0,
+        ...(proof ? { proof } : {}),
       });
       setSent(r.entry?.id ?? "saved");
       await load();

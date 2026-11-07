@@ -31,11 +31,33 @@ export interface ApprovalView {
   account?: `0x${string}`;
 }
 
+/**
+ * The password or the passkey's PRF output, sent again with a request that signs. A wallet built with
+ * `confirmEachSignature` (the web app) refuses to sign without it, so an unlocked wallet left open can't sign alone.
+ */
+export type SignProof = { password: string } | { entropy: Hex };
+/** A request that signs: carries the proof (see SignProof). */
+export type Signed<T> = T & { proof?: SignProof };
+
 export interface SendRequest {
   chainId?: number;
   to: `0x${string}`;
-  /** wei, decimal string */
+  /** wei, decimal string; with `token`, the token's smallest unit */
   valueWei: string;
+  /** An ERC-20 to send instead of ETH (a `transfer` call from the account). */
+  token?: `0x${string}`;
+}
+
+/** A token the wallet shows, with the account's balance of it. */
+export interface TokenBalance {
+  token: `0x${string}`;
+  symbol: string;
+  name: string;
+  decimals: number;
+  /** In the token's smallest unit, decimal string; "0" when the account doesn't exist yet. */
+  balance: string;
+  /** Added by the person (not one of the network's presets): can be removed. */
+  custom: boolean;
 }
 
 /** A move into the account ("Move to quantum-safe"). Imported keys are used for this move only, never stored. */
@@ -119,7 +141,7 @@ export interface UiApi {
   "permissions:list": { req: undefined; res: OriginPermission[] };
   "permissions:revoke": { req: { origin: string }; res: null };
   "approval:get": { req: { id: string }; res: ApprovalView | null };
-  "approval:resolve": { req: { id: string; approved: boolean; alwaysAllow?: boolean }; res: null };
+  "approval:resolve": { req: Signed<{ id: string; approved: boolean; alwaysAllow?: boolean }>; res: null };
   /** Transaction approvals: who signs and the most the network fee can be. */
   "approval:preview": { req: { id: string }; res: SendPreview };
 
@@ -129,7 +151,7 @@ export interface UiApi {
   /** Before the account exists: who can help recover it (the address is bound to them). */
   /** Sets the guardians: at creation before the account exists, by an owner admin payment after. */
   "account:updateGuardians": {
-    req: { chainId?: number; guardians: `0x${string}`[]; threshold: number };
+    req: Signed<{ chainId?: number; guardians: `0x${string}`[]; threshold: number }>;
     res: { entry?: ActivityEntry; status: AccountStatus };
   };
   "account:setGuardians": {
@@ -137,28 +159,33 @@ export interface UiApi {
     res: AccountStatus;
   };
   /** The setup key creates the account. */
-  "account:activate": { req: { chainId?: number }; res: ActivityEntry };
+  "account:activate": { req: Signed<{ chainId?: number }>; res: ActivityEntry };
   "send:preview": { req: SendRequest; res: SendPreview };
-  "send:submit": { req: SendRequest; res: ActivityEntry };
+  "send:submit": { req: Signed<SendRequest>; res: ActivityEntry };
   "activity:list": { req: undefined; res: ActivityEntry[] };
+  /** The network's tokens and the ones added here, with the account's balances. */
+  "tokens:list": { req: { chainId?: number }; res: TokenBalance[] };
+  /** Adds any ERC-20 by its contract address (its symbol, name and decimals are read from the chain). */
+  "tokens:add": { req: { chainId?: number; token: `0x${string}` }; res: TokenBalance };
+  "tokens:remove": { req: { chainId?: number; token: `0x${string}` }; res: null };
 
   // ---- sessions ----
   "sessions:list": { req: { chainId?: number }; res: SessionRecord[] };
   /** The owner adds a session key (one admin transaction through LeanPool). */
-  "sessions:create": { req: SessionRequest; res: SessionRecord };
+  "sessions:create": { req: Signed<SessionRequest>; res: SessionRecord };
   /** The owner removes it now. */
-  "sessions:revoke": { req: { id: `0x${string}` }; res: SessionRecord };
+  "sessions:revoke": { req: Signed<{ id: `0x${string}` }>; res: SessionRecord };
 
   // ---- keys & recovery ----
   "keys:view": { req: { chainId?: number }; res: KeysView };
   /** Deletes expired keys from the account (one transaction). */
-  "keys:prune": { req: { chainId?: number; ids: `0x${string}`[] }; res: ActivityEntry };
+  "keys:prune": { req: Signed<{ chainId?: number; ids: `0x${string}`[] }>; res: ActivityEntry };
   /** Cancels a guardian recovery nobody here asked for (the owner signs). */
-  "keys:cancelRecovery": { req: { chainId?: number; id: `0x${string}` }; res: ActivityEntry };
+  "keys:cancelRecovery": { req: Signed<{ chainId?: number; id: `0x${string}` }>; res: ActivityEntry };
 
   // ---- move to quantum-safe ----
   "migrate:preview": { req: MigrationRequest; res: MigrationPreview };
-  "migrate:run": { req: MigrationRequest; res: { hashes: `0x${string}`[] } };
+  "migrate:run": { req: Signed<MigrationRequest>; res: { hashes: `0x${string}`[] } };
   /**
    * An EOA move its own wallet sends (`external: true`): the token transfers, in order. The ETH goes last, from
    * `migrate:sweep`, once the transfers have landed (they spend some of it on fees).
@@ -191,16 +218,16 @@ export interface UiApi {
   "privacy:sync": { req: { chainId?: number }; res: PrivacyView };
   /** Starts Move to private (shield), Move to public (unshield, to a fresh address via PoolPayer) or a public exit. */
   "privacy:start": {
-    req: {
+    req: Signed<{
       chainId?: number;
       kind: PrivacyOp["kind"];
       amountWei: string;
       /** `exit`: the note to take back publicly. */
       note?: { depositIndex: number; secretIndex: number };
-    };
+    }>;
     res: PrivacyView;
   };
-  "privacy:retry": { req: { chainId?: number; opId: string }; res: PrivacyView };
+  "privacy:retry": { req: Signed<{ chainId?: number; opId: string }>; res: PrivacyView };
   "privacy:cancel": { req: { chainId?: number; opId: string }; res: PrivacyView };
   "privacy:dismiss": { req: { chainId?: number }; res: PrivacyView };
   "privacy:saveConfig": {

@@ -3,35 +3,60 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getAddress, isAddress } from "viem";
 import { Field, Notice, Primary, Screen, Secondary, Title, Working } from "@/components/onboarding/ui";
-import { PasskeyError, passkeySecret } from "@/lib/passkey";
+import { PasskeyError } from "@/lib/passkey";
+import { signProof, type SignProof } from "@/lib/proof";
 import { VSend } from "@/components/onboarding/vignettes";
 import { engine, EngineCallError } from "@/lib/engine/client";
 import type { UiApi } from "@/lib/engine/protocol";
 import { askFaucet, waitForWei } from "@/lib/faucet";
-import { ago, eth, explorerLink, parseEthInput, short } from "@/lib/format";
+import { ago, eth, explorerLink, parseAmountInput, short, units } from "@/lib/format";
 import { Row, recipients, type Recipient } from "./bits";
 import { Identicon } from "./Identicon";
 import { Scanner, canScan } from "./Scan";
+import { TokenGlyph } from "./Tokens";
 import { errText, useWallet, type ActivityEntry } from "./state";
 import type { Nav } from "./Wallet";
 
 type Preview = UiApi["send:preview"]["res"];
-type Draft = { to: `0x${string}`; wei: bigint };
+/** What is sent: ETH (no `token`) or an ERC-20, with the account's balance of it. */
+export type Asset = { token?: `0x${string}`; symbol: string; decimals: number; balance: bigint };
+type Draft = { to: `0x${string}`; wei: bigint; asset: Asset };
+
+const ETH_ASSET = (balance: bigint): Asset => ({ symbol: "ETH", decimals: 18, balance });
+
+/** The account's assets: ETH first, then every token it holds or that the network lists. */
+function useAssets(): Asset[] {
+  const { status, tokens } = useWallet();
+  return useMemo(
+    () => [
+      ETH_ASSET(BigInt(status?.accountWei ?? "0")),
+      ...tokens.map((t) => ({ token: t.token, symbol: t.symbol, decimals: t.decimals, balance: BigInt(t.balance) })),
+    ],
+    [status?.accountWei, tokens],
+  );
+}
+
+const sameAsset = (a: Asset, b: Asset) => (a.token ?? "").toLowerCase() === (b.token ?? "").toLowerCase();
+const tokenField = (a: Asset) => (a.token ? { token: a.token } : {});
 
 /**
  * Send, the way people already know it from MetaMask, Rainbow or Phantom: pick who (paste, scan, or someone you paid
  * before), type how much on a big keypad, confirm a "you → them" receipt, then watch it go. The quantum-safe parts
  * (the signature it uses, LeanPool's batch) are shown where they matter, never in the way.
  */
-export function Send({ nav }: { nav: Nav }) {
+export function Send({ nav, token }: { nav: Nav; token?: `0x${string}` }) {
+  const assets = useAssets();
   const [step, setStep] = useState<"to" | "amount" | "review" | "sending">("to");
   const [to, setTo] = useState<`0x${string}` | null>(null);
   const [amount, setAmount] = useState("");
+  const [pick, setPick] = useState<`0x${string}` | undefined>(token);
   const [preview, setPreview] = useState<Preview | null>(null);
+  const [proof, setProof] = useState<SignProof | null>(null);
+  const asset = assets.find((a) => (a.token ?? "").toLowerCase() === (pick ?? "").toLowerCase()) ?? assets[0]!;
   const draft = useMemo<Draft | null>(() => {
-    const a = parseEthInput(amount);
-    return to && "wei" in a ? { to, wei: a.wei } : null;
-  }, [to, amount]);
+    const a = parseAmountInput(amount, asset.decimals, asset.symbol);
+    return to && "wei" in a ? { to, wei: a.wei, asset } : null;
+  }, [to, amount, asset]);
 
   if (step === "to" || !to)
     return (
@@ -47,6 +72,12 @@ export function Send({ nav }: { nav: Nav }) {
     return (
       <EnterAmount
         to={to}
+        asset={asset}
+        assets={assets}
+        onAsset={(a) => {
+          setPick(a.token);
+          setAmount("");
+        }}
         amount={amount}
         onAmount={setAmount}
         onBack={() => setStep("to")}
@@ -58,9 +89,29 @@ export function Send({ nav }: { nav: Nav }) {
     );
   if (step === "review")
     return (
-      <Confirm draft={draft} preview={preview} onBack={() => setStep("amount")} onSend={() => setStep("sending")} />
+      <Confirm
+        draft={draft}
+        preview={preview}
+        onBack={() => setStep("amount")}
+        onSend={(p) => {
+          setProof(p);
+          setStep("sending");
+        }}
+      />
     );
-  return <Sending nav={nav} draft={draft} preview={preview} onRetry={() => setStep("review")} />;
+  if (!proof) return null;
+  return (
+    <Sending
+      nav={nav}
+      draft={draft}
+      preview={preview}
+      proof={proof}
+      onRetry={() => {
+        setProof(null);
+        setStep("review");
+      }}
+    />
+  );
 }
 
 // ---- 1. who ------------------------------------------------------------------------------------------------------
@@ -262,12 +313,18 @@ const KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", ".", "0", "back"] as 
 
 function EnterAmount({
   to,
+  asset,
+  assets,
+  onAsset,
   amount,
   onAmount,
   onBack,
   onNext,
 }: {
   to: `0x${string}`;
+  asset: Asset;
+  assets: Asset[];
+  onAsset: (a: Asset) => void;
   amount: string;
   onAmount: (a: string) => void;
   onBack: () => void;
@@ -277,36 +334,43 @@ function EnterAmount({
   const [fee, setFee] = useState<bigint | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const balance = BigInt(status?.accountWei ?? "0");
+  const [choosing, setChoosing] = useState(false);
+  const ethWei = BigInt(status?.accountWei ?? "0");
+  const balance = asset.balance;
+  const isEth = !asset.token;
   const known = useMemo(
     () => recipients(activity).find((r) => r.address.toLowerCase() === to.toLowerCase()),
     [activity, to],
   );
 
-  // The fee doesn't depend on the amount: quote it once, to show it live and to work out "Max".
+  // The fee doesn't depend on the amount: quote it once per asset, to show it live and to work out "Max".
   useEffect(() => {
+    setFee(null);
     void engine()
-      .call("send:preview", { to, valueWei: "1" })
+      .call("send:preview", { to, valueWei: "1", ...tokenField(asset) })
       .then((p) => setFee(BigInt(p.maxFeeWei)))
       .catch(() => setFee(null));
-  }, [to]);
+  }, [to, asset.token]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const spendable = fee === null ? balance : balance > fee ? balance - fee : 0n;
-  const parsed = parseEthInput(amount || "0");
+  // ETH pays its own fee; a token's whole balance can go, the fee is paid in ETH beside it.
+  const spendable = !isEth || fee === null ? balance : balance > fee ? balance - fee : 0n;
+  const parsed = parseAmountInput(amount || "0", asset.decimals, asset.symbol);
   const wei = "wei" in parsed ? parsed.wei : 0n;
   const over = wei > spendable;
+  const noFee = !isEth && fee !== null && ethWei < fee;
 
   const press = useCallback(
     (k: string) => {
       setErr(null);
       if (k === "back") return onAmount(amount.slice(0, -1));
       if (k === ".") return onAmount(amount.includes(".") ? amount : (amount || "0") + ".");
-      if ((amount.split(".")[1] ?? "").length >= 18 && amount.includes(".")) return;
+      if (k === "." && asset.decimals === 0) return;
+      if ((amount.split(".")[1] ?? "").length >= asset.decimals && amount.includes(".")) return;
       if (amount === "0") return onAmount(k);
       if (amount.replace(".", "").length >= 20) return;
       onAmount(amount + k);
     },
-    [amount, onAmount],
+    [amount, onAmount, asset.decimals],
   );
 
   // A hardware keyboard types into the same display.
@@ -323,16 +387,22 @@ function EnterAmount({
     return () => window.removeEventListener("keydown", on);
   }, [press]);
 
-  const part = (num: bigint, den: bigint) => onAmount(eth((spendable * num) / den, 18));
+  const part = (num: bigint, den: bigint) => onAmount(units((spendable * num) / den, asset.decimals, asset.decimals));
 
   const next = async () => {
     if (!("wei" in parsed) || wei === 0n || over) return;
     setBusy(true);
     setErr(null);
     try {
-      const p = await guard(engine().call("send:preview", { to, valueWei: wei.toString() }));
-      if (!p.enough) setErr(`With the network fee this needs ${eth(wei + BigInt(p.maxFeeWei), 6)} ETH.`);
-      else onNext(p);
+      const p = await guard(engine().call("send:preview", { to, valueWei: wei.toString(), ...tokenField(asset) }));
+      if (p.enough) onNext(p);
+      else if (isEth) setErr(`With the network fee this needs ${eth(wei + BigInt(p.maxFeeWei), 6)} ETH.`);
+      else if (BigInt(p.token?.balance ?? "0") < wei)
+        setErr(`The account has ${units(p.token?.balance, asset.decimals, 6)} ${asset.symbol}.`);
+      else
+        setErr(
+          `The network fee is paid in ETH: up to ${eth(p.maxFeeWei, 6)} ETH, and the account has ${eth(p.balanceWei, 6)}.`,
+        );
     } catch (e) {
       setErr(errText(e));
     } finally {
@@ -350,7 +420,7 @@ function EnterAmount({
       step={2}
       of={3}
       actions={
-        <Primary busy={busy} busyLabel="Checking" disabled={wei === 0n || over} onClick={() => void next()}>
+        <Primary busy={busy} busyLabel="Checking" disabled={wei === 0n || over || noFee} onClick={() => void next()}>
           Review
         </Primary>
       }
@@ -376,14 +446,57 @@ function EnterAmount({
           >
             {shown}
           </span>
-          <span className="mono-label text-[14px] text-ink-2">ETH</span>
+          {/* The unit is the asset picker: tap to send something else. */}
+          <button
+            type="button"
+            onClick={() => setChoosing((c) => !c)}
+            aria-expanded={choosing}
+            aria-label={`Sending ${asset.symbol}. Change what you send`}
+            className="mono-label flex h-9 items-center gap-1.5 border border-ink px-2 text-[13px] active:bg-paper-3"
+          >
+            {asset.symbol}
+            <Chevron open={choosing} />
+          </button>
         </p>
-        <p className={`mt-3.5 text-[0.95rem] ${over ? "text-red" : "text-ink-3"}`}>
+        <p className={`mt-3.5 text-[0.95rem] ${over || noFee ? "text-red" : "text-ink-3"}`}>
           {over
-            ? `More than you can send. Up to ${eth(spendable, 6)} ETH after the fee.`
-            : `${eth(balance, 6)} ETH available${fee !== null ? ` · fee up to ${eth(fee, 6)}` : ""}`}
+            ? isEth
+              ? `More than you can send. Up to ${eth(spendable, 6)} ETH after the fee.`
+              : `More than you have: ${units(balance, asset.decimals, 6)} ${asset.symbol}.`
+            : noFee
+              ? `The fee is paid in ETH (up to ${eth(fee, 6)}); the account has ${eth(ethWei, 6)}.`
+              : `${units(balance, asset.decimals, 6)} ${asset.symbol} available${fee !== null ? ` · fee up to ${eth(fee, 6)} ETH` : ""}`}
         </p>
       </div>
+
+      {choosing && (
+        <ul className="mt-5 border-t border-ink" aria-label="What to send">
+          {assets.map((a) => (
+            <li key={a.token ?? "eth"}>
+              <button
+                type="button"
+                aria-pressed={sameAsset(a, asset)}
+                onClick={() => {
+                  onAsset(a);
+                  setChoosing(false);
+                  setErr(null);
+                }}
+                className="flex min-h-[56px] w-full items-center gap-3 border-b border-rule py-2.5 text-left active:bg-blue-wash"
+              >
+                <TokenGlyph symbol={a.symbol} token={a.token} size={30} />
+                <span className="flex-1 text-[1rem]">{a.symbol}</span>
+                <span className="text-[0.98rem] tnum text-ink-2">{units(a.balance, a.decimals, 6)}</span>
+                <span
+                  aria-hidden
+                  className={`mono-label w-10 text-right text-[11px] ${sameAsset(a, asset) ? "text-blue" : "text-transparent"}`}
+                >
+                  ✓
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
 
       <div className="mt-6 grid grid-cols-3 gap-2">
         {(
@@ -448,34 +561,31 @@ function Confirm({
   draft: Draft;
   preview: Preview;
   onBack: () => void;
-  onSend: () => void;
+  onSend: (proof: SignProof) => void;
 }) {
   const { status, net, activity, lockedWith } = useWallet();
   const [pw, setPw] = useState("");
   const [authing, setAuthing] = useState(false);
   const [authErr, setAuthErr] = useState<string | null>(null);
   const fee = BigInt(preview.maxFeeWei);
-  const total = draft.wei + fee;
+  const { asset } = draft;
+  const isEth = !asset.token;
+  const amountText = `${units(draft.wei, asset.decimals, 8)} ${asset.symbol}`;
+  const total = isEth ? draft.wei + fee : fee;
   const creating = !preview.deployed;
   const setupShort = creating && BigInt(status?.setupWei ?? "0") < BigInt(status?.activationCostWei ?? "0");
   const blocked = !preview.enough || (setupShort && Boolean(net?.localDevnet));
   const known = recipients(activity).find((r) => r.address.toLowerCase() === draft.to.toLowerCase());
   const left = status?.ownerSignaturesLeft;
 
-  // Every signature asks for the passkey (or password) again, so an unlocked wallet left open can't sign alone.
+  // Every signature asks for the passkey (or password) again, and the engine refuses to sign without it, so an
+  // unlocked wallet left open can't sign alone.
   const confirm = async () => {
+    if (!lockedWith) return;
     setAuthing(true);
     setAuthErr(null);
     try {
-      if (lockedWith === "passkey") {
-        const info = await engine().call("keyring:passkeyInfo");
-        if (!info) throw new Error("This wallet has no passkey.");
-        const { entropy } = await passkeySecret(navigator.credentials, info.credentialId);
-        await engine().call("keyring:verify", { entropy });
-      } else {
-        await engine().call("keyring:verify", { password: pw });
-      }
-      onSend();
+      onSend(await signProof(lockedWith, pw));
     } catch (e) {
       setAuthErr(e instanceof PasskeyError || e instanceof Error ? e.message : "That didn't work. Try again.");
     } finally {
@@ -496,15 +606,19 @@ function Confirm({
           busy={authing}
           busyLabel={lockedWith === "passkey" ? "Waiting for your passkey" : "Checking"}
         >
-          {lockedWith === "passkey" ? `Confirm with passkey` : `Sign and send ${eth(draft.wei)} ETH`}
+          {lockedWith === "passkey"
+            ? `Confirm with passkey`
+            : `Sign and send ${units(draft.wei, asset.decimals)} ${asset.symbol}`}
         </Primary>
       }
     >
       <p className="text-center">
         <span className="mono-label text-ink-3">You send</span>
         <span className="mt-2 flex items-baseline justify-center gap-2.5">
-          <span className="text-[3.4rem] leading-none tracking-[-0.02em] tnum">{eth(draft.wei, 8)}</span>
-          <span className="mono-label text-[14px] text-ink-2">ETH</span>
+          <span className="text-[3.4rem] leading-none tracking-[-0.02em] tnum">
+            {units(draft.wei, asset.decimals, 8)}
+          </span>
+          <span className="mono-label text-[14px] text-ink-2">{asset.symbol}</span>
         </span>
       </p>
 
@@ -526,9 +640,14 @@ function Confirm({
       </ol>
 
       <dl className="mt-6 border-t border-ink">
+        {!isEth && (
+          <Row k="Token">
+            {asset.symbol} · {short(asset.token!)}
+          </Row>
+        )}
         <Row k="Network fee">up to {eth(fee, 8)} ETH</Row>
         <Row k="Total" strong>
-          {eth(total, 8)} ETH
+          {isEth ? `${eth(total, 8)} ETH` : `${amountText} + up to ${eth(fee, 8)} ETH`}
         </Row>
         <Row k="Signed with">Quantum-safe key</Row>
         {left !== undefined && (
@@ -545,7 +664,9 @@ function Confirm({
       )}
       {!preview.enough && (
         <Notice tone="error">
-          The account has {eth(preview.balanceWei, 6)} ETH. This needs {eth(total, 6)} ETH, fee included.
+          {isEth || BigInt(preview.token?.balance ?? "0") >= draft.wei
+            ? `The account has ${eth(preview.balanceWei, 6)} ETH. This needs ${eth(total, 6)} ETH, fee included.`
+            : `The account has ${units(preview.token?.balance, asset.decimals, 6)} ${asset.symbol}.`}
         </Notice>
       )}
       {setupShort && net?.localDevnet && (
@@ -611,7 +732,19 @@ function explain(e: unknown): { text: string; detail?: string; atPool: boolean }
   return { text: raw, atPool: false };
 }
 
-function Sending({ nav, draft, preview, onRetry }: { nav: Nav; draft: Draft; preview: Preview; onRetry: () => void }) {
+function Sending({
+  nav,
+  draft,
+  preview,
+  proof,
+  onRetry,
+}: {
+  nav: Nav;
+  draft: Draft;
+  preview: Preview;
+  proof: SignProof;
+  onRetry: () => void;
+}) {
   const { net, refresh, guard } = useWallet();
   const creating = !preview.deployed;
   const [created, setCreated] = useState(!creating);
@@ -655,7 +788,9 @@ function Sending({ nav, draft, preview, onRetry }: { nav: Nav; draft: Draft; pre
             }
           })();
         }
-        const ent = await guard(e.call("send:submit", { to: draft.to, valueWei: draft.wei.toString() }));
+        const ent = await guard(
+          e.call("send:submit", { to: draft.to, valueWei: draft.wei.toString(), ...tokenField(draft.asset), proof }),
+        );
         setCreated(true);
         setEntry(ent);
         void refresh();
@@ -675,7 +810,7 @@ function Sending({ nav, draft, preview, onRetry }: { nav: Nav; draft: Draft; pre
         void refresh();
       }
     })();
-  }, [creating, draft, guard, refresh]);
+  }, [creating, draft, guard, refresh, proof]);
 
   const done = entry?.status === "confirmed";
   const failed = entry?.status === "failed";
@@ -713,13 +848,17 @@ function Sending({ nav, draft, preview, onRetry }: { nav: Nav; draft: Draft; pre
       <Title
         sub={
           done
-            ? `${eth(draft.wei)} ETH to ${short(draft.to)}.`
+            ? `${units(draft.wei, draft.asset.decimals)} ${draft.asset.symbol} to ${short(draft.to)}.`
             : stopped
               ? undefined
               : "You can leave this screen. It keeps going."
         }
       >
-        {done ? "Sent" : stopped ? "Not sent" : `Sending ${eth(draft.wei)} ETH`}
+        {done
+          ? "Sent"
+          : stopped
+            ? "Not sent"
+            : `Sending ${units(draft.wei, draft.asset.decimals)} ${draft.asset.symbol}`}
       </Title>
       <ol className="border-t border-ink">
         {steps.map((s, i) => (
@@ -753,5 +892,13 @@ function Sending({ nav, draft, preview, onRetry }: { nav: Nav; draft: Draft; pre
         </>
       )}
     </Screen>
+  );
+}
+
+function Chevron({ open }: { open: boolean }) {
+  return (
+    <svg viewBox="0 0 10 6" aria-hidden className={`w-2.5 transition-transform ${open ? "rotate-180" : ""}`}>
+      <path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.3" />
+    </svg>
   );
 }
