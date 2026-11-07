@@ -235,7 +235,13 @@ jobs:
           version: ${{ env.FOUNDRY_VERSION }}
       - name: forge build
         working-directory: contracts
-        run: forge build --sizes
+        run: forge build
+      # EIP-170/3860 limits for what ships: src/ and everything it imports. Test-only code is out of scope: the vendored
+      # poseidon-solidity PoseidonT3/T4 (test/privacy/vendor) are 29.3/32.9 kB under via-IR; the devnet, which does not
+      # enforce EIP-170, is the only chain they are deployed on (docs/plan/IMPLEMENTATION-NOTES.md, "Devnet facts").
+      - name: contract sizes (deployable src/)
+        working-directory: contracts
+        run: forge build --sizes src
       - name: forge test (ci profile, 10k fuzz runs)
         working-directory: contracts
         env:

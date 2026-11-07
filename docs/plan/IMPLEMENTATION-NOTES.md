@@ -537,7 +537,9 @@ pipeline, over EIP-170). With two profiles forge 1.3.5's name-based `vm.getCode(
 the harness deploys hosts from artifact paths (`out/...json`; `fs_permissions` read on `out`). The privacy suite's
 `test/privacy/vendor/.../Entrypoint.sol` and `EntryPoint.sol` collide in `out/` on case-insensitive macOS — another
 reason the EntryPoint is deployed from its canonical JSON instead of compiled. `forge build --sizes` still fails on
-the privacy vendor's `PoseidonT3`/`PoseidonT4` (not M7). Safe7579 needs `erc7579-implementation@16138d1` (its lockfile
+the privacy vendor's `PoseidonT3`/`PoseidonT4` (not M7); CI therefore checks sizes on `forge build --sizes src` (the
+deployable contracts and their imports). Building the two without IR (16.5/12.5 kB) would need every importer, down to
+the PoolPayer tests and `FrameSim`, on the legacy pipeline too, where `FrameSim` is stack-too-deep. Safe7579 needs `erc7579-implementation@16138d1` (its lockfile
 pin, context-remapped) and a file-level remapping for its `src/lib/ModeLib.sol` import.
 
 **For later (shared refactoring, not done: `src/account` and `src/lib` are under review).** The token config / price
