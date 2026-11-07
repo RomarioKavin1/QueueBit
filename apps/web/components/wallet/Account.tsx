@@ -114,6 +114,12 @@ export function AccountTab({ nav }: { nav: Nav }) {
               onSelect: () => nav.open({ id: "guardians" }),
             },
             {
+              key: "permissions",
+              title: "Let someone spend",
+              body: "Give another wallet a limited allowance from this account, until a time you pick.",
+              onSelect: () => nav.open({ id: "permissions" }),
+            },
+            {
               key: "lock",
               title: "Lock now",
               body: lockedWith === "password" ? "Your password opens it again." : "Your passkey opens it again.",
