@@ -1,9 +1,29 @@
 # QueueBit
 
-**A quantum-safe wallet for Ethereum, today.** Every payment is signed with a hash-based key a quantum computer can’t
-forge, and costs about as much as an ordinary one.
+**A post-quantum smart wallet for Ethereum, live today.** QueueBit signs every payment with a hash-based key that a
+quantum computer can’t forge, and brings the cost of that signature down from 383,018 gas to 85,598, about what an
+ordinary payment costs. It does this without a hard fork: it implements the mempool side of
+[EIP-8288](https://eips.ethereum.org/EIPS/eip-8288) (post-quantum signature aggregation) on an
+[EIP-8141](https://eips.ethereum.org/EIPS/eip-8141) frame-transaction account
+([ERC-8286](https://ercs.ethereum.org/ERCS/erc-8286) + ERC-7579), carried by the
+ERC-8421 alternative mempool with no stake.
 
 Try it: [queuebit.space](https://www.queuebit.space) (public EIP-8141 devnet, chain 1337).
+
+![How a QueueBit payment works: the quantum-safe key signs, the aggregator checks and batches, posts one hash-signed root on chain, and sends the payment with its proof through the alt mempool; VERIFY checks it is in the root; a STARK per batch lets anyone audit](images/how-it-works.png)
+
+- **EIP-8288, implemented today: 4.5× cheaper.** The 4 KB signature never goes on chain. An aggregator verifies it
+  off chain, batches up to 16, and posts one Merkle root, itself signed with a hash-based key. Each payment declares
+  its signature as an EIP-8288 dependency and its VERIFY frame only checks that it is in that root.
+- **Zero-knowledge, twice.** Every batch gets a recursive leanVM **STARK** over all its signatures, so anyone can audit
+  the aggregator. Private payments use a **zk proof made in the browser** (Privacy Pools, Groth16): you prove you own a
+  deposit without revealing which one, then send from a brand-new address while the pool pays the gas inside the same
+  frame transaction. No relayer.
+- **No stake, inside the alt mempool’s rules.** VERIFY reads only storage keyed by the account itself (ERC-7562
+  STO-021) and uses 70–87k of the 100k unstaked budget. The public mempool refuses these transactions; the alt mempool
+  admits them.
+- **A migration tool.** Bring any wallet to post-quantum in one transaction: an EOA or MetaMask (move the funds, or
+  keep the address with EIP-7702), a **Safe** (upgraded in place, same address), or any upgradeable smart account.
 
 **Admitted by the alt mempool and mined** (devnet explorer; times in IST, UTC+5:30):
 
@@ -63,20 +83,7 @@ not the protocol’s.
 
 [EIP-8288](https://eips.ethereum.org/EIPS/eip-8288) moves post-quantum signature checks out of the EVM: a transaction
 declares a **dependency** on its signature instead of carrying it, nodes verify and aggregate signatures off chain, and
-blocks carry one recursive proof. QueueBit runs the same design on today’s devnet:
-
-```mermaid
-flowchart LR
-  K[leanSPHINCS key] -->|"tx + 4 KB sig"| N[Aggregator node]
-  N -->|"verifies natively,<br/>batches ≤16 deps"| R["Merkle root over<br/>keccak(0x10 ‖ sigHash ‖ vk)"]
-  R -->|"post(root, C13 sig)"| P[PQAggregator]
-  P -->|postRoot| G[("DepsRegistry<br/>8-slot ring per account")]
-  N -->|"tx + witness<br/>(root, slot, proof)"| M[ERC-8421 alt mempool]
-  M --> V{"VERIFY:<br/>leaf ∈ root in ring?"}
-  G -.->|rootAt| V
-  V -->|approve| S[SENDER frames execute]
-  N -.->|"recursive STARK,<br/>hash attached"| A[Audit]
-```
+blocks carry one recursive proof. QueueBit runs the same design on today’s devnet (the diagram at the top):
 
 - **Dependency, not signature.** The transaction lists a dependency triple `(scheme 0x10, sigHash, vk)`; the 4 KB
   leanSPHINCS signature goes only to the aggregator. The leaf is `keccak(0x10 ‖ SIG_HASH ‖ vk)`.
