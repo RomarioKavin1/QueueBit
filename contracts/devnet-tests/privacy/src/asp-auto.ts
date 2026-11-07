@@ -79,8 +79,10 @@ async function scan(): Promise<void> {
 async function latestRoot(): Promise<bigint> {
   try {
     return BigInt(await ethrex("eth_call", [{ to: ENTRYPOINT, data: encodeFunctionData({ abi: EP, functionName: "latestRoot" }) }, "latest"]));
-  } catch {
-    return 0n; // NoRootsAvailable: never posted
+  } catch (e) {
+    // NoRootsAvailable (a revert): never posted. A network error is not "never posted": skip this tick.
+    if (/revert/iu.test(String((e as Error).message ?? e))) return 0n;
+    throw e;
   }
 }
 
@@ -109,6 +111,7 @@ async function post(root: bigint): Promise<Hex> {
       const m = String((e as Error).message ?? e);
       if (attempt < 3 && /nonce|underpriced|already known/iu.test(m)) {
         await sleep(3000);
+        if ((await latestRoot()) === root) throw new Error("root already posted (an earlier attempt landed)");
         continue;
       }
       throw e;
@@ -125,8 +128,8 @@ async function tick(): Promise<void> {
   if (want === have) return;
   const wait = lastPost + INTERVAL_MS - Date.now();
   if (wait > 0 && !ONCE) return; // batched: the next tick after the interval posts everything seen by then
+  lastPost = Date.now(); // a failed attempt counts too: at most one try per interval
   const hash = await post(want);
-  lastPost = Date.now();
   say("ASP root posted", { root: want, labels: labels.length, tx: hash });
 }
 
