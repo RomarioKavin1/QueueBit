@@ -376,3 +376,12 @@ and are used for attribution only.
 |---|---|---|
 | `privacy-pools.svg` | 0xbow-io/privacy-pools-core, `docs/static/img/logo.svg` | unchanged |
 | `kohaku.png` | ethereum/kohaku (MIT), `docs/public/kohaku_icon.svg` | rendered to a 128 px PNG (the SVG is ~360 KB) |
+
+### Wallet logos (`apps/web/public/brands/wallets/`)
+
+Shown on `/pitch` to say which wallets can move in; the marks belong to their owners and are used to name the wallet
+only, not to claim a partnership.
+
+| File | Source | Note |
+|---|---|---|
+| `metamask.svg`, `safe.svg`, `coinbase.svg`, `rabby.svg`, `rainbow.svg`, `ledger.svg`, `trust.svg` | [`0xa3k5/web3icons`](https://github.com/0xa3k5/web3icons) (npm `@web3icons/core@4.0.58`, MIT), `dist/svgs/wallets/branded/` | SVG strings taken from the modules, `class` attribute removed |

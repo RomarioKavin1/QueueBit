@@ -147,7 +147,7 @@ function Drawing({ L }: { L: Layout }) {
         LeanPool node
       </Label>
       <text x={L.caption[0]} y={L.caption[1]} fontSize={11} fontStyle="italic" fill="var(--ink-2)">
-        verifies off chain, batches
+        checks each one, batches
       </text>
       <g opacity={grow * out}>
         {leaves.map(([x, y], i) => (

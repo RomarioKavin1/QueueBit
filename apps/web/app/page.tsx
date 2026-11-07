@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { ANATOMY_LEGEND } from "@/components/figures/content";
+import { ANATOMY_LEGEND, GAS_NOTE } from "@/components/figures/content";
+import { GasBars, PrivacyFigure, StakeFigure } from "@/components/figures/Diagrams";
 import { FigAnatomy } from "@/components/figures/FigAnatomy";
 import { FigAttack } from "@/components/figures/FigAttack";
 import { FigLeanPool } from "@/components/figures/FigLeanPool";
@@ -155,10 +156,46 @@ export default function Landing() {
           </Figure>
         </Row>
 
-        {/* 5 · sessions */}
+        {/* 5 · cost and stake */}
         <Row>
           <Text>
-            <Heading n={5} id="sessions">
+            <Heading n={5} id="cost">
+              A fraction of the gas, and no stake
+            </Heading>
+            <p>
+              Post-quantum signatures are large, and on chain every byte is paid for. Checking one in the transaction
+              costs from about 250,000 gas to over 1.5 million. A QueueBit payment averages 85,598 gas, root posts
+              included: about a third of the cheapest scheme we measured, and 4.5 times less than checking the same
+              leanSPHINCS key on chain.
+            </p>
+            <p>
+              Accounts that check their own signatures travel through an alternative mempool <Cite n={5} />, which asks
+              for a stake from any account whose check reads storage that others can change. A root shared by many
+              wallets is exactly that: our first version made each wallet lock 0.012 ETH. Now each root is written into
+              a slot keyed by your account, which only your own transactions depend on, so{" "}
+              <span className="font-semibold">no wallet stakes anything</span>.
+            </p>
+          </Text>
+          <Figure left>
+            <Plate
+              n={5}
+              title="Gas per payment"
+              label="Horizontal bars of gas per payment. QueueBit through LeanPool 85,598; SPHINCS- C13 250,682; leanSPHINCS checked on chain 383,018; SLH-DSA-SHA2-128s 1,019,114; Falcon-512 1,558,828."
+              caption={GAS_NOTE}
+            >
+              <GasBars />
+              <p className="mt-5 text-[0.82rem] leading-[1.55] text-ink-3">{GAS_NOTE}</p>
+              <div className="mt-8 border-t border-rule pt-6">
+                <StakeFigure />
+              </div>
+            </Plate>
+          </Figure>
+        </Row>
+
+        {/* 6 · sessions */}
+        <Row>
+          <Text>
+            <Heading n={6} id="sessions">
               Everyday payments, bounded on chain
             </Heading>
             <p>
@@ -170,10 +207,15 @@ export default function Landing() {
               Three payments pass all three gates. The fourth is within the per-payment cap but would take the day past
               0.05 ETH, so the chain refuses it. Sessions bound what a site can move, not the network fees it can spend.
             </p>
+            <p>
+              None of this waits on us. A session key is checked by the account itself, and guardians approve a recovery
+              from their own wallets, on chain. If every LeanPool node went down, sessions would still pay and guardians
+              could still recover; only owner actions would wait.
+            </p>
           </Text>
           <Figure>
             <Plate
-              n={5}
+              n={6}
               title="A session at work"
               label="Payments from a site pass three gates on the way to the account: allowed contracts, a per-payment cap and a daily cap. Three payments arrive; the fourth would cross the daily cap and is stopped at the third gate."
               caption="The fourth payment would cross the daily cap and is refused. Values are illustrative."
@@ -183,21 +225,50 @@ export default function Landing() {
           </Figure>
         </Row>
 
-        {/* 6 · moving in */}
+        {/* 7 · private payments */}
         <Row>
           <Text>
-            <Heading n={6} id="moving-in">
+            <Heading n={7} id="private">
+              Private payments, with no relayer
+            </Heading>
+            <p>
+              Make funds private and they join a shared Privacy Pool <Cite n={6} />. Send them privately and a
+              zero-knowledge proof releases them to a fresh address, with nothing on chain linking it to the deposit.
+            </p>
+            <p>
+              A fresh address holds no ETH to pay gas with, so privacy tools usually hand the withdrawal to a relayer.
+              QueueBit doesn&rsquo;t need one: the withdrawal is a frame transaction <Cite n={3} /> in which the
+              pool&rsquo;s paymaster pays the gas and is repaid at cost from the withdrawal itself, in the same
+              transaction. The notes follow Kohaku&rsquo;s formats.
+            </p>
+          </Text>
+          <Figure>
+            <Plate
+              n={7}
+              title="Private payments"
+              label="Your account deposits into a privacy pool of many deposits. A zero-knowledge proof releases funds to a new address with no ETH. Below, one frame transaction: a check, the pool paying the gas, and the withdrawal."
+              caption="In from your account, out to a fresh address; one frame transaction in which the pool pays the gas."
+            >
+              <PrivacyFigure />
+            </Plate>
+          </Figure>
+        </Row>
+
+        {/* 8 · moving in */}
+        <Row>
+          <Text>
+            <Heading n={8} id="moving-in">
               Bringing your wallet with you
             </Heading>
             <p>
-              You keep your balances and your habits. QueueBit reads what your current wallet holds and moves all of it
-              in one step, whatever kind of wallet it is.
+              You keep your balances and your habits. Connect MetaMask or any other wallet: QueueBit reads what it holds
+              and moves all of it in one step, whatever kind of wallet it is.
             </p>
             <Rails />
           </Text>
           <Figure left>
             <Plate
-              n={6}
+              n={8}
               title="Moving in"
               label="Four numbered steps. A passkey appears on this device, a new quantum-safe account appears, the current wallet is linked and signs once, and three token balances travel from the old wallet into the new account."
               caption="One line carries the whole move: create a passkey, connect your wallet, sign once, and everything moves. Balances are illustrative."
@@ -239,7 +310,9 @@ function TopBar() {
     ["#threat", "Problem"],
     ["#construction", "Account"],
     ["#owner-key", "Owner key"],
+    ["#cost", "Gas"],
     ["#sessions", "Sessions"],
+    ["#private", "Private"],
     ["#moving-in", "Moving in"],
   ];
   return (
@@ -277,6 +350,12 @@ function Hero() {
           <br />
           <span className="font-medium">Technical report QB-1, November 2026.</span>
         </p>
+        <div className="flex flex-wrap items-center gap-4 lg:justify-end">
+          <Link href="/pitch" className="mono-label text-ink-2 no-underline hover:text-blue">
+            The pitch, in 14 slides
+          </Link>
+          <StartLink />
+        </div>
       </div>
       <DitherBand className="mt-4 lg:col-span-3" />
     </section>
@@ -300,13 +379,13 @@ function StartLink({ size = "lg" }: { size?: "sm" | "lg" }) {
     <Link
       href="/start"
       className={`group mono-label inline-flex shrink-0 items-center gap-2 border border-ink bg-paper text-ink no-underline transition-colors duration-200 hover:border-blue hover:bg-blue hover:text-on-blue ${
-        size === "sm" ? "h-7 px-2.5" : "h-9 px-3.5 text-[13px]"
+        size === "sm" ? "h-9 px-3.5 text-[12px]" : "h-14 gap-3 px-7 text-[15px]"
       }`}
     >
       Launch wallet
       <svg
-        width="14"
-        height="10"
+        width={size === "sm" ? 14 : 18}
+        height={size === "sm" ? 10 : 13}
         viewBox="0 0 14 10"
         aria-hidden
         className="transition-transform duration-300 ease-[var(--ease-out)] group-hover:translate-x-0.5"
@@ -369,13 +448,8 @@ function Cite({ n }: { n: number }) {
 function Rails() {
   const rows: Array<[string, string, string]> = [
     ["An ordinary wallet", "Its tokens and ETH move into a new quantum-safe account.", "New"],
-    [
-      "An ordinary wallet, keeping its address",
-      "EIP-7702 turns the address itself into the account. The old key keeps working until Ethereum can switch it off: quantum-ready, not yet quantum-safe.",
-      "Same",
-    ],
     ["A Safe", "Its owners sign one Safe transaction that moves everything.", "New"],
-    ["An upgradeable smart account", "It is upgraded in place.", "Same"],
+    ["An upgradeable smart account", "It is upgraded in place and keeps its address.", "Same"],
   ];
   return (
     <div className="mt-6 [text-align:left]">
@@ -446,11 +520,14 @@ function BackMatter() {
       "Trust in the aggregator.",
       "The chain checks that an owner transaction is in the root your LeanPool node posted, not the signature itself. A dishonest node could approve owner actions; each batch's proof is on chain, so this is auditable after the fact rather than prevented.",
     ],
+    [
+      "Private payments.",
+      "Privacy grows with the number of people using the pool, and the test-network pool is still small.",
+    ],
     ["Fees.", "A session can spend the account's ETH on network fees, even on payments that fail."],
-    ["Keeping your address.", "With EIP-7702 the old elliptic-curve key stays valid until Ethereum can retire it."],
     [
       "Status.",
-      "The contracts, the signer and the node have not been audited, and QueueBit runs on the public test network until frame transactions reach mainnet.",
+      "The contracts, the signer and the node have not been audited, and QueueBit runs on the public devnet until frame transactions reach mainnet.",
     ],
   ];
   const refs = [
@@ -459,6 +536,7 @@ function BackMatter() {
     "EIP-8141. Frame transactions. Draft.",
     "ERC-8286 and ERC-7579. Modular smart accounts. Drafts.",
     "ERC-8421. An alternative mempool for accounts that validate themselves. Draft.",
+    "Privacy Pools, by 0xbow. Kohaku, the Ethereum Foundation's privacy wallet SDK.",
   ];
   return (
     <section className="grid grid-cols-1 gap-x-16 gap-y-10 pt-16 pb-20 lg:grid-cols-3 lg:pt-24">
