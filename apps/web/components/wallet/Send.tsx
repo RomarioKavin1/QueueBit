@@ -12,7 +12,7 @@ import { askFaucet, waitForWei } from "@/lib/faucet";
 import { ago, eth, explorerLink, parseAmountInput, short, units } from "@/lib/format";
 import { privateBalanceSummary } from "@queuebit/extension/src/shared/privacy";
 import { Row, recipients, type Recipient } from "./bits";
-import { MIN_PRIVATE_SEND_WEI, PRIVACY_HINT, PrivateReview, PrivateSending } from "./Private";
+import { MIN_PRIVATE_SEND_WEI, PRIVACY_HINT, PrivacyBrands, PrivateReview, PrivateSending } from "./Private";
 import { Identicon } from "./Identicon";
 import { Scanner, canScan } from "./Scan";
 import { TokenGlyph } from "./Tokens";
@@ -563,6 +563,7 @@ function EnterAmount({
             </span>
           </button>
           {priv && <p className="mt-1.5 text-[0.88rem] leading-[1.5] text-ink-3">{PRIVACY_HINT}</p>}
+          {priv && <PrivacyBrands compact />}
         </div>
       )}
 

@@ -26,7 +26,21 @@ export const PRIVACY_HINT = "For more privacy, wait a while after making funds p
  * Kohaku (the EF's privacy wallet SDK), whose note and fee formats it follows (a Kohaku-built note withdraws through
  * the same paymaster: contracts/devnet-tests/privacy). The app's client is QueueBit's own, so "compatible", not "by".
  */
-export function PrivacyBrands() {
+export function PrivacyBrands({ compact = false }: { compact?: boolean }) {
+  if (compact)
+    return (
+      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.8rem] text-ink-3">
+        <span className="mono-label text-[10px]">Private with</span>
+        <span className="inline-flex items-center gap-1.5">
+          <img src="/brands/privacy-pools.svg" alt="" width={14} height={14} className="h-3.5 w-3.5" />
+          Privacy Pools
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <img src="/brands/kohaku.png" alt="" width={16} height={16} className="h-4 w-4" />
+          Kohaku-compatible
+        </span>
+      </div>
+    );
   return (
     <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-rule pt-4">
       <span className="mono-label text-[11px] text-ink-3">Private with</span>
@@ -131,6 +145,7 @@ export function PrivateCard({ nav }: { nav: Nav }) {
           </button>
         )}
       </p>
+      <PrivacyBrands compact />
     </section>
   );
 }
@@ -355,6 +370,7 @@ export function AmountScreen(o: {
       </div>
       <Keypad press={press} />
       {o.hint && <p className="mt-4 text-[0.9rem] leading-[1.55] text-ink-3">{o.hint}</p>}
+      <PrivacyBrands compact />
     </Screen>
   );
 }
@@ -529,6 +545,7 @@ function MakingPrivate({ nav, wei, proof }: { nav: Nav; wei: bigint; proof: Sign
           &ldquo;getting ready&rdquo; until then.
         </Notice>
       )}
+      <PrivacyBrands compact />
     </Screen>
   );
 }
@@ -649,6 +666,7 @@ export function PrivateSending({
       </Title>
       <Progress steps={steps} stopped={failed} />
       {failed && <Notice tone="error">{privateErrorText(err ? { message: err } : op?.error)}</Notice>}
+      <PrivacyBrands compact />
     </Screen>
   );
 }
