@@ -224,6 +224,8 @@ export interface UiApi {
       amountWei: string;
       /** `exit`: the note to take back publicly. */
       note?: { depositIndex: number; secretIndex: number };
+      /** `unshield`: send privately to this address (default: a fresh address of this wallet). */
+      to?: string;
     }>;
     res: PrivacyView;
   };

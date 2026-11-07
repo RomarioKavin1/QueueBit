@@ -70,10 +70,40 @@ export interface Network {
   /** A transaction's page in this network's explorer, `{hash}` replaced. */
   explorerTxUrl?: string;
   capabilities: DevnetCapabilities;
+  /** The private balance's contracts QueueBit ships with on this network (none: off, or set in Settings). */
+  privacy?: BuiltInPrivacy;
   /** One honest line for the network picker. */
   note: string;
   testnet: boolean;
 }
+
+/**
+ * A Privacy Pools v1 deployment and its fee payer. `payer: "lite"` is PoolPayerLite, whose VERIFY step skips the proof
+ * check (the pool checks it in the settle frame) so it fits a stock sidecar's 100k validation cap; `"full"` is
+ * PoolPayer, which needs a staked-budget lane.
+ */
+export interface BuiltInPrivacy {
+  entrypoint: `0x${string}`;
+  pool: `0x${string}`;
+  poolPayer: `0x${string}`;
+  deployBlock: string;
+  sidecarUrl: string;
+  payer: "full" | "lite";
+}
+
+/**
+ * Our Privacy Pools v1 deployment on the public devnet (contracts/devnet-tests/privacy/deployments/public.json): the
+ * native-ETH pool, its Entrypoint (whose ASP postman approves deposits: `bun run asp-auto` there) and PoolPayerLite,
+ * staked, with withdrawals sent to the Miner's sidecar.
+ */
+export const PUBLIC_DEVNET_PRIVACY: BuiltInPrivacy = {
+  entrypoint: "0xe71178f42b23ef08ed3e5680dc34844ad42b8330",
+  pool: "0xb522db9e59b670af99c19b3791d92138494b655f",
+  poolPayer: "0xfb78bf13bbb43c66449e2d8b8b909ee5fa1fdf35",
+  deployBlock: "10347",
+  sidecarUrl: DEVNET_1337.sidecarUrl,
+  payer: "lite",
+};
 
 export const DEVNET_CAPABILITIES = {
   local: { stagedBudget: true, precompilesAllowed: true },
@@ -150,6 +180,7 @@ const devnet: Network = LOCAL_DEVNET
       currency: { symbol: "ETH", decimals: 18 },
       explorerTxUrl: PUBLIC_EXPLORER_TX,
       capabilities: DEVNET_CAPABILITIES.public,
+      privacy: PUBLIC_DEVNET_PRIVACY,
       note: "The public test network for quantum-safe accounts (it can be reset). Test money only.",
       testnet: true,
     };
