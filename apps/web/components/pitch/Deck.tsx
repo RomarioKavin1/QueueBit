@@ -74,11 +74,21 @@ const SLIDES: Slide[] = [
   },
   {
     id: "owner",
-    kicker: "The owner key",
-    title: "Your phone signs with hashes. Nothing for a quantum computer to break.",
+    kicker: "Under the hood",
+    title: "leanSPHINCS keys, EIP\u20118288 batches, recursive STARK proofs.",
     points: [
-      "Unlocked by your passkey.",
-      "The wallet counts every signature and tells you long before the key needs replacing.",
+      <>
+        <b className="font-semibold text-ink">leanSPHINCS.</b> Your owner key is the hash-based signature from
+        Ethereum&rsquo;s lean post-quantum work, unlocked by your passkey.
+      </>,
+      <>
+        <b className="font-semibold text-ink">EIP-8288.</b> Each signature travels as a dependency the network checks
+        once per batch, not once per contract.
+      </>,
+      <>
+        <b className="font-semibold text-ink">Recursive STARK.</b> One leanVM proof covers a whole batch; its hash goes
+        on chain, so anyone can audit it.
+      </>,
     ],
     figure: <FigSignature />,
     plate: ["How the owner key signs", "A one-time key at a leaf plus the sibling hashes up to the root."],
