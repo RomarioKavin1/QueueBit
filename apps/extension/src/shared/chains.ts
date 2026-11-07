@@ -141,8 +141,9 @@ const devnet: Network = LOCAL_DEVNET
       rpcUrl: DEVNET_1337.nodeUrl,
       sidecarUrl: DEVNET_1337.sidecarUrl,
       leanpoolUrl: BUILD_LEANPOOL_URL,
-      // QueueBit's LeanPool node for the public devnet (contracts/devnet-tests/leanpool-account/.keys/aggregator.json).
-      aggregator: "0x99Bd573ABC2E87D33429856d13712BA82203AF41",
+      // QueueBit's LeanPool aggregator for the public devnet: the PQAggregator contract (contracts/src/leanpool), whose
+      // roots are authorized by a SPHINCS- C13 key verified on chain (devnet/deploy/addresses.public.json).
+      aggregator: "0x19F0F29c94edCc30476a8Ef9BF5A453b6A1B477a",
       profileId: "ethrex-eip8141-tracer",
       ...(publicDeployment ? { deployment: deploymentOf(publicDeployment)! } : {}),
       tokens: tokensOf(publicDeployment),

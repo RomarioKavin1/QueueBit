@@ -13,7 +13,8 @@ import type { NextConfig } from "next";
  *   NEXT_PUBLIC_QUEUEBIT_FAUCET_URL        a local devnet's `?address=` faucet
  */
 const LOCAL_DEVNET = process.env.NEXT_PUBLIC_QUEUEBIT_LOCAL_DEVNET === "1";
-/** QueueBit's LeanPool node for the public devnet (aggregator 0x99Bd…AF41, the one its accounts trust). */
+/** QueueBit's LeanPool node for the public devnet. It must serve the pinned aggregator (the PQAggregator 0x19F0…477a
+ * in apps/extension/src/shared/chains.ts, the one new accounts trust): a node in PQ mode. */
 const PUBLIC_LEANPOOL_URL = "https://basis-continent-baby-families.trycloudflare.com";
 const LEANPOOL_URL = (
   process.env.NEXT_PUBLIC_QUEUEBIT_LEANPOOL_URL ?? (LOCAL_DEVNET ? "http://127.0.0.1:8701" : PUBLIC_LEANPOOL_URL)

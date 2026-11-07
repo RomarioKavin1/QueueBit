@@ -146,7 +146,7 @@ test("live: create, pay as owner, pay with a session, move an EOA in", async ({ 
     activationCostWei: string;
     aggregator: Address;
   };
-  expect(st.aggregator).toBe("0x99Bd573ABC2E87D33429856d13712BA82203AF41");
+  expect(st.aggregator).toBe("0x19F0F29c94edCc30476a8Ef9BF5A453b6A1B477a");
   expect(await client.getCode({ address: st.address })).toBeUndefined();
   log("setup key funded", await fromFunder(st.setupKey, BigInt(st.activationCostWei) * 3n));
   const popup = await openPopup(context, extensionId);

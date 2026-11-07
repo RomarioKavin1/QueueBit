@@ -490,7 +490,7 @@ describe("restoring: the same words give the same account, and the signature cou
     await wallet.keyring.import(MNEMONIC, "password-1");
     const st = await wallet.handleUi("account:status", { chainId: 1337 });
     expect(st.address).toBeUndefined();
-    expect(st.error).toMatch(/LeanPool node .* posts from 0x0000…00b0, not 0x99Bd…AF41/u);
+    expect(st.error).toMatch(/LeanPool node .* posts from 0x0000…00b0, not 0x19F0…477a/u);
     await expect(wallet.account!.ensure(1337)).rejects.toMatchObject({ reason: "leanpool" });
   });
 
