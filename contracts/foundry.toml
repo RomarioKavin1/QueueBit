@@ -48,9 +48,11 @@ fuzz = { runs = 10000 }
 [fmt]
 line_length = 120
 # forge fmt only parses Solidity; standalone Yul objects (src/pq/vendor/*.yul) make `forge fmt --check` fail.
-# test/privacy/vendor/: third-party sources, kept as upstream wrote them (THIRD_PARTY.md lists the edits).
-ignore = ["**/*.yul", "test/privacy/vendor/**"]
+# src/pq/vendor/ and test/privacy/vendor/: third-party sources, kept as upstream wrote them (THIRD_PARTY.md lists the
+# edits; the SPHINCS- verifiers are byte-identical below a provenance comment). Patterns name the files: a trailing
+# `dir/**` matches only directories, so it ignored nothing.
+ignore = ["**/*.yul", "src/pq/vendor/**/*.sol", "test/privacy/vendor/**/*.sol"]
 
 [lint]
 # Newer forge lints on build and cannot parse standalone Yul objects (src/pq/vendor/*.yul), as with [fmt] above.
-ignore = ["**/*.yul", "test/privacy/vendor/**"]
+ignore = ["**/*.yul", "test/privacy/vendor/**/*.sol"]
