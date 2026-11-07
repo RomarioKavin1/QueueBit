@@ -26,3 +26,6 @@ devnet/data/
 next-env.d.ts
 *.tsbuildinfo
 apps/web/public/pp-circuits/
+
+# Claude Code agent worktrees (local only)
+.claude/worktrees/
